@@ -483,6 +483,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
       -- Update the envs with bindings for pattern matched variables and locations.
       -- The locations point to the same region as the scrutinee.
       let (vars,locargs) = unzip vlocargs
+          dcon_tys = lookupDataCon ddefs dcon
           locs = map toLocVar locargs
           renv0  = if isIndirectionTag dcon || isRedirectionTag dcon
                    then foldr (\lc acc -> M.insert lc reg acc) renv1 vars
@@ -494,7 +495,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                   PackedTy tycon _ -> M.insert loc tycon acc
                                   _ -> acc)
                               rlocs_env1
-                              (fragileZip locs (lookupDataCon ddefs dcon))
+                              (fragileZip locs dcon_tys)
+          pkd_env1' = foldr (\(loc,ty) acc ->
+                                case unTy2 ty of
+                                  PackedTy tycon _ -> M.insert loc reg acc
+                                  _ -> acc)
+                              pkd_env1
+                              (fragileZip locs dcon_tys)
           indirs1' = if isIndirectionTag dcon
                      then S.insert (head vars) indirs1
                      else indirs1
@@ -504,14 +511,14 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           region_locs1' = if isIndirectionTag dcon || isRedirectionTag dcon
                           then M.adjust (\val -> val ++ take 1 vars) reg region_locs1
                           else M.adjust (\val -> val ++ locs) reg region_locs1
-          num_cursor_tys = length $ filter ((== CursorTy) . unTy2) $ lookupDataCon ddefs dcon
+          num_cursor_tys = length $ filter ((== CursorTy) . unTy2) dcon_tys
           ran_env1' = ran_env1 `M.union`
                       (if isIndirectionTag dcon || isRedirectionTag dcon then M.empty else
                          M.fromList $ zip
                          (reverse $ take num_cursor_tys $ reverse locs)
                          (take num_cursor_tys vars))
       (dcon,vlocargs,) <$>
-         (threadRegionsExp ddefs fundefs fnLocArgs renv1' env21' lfenv1 rlocs_env1' wlocs_env1 pkd_env1 region_locs1' ran_env1' indirs1' redirs1' bod)
+         (threadRegionsExp ddefs fundefs fnLocArgs renv1' env21' lfenv1 rlocs_env1' wlocs_env1 pkd_env1' region_locs1' ran_env1' indirs1' redirs1' bod)
 
     ss_free_locs :: S.Set Var -> Env2 Ty2 -> Exp2 -> S.Set Var
     ss_free_locs bound env20 ex0 =

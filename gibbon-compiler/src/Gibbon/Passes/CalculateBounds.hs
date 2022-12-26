@@ -117,7 +117,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
               let vle = case ty0 of
                     PackedTy _tag loc -> M.insert v loc varLocEnv
                     _                 -> varLocEnv
-              (bod', regSzEnv'', regTyEnv'') <- calculateBoundsExp ddefs env2 { vEnv = venv' } varSzEnv vle locRegEnv locOffEnv regSzEnv regTyEnv bod
+              (bod', regSzEnv'', regTyEnv'') <- calculateBoundsExp ddefs (env2 { vEnv = venv' }) varSzEnv vle locRegEnv locOffEnv regSzEnv regTyEnv bod
               let regSzEnv3 = M.unionWith max regSzEnv' regSzEnv''
               let regSzEnv4 = case ty0 of
                     -- TODO sizeofTy ty0 is incalculable? -> assume as 0 to give preference to analysis in other locations
@@ -177,7 +177,9 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                     let (re, off) = case locExp of
                           (StartOfRegionLE r          ) -> (regionToVar r, BoundedSize 0)
                           (AfterConstantLE n l  ) -> (locRegEnv # l, locOffEnv # l <> BoundedSize n)
-                          (AfterVariableLE v l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v) <> varSzEnv # v)
+                          -- [2022.12.26] CSK: the lookup in varSzEnv always fails since the
+                          -- pass never inserts anything into it. Disabling it for now.
+                          (AfterVariableLE v l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v)) -- <> varSzEnv # v
                           (InRegionLE r         ) -> (regionToVar r, Undefined)
                           (FromEndLE  l         ) -> (locRegEnv # l, Undefined)
                           FreeLE                  -> undefined
