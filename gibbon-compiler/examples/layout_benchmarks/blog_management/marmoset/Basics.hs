@@ -395,9 +395,9 @@ fileToContent file word plist_inline index max_len =
                                  character    = nth file index
                                  isSpace      = if ( character *==* (head " ") ) then True else False
                                  char_vec     = (singleton character)
-                                 plist_space :: PList Inline
-                                 plist_space = (Cons (Space) plist_inline) 
-                                in if (isSpace) then (fileToContent file (singleton (nth file (index+1))) (Cons (Str word) plist_inline) (index+2) max_len)  
+                                 -- plist_space :: PList Inline
+                                 -- plist_space = (Cons (Space) plist_inline)
+                                in if (isSpace) then (fileToContent file (singleton (nth file (index+1))) (Cons (Str word) (copyPacked plist_inline)) (index+2) max_len)  
                                                 else (fileToContent file (append word char_vec) (plist_inline) (index+1) max_len)
 
 fileToTags :: Vector Char -> Vector Char -> Int -> Int -> PList Text 
@@ -422,5 +422,4 @@ mkTagsFromText f' =
 mkContentFromText :: Text -> BlogContent
 mkContentFromText f = 
          let block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-             content = mkBlogContent block 
-           in content
+           in Content block

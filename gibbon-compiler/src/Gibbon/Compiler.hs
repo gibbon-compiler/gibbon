@@ -710,9 +710,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "addRedirectionCon" addRedirectionCon l2
-              l2 <- if gibbon1
-                    then pure l2
-                    else go "inferRegSize" inferRegSize l2
+              -- l2 <- if gibbon1
+              --       then pure l2
+              --       else go "inferRegSize" inferRegSize l2
               l2 <- if gibbon1
                     then pure l2
                     else go "followPtrs" followPtrs l2
