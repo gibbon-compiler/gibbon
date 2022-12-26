@@ -331,7 +331,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
 
     -- Ignoring end-witnesses atm.
-    StartOfPkd{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    StartOfPkdCursor{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     TagCursor{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     RetE _locs v -> return (env # v, sizeEnv # v)
     FromEndE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext

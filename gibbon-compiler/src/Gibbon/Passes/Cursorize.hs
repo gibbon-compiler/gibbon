@@ -325,7 +325,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
               [] -> return (VarE v)
               _  -> return $ L3.MkProdE $ [VarE (toLocVar loc) | loc <- locs] ++ [VarE v]
 
-        StartOfPkd cur -> return (VarE cur)
+        StartOfPkdCursor cur -> return (VarE cur)
 
         TagCursor a b -> return $ Ext $ L3.TagCursor a b
 
@@ -609,7 +609,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
 
 
-        StartOfPkd cur -> return $ dl $ VarE cur
+        StartOfPkdCursor cur -> return $ dl $ VarE cur
 
         TagCursor a b -> return $ dl $ Ext $ L3.TagCursor a b
 

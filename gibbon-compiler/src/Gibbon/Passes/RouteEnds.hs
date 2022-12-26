@@ -146,7 +146,7 @@ bindReturns ex =
         LetLocE loc locexp bod -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetLocE loc locexp bod'
-        L2.StartOfPkd{}-> pure ex
+        L2.StartOfPkdCursor{}-> pure ex
         L2.TagCursor{}-> pure ex
         RetE{} -> pure ex
         L2.AddFixed{} -> pure ex
@@ -490,7 +490,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
               FreeLE{} -> only_recur bod
               _ -> error $ "RouteEnds: todo" ++ sdoc e
 
-          Ext (L2.StartOfPkd{})-> pure e
+          Ext (L2.StartOfPkdCursor{})-> pure e
 
           Ext (IndirectionE{}) -> return e
 

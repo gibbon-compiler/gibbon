@@ -421,7 +421,7 @@ instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
         L1.AddFixed v i   -> text "addFixed" <+> pprintWithStyle sty v <+> int i
-        L1.StartOfPkd cur -> text "startOfPkd" <+> pprintWithStyle sty cur
+        L1.StartOfPkdCursor cur -> text "startOfPkdCursor" <+> pprintWithStyle sty cur
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
                                    (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                    (pprintWithStyle sty args) <+> text (if b then "true" else "false")
@@ -458,7 +458,7 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                             lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
           FromEndE loc -> text "fromende" <+> pprint loc
-          L2.StartOfPkd c -> parens $ text "startOfPkd" <+> pprint c
+          L2.StartOfPkdCursor c -> parens $ text "startOfPkdCursor" <+> pprint c
           L2.TagCursor a b -> parens $ text "tagCursor" <+> pprint a <+> pprint b
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
@@ -618,7 +618,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
       case ex of
         Ext (BenchE{})   -> True
         Ext (L1.AddFixed{}) -> False
-        Ext (L1.StartOfPkd{}) -> False
+        Ext (L1.StartOfPkdCursor{}) -> False
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
@@ -736,7 +736,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
           SpawnE{} -> error "ppHsWithEnv: SpawnE not handled."
           SyncE{}  -> error "ppHsWithEnv: SyncE not handled."
           Ext(L1.AddFixed{}) -> error "ppHsWithEnv: AddFixed not handled."
-          Ext(L1.StartOfPkd{}) -> error "ppHsWithEnv: AddFixed not handled."
+          Ext(L1.StartOfPkdCursor{}) -> error "ppHsWithEnv: AddFixed not handled."
           Ext (BenchE fn _locs args _b) ->
              --  -- Criterion
              -- let args_doc = hsep $ map (ppExp env2) args

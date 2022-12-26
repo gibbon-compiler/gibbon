@@ -353,7 +353,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                         in LetE ("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg)
       pure $ boundscheck $ LetE (v,locs,ty,(Ext (IndirectionE tcon dcon (a',b') (c',d') cpy))) bod'
 
-    Ext (StartOfPkd cur) -> do
+    Ext (StartOfPkdCursor cur) -> do
       let (PackedTy _ loc) = unTy2 (lookupVEnv cur env2)
       case M.lookup loc pkd_env of
         Just reg -> return $ Ext $ TagCursor loc (toEndV reg)
@@ -589,7 +589,7 @@ findRetLocs e0 = go e0 []
             LetRegionE _ _ _ bod  -> go bod acc
             LetParRegionE _ _ _ bod  -> go bod acc
             LetLocE _ _ bod   -> go bod acc
-            StartOfPkd{}      -> acc
+            StartOfPkdCursor{} -> acc
             TagCursor{}    -> acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc
@@ -655,7 +655,7 @@ allFreeVars_sans_datacon_args ex =
         LetRegionE r _sz _ty bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetParRegionE r _sz _ty bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars_sans_datacon_args bod `S.union` gFreeVars locexp)
-        StartOfPkd cur  -> S.singleton cur
+        StartOfPkdCursor cur   -> S.singleton cur
         TagCursor a b-> S.fromList [a,b]
         RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
         FromEndE loc    -> S.singleton (toLocVar loc)
@@ -698,7 +698,7 @@ substEndReg loc_or_reg end_reg ex =
         IndirectionE tycon dcon (a,b) (c,d) e ->
           Ext $ IndirectionE tycon dcon (gosubst a, gosubst b) (gosubst c, gosubst d) e
         LetAvail vs bod -> Ext $ LetAvail vs (go bod)
-        StartOfPkd{}          -> ex
+        StartOfPkdCursor{}    -> ex
         TagCursor{}           -> ex
         AddFixed{}            -> ex
         GetCilkWorkerNum      -> ex

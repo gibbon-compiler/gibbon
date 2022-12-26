@@ -56,7 +56,7 @@ placeRegionInwards env scopeSet ex  =
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
 
-        StartOfPkd{} -> return ex
+        StartOfPkdCursor{} -> return ex
         TagCursor{} -> return ex
 
         LetLocE loc phs rhs -> do                                                --take care of locations

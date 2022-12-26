@@ -125,12 +125,12 @@ tcExp ddfs env exp =
             _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
             pure BoolTy
-            
+
           char_cmps = do
             len2
             _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
-            pure BoolTy            
+            pure BoolTy
 
       case pr of
         MkTrue  -> mk_bools
@@ -680,7 +680,7 @@ tcExp ddfs env exp =
     Ext (AddFixed{}) ->
       pure CursorTy
 
-    Ext (StartOfPkd cur) -> do
+    Ext (StartOfPkdCursor cur) -> do
       ty <- lookupVar env cur exp
       if isPackedTy ty
         then pure CursorTy

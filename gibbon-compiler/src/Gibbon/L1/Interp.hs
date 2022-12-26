@@ -35,7 +35,7 @@ instance InterpExt () Exp1 (E1Ext () Ty1) where
       case ex of
           BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn locs args)
           AddFixed{}   -> error "L1.Interp: AddFixed not handled."
-          StartOfPkd{} -> error "L1.Interp: StartOfPkd not handled."
+          StartOfPkdCursor{} -> error "L1.Interp: StartOfPkdCursor not handled."
 
 instance Interp () Exp1 where
   gInterpExp = interp

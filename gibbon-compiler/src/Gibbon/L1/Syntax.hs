@@ -56,8 +56,8 @@ type Ty1 = UrTy ()
 --------------------------------------------------------------------------------
 
 data E1Ext loc dec = BenchE Var [loc] [(PreExp E1Ext loc dec)] Bool
-                   | AddFixed Var Int
-                   | StartOfPkd Var
+                   | AddFixed Var Int     -- Created by AddRAN.
+                   | StartOfPkdCursor Var -- Created by AddRAN.
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 instance FreeVars (E1Ext l d) where
@@ -65,7 +65,7 @@ instance FreeVars (E1Ext l d) where
     case e of
       BenchE _ _ args _-> S.unions (map gFreeVars args)
       AddFixed v _ -> S.singleton v
-      StartOfPkd cur -> S.singleton cur
+      StartOfPkdCursor cur -> S.singleton cur
 
 instance (Show l, Show d, Out l, Out d) => Expression (E1Ext l d) where
   type TyOf  (E1Ext l d) = d
@@ -88,17 +88,18 @@ instance HasSubstitutableExt E1Ext l d => SubstitutableExt (PreExp E1Ext l d) (E
                              (VarE v') -> AddFixed v' i
                              _oth -> error "Could not substitute non-variable in AddFixed"
                       else AddFixed v i
-      StartOfPkd cur -> if cur == old
+      StartOfPkdCursor cur ->
+                     if cur == old
                      then case new of
-                             VarE cur' -> StartOfPkd cur'
-                             _oth -> error "Could not substitute non-variable in StartOfPkd"
-                     else (StartOfPkd cur)
+                             VarE cur' -> StartOfPkdCursor cur'
+                             _oth -> error "Could not substitute non-variable in StartOfPkdCursor"
+                     else (StartOfPkdCursor cur)
 
   gSubstEExt old new ext =
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
       AddFixed v i -> AddFixed v i
-      StartOfPkd cur  -> StartOfPkd cur
+      StartOfPkdCursor cur  -> StartOfPkdCursor cur
 
 instance Typeable (E1Ext () (UrTy ())) where
   gRecoverType _ddefs env2 ext =
@@ -107,9 +108,10 @@ instance Typeable (E1Ext () (UrTy ())) where
       AddFixed v _i   -> if M.member v (vEnv env2)
                          then CursorTy
                          else error $ "AddFixed: unbound variable " ++ show v
-      StartOfPkd cur     -> case M.lookup cur (vEnv env2) of
+      StartOfPkdCursor cur ->
+                         case M.lookup cur (vEnv env2) of
                            Just (PackedTy{}) -> CursorTy
-                           ty -> error $ "StartOfPkd: got " ++ show ty
+                           ty -> error $ "StartOfPkdCursor: got " ++ show ty
 
 instance Renamable () where
     gRename _ () = ()
@@ -119,7 +121,7 @@ instance HasRenamable E1Ext l d => Renamable (E1Ext l d) where
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map go args) b
       AddFixed v i -> AddFixed (go v) i
-      StartOfPkd cur -> StartOfPkd (go cur)
+      StartOfPkdCursor cur -> StartOfPkdCursor (go cur)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

@@ -231,8 +231,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
                      pure (BoolTy, tstate)
-                   
-                   char_cmps = do 
+
+                   char_cmps = do
                      len2
                      _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
@@ -806,7 +806,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                 InRegionLE{} -> throwError $ GenericTC ("InRegionLE not handled.")  exp
 
-      Ext (StartOfPkd cur) -> do
+      Ext (StartOfPkdCursor cur) -> do
         case M.lookup cur (vEnv env) of
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp

@@ -9,7 +9,7 @@ import Data.Set as S
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Passes.InferEffects ( inferExp )
-import Gibbon.L1.Syntax hiding (StartOfPkd)
+import Gibbon.L1.Syntax hiding (StartOfPkdCursor)
 import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
       case ext of
         LetRegionE reg sz ty bod -> Ext . LetRegionE reg sz ty <$> go bod
         LetParRegionE reg sz ty bod -> Ext . LetParRegionE reg sz ty <$> go bod
-        L2.StartOfPkd cur -> pure $ Ext $ L2.StartOfPkd cur
+        L2.StartOfPkdCursor cur -> pure $ Ext $ L2.StartOfPkdCursor cur
         LetLocE loc FreeLE  bod ->
           Ext <$> LetLocE loc FreeLE <$>
             addTraversalsExp ddefs fundefs env2 renv context bod

@@ -181,7 +181,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
         TagCursor a b -> pure $ Ext $ TagCursor a b
 
-        StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+        StartOfPkdCursor cur -> pure $ Ext $ StartOfPkdCursor cur
 
         IndirectionE tycon dcon (from,from_reg) (to,to_reg) e -> do
           e' <- go locenv env2 e
@@ -343,8 +343,8 @@ toOldL2Exp ex =
           bod' <- go bod
           pure $ Ext $ LetLocE loc rhs' bod'
 
-        StartOfPkd cur -> do
-          pure $ Ext $ StartOfPkd cur
+        StartOfPkdCursor cur -> do
+          pure $ Ext $ StartOfPkdCursor cur
 
         TagCursor a b -> do
           pure $ Ext $ TagCursor a b

@@ -301,7 +301,7 @@ mkRANs needRANsExp =
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
           let rhs = case arg of
-                      VarE v -> Ext (L1.StartOfPkd v)
+                      VarE v -> Ext (L1.StartOfPkdCursor v)
                       -- It's safe to use 'fromJust' here b/c we would only
                       -- request a RAN for a literal iff it occurs after a
                       -- packed datatype. So there has to be random access
@@ -417,7 +417,7 @@ we need random access for that type.
       case ext of
         LetRegionE _ _ _ bod -> go bod
         LetParRegionE _ _ _ bod -> go bod
-        L2.StartOfPkd{} -> S.empty
+        L2.StartOfPkdCursor{} -> S.empty
         LetLocE _loc FreeLE bod -> go bod
         LetLocE loc rhs bod  ->
             let reg = case rhs of

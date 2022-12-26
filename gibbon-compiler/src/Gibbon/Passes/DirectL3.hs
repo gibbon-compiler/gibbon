@@ -66,7 +66,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
               ex'    = TimeIt (AppE fn [] args) ret_ty b
           in go env2 ex'
         Ext (AddFixed{}) -> error "directL3: AddFixed not handled."
-        Ext (StartOfPkd{}) -> error "directL3: StartOfPkd not handled."
+        Ext (StartOfPkdCursor{}) -> error "directL3: StartOfPkdCursor not handled."
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
 

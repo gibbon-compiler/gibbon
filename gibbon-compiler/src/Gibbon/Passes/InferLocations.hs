@@ -831,7 +831,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
               (concat $ [c | (_,_,c) <- pairs]))
 
     Ext (L1.AddFixed cur i) -> pure (L2.Ext (L2.AddFixed cur i), CursorTy, [])
-    Ext (L1.StartOfPkd cur) -> err $ "unbound " ++ sdoc ex0
+    Ext (L1.StartOfPkdCursor cur) -> err $ "unbound " ++ sdoc ex0
 
     LetE (vr,locs,bty,rhs) bod | [] <- locs ->
       case rhs of
@@ -1083,9 +1083,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.AddFixed cur i)) bod', ty', cs')
 
-        Ext (L1.StartOfPkd cur) -> do
+        Ext (L1.StartOfPkdCursor cur) -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.StartOfPkd cur)) bod', ty', cs')
+          return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.StartOfPkdCursor cur)) bod', ty', cs')
 
         Ext(BenchE{}) -> error "inferExp: BenchE not handled."
 
@@ -1188,7 +1188,7 @@ finishExp e =
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
-      Ext (L2.StartOfPkd cur) -> pure $ Ext (L2.StartOfPkd cur)
+      Ext (L2.StartOfPkdCursor cur) -> pure $ Ext (L2.StartOfPkdCursor cur)
       Ext (L2.TagCursor a b) -> pure $ Ext (L2.TagCursor a b)
       Ext (LetParRegionE{})       -> err $ "todo: " ++ sdoc e
       Ext (RetE{})                -> err $ "todo: " ++ sdoc e
@@ -1298,7 +1298,7 @@ cleanExp e =
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
-      Ext (L2.StartOfPkd cur) -> (Ext (L2.StartOfPkd cur), S.singleton cur)
+      Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.singleton cur)
       Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.fromList [a,b])
       Ext (RetE{})                -> err $ "todo: " ++ sdoc e
       Ext (FromEndE{})            -> err $ "todo: " ++ sdoc e

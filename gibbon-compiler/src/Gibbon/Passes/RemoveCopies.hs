@@ -77,7 +77,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         LetLocE loc FreeLE bod -> do
           Ext <$> LetLocE loc FreeLE <$>
             removeCopiesExp ddefs fundefs lenv env2 bod
-        StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+        StartOfPkdCursor cur -> pure $ Ext $ StartOfPkdCursor cur
         TagCursor a b -> pure $ Ext $ TagCursor a b
         LetLocE loc rhs bod -> do
           let reg = case rhs of

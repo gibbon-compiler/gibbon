@@ -194,7 +194,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
               LetAvail vs e      -> do
                 (e', re', rt') <- go e
                 return (Ext $ LetAvail vs e', re', rt')
-              StartOfPkd{}          -> error $ "todo: " ++ sdoc ex
+              StartOfPkdCursor{}    -> error $ "todo: " ++ sdoc ex
               TagCursor{}           -> error $ "todo: " ++ sdoc ex
               AllocateTagHere{}     -> error $ "todo: " ++ sdoc ex
               AllocateScalarsHere{} -> error $ "todo: " ++ sdoc ex
