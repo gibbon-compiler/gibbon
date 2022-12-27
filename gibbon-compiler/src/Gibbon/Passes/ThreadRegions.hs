@@ -297,8 +297,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
         (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
-        let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
-        (pure $ mkLets binds bod3)
+        emit_ss <- emit_ss_instrs
+        if emit_ss
+          then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
+                  (pure $ mkLets binds bod3)
+          else pure $ mkLets [(v, newretlocs, ty, AppE f newapplocs args)] bod3
 
 
     LetE (v,locs,ty, (SpawnE f applocs args)) bod -> do
@@ -434,10 +437,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
           (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
+          emit_ss <- emit_ss_instrs
           bod' <- go bod
-          let pre = mkLets (rpush ++ wpush)
-              post = mkLets (wpop ++ rpop) bod'
-          pure $ pre (Ext $ LetRegionE r sz ty post)
+          if emit_ss
+            then do let pre = mkLets (rpush ++ wpush)
+                        post = mkLets (wpop ++ rpop) bod'
+                    pure $ pre (Ext $ LetRegionE r sz ty post)
+            else pure $ Ext $ LetRegionE r sz ty bod'
         LetParRegionE r sz ty bod -> Ext <$> LetParRegionE r sz ty <$> go bod
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
@@ -477,6 +483,10 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 
   where
+    emit_ss_instrs =
+      do dflags <- getDynFlags
+         pure $ not (gopt Opt_NonGenGc dflags)
+
     go = threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs
 
     docase reg renv1 env21 lfenv1 rlocs_env1 wlocs_env1 pkd_env1 region_locs1 ran_env1 indirs1 redirs1 (dcon,vlocargs,bod) = do
@@ -498,7 +508,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                               (fragileZip locs dcon_tys)
           pkd_env1' = foldr (\(loc,ty) acc ->
                                 case unTy2 ty of
-                                  PackedTy tycon _ -> M.insert loc reg acc
+                                  PackedTy{} -> M.insert loc reg acc
                                   _ -> acc)
                               pkd_env1
                               (fragileZip locs dcon_tys)
