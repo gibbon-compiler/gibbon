@@ -532,11 +532,9 @@ enum EvacAction {
 
 /*
 
-[2022.09.06] Main todo:
+[2022.09.06] Main todos:
 
 (1)
-
-[2022.07.08] special case added while fixing tree_update.
 
 Suppose there is an indirection pointer pointing to a an address ABC within the
 nursery. However, the address ABC contains a redirection pointer. Under the usual
@@ -551,6 +549,12 @@ Also, make indirection/redirection branches use the proper end-of-input-region
 by using the tag.
 
 [2022.11.30]: this is implemented but redirection pointers are still buggy.
+
+
+(2)
+
+Properly handle values that start in the nursery but end in the old generation,
+possibly due to eager promotion.
 
 */
 
