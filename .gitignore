@@ -17,6 +17,7 @@ BintreeBench/*.exe
 compiled/
 
 .racket_sandbox/*
+gibbon-compiler/cbits/lib
 gibbon-compiler/build/
 **/gibbon-compiler/examples/parallel/data/
 

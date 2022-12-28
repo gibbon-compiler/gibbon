@@ -209,7 +209,6 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   ((l0, cnt0), fp) <- parseInput config input fp1
   let config' = config { srcFile = Just fp }
 
-
   let initTypeChecked :: L0.Prog0
       initTypeChecked =
         -- We typecheck first to turn the appropriate VarE's into FunRefE's.
@@ -349,6 +348,35 @@ withPrintInterpProg l0 =
   else
     return Nothing
 
+compileRTS :: Config -> IO ()
+compileRTS Config{verbosity,optc,dynflags} = do
+  gibbon_dir <- getGibbonDir
+  let rtsmk = gibbon_dir </> "gibbon-compiler/cbits/rts.mk"
+  let rtsmkcmd = "make -f " ++ rtsmk ++ " "
+                 ++ (if rts_debug then " MODE=debug " else " MODE=release ")
+                 ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
+                 ++ (if not genGC then " GC=nongen " else " GC=gen ")
+                 ++ (if print_gc_stats then " GCSTATS=1 " else "")
+                 ++ (if pointer then " POINTER=1 " else "")
+                 ++ (if parallel then " PARALLEL=1 " else "")
+                 ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
+                 ++ (" USER_CFLAGS=\"" ++ optc ++ "\"")
+                 ++ (" VERBOSITY=" ++ show verbosity)
+  execCmd
+    Nothing
+    rtsmkcmd
+    "Compiling RTS\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    "codegen: C RTS could not be compiled: "
+  where
+    bumpAlloc = gopt Opt_BumpAlloc dynflags
+    pointer = gopt Opt_Pointer dynflags
+    warnc = gopt Opt_Warnc dynflags
+    parallel = gopt Opt_Parallel dynflags
+    rts_debug = gopt Opt_RtsDebug dynflags
+    print_gc_stats = gopt Opt_PrintGcStats dynflags
+    genGC = gopt Opt_GenGc dynflags
+
+
 -- | Compile and run the generated code if appropriate
 --
 compileAndRunExe :: Config -> FilePath -> IO String
@@ -379,103 +407,62 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         exe = getExeFile backend fp exefile
         pointer = gopt Opt_Pointer (dynflags cfg)
         links = if pointer
-                then " -lgc -lm -lgibbon_rts_ng "
-                else " -lm -lgibbon_rts_ng "
-
-        rts_debug = gopt Opt_RtsDebug (dynflags cfg)
-        print_gc_stats = gopt Opt_PrintGcStats (dynflags cfg)
-        genGC = gopt Opt_GenGc (dynflags cfg)
-
-        compile_rust_rts = do
-            env <- getEnvironment
-            -- Compile Rust RTS.
-            rust_rts_dir <- makeAbsolute $ case lookup "GIBBON_NEWRTS_DIR" env of
-                                  Just p -> p
-                                  -- Otherwise, assume we're running from the compiler dir!
-                                  Nothing -> "../gibbon-rts/"
-            e2 <- doesDirectoryExist rust_rts_dir
-            unless e2 $ error$ "codegen: Rust RTS not found at path: "++rust_rts_dir
-                               ++"\n Consider setting GIBBON_NEWRTS_DIR.\n"
-            let rust_rts_path = rust_rts_dir ++
-                                (if rts_debug
-                                 then "/target/debug"
-                                 else "/target/release")
-
-            let compile_rust_rts_cmd = "cargo build " ++
-                                       (if rts_debug then " --features=verbose_evac " else " --release ") ++
-                                       (if print_gc_stats then " --features=gcstats " else "")
-
-            compile (Just rust_rts_dir)
-                    compile_rust_rts_cmd
-                    "Compiling the Rust RTS\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-                    "codegen: Rust RTS could not be compiled: "
-            pure rust_rts_path
-
-        compile_c_rts rust_rts_path = do
-            env <- getEnvironment
-            rtsPath <- makeAbsolute $ case lookup "GIBBONDIR" env of
-                            Just p -> p ++"/gibbon-compiler/cbits/gibbon_rts.c"
-                            -- Otherwise, assume we're running from the compiler dir!
-                            Nothing -> "cbits/gibbon_rts.c"
-            e <- doesFileExist rtsPath
-            unless e $ error$ "codegen: gibbon_rts.c file not found at path: "++rtsPath
-                             ++"\n Consider setting GIBBONDIR to repo root.\n"
-            let rts_o_path = replaceExtension rtsPath ".o"
-            let rts_header_dir = takeDirectory rts_o_path
-            let compile_rts_cmd = compilationCmd backend cfg
-                                  ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g" else "")
-                                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
-                                  ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
-                                  ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
-                                  ++" -I " ++ rts_header_dir ++ " "
-                                  ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
-                                  ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links
-            compile Nothing
-                    compile_rts_cmd
-                    "Compiling the C RTS\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-                    "codegen: C RTS could not be compiled: "
-            pure rts_o_path
-
-
+                then " -lgc -lm "
+                else " -lm "
         compile_program = do
-            rust_rts_path <- compile_rust_rts
-            rts_o_path <- compile_c_rts rust_rts_path
-            let rts_header_dir = takeDirectory rts_o_path
+            lib_dir <- getLibDir
+            let rts_o_path = lib_dir </> "gibbon_rts.o"
+            compileRTS cfg
             let compile_prog_cmd = compilationCmd backend cfg
-                                   ++" " ++ rts_o_path
-                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g " else "")
-                                   ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
-                                   ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
-                                   ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
-                                   ++" -I" ++ rts_header_dir ++ " "
-                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
-                                   ++outfile ++ " -o " ++ exe ++ links
+                                   ++ " -o " ++ exe
+                                   ++" -I" ++ lib_dir
+                                   ++" -L" ++ lib_dir
+                                   ++ " -Wl,-rpath=" ++ lib_dir ++ " "
+                                   ++ outfile ++ " " ++ rts_o_path
+                                   ++ links ++ " -lgibbon_rts_ng"
 
-            compile Nothing
-                    compile_prog_cmd
-                    "Compiling the program\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-                    (show backend ++" compiler failed! ")
+            execCmd
+              Nothing
+              compile_prog_cmd
+              "Compiling the program\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+              (show backend ++" compiler failed! ")
             pure ()
 
-        compile :: Maybe FilePath -> String -> String -> String -> IO ()
-        compile dir cmd msg errmsg = do
-            dbgPrintLn 2 msg
-            dbgPrintLn 2 cmd
-            (_,Just hout,Just herr,phandle) <-
-                createProcess (shell cmd)
-                    { std_out = CreatePipe
-                    , std_err = CreatePipe
-                    , cwd     = dir
-                    }
-            exit_code <- waitForProcess phandle
-            case exit_code of
-                ExitSuccess -> do out <- hGetContents hout
-                                  err <- hGetContents herr
-                                  dbgPrintLn 2 out
-                                  dbgPrintLn 2 err
-                ExitFailure n -> do out <- hGetContents hout
-                                    err <- hGetContents herr
-                                    die$ errmsg++out++"\n"++err++"\nCode: "++show n
+getGibbonDir :: IO String
+getGibbonDir =
+  do env <- getEnvironment
+     makeAbsolute $ case lookup "GIBBONDIR" env of
+       Just p  -> p
+       -- Otherwise, assume we're running from the compiler dir!
+       Nothing -> "./"
+
+getLibDir :: IO String
+getLibDir =
+  do gibbon_dir <- getGibbonDir
+     let lib_dir = gibbon_dir </> "gibbon-compiler/cbits/lib"
+     createDirectoryIfMissing False lib_dir
+     pure lib_dir
+
+
+execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
+execCmd dir cmd msg errmsg = do
+    dbgPrintLn 2 msg
+    dbgPrintLn 2 cmd
+    (_,Just hout,Just herr,phandle) <-
+        createProcess (shell cmd)
+            { std_out = CreatePipe
+            , std_err = CreatePipe
+            , cwd     = dir
+            }
+    exit_code <- waitForProcess phandle
+    case exit_code of
+        ExitSuccess -> do out <- hGetContents hout
+                          err <- hGetContents herr
+                          dbgPrintLn 2 out
+                          dbgPrintLn 2 err
+        ExitFailure n -> do out <- hGetContents hout
+                            err <- hGetContents herr
+                            die$ errmsg++out++"\n"++err++"\nCode: "++show n
 
 
 
@@ -512,12 +499,19 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if warnc
                              then " -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic "
                              else suppress_warnings)
-                          ++(optc config)
+                          ++ (optc config)
+                          ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g" else "")
+                          ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
+                          ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
+                          ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
         warnc = gopt Opt_Warnc dflags
         parallel = gopt Opt_Parallel dflags
+        rts_debug = gopt Opt_RtsDebug dflags
+        print_gc_stats = gopt Opt_PrintGcStats dflags
+        genGC = gopt Opt_GenGc dflags
 
 -- |
 isBench :: Mode -> Bool
