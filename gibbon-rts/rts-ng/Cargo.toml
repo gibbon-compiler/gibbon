@@ -1,0 +1,19 @@
+[package]
+name = "gibbon-rts-ng"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chaitanya Koparkar <ckoparkar@gmail.com>"]
+description = "A runtime system for the Gibbon compiler."
+homepage = "https://github.com/iu-parfunc/gibbon"
+repository = "https://github.com/iu-parfunc/gibbon"
+
+[dependencies]
+libc = "0.2"
+
+[lib]
+name = "gibbon_rts_ng"
+crate-type = ["cdylib"]
+
+[features]
+gcstats = []
+verbose_evac = []

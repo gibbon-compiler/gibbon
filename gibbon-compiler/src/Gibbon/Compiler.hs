@@ -379,8 +379,8 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         exe = getExeFile backend fp exefile
         pointer = gopt Opt_Pointer (dynflags cfg)
         links = if pointer
-                then " -lgc -lm -lgibbon_rts "
-                else " -lm -lgibbon_rts "
+                then " -lgc -lm -lgibbon_rts_ng "
+                else " -lm -lgibbon_rts_ng "
 
         rts_debug = gopt Opt_RtsDebug (dynflags cfg)
         print_gc_stats = gopt Opt_PrintGcStats (dynflags cfg)
