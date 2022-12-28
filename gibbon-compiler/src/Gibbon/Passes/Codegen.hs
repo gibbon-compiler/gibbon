@@ -206,14 +206,23 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
       main_expr :: PassM C.Definition
       main_expr = do
+        dflags <- getDynFlags
+        let pointer = gopt Opt_Pointer dflags
         e <- case mtal of
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
-        let init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
+        ret_init <- gensym "init"
+        ret_exit <- gensym "exit"
+        let init_gib = (if pointer then [ C.BlockStm [cstm| GC_INIT(); |] ] else []) ++
+                       [ C.BlockDecl [cdecl| int $id:ret_init = gib_init(argc, argv); |] ]
+            exit_gib = [ C.BlockDecl [cdecl| int $id:ret_exit = gib_exit(); |]
+                       , C.BlockStm [cstm| return $id:ret_exit; |]
+                       ]
+            init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
             init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
-        let bod = init_info_table ++ init_symbol_table ++ ssDecls ++ e
-        pure $ C.FuncDef [cfun| int gib_main_expr(void) { $items:bod } |] noLoc
+        let bod = init_gib ++ init_info_table ++ init_symbol_table ++ ssDecls ++ e ++ exit_gib
+        pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =

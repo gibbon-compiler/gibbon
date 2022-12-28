@@ -1755,11 +1755,12 @@ int dbgprintf(const char *format, ...)
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Main functions
+ * RTS initialization and clean up
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-int main(int argc, char **argv)
+// Called from gib_main_expr.
+int gib_init(int argc, char **argv)
 {
     // Ensure that C and Rust agree on sizes of structs that cross the boundary.
     gib_check_rust_struct_sizes();
@@ -1868,26 +1869,31 @@ int main(int argc, char **argv)
 
     // Initialize the nursery and shadow stack.
     gib_storage_initialize();
-    GibNursery *nursery = DEFAULT_NURSERY;
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibOldgen *oldgen = DEFAULT_GENERATION;
     gib_init_zcts(oldgen);
 
     // Minimal test to see if FFI is set up correctly.
     gib_check_rust_struct_sizes();
 
-    // Run the program.
-    gib_main_expr();
-
-    // Free all objects initialized by the Rust RTS.
-    gib_free(gib_global_bench_prog_param);
-    gib_gc_cleanup(rstack, wstack, nursery, oldgen);
-
 #ifdef _GIBBON_GCSTATS
     // Print GC statistics.
     gib_gc_stats_print(GC_STATS);
 #endif
+
+    return 0;
+}
+
+// Called from gib_main_expr.
+int gib_exit(void)
+{
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
+
+    // Free all objects initialized by the Rust RTS.
+    gib_free(gib_global_bench_prog_param);
+    gib_gc_cleanup(rstack, wstack, nursery, oldgen);
 
     // Next, free all objects initialized by the C RTS.
     gib_storage_free();

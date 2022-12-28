@@ -767,16 +767,11 @@ INLINE_HEADER void clobber() {
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Main functions
+ * RTS initialization and clean up
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-
-// This function must be provided by the code generator.
-int gib_main_expr(void);
-
-// Defined in the RTS.
-int main(int argc, char** argv);
-
+int gib_init(int argc, char **argv);
+int gib_exit(void);
 
 #endif // #ifndef _GIBBON_H
