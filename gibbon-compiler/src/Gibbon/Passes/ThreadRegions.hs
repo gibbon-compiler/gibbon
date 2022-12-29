@@ -484,7 +484,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
   where
     emit_ss_instrs =
       do dflags <- getDynFlags
-         pure $ not (gopt Opt_NonGenGc dflags || gopt Opt_DisableGC dflags)
+         pure $ gopt Opt_GenGc dflags && not (gopt Opt_DisableGC dflags)
 
     go = threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs
 

@@ -756,7 +756,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
        dflags <- getDynFlags
        let isPacked = gopt Opt_Packed dflags
            noGC = gopt Opt_DisableGC dflags
-           nongenGC = gopt Opt_NonGenGc dflags
+           genGC = gopt Opt_GenGc dflags
 
        pre <- case prm of
                  AddP -> let [(outV,outT)] = bnds
@@ -887,12 +887,13 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ]
                    else
                      pure $
-                       (if nongenGC
-                        then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region_on_heap($exp:bufsize); |] ]
-                        else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |] ]) ++
+                       (if genGC
+                        then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |] ]
+                        else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region_on_heap($exp:bufsize); |] ]) ++
                           [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start; |]
                           , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg.end; |]
                           ]
+
 
                  NewParBuffer mul -> do
                    dflags <- getDynFlags
@@ -908,9 +909,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ]
                    else
                      pure $
-                       (if nongenGC
-                        then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region_on_heap($exp:bufsize); |] ]
-                        else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |] ]) ++
+                       (if genGC
+                        then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |] ]
+                        else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region_on_heap($exp:bufsize); |] ]) ++
                           [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start; |]
                           , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg.end; |]
                           ]
@@ -1126,9 +1127,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
                         pure $
-                           (if nongenGC
-                            then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region_on_heap(gib_get_biginf_init_chunk_size()); |] ]
-                            else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |] ]) ++
+                           (if genGC
+                            then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |] ]
+                            else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region_on_heap(gib_get_biginf_init_chunk_size()); |] ]) ++
                                [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg.start; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg.end; |]
                                  -- This would ideally be the *end* of the input region corresponding to inV

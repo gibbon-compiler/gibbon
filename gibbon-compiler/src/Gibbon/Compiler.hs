@@ -384,7 +384,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
 
         rts_debug = gopt Opt_RtsDebug (dynflags cfg)
         print_gc_stats = gopt Opt_PrintGcStats (dynflags cfg)
-        nongenGC = gopt Opt_NonGenGc (dynflags cfg)
+        genGC = gopt Opt_GenGc (dynflags cfg)
 
         compile_rust_rts = do
             env <- getEnvironment
@@ -426,7 +426,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g" else "")
                                   ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                   ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
-                                  ++ (if nongenGC then " -D_GIBBON_NONGENGC " else "")
+                                  ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
                                   ++" -I " ++ rts_header_dir ++ " "
                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                   ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links
@@ -446,7 +446,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                                    ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g " else "")
                                    ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                    ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
-                                   ++ (if nongenGC then " -D_GIBBON_NONGENGC " else "")
+                                   ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
                                    ++" -I" ++ rts_header_dir ++ " "
                                    ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                    ++outfile ++ " -o " ++ exe ++ links

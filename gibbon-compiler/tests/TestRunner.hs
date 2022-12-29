@@ -181,16 +181,16 @@ readMode s =
 
 -- Must match the flag expected by Gibbon.
 modeRunFlags :: Mode -> [String]
-modeRunFlags Gibbon3  = ["--run", "--packed"]
-modeRunFlags Gibbon2  = ["--run", "--packed", "--nongen-gc"]
+modeRunFlags Gibbon3  = ["--run", "--packed", "--gen-gc"]
+modeRunFlags Gibbon2  = ["--run", "--packed"]
 modeRunFlags Pointer = ["--run", "--pointer"]
 modeRunFlags Interp1 = ["--interp1"]
 modeRunFlags Gibbon1 = ["--run", "--packed", "--gibbon1"]
 
 -- Must match the flag expected by Gibbon.
 modeExeFlags :: Mode -> [String]
-modeExeFlags Gibbon3 = ["--to-exe", "--packed"]
-modeExeFlags Gibbon2 = ["--to-exe", "--packed", "--nongen-gc"]
+modeExeFlags Gibbon3 = ["--to-exe", "--packed", "--gen-gc"]
+modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
 modeExeFlags Interp1 = error "Cannot compile in Interp1 mode."
 modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
