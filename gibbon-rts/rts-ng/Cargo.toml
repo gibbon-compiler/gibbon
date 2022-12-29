@@ -3,7 +3,7 @@ name = "gibbon-rts-ng"
 version = "0.1.0"
 edition = "2021"
 authors = ["Chaitanya Koparkar <ckoparkar@gmail.com>"]
-description = "Runtime system for the Gibbon compiler."
+description = "Next generation runtime system for the Gibbon compiler."
 homepage = "https://github.com/iu-parfunc/gibbon"
 repository = "https://github.com/iu-parfunc/gibbon"
 

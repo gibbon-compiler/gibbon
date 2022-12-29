@@ -55,47 +55,45 @@ endif
 
 # Assume current directory if not set.
 GIBBONDIR         ?= ./
-GIBBON_NEWRTS_DIR ?= $(GIBBONDIR)/gibbon-rts
-RUST_RTS_DIR      := $(GIBBON_NEWRTS_DIR)
-C_RTS_DIR         := $(GIBBON_NEWRTS_DIR)/rts-c
-LIB_DIR           := $(GIBBON_NEWRTS_DIR)/lib
+RUST_RTS_DIR      := $(GIBBONDIR)/gibbon-rts
+C_RTS_DIR         := $(RUST_RTS_DIR)/rts-c
+BUILD_DIR         := $(RUST_RTS_DIR)/build
 NAME              := gibbon_rts
 RUST_RTS_SO       := libgibbon_rts_ng.so
-
-RUST_RTS_PATH := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
+RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
 
 all: c_rts rs_rts
 
-c_rts: $(LIB_DIR)/lib$(NAME).a $(LIB_DIR)/$(NAME).o $(LIB_DIR)/$(NAME).h
+c_rts: $(BUILD_DIR)/lib$(NAME).a $(BUILD_DIR)/$(NAME).o $(BUILD_DIR)/$(NAME).h
 
-rs_rts: $(LIB_DIR)/$(RUST_RTS_SO)
+rs_rts: $(BUILD_DIR)/$(RUST_RTS_SO)
 
-$(LIB_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
-	mkdir -p $(LIB_DIR) && \
+$(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
+	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
 
 $(RUST_RTS_PATH): $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
 	cd  $(RUST_RTS_DIR) && \
 	$(RSC) build -p gibbon-rts-ng $(RSFLAGS)
 
-$(LIB_DIR)/lib%.a: $(LIB_DIR)/%.o
+$(BUILD_DIR)/lib%.a: $(BUILD_DIR)/%.o
 	$(AR) crs $@ $^
 
-$(LIB_DIR)/%.o: $(C_RTS_DIR)/%.o
-	mkdir -p $(LIB_DIR) && \
+$(BUILD_DIR)/%.o: $(C_RTS_DIR)/%.o
+	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
 
 $(C_RTS_DIR)/%.o: $(C_RTS_DIR)/%.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
-$(LIB_DIR)/%.h: $(C_RTS_DIR)/%.h
-	mkdir -p $(LIB_DIR) && \
-	cp $^ $@
+$(BUILD_DIR)/%.h: $(C_RTS_DIR)/%.h
+	mkdir -p $(BUILD_DIR) && \
+	ln -s $^ $@
 
-$(LIB_DIR):
-	mkdir -p $(LIB_DIR)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 clean:
-	rm -rf $(LIB_DIR)
+	rm -rf $(BUILD_DIR)
 
 .PHONY: clean

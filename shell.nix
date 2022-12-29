@@ -25,7 +25,6 @@ in
                     stdenv ncurses unzip which rr rustfmt clippy ghcid gdb valgrind
                   ];
     shellHook = ''
-      export GIBBONDIR=${gibbon_dir} \
-             GIBBON_NEWRTS_DIR="${gibbon_dir}/gibbon-rts"
+      export GIBBONDIR=${gibbon_dir}
     '';
   }

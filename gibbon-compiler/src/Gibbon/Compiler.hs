@@ -410,7 +410,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                 then " -lgc -lm "
                 else " -lm "
         compile_program = do
-            lib_dir <- getLibDir
+            lib_dir <- getRTSBuildDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
             compileRTS cfg
             let compile_prog_cmd = compilationCmd backend cfg
@@ -436,12 +436,13 @@ getGibbonDir =
        -- Otherwise, assume we're running from the compiler dir!
        Nothing -> "./"
 
-getLibDir :: IO String
-getLibDir =
+getRTSBuildDir :: IO String
+getRTSBuildDir =
   do gibbon_dir <- getGibbonDir
-     let lib_dir = gibbon_dir </> "gibbon-rts/lib"
-     createDirectoryIfMissing False lib_dir
-     pure lib_dir
+     let build_dir = gibbon_dir </> "gibbon-rts/build"
+     exists <- doesDirectoryExist build_dir
+     unless exists (error "RTS build not found.")
+     pure build_dir
 
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
