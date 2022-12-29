@@ -1,6 +1,7 @@
 [workspace]
 members = [
-  "rts-ng"
+  "rts-ng",
+  "rts-sys"
 ]
 
 [profile.release]

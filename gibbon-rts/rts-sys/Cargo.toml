@@ -1,0 +1,13 @@
+[package]
+name = "gibbon-rts-sys"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chaitanya Koparkar <ckoparkar@gmail.com>"]
+description = "Rust bindings for Gibbon RTS."
+homepage = "https://github.com/iu-parfunc/gibbon"
+repository = "https://github.com/iu-parfunc/gibbon"
+links = "gibbon_rts"
+build = "build.rs"
+
+[lib]
+name = "gibbon_rts_sys"
