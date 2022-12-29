@@ -351,7 +351,7 @@ withPrintInterpProg l0 =
 compileRTS :: Config -> IO ()
 compileRTS Config{verbosity,optc,dynflags} = do
   gibbon_dir <- getGibbonDir
-  let rtsmk = gibbon_dir </> "gibbon-compiler/cbits/rts.mk"
+  let rtsmk = gibbon_dir </> "gibbon-rts/Makefile"
   let rtsmkcmd = "make -f " ++ rtsmk ++ " "
                  ++ (if rts_debug then " MODE=debug " else " MODE=release ")
                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
@@ -439,7 +439,7 @@ getGibbonDir =
 getLibDir :: IO String
 getLibDir =
   do gibbon_dir <- getGibbonDir
-     let lib_dir = gibbon_dir </> "gibbon-compiler/cbits/lib"
+     let lib_dir = gibbon_dir </> "gibbon-rts/lib"
      createDirectoryIfMissing False lib_dir
      pure lib_dir
 

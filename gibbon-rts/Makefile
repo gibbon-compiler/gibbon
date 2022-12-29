@@ -21,6 +21,7 @@ CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -std=gnu11 -O3 -flto
 RSC       := cargo
 RSFLAGS   := -p gibbon-rts-ng
 VERBOSITY := 1
+MODE      := release
 
 CFLAGS += $(USER_CFLAGS) -D_GIBBON_VERBOSITY=$(VERBOSITY)
 
@@ -56,8 +57,8 @@ endif
 GIBBONDIR         ?= ./
 GIBBON_NEWRTS_DIR ?= $(GIBBONDIR)/gibbon-rts
 RUST_RTS_DIR      := $(GIBBON_NEWRTS_DIR)
-C_RTS_DIR         := $(GIBBONDIR)/gibbon-compiler/cbits
-LIB_DIR           := $(C_RTS_DIR)/lib
+C_RTS_DIR         := $(GIBBON_NEWRTS_DIR)/rts-c
+LIB_DIR           := $(GIBBON_NEWRTS_DIR)/lib
 NAME              := gibbon_rts
 RUST_RTS_SO       := libgibbon_rts_ng.so
 
