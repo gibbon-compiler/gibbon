@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 // Copied from https://stackoverflow.com/a/65192210.
 fn copy_dir_all(
@@ -25,8 +26,17 @@ fn main() {
     let dst_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let lib_dir = dst_dir.join("lib");
     fs::create_dir_all(&lib_dir).unwrap();
-
     let gibbon_dir = env::var_os("GIBBONDIR").unwrap();
+
+    let make_rts = Command::new("make")
+        .current_dir(format!("{}/gibbon-rts", gibbon_dir.to_str().unwrap()))
+        .output()
+        .expect("failed to execute process");
+    println!("make: {}", make_rts.status);
+    println!("make: {}", String::from_utf8_lossy(&make_rts.stdout));
+    println!("make: {}", String::from_utf8_lossy(&make_rts.stderr));
+    assert!(make_rts.status.success());
+
     copy_dir_all(
         format!("{}/gibbon-rts/build", gibbon_dir.to_str().unwrap()),
         &lib_dir,

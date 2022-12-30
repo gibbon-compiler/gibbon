@@ -1,0 +1,35 @@
+name: Test Gibbon RTS
+
+on:
+  push:
+  pull_request:
+    types:
+      - review_requested
+      - ready_for_review
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: test-gibbon-rts
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        toolchain:
+          - nightly-2021-10-18
+    steps:
+      - name: dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-7
+          sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-7 /usr/bin/gcc
+      - name: rustup
+        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: build and test
+        run: |
+          export GIBBONDIR=`pwd`
+          cd gibbon-rts/
+          cargo build --verbose
+          cargo test --verbose

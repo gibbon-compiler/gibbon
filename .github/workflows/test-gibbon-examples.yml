@@ -1,4 +1,4 @@
-name: test-gibbon
+name: Test Gibbon examples
 on:
   push:
     branches:
@@ -10,7 +10,7 @@ on:
       - ready_for_review
 jobs:
   linux:
-    name: test-gibbon
+    name: test-gibbon-examples
     runs-on: ubuntu-18.04
     steps:
       - name: dependencies
