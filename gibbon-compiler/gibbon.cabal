@@ -169,12 +169,10 @@ test-suite test-gibbon
                        Unariser
                        InferRegionScope
                        AddRAN
-                       Compiler
                        L1.Typecheck
                        L1.Interp
                        L2.Typecheck
                        L2.Interp
-                       L3.Typecheck
                        -- L0.Specialize
   default-language:    Haskell2010
   ghc-options:         -fdefer-typed-holes
