@@ -14,7 +14,7 @@ use std::error::Error;
 use std::mem::size_of;
 use std::ptr::{null, null_mut, write_bytes};
 
-use crate::ffi::types::*;
+use crate::ffi::c::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
 use crate::{dbgprint, dbgprintln, worklist_next, write_shortcut_ptr};
@@ -301,7 +301,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         dbgprintln!("+Evacuating root {:?}", (*frame));
 
         match (*frame).gc_root_prov {
-            GcRootProv::RemSet => {
+            GibGcRootProv::RemSet => {
                 let (tagged_src, _): (u64, _) = read((*frame).ptr);
                 let tagged = TaggedPointer::from_u64(tagged_src);
                 let src = tagged.untag();
@@ -376,7 +376,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     }
                 }
             }
-            GcRootProv::Stk => {
+            GibGcRootProv::Stk => {
                 let root_in_nursery = nursery.contains_addr((*frame).ptr);
                 if !root_in_nursery {
                     dbgprintln!(
@@ -493,7 +493,7 @@ unsafe fn evacuate_copied(
     let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
 
     match (*frame).gc_root_prov {
-        GcRootProv::Stk => {
+        GibGcRootProv::Stk => {
             dbgprintln!(
                 "+Restoring reader {:?} to {:?}",
                 (*frame).ptr,
@@ -502,7 +502,7 @@ unsafe fn evacuate_copied(
             (*frame).ptr = fwd_ptr;
             (*frame).endptr = fwd_footer_addr;
         }
-        GcRootProv::RemSet => {
+        GibGcRootProv::RemSet => {
             dbgprintln!(
                 "*Writing {:?} at {:?} in oldgen",
                 fwd_ptr,
@@ -576,8 +576,8 @@ unsafe fn evacuate_packed(
 
     let orig_typ = (*frame).datatype;
     let orig_src = match (*frame).gc_root_prov {
-        GcRootProv::Stk => (*frame).ptr,
-        GcRootProv::RemSet => {
+        GibGcRootProv::Stk => (*frame).ptr,
+        GibGcRootProv::RemSet => {
             // The remembered set contains the address where the indirect-
             // ion pointer is stored. We must read it to get the address of
             // the pointed-to data.
@@ -707,7 +707,7 @@ unsafe fn evacuate_packed(
                             // from the remembered set of if we're evacuating an
                             // indirection pointer that points to a non-zero location.
                             match (*frame).gc_root_prov {
-                                GcRootProv::RemSet => {
+                                GibGcRootProv::RemSet => {
                                     dbgprintln!(
                                         "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
                                         src,
@@ -717,7 +717,7 @@ unsafe fn evacuate_packed(
                                     );
                                 }
 
-                                GcRootProv::Stk => {
+                                GibGcRootProv::Stk => {
                                     if !is_loc0(pointee, pointee_footer, true)
                                     {
                                         dbgprintln!(
@@ -764,7 +764,7 @@ unsafe fn evacuate_packed(
                             // from the remembered set of if we're evacuating an
                             // indirection pointer that points to a non-zero location.
                             match (*frame).gc_root_prov {
-                                GcRootProv::RemSet => {
+                                GibGcRootProv::RemSet => {
                                     dbgprintln!(
                                         "   inserting ({:?} to {:?}) to so_env, root in remembered set",
                                         src,
@@ -773,7 +773,7 @@ unsafe fn evacuate_packed(
                                     st.so_env.insert(src, src_after_indr1);
                                 }
 
-                                GcRootProv::Stk => {
+                                GibGcRootProv::Stk => {
                                     if !is_loc0(pointee, pointee_footer, true)
                                     {
                                         dbgprintln!(
@@ -897,8 +897,8 @@ unsafe fn evacuate_packed(
                             fwd_footer_addr,
                         );
                         match (*frame).gc_root_prov {
-                            GcRootProv::RemSet => {}
-                            GcRootProv::Stk => {
+                            GibGcRootProv::RemSet => {}
+                            GibGcRootProv::Stk => {
                                 let fwd_footer = fwd_footer_addr
                                     as *const GibOldgenChunkFooter;
                                 record_time!(
@@ -1273,7 +1273,7 @@ unsafe fn evacuate_packed(
                             }
 
                             match (*frame).gc_root_prov {
-                                GcRootProv::RemSet => {
+                                GibGcRootProv::RemSet => {
                                     dbgprintln!(
                                         "   pushing SkipoverEnvWrite({:?}) action to stack for ctor, root in remembered set",
                                         src
@@ -1283,7 +1283,7 @@ unsafe fn evacuate_packed(
                                     );
                                 }
 
-                                GcRootProv::Stk => (),
+                                GibGcRootProv::Stk => (),
                             }
 
                             for (ty, shct) in field_tys

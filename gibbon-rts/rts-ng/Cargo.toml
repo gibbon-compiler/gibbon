@@ -12,7 +12,7 @@ libc = "0.2"
 
 [lib]
 name = "gibbon_rts_ng"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 gcstats = []
