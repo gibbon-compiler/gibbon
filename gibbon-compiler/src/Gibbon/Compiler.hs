@@ -410,9 +410,9 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                 then " -lgc -lm "
                 else " -lm "
         compile_program = do
+            compileRTS cfg
             lib_dir <- getRTSBuildDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
-            compileRTS cfg
             let compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
