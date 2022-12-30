@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         toolchain:
-          - nightly-2021-10-18
+          - nightly-2022-12-30
     steps:
       - name: dependencies
         run: |

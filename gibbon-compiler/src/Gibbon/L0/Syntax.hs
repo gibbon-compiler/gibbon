@@ -75,7 +75,6 @@ data LinearExt loc dec =
 
 deriving instance Generic Loc.Loc
 deriving instance Generic Loc.Pos
-deriving instance Ord     Loc.Loc
 deriving instance NFData  Loc.Pos
 deriving instance NFData  Loc.Loc
 

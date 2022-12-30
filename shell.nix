@@ -1,27 +1,33 @@
 let
   moz_overlay = import (builtins.fetchGit {
                    name = "nixpkgs-mozilla-2021-10-24";
-                   url = "https://github.com/mozilla/nixpkgs-mozilla/";
+                   url = "https://github.com/ckoparkar/nixpkgs-mozilla";
                    ref = "refs/heads/master";
-                   # Commit hash for nixpkgs-mozilla as of 2021-10-24
-                   rev = "6070a8ee799f629cb1d0004821f77ceed94d3992";
+                   # Commit hash for nixpkgs-mozilla as of 2022-12-30
+                   rev = "e365e1346c3390cf7fde486c2441abe178e384e8";
                  });
   pkgs = import (builtins.fetchGit {
                    url = "https://github.com/nixos/nixpkgs/";
-                   ref = "refs/heads/master";
-                   # Commit hash for nixos-unstable as of 2022-01-30
-                   rev = "8b01281b66cba818abea8dbbdb3614b1b38961e3";
+                   ref = "refs/tags/22.11";
                  }) { overlays = [ moz_overlay ]; };
   stdenv = pkgs.overrideCC pkgs.stdenv pkgs.gcc7;
-  ghc = pkgs.haskell.compiler.ghc902;
+  ghc = pkgs.haskell.compiler.ghc943;
   rust = (pkgs.rustChannelOf { rustToolchain = ./gibbon-rts/rust-toolchain; }).rust;
+  clang = pkgs.clang_14;
   gibbon_dir = builtins.toString ./.;
 in
   with pkgs;
   stdenv.mkDerivation {
     name = "basicGibbonEnv";
-    buildInputs = [ ghc cabal-install stack gcc7 boehmgc uthash rust racket
-                    # dev environment
+    buildInputs = [ # Haskell
+                    ghc cabal-install stack
+                    # C/C++
+                    clang gcc7 boehmgc uthash
+                    # Rust
+                    rust
+                    # Racket
+                    racket
+                    # Other utilities
                     stdenv ncurses unzip which rr rustfmt clippy ghcid gdb valgrind
                   ];
     shellHook = ''
