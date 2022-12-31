@@ -204,7 +204,9 @@ jobs:
         uses: actions/cache@v2
         with:
           key: ${{ runner.os }}-${{ matrix.compiler }}-${{ github.sha }}
-          path: ~/.cabal/store
+          path: |
+            ~/.cabal/store
+            ~/.cabal/packages
           restore-keys: ${{ runner.os }}-${{ matrix.compiler }}-
       - name: install dependencies
         run: |
