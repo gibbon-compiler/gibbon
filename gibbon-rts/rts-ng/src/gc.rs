@@ -17,7 +17,7 @@ use std::ptr::{null, null_mut, write_bytes};
 use crate::ffi::c::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
-use crate::{dbgprint, dbgprintln, worklist_next, write_shortcut_ptr};
+use crate::{dbgprintln, worklist_next, write_shortcut_ptr};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
@@ -1913,8 +1913,8 @@ impl<'a> GibOldgen<'a> {
         let gen: *mut GibOldgen = self;
         unsafe {
             // Rust will drop these heap objects at the end of this scope.
-            Box::from_raw((*gen).old_zct);
-            Box::from_raw((*gen).new_zct);
+            let _drop_1 = Box::from_raw((*gen).old_zct);
+            let _drop_2 = Box::from_raw((*gen).new_zct);
         }
     }
 
@@ -2049,6 +2049,8 @@ impl<'a> GibShadowstack {
             end_ptr.offset_from(start_ptr)
         }
     }
+
+    #[cfg(feature = "verbose_evac")]
     /// Print all frames of the shadow-stack.
     fn print_all(&self, msg: &str) {
         dbgprintln!("{} shadowstack: ", msg);
@@ -2271,6 +2273,7 @@ pub type Result<T> = std::result::Result<T, RtsError>;
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+#[cfg(feature = "verbose_evac")]
 /// Print all information about the nursery and oldgen.
 pub fn print_nursery_and_oldgen(
     rstack: &GibShadowstack,
@@ -2346,6 +2349,16 @@ pub fn print_nursery_and_oldgen(
             dbgprintln!("{}", info);
         }
     }
+}
+
+#[cfg(not(feature = "verbose_evac"))]
+/// Print all information about the nursery and oldgen.
+pub fn print_nursery_and_oldgen(
+    _rstack: &GibShadowstack,
+    _wstack: &GibShadowstack,
+    _nursery: &GibNursery,
+    _oldgen: &GibOldgen,
+) {
 }
 
 #[derive(Debug)]

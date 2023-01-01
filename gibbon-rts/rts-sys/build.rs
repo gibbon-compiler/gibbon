@@ -29,12 +29,13 @@ fn main() {
     let gibbon_dir = env::var_os("GIBBONDIR").unwrap();
 
     let make_rts = Command::new("make")
+        .arg("rts")
         .current_dir(format!("{}/gibbon-rts", gibbon_dir.to_str().unwrap()))
         .output()
         .expect("failed to execute process");
-    println!("make: {}", make_rts.status);
-    println!("make: {}", String::from_utf8_lossy(&make_rts.stdout));
-    println!("make: {}", String::from_utf8_lossy(&make_rts.stderr));
+    eprintln!("make: {}", make_rts.status);
+    eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stdout));
+    eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stderr));
     assert!(make_rts.status.success());
 
     copy_dir_all(

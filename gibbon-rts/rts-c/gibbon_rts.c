@@ -147,16 +147,16 @@ GibSym gib_read_gensym_counter(void)
 #ifdef _GIBBON_POINTER
 #ifndef _GIBBON_PARALLEL
 // void *gib_alloc(size_t n) { return GC_MALLOC(n); }
-// void gib_free(void *ptr) { return GC_FREE(ptr); }
+// void gib_free(void *ptr) { GC_FREE(ptr); }
 void *gib_alloc(size_t n) { return malloc(n); }
-void gib_free(void *ptr) { return free(ptr); }
+void gib_free(void *ptr) { free(ptr); }
 #else
 void *gib_alloc(size_t n) { return malloc(n); }
-void gib_free(void *ptr) { return free(ptr); }
+void gib_free(void *ptr) { free(ptr); }
 #endif // ifndef _GIBBON_PARALLEL
 #else
 void *gib_alloc(size_t n) { return malloc(n); }
-void gib_free(void *ptr) { return free(ptr); }
+void gib_free(void *ptr) { free(ptr); }
 #endif // ifdef _GIBBON_POINTER
 
 // Could try alloca() here.  Better yet, we could keep our own,
@@ -1121,7 +1121,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
-        GibNurseryChunkFooter oldsize = (GibNurseryChunkFooter *) footer_ptr;
+        GibNurseryChunkFooter oldsize = *(GibNurseryChunkFooter *) footer_ptr;
         newsize = oldsize * 2;
     } else {
         old_chunk_in_nursery = false;
@@ -1482,6 +1482,7 @@ static void gib_gc_stats_free(GibGcStats *stats)
     gib_free(stats);
 }
 
+#ifdef _GIBBON_GCSTATS
 static void gib_gc_stats_print(GibGcStats *stats)
 {
     printf("\nGC statistics\n----------------------------------------\n");
@@ -1521,6 +1522,7 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("GC ZCT mgmt time:\t\t %e\n", stats->gc_zct_mgmt_time);
 
 }
+#endif // _GIBBON_GCSTATS
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1793,7 +1795,7 @@ int gib_init(int argc, char **argv)
             fprintf(stderr, " [gibbon rts] Failed setrlimit stack size to something reasonable; giving up.\n");
             break; // abort();
         }
-        int code = setrlimit(RLIMIT_STACK, &lim);
+        code = setrlimit(RLIMIT_STACK, &lim);
     }
 #endif
 

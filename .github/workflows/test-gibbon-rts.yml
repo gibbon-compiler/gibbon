@@ -31,5 +31,6 @@ jobs:
         run: |
           export GIBBONDIR=`pwd`
           cd gibbon-rts/
-          cargo build --verbose
-          cargo test --verbose
+          make all
+          cargo build -v
+          cargo test -v

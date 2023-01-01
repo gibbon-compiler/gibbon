@@ -591,7 +591,6 @@ INLINE_HEADER void gib_indirection_barrier(
     GibCursor writeloc = from;
     *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
     writeloc += sizeof(GibPackedTag);
-    char *indr_ptr_addr = writeloc;
     *(uintptr_t *) writeloc = tagged;
 
     // If we're using the non-generational GC, all indirections will be
@@ -608,7 +607,6 @@ INLINE_HEADER void gib_indirection_barrier(
     // Add to remembered set if it's an old to young pointer.
     bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
-    bool to_old = !to_young;
 
     if (from_old) {
         if (to_young) {

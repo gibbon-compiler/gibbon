@@ -19,7 +19,7 @@ CC        := gcc
 AR        := gcc-ar
 CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -std=gnu11 -O3 -flto
 RSC       := cargo
-RSFLAGS   := -p gibbon-rts-ng
+RSFLAGS   := -v
 VERBOSITY := 1
 MODE      := release
 
@@ -61,18 +61,28 @@ BUILD_DIR         := $(RUST_RTS_DIR)/build
 NAME              := gibbon_rts
 RUST_RTS_SO       := libgibbon_rts_ng.so
 RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
+RUST_SOURCES      := $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
 
-all: c_rts rs_rts
+
+all: rts
+
+rts: c_rts rs_rts
 
 c_rts: $(BUILD_DIR)/lib$(NAME).a $(BUILD_DIR)/$(NAME).o $(BUILD_DIR)/$(NAME).h
 
 rs_rts: $(BUILD_DIR)/$(RUST_RTS_SO)
 
+test: t_rs_rts
+
+t_rs_rts: $(RUST_SOURCES)
+	cd  $(RUST_RTS_DIR) && \
+	$(RSC) test
+
 $(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
 	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
 
-$(RUST_RTS_PATH): $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
+$(RUST_RTS_PATH): $(RUST_SOURCES)
 	cd  $(RUST_RTS_DIR) && \
 	$(RSC) build -p gibbon-rts-ng $(RSFLAGS)
 
@@ -94,6 +104,6 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(RUST_RTS_DIR)/target
 
 .PHONY: clean
