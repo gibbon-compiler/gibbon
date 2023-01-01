@@ -1176,11 +1176,11 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     // Write a redirection tag at writeloc and make it point to the start of
     // this fresh chunk, but store a tagged pointer here.
     uint16_t new_footer_offset = new_footer_start - heap_start;
-    uintptr_t tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
+    GibTaggedPtr tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
     GibCursor writeloc = *writeloc_addr;
-    *(GibBoxedTag *) writeloc = GIB_REDIRECTION_TAG;
+    *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
     writeloc += 1;
-    *(uintptr_t *) writeloc = tagged;
+    *(GibTaggedPtr *) writeloc = tagged;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     fprintf(stderr, "  wrote a redirection pointer at %p to %p\n",
@@ -1448,6 +1448,84 @@ static void gib_shadowstack_free(GibShadowstack* stack)
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Write barrier
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void gib_indirection_barrier_noinline(
+    // Address where the indirection tag is written.
+    GibCursor from,
+    GibCursor from_footer,
+    // Address of the pointed-to data.
+    GibCursor to,
+    GibCursor to_footer,
+    // Data type written at from/to.
+    uint32_t datatype
+)
+{
+    // Write the indirection.
+    uint16_t footer_offset = to_footer - to;
+    GibTaggedPtr tagged = GIB_STORE_TAG(to, footer_offset);
+    GibCursor writeloc = from;
+    *(GibPackedTag *) writeloc = GIB_INDIRECTION_TAG;
+    writeloc += sizeof(GibPackedTag);
+    *(GibTaggedPtr *) writeloc = tagged;
+
+    // If we're using the non-generational GC, all indirections will be
+    // old-to-old indirections.
+
+#ifdef _GIBBON_NONGENGC
+    gib_handle_old_to_old_indirection(from_footer, to_footer);
+#else
+
+#ifdef _GIBBON_DEBUG
+    assert(from <= from_footer);
+    assert(to <= to_footer);
+#endif
+    // Add to remembered set if it's an old to young pointer.
+    bool from_old = !gib_addr_in_nursery(from);
+    bool to_young = gib_addr_in_nursery(to);
+
+    if (from_old) {
+        if (to_young) {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            fprintf(stderr, "Writing an old-to-young indirection, %p -> %p.\n", from, to);
+#endif
+
+            // (3) oldgen -> nursery
+            GibOldgen *oldgen = DEFAULT_GENERATION;
+            // Store the address of the indirection pointer, *NOT* the address of
+            // the indirection tag, in the remembered set.
+            char *indr_addr = (char *) from + sizeof(GibPackedTag);
+            gib_remset_push(oldgen->rem_set, indr_addr, from_footer, datatype);
+            return;
+        } else {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            fprintf(stderr, "Writing an old-to-old indirection, %p -> %p.\n", from, to);
+#endif
+
+            // (4) oldgen -> oldgen
+            gib_handle_old_to_old_indirection(from_footer, to_footer);
+            return;
+        }
+    } else {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        fprintf(stderr, "Writing a young-to-%s indirection, %p -> %p.\n",
+                (to_young ? "young" : "old"), from, to);
+#endif
+
+   }
+
+    return;
+#endif // _GIBBON_NONGENGC
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Gc statistics
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -1523,6 +1601,7 @@ static void gib_gc_stats_print(GibGcStats *stats)
 
 }
 #endif // _GIBBON_GCSTATS
+
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

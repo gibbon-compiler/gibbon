@@ -26,6 +26,7 @@ pub mod c {
     pub type GibBool = bool;
     pub type GibPtr = *const i8;
     pub type GibCursor = *const i8;
+    pub type GibTaggedPtr = usize;
     pub type GibThreadId = u64;
 
     /// An enum in C, which is 4 bytes.
@@ -559,7 +560,20 @@ pub mod c {
             datatype: GibDatatype,
         );
     }
-    */
+     */
+
+    extern "C" {
+        pub fn gib_indirection_barrier_noinline(
+            // Address where the indirection tag is written.
+            from: GibCursor,
+            from_footer: GibCursor,
+            // Address of the pointed-to data.
+            to: GibCursor,
+            to_footer: GibCursor,
+            // Data type written at from/to.
+            datatype: GibDatatype,
+        );
+    }
 
     /*
      * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

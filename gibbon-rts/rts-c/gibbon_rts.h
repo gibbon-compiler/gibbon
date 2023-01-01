@@ -56,6 +56,7 @@ typedef uint64_t GibSym;
 typedef bool GibBool;
 typedef char* GibPtr;
 typedef char* GibCursor;
+typedef uintptr_t GibTaggedPtr;
 typedef uint64_t GibThreadId;
 
 
@@ -132,16 +133,16 @@ GibSym gib_read_gensym_counter(void);
 
 #define GIB_TAG_BITS 16
 #define GIB_POINTER_BITS 48
-static const uintptr_t GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
+static const GibTaggedPtr GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
 
 #define GIB_STORE_TAG(ptr, tag)                                               \
-    (uintptr_t) (((uintptr_t) ptr) | (((uintptr_t) tag) << GIB_POINTER_BITS)) \
+    (GibTaggedPtr) (((GibTaggedPtr) ptr) | (((GibTaggedPtr) tag) << GIB_POINTER_BITS)) \
 
 #define GIB_UNTAG(tagged)                              \
-    (char *) (((uintptr_t) tagged) & GIB_POINTER_MASK) \
+    (char *) (((GibTaggedPtr) tagged) & GIB_POINTER_MASK) \
 
 #define GIB_GET_TAG(tagged)                               \
-    (uint16_t) (((uintptr_t) tagged) >> GIB_POINTER_BITS) \
+    (uint16_t) (((GibTaggedPtr) tagged) >> GIB_POINTER_BITS) \
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -587,11 +588,11 @@ INLINE_HEADER void gib_indirection_barrier(
 {
     // Write the indirection.
     uint16_t footer_offset = to_footer - to;
-    uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
+    GibTaggedPtr tagged = GIB_STORE_TAG(to, footer_offset);
     GibCursor writeloc = from;
-    *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
+    *(GibPackedTag *) writeloc = GIB_INDIRECTION_TAG;
     writeloc += sizeof(GibPackedTag);
-    *(uintptr_t *) writeloc = tagged;
+    *(GibTaggedPtr *) writeloc = tagged;
 
     // If we're using the non-generational GC, all indirections will be
     // old-to-old indirections.
@@ -644,6 +645,18 @@ INLINE_HEADER void gib_indirection_barrier(
     return;
 #endif // _GIBBON_NONGENGC
 }
+
+// A copy of gib_indirection_barrier that is not inlined, for use via Rust.
+void gib_indirection_barrier_noinline(
+    // Address where the indirection tag is written.
+    GibCursor from,
+    GibCursor from_footer,
+    // Address of the pointed-to data.
+    GibCursor to,
+    GibCursor to_footer,
+    // Data type written at from/to.
+    uint32_t datatype
+);
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
