@@ -2121,7 +2121,7 @@ struct DataconInfo {
     num_scalars: u8,
     /// Number of packed fields.
     num_packed: u8,
-    /// Field types.
+    /// Field types of packed fields.
     field_tys: Vec<GibDatatype>,
 }
 

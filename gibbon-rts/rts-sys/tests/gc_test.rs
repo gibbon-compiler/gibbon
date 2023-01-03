@@ -1,5 +1,7 @@
 use gibbon_rts_sys::*;
 
+mod utils;
+
 #[test]
 fn it_works() {
     use std::ptr::null_mut;
