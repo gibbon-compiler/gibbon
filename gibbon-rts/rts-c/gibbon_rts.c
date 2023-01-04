@@ -1437,6 +1437,40 @@ static void gib_shadowstack_free(GibShadowstack* stack)
     return;
 }
 
+void gib_shadowstack_push_noinline(
+    GibShadowstack *stack,
+    char *ptr,
+    char *endptr,
+    GibGcRootProv gc_root_prov,
+    uint32_t datatype
+)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_end = stack->end;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    assert((stack_alloc_ptr + size) <= stack_end);
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
+    frame->ptr = ptr;
+    frame->endptr = endptr;
+    frame->gc_root_prov = gc_root_prov;
+    frame->datatype = datatype;
+    (*stack_alloc_ptr_addr) += size;
+    return;
+}
+
+GibShadowstackFrame *gib_shadowstack_pop_noinline(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    assert((stack_alloc_ptr - size) >= stack_start);
+    (*stack_alloc_ptr_addr) -= size;
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
+    return frame;
+}
+
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -401,6 +401,14 @@ pub mod c {
 
     #[repr(C)]
     #[derive(Debug)]
+    pub struct GibOldgen_ {
+        pub rem_set_: *mut GibRememberedSet,
+        pub old_zct_: *mut c_void,
+        pub new_zct_: *mut c_void,
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
     pub struct GibGcStats {
         pub minor_collections: u64,
         pub major_collections: u64,
@@ -484,6 +492,19 @@ pub mod c {
      * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
      */
 
+    extern "C" {
+        pub static gib_global_nurseries: *mut GibNursery;
+        pub static gib_global_oldgen: *mut GibOldgen_;
+    }
+
+    impl GibOldgen<'_> {
+        pub fn from_ffi(
+            oldgen_ptr: *mut GibOldgen_,
+        ) -> &'static mut GibOldgen<'static> {
+            unsafe { &mut *(oldgen_ptr as *mut GibOldgen) }
+        }
+    }
+
     /*
     extern "C" {
         // TODO: macro.
@@ -497,23 +518,28 @@ pub mod c {
      * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
      */
 
-    /*
     extern "C" {
-        // TODO: macro.
-        fn gib_shadowstack_push(
+        pub static gib_global_read_shadowstacks: *mut GibShadowstack;
+        pub static gib_global_write_shadowstacks: *mut GibShadowstack;
+    }
+
+    extern "C" {
+        pub fn gib_shadowstack_push_noinline(
             stack: *const GibShadowstack,
             ptr: *const i8,
             endptr: *const i8,
             gc_root_prov: GibGcRootProv,
             datatype: GibDatatype,
         );
-        fn gib_shadowstack_pop(
+        pub fn gib_shadowstack_pop_noinline(
             stack: *const GibShadowstack,
         ) -> *const GibShadowstackFrame;
-        fn gib_shadowstack_length(stack: *const GibShadowstack) -> i32;
-        fn gib_shadowstack_print_all(stack: *const GibShadowstack);
+
+        /* TODO: macro
+                fn gib_shadowstack_length(stack: *const GibShadowstack) -> i32;
+                fn gib_shadowstack_print_all(stack: *const GibShadowstack);
+        */
     }
-    */
 
     /*
      * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1,1 +1,1 @@
-mod heap;
+pub mod heap;

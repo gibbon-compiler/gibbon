@@ -66,13 +66,16 @@ pub enum Object {
     KS3(GibChar, GibBool, GibFloat),
     KS4(GibChar, GibBool, GibBool, GibInt),
     // Constructor with packed fields.
-    KP(Vec<TDatatype>),
+    KP(Vec<Object>),
     // Constructor with both scalar and packed fields.
-    KSP2(GibInt, Box<TDatatype>),
-    KSP3(GibBool, Box<TDatatype>, Box<TDatatype>),
-    KSP4(GibTaggedPtr, GibInt, Box<TDatatype>, Box<TDatatype>),
-    KSP5(GibChar, GibBool, GibFloat, Box<TDatatype>, Box<TDatatype>),
-    KSP6(GibChar, GibBool, GibFloat, GibInt, Box<TDatatype>, Box<TDatatype>),
+    KSP2(GibInt, Box<Object>),
+    KSP3(GibBool, Box<Object>, Box<Object>),
+    KSP4(GibTaggedPtr, GibInt, Box<Object>, Box<Object>),
+    KSP5(GibChar, GibBool, GibFloat, Box<Object>, Box<Object>),
+    KSP6(GibChar, GibBool, GibFloat, GibInt, Box<Object>, Box<Object>),
     // Indicates that this object should be allocated in a fresh region.
-    FreshReg(Box<TDatatype>),
+    FreshNurseryReg(Box<Object>),
+    FreshOldgenReg(Box<Object>),
+    // Address of another object.
+    Addr(GibTaggedPtr),
 }

@@ -76,7 +76,7 @@ test: t_rs_rts
 
 t_rs_rts: $(RUST_SOURCES)
 	cd  $(RUST_RTS_DIR) && \
-	$(RSC) test
+	$(RSC) test -- --nocapture
 
 $(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
 	mkdir -p $(BUILD_DIR) && \

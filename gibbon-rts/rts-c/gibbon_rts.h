@@ -527,6 +527,15 @@ INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
     return;
 }
 
+void gib_shadowstack_push_noinline(
+    GibShadowstack *stack,
+    char *ptr,
+    char *endptr,
+    GibGcRootProv gc_root_prov,
+    uint32_t datatype
+);
+GibShadowstackFrame *gib_shadowstack_pop_noinline(GibShadowstack *stack);
+
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Remembered set
