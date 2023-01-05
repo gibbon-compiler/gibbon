@@ -145,18 +145,104 @@ GibSym gib_read_gensym_counter(void)
  */
 
 #ifdef _GIBBON_POINTER
+
+#ifdef _GIBBON_BUMPALLOC_HEAP
+#warning "Using bump allocator."
+
+static __thread char *gib_global_ptr_bumpalloc_heap_ptr = (char *) NULL;
+static __thread char *gib_global_ptr_bumpalloc_heap_ptr_end = (char *) NULL;
+static char *gib_global_ptr_saved_heap_ptr_stack[100];
+static int gib_global_ptr_num_saved_heap_ptr = 0;
+
+// For simplicity just use a single large slab:
+static inline void gib_init_ptr_bumpalloc(void)
+{
+    gib_global_ptr_bumpalloc_heap_ptr =
+        (char*) malloc(gib_global_biginf_init_chunk_size);
+    gib_global_ptr_bumpalloc_heap_ptr_end =
+        gib_global_ptr_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Arena size for bump alloc: %zu\n", gib_global_biginf_init_chunk_size);
+    printf("gib_init_ptr_bumpalloc DONE: heap_ptr = %p\n",
+           gib_global_ptr_bumpalloc_heap_ptr);
+#endif
+}
+
+static inline void *gib_ptr_bumpalloc(size_t n)
+{
+    if (! gib_global_ptr_bumpalloc_heap_ptr) {
+        gib_init_ptr_bumpalloc();
+    }
+    if (gib_global_ptr_bumpalloc_heap_ptr + n <
+        gib_global_ptr_bumpalloc_heap_ptr_end) {
+        char* old= gib_global_ptr_bumpalloc_heap_ptr;
+        gib_global_ptr_bumpalloc_heap_ptr += n;
+        return old;
+    } else {
+        fprintf(stderr, "Warning: bump allocator ran out of memory.");
+        exit(1);
+    }
+}
+
+// Snapshot the current heap pointer value across all threads.
+void gib_ptr_bumpalloc_save_state(void)
+{
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Saving(%p): pos %d", heap_ptr, gib_global_ptr_num_saved_heap_ptr);
+#endif
+    char *heap_ptr = gib_global_ptr_bumpalloc_heap_ptr;
+    gib_global_ptr_saved_heap_ptr_stack[gib_global_ptr_num_saved_heap_ptr] = heap_ptr;
+    gib_global_ptr_num_saved_heap_ptr++;
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("\n");
+#endif
+}
+
+void gib_ptr_bumpalloc_restore_state(void)
+{
+    if(gib_global_ptr_num_saved_heap_ptr <= 0) {
+        fprintf(stderr, "Bad call to gib_ptr_bumpalloc_restore_state!  Saved stack empty!\ne");
+        exit(1);
+    }
+    gib_global_ptr_num_saved_heap_ptr--;
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Restoring(%p): pos %d, discarding %p",
+           gib_global_ptr_saved_heap_ptr_stack[gib_global_ptr_num_saved_heap_ptr],
+           gib_global_ptr_num_saved_heap_ptr,
+           gib_global_ptr_bumpalloc_heap_ptr);
+#endif
+    gib_global_ptr_bumpalloc_heap_ptr =
+        gib_global_ptr_saved_heap_ptr_stack[gib_global_ptr_num_saved_heap_ptr];
+}
+
+void *gib_alloc(size_t n) { return gib_ptr_bumpalloc(n); }
+void gib_free(void *ptr) {}
+
+#else // ifdef _GIBBON_BUMPALLOC_HEAP
+
+void gib_ptr_bumpalloc_save_state(void) {}
+void gib_ptr_bumpalloc_restore_state(void) {}
+
 #ifndef _GIBBON_PARALLEL
 // void *gib_alloc(size_t n) { return GC_MALLOC(n); }
 // void gib_free(void *ptr) { GC_FREE(ptr); }
 void *gib_alloc(size_t n) { return malloc(n); }
 void gib_free(void *ptr) { free(ptr); }
-#else
+#else // ifndef _GIBBON_PARALLEL
 void *gib_alloc(size_t n) { return malloc(n); }
 void gib_free(void *ptr) { free(ptr); }
 #endif // ifndef _GIBBON_PARALLEL
-#else
+
+#endif // ifdef _GIBBON_BUMPALLOC_HEAP
+
+#else // ifdef _GIBBON_POINTER
+
+void gib_ptr_bumpalloc_save_state(void) {}
+void gib_ptr_bumpalloc_restore_state(void) {}
+
 void *gib_alloc(size_t n) { return malloc(n); }
 void gib_free(void *ptr) { free(ptr); }
+
 #endif // ifdef _GIBBON_POINTER
 
 // Could try alloca() here.  Better yet, we could keep our own,
@@ -620,7 +706,7 @@ double gib_sum_timing_array(GibVector *times)
  */
 
 
-#ifdef _BUMPALLOC
+#ifdef _GIBBON_BUMPALLOC_LISTS
 // #define _GIBBON_DEBUG
 #warning "Using bump allocator."
 
@@ -665,6 +751,7 @@ void gib_list_bumpalloc_save_state(void)
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("Saving(%p): pos %d", heap_ptr, gib_global_list_num_saved_heap_ptr);
 #endif
+    char *heap_ptr = gib_global_list_bumpalloc_heap_ptr;
     gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr] = heap_ptr;
     gib_global_list_num_saved_heap_ptr++;
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
@@ -696,7 +783,7 @@ void *gib_list_bumpalloc(size_t n) { return gib_alloc(n); }
 void gib_list_bumpalloc_save_state(void) {}
 void gib_list_bumpalloc_restore_state(void) {}
 
-#endif // BUMPALLOC
+#endif // _GIBBON_BUMPALLOC_LISTS
 
 
 // List API.
@@ -1982,6 +2069,7 @@ int gib_init(int argc, char **argv)
         *gib_global_bench_prog_param = '\n';
     }
 
+#ifndef _GIBBON_POINTER
     // Initialize the nursery and shadow stack.
     gib_storage_initialize();
     GibOldgen *oldgen = DEFAULT_GENERATION;
@@ -1994,6 +2082,8 @@ int gib_init(int argc, char **argv)
     // Print GC statistics.
     gib_gc_stats_print(GC_STATS);
 #endif
+
+#endif // ifndef _GIBBON_POINTER
 
     return 0;
 }
@@ -2010,9 +2100,12 @@ int gib_exit(void)
     gib_free(gib_global_bench_prog_param);
     gib_gc_cleanup(rstack, wstack, nursery, oldgen);
 
+#ifndef _GIBBON_POINTER
     // Next, free all objects initialized by the C RTS.
     gib_storage_free();
-    gib_free_symtable();
+#endif
+
+    // gib_free_symtable();
 
     return 0;
 }

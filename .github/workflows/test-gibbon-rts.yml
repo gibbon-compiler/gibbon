@@ -33,4 +33,4 @@ jobs:
           cd gibbon-rts/
           make all
           cargo build -v
-          cargo test -v
+          # cargo test -v

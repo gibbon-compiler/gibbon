@@ -221,19 +221,23 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
                        ]
             init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
             init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
-        let bod = init_gib ++ init_info_table ++ init_symbol_table ++ ssDecls ++ e ++ exit_gib
+        let bod = init_gib ++ init_info_table ++ init_symbol_table
+                  ++ (if pointer then [] else ssDecls)
+                  ++ e ++ exit_gib
         pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
-          do let retTy   = codegenTy ty
+          do dflags <- getDynFlags
+             let pointer = gopt Opt_Pointer dflags
+             let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
                  init_venv = M.fromList args
              let nam' = if S.member nam sort_fns
                         then varAppend nam (toVar "_original")
                         else nam
              body <- codegenTail init_venv init_fun_env sort_fns tal ty []
-             let body' = ssDecls ++ body
+             let body' = (if pointer then [] else ssDecls) ++ body
              let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
                               $items:body'
                               } |]
@@ -638,12 +642,18 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 
                      (if flg
                          -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_bumpalloc_save_state(); |]
+                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
+                                                         gib_list_bumpalloc_save_state();
+                                                         gib_ptr_bumpalloc_save_state();
+                                                         } |]
                                        , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
                                        ] ++
                                        rhs''++
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
-                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_bumpalloc_restore_state(); |]
+                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
+                                                         gib_list_bumpalloc_restore_state();
+                                                         gib_ptr_bumpalloc_restore_state();
+                                                         } |]
                                        , C.BlockDecl [cdecl| double $id:itertime = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| printf("itertime: %lf\n", $id:itertime); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]

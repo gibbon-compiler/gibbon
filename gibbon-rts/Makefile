@@ -36,21 +36,21 @@ ifeq ($(GC), nongen)
 	CFLAGS += -D_GIBBON_NONGENGC
 endif
 
-ifdef $(GCSTATS)
+ifeq ($(BUMPALLOC), 1)
 	CFLAGS += -D_GIBBON_GCSTATS
 	RSFLAGS += --features=gcstats
 endif
 
-ifdef $(POINTER)
+ifeq ($(BUMPALLOC), 1)
 	CFLAGS += -D_GIBBON_POINTER
 endif
 
-ifdef $(PARALLEL)
+ifeq ($(BUMPALLOC), 1)
 	CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
 endif
 
-ifdef $(BUMPALLOC)
-	CFLAGS += -D_GIBBON_BUMPALLOC_LISTS
+ifeq ($(BUMPALLOC), 1)
+	CFLAGS += -D_GIBBON_BUMPALLOC_LISTS -D_GIBBON_BUMPALLOC_HEAP
 endif
 
 # Assume current directory if not set.

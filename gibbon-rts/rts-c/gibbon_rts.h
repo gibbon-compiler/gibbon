@@ -154,6 +154,10 @@ void *gib_alloc(size_t size);
 void *gib_scoped_alloc(size_t size);
 void gib_free(void *ptr);
 
+// Bump allocation.
+void gib_ptr_bumpalloc_save_state(void);
+void gib_ptr_bumpalloc_restore_state(void);
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Arenas
