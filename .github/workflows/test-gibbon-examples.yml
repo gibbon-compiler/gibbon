@@ -4,6 +4,7 @@ on:
     branches:
       - master
       - new-rts
+      - main
   pull_request:
     types:
       - review_requested
