@@ -208,6 +208,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
       main_expr = do
         dflags <- getDynFlags
         let pointer = gopt Opt_Pointer dflags
+        let gen_gc = gopt Opt_GenGc dflags
         e <- case mtal of
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
@@ -222,14 +223,14 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
             init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
             init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
         let bod = init_gib ++ init_info_table ++ init_symbol_table
-                  ++ (if pointer then [] else ssDecls)
+                  ++ (if gen_gc then ssDecls else [])
                   ++ e ++ exit_gib
         pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
           do dflags <- getDynFlags
-             let pointer = gopt Opt_Pointer dflags
+             let gen_gc = gopt Opt_GenGc dflags
              let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
                  init_venv = M.fromList args
@@ -237,7 +238,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
                         then varAppend nam (toVar "_original")
                         else nam
              body <- codegenTail init_venv init_fun_env sort_fns tal ty []
-             let body' = (if pointer then [] else ssDecls) ++ body
+             let body' = (if gen_gc then ssDecls else []) ++ body
              let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
                               $items:body'
                               } |]

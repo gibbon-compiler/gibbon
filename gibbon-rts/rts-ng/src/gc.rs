@@ -1759,12 +1759,12 @@ trait Heap {
 
 impl<'a> GibNursery {
     #[inline(always)]
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         (*self).alloc = (*self).heap_end;
     }
 
     #[inline(always)]
-    fn contains_addr(&self, addr: *const i8) -> bool {
+    pub fn contains_addr(&self, addr: *const i8) -> bool {
         (addr >= (*self).heap_start) && (addr <= (*self).heap_end)
     }
 }
@@ -2039,7 +2039,7 @@ pub fn init_zcts(oldgen: &mut GibOldgen) {
 
 impl<'a> GibShadowstack {
     /// Length of the shadow-stack.
-    fn length(&self) -> isize {
+    pub fn length(&self) -> isize {
         unsafe {
             let (start_ptr, end_ptr) = (
                 ((*self).start as *const i8) as *const GibShadowstackFrame,
@@ -2052,7 +2052,7 @@ impl<'a> GibShadowstack {
 
     #[cfg(feature = "verbose_evac")]
     /// Print all frames of the shadow-stack.
-    fn print_all(&self, msg: &str) {
+    pub fn print_all(&self, msg: &str) {
         dbgprintln!("{} shadowstack: ", msg);
         for frame in ShadowstackIter::new(self) {
             unsafe {
@@ -2062,7 +2062,7 @@ impl<'a> GibShadowstack {
     }
 
     /// Delete all frames from the shadow-stack.
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         (*self).alloc = (*self).start;
     }
 }

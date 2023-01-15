@@ -1039,6 +1039,9 @@ typedef struct gib_gc_stats {
 
 } GibGcStats;
 
+// Whether storage is initialized or not.
+bool gib_storage_initialized = false;
+
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
 // Old generation.
@@ -1361,7 +1364,7 @@ static void gib_gc_stats_free(GibGcStats *stats);
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void)
 {
-    if (gib_global_nurseries != NULL) {
+    if (gib_storage_initialized) {
         return;
     }
 
@@ -1401,7 +1404,7 @@ static void gib_storage_initialize(void)
 
 static void gib_storage_free(void)
 {
-    if (gib_global_nurseries == NULL) {
+    if (!gib_storage_initialized) {
         return;
     }
 

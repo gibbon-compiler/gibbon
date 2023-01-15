@@ -404,6 +404,9 @@ typedef struct gib_old_generation {
 typedef struct gib_region_info GibRegionInfo;
 typedef struct gib_gc_stats GibGcStats;
 
+// Whether storage is initialized or not.
+extern bool gib_storage_initialized;
+
 // Array of nurseries, indexed by thread_id.
 extern GibNursery *gib_global_nurseries;
 // Old generation.
