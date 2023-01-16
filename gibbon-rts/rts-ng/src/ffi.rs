@@ -702,6 +702,11 @@ pub mod rs {
         0
     }
 
+    pub extern "C" fn gib_info_table_clear() -> i32 {
+        gc::info_table_clear();
+        0
+    }
+
     #[no_mangle]
     pub extern "C" fn gib_info_table_insert_packed_dcon(
         datatype: GibDatatype,
