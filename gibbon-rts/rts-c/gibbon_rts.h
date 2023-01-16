@@ -449,7 +449,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
 
 // Trigger GC.
-void performGC(bool force_major);
+void gib_perform_GC(bool force_major);
 
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size);
@@ -700,6 +700,7 @@ typedef struct gib_oldgen_footer GibOldgenChunkFooter;
 int gib_info_table_initialize(size_t size);
 int gib_info_table_finalize(void);
 int gib_info_table_clear(void);
+int gib_info_table_print(void);
 int gib_info_table_insert_scalar(uint32_t datatype, size_t size);
 int gib_info_table_insert_packed_dcon(
     uint32_t datatype,

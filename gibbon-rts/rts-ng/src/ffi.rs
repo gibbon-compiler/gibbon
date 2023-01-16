@@ -478,7 +478,7 @@ pub mod c {
         pub fn gib_free_region(footer_ptr: *mut c_char);
 
         /// Trigger GC.
-        pub fn performGC(force_major: bool);
+        pub fn gib_perform_GC(force_major: bool);
 
         // Functions related to counting the number of allocated regions.
         pub fn gib_alloc_counted_region(size: usize) -> GibChunk;
@@ -704,6 +704,11 @@ pub mod rs {
 
     pub extern "C" fn gib_info_table_clear() -> i32 {
         gc::info_table_clear();
+        0
+    }
+
+    pub extern "C" fn gib_info_table_print() -> i32 {
+        gc::info_table_print();
         0
     }
 

@@ -1916,9 +1916,11 @@ impl<'a> GibOldgen<'a> {
     fn free_zcts(&mut self) {
         let gen: *mut GibOldgen = self;
         unsafe {
-            // Rust will drop these heap objects at the end of this scope.
-            let _drop_1 = Box::from_raw((*gen).old_zct);
-            let _drop_2 = Box::from_raw((*gen).new_zct);
+            // [2023.01.16]: This fails with the rts-sys tests for some reason.
+            //
+            // // Rust will drop these heap objects at the end of this scope.
+            // let _drop_1 = Box::from_raw((*gen).old_zct);
+            // let _drop_2 = Box::from_raw((*gen).new_zct);
         }
     }
 
@@ -2054,13 +2056,12 @@ impl<'a> GibShadowstack {
         }
     }
 
-    #[cfg(feature = "verbose_evac")]
     /// Print all frames of the shadow-stack.
     pub fn print_all(&self, msg: &str) {
-        dbgprintln!("{} shadowstack: ", msg);
+        println!("{} shadowstack: ", msg);
         for frame in ShadowstackIter::new(self) {
             unsafe {
-                dbgprintln!("{:?}", *frame);
+                println!("{:?}", *frame);
             }
         }
     }
@@ -2222,6 +2223,12 @@ pub fn info_table_finalize() {
 pub fn info_table_clear() {
     unsafe {
         INFO_TABLE = &[];
+    }
+}
+
+pub fn info_table_print() {
+    unsafe {
+        println!("INFO_TABLE:\n\n{:?}", INFO_TABLE);
     }
 }
 

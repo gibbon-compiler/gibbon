@@ -1296,7 +1296,7 @@ void gib_free_region(char *footer_ptr)
     }
 }
 
-void performGC(bool force_major)
+void gib_perform_GC(bool force_major)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
