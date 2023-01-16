@@ -8,9 +8,10 @@ Also see https://stackoverflow.com/a/18426582.
 
 */
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
+use core::mem::size_of;
 use std::fmt;
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 /// The number of bits reserved for the tag.
 const TAG_BITS: u64 = 16;
@@ -41,6 +42,12 @@ impl TaggedPointer {
     #[inline(always)]
     pub fn from_u64(tagged: u64) -> TaggedPointer {
         TaggedPointer(tagged)
+    }
+
+    #[inline(always)]
+    pub fn from_usize(tagged: usize) -> TaggedPointer {
+        debug_assert!(size_of::<usize>() == size_of::<u64>());
+        TaggedPointer(tagged as u64)
     }
 
     #[inline(always)]

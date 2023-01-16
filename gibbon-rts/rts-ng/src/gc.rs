@@ -302,8 +302,8 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
 
         match (*frame).gc_root_prov {
             GibGcRootProv::RemSet => {
-                let (tagged_src, _): (u64, _) = read((*frame).ptr);
-                let tagged = TaggedPointer::from_u64(tagged_src);
+                let (tagged_src, _): (GibTaggedPtr, _) = read((*frame).ptr);
+                let tagged = TaggedPointer::from_usize(tagged_src);
                 let src = tagged.untag();
                 let src_footer_offset = tagged.get_tag();
                 // let src_end = src.add(src_footer_offset as usize);
@@ -581,8 +581,8 @@ unsafe fn evacuate_packed(
             // The remembered set contains the address where the indirect-
             // ion pointer is stored. We must read it to get the address of
             // the pointed-to data.
-            let (tagged_src, _): (u64, _) = read((*frame).ptr);
-            TaggedPointer::from_u64(tagged_src).untag()
+            let (tagged_src, _): (GibTaggedPtr, _) = read((*frame).ptr);
+            TaggedPointer::from_usize(tagged_src).untag()
         }
     };
 
@@ -642,8 +642,10 @@ unsafe fn evacuate_packed(
                     // Indirections into oldgen are not inlined in the current version.
                     // See Note [Smart inlining policies].
                     INDIRECTION_TAG => {
-                        let (tagged_pointee, src_after_indr): (u64, _) =
-                            read(src_after_tag);
+                        let (tagged_pointee, src_after_indr): (
+                            GibTaggedPtr,
+                            _,
+                        ) = read(src_after_tag);
 
                         dbgprintln!(
                             "   indirection! src {:?} dest {:?}, after {:?}",
@@ -653,7 +655,7 @@ unsafe fn evacuate_packed(
                         );
 
                         let src_after_indr1 = src_after_indr as *mut i8;
-                        let tagged = TaggedPointer::from_u64(tagged_pointee);
+                        let tagged = TaggedPointer::from_usize(tagged_pointee);
                         let pointee = tagged.untag();
                         let pointee_footer_offset = tagged.get_tag();
                         let pointee_footer =
@@ -942,11 +944,11 @@ unsafe fn evacuate_packed(
                     // See Note [Smart inlining policies].
                     REDIRECTION_TAG => {
                         let (tagged_next_chunk, src_after_next_chunk): (
-                            u64,
+                            GibTaggedPtr,
                             _,
                         ) = read(src_after_tag);
                         let tagged =
-                            TaggedPointer::from_u64(tagged_next_chunk);
+                            TaggedPointer::from_usize(tagged_next_chunk);
                         let next_chunk = tagged.untag();
 
                         dbgprintln!("   redirection ptr!: src {:?}, to next chunk {:?}, inlining_underway={:?}",
@@ -1153,12 +1155,12 @@ unsafe fn evacuate_packed(
                                     // evacuating oldgen?
                                     for i in 0..num_shortcut1 {
                                         let (tagged_shortcut_dst, _): (
-                                            u64,
+                                            GibTaggedPtr,
                                             _,
                                         ) = read(
                                             src_shortcuts_start.add(i * 8),
                                         );
-                                        let tagged = TaggedPointer::from_u64(
+                                        let tagged = TaggedPointer::from_usize(
                                             tagged_shortcut_dst,
                                         );
                                         let shortcut_dst = tagged.untag();
@@ -1351,9 +1353,11 @@ fn sort_roots(
     for frame in rstack.into_iter().chain(rem_set.into_iter()) {
         frames_vec.push(frame);
     }
+    // Only roots in remembered sets are tagged, but it's safe to "untag"
+    // all root pointers.
     frames_vec.sort_unstable_by(|a, b| unsafe {
-        let tagged_a = TaggedPointer::from_u64((*(*a)).ptr as u64);
-        let tagged_b = TaggedPointer::from_u64((*(*b)).ptr as u64);
+        let tagged_a = TaggedPointer::from_usize((*(*a)).ptr as usize);
+        let tagged_b = TaggedPointer::from_usize((*(*b)).ptr as usize);
         let ptr_a: *const i8 = tagged_a.untag();
         let ptr_b: *const i8 = tagged_b.untag();
         (ptr_a).cmp(&ptr_b)
@@ -1447,8 +1451,8 @@ unsafe fn find_forwarding_pointer(
 ) -> TaggedPointer {
     match tag {
         COPIED_TO_TAG => {
-            let (tagged, _): (u64, _) = read_mut(addr_after_tag);
-            let tagged_fwd_ptr = TaggedPointer::from_u64(tagged);
+            let (tagged, _): (GibTaggedPtr, _) = read_mut(addr_after_tag);
+            let tagged_fwd_ptr = TaggedPointer::from_usize(tagged);
             dbgprintln!(
                 "   Found forwarding ptr at {:?}, dest {:p}",
                 addr_after_tag,
@@ -1494,8 +1498,8 @@ unsafe fn find_forwarding_pointer(
                 }
             };
             // The forwarding pointer that's available.
-            let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
-            let tagged_avail = TaggedPointer::from_u64(tagged_fwd_avail);
+            let (tagged_fwd_avail, _): (GibTaggedPtr, _) = read(scan_ptr);
+            let tagged_avail = TaggedPointer::from_usize(tagged_fwd_avail);
             let fwd_avail = tagged_avail.untag();
             let fwd_footer_offset_avail = tagged_avail.get_tag();
             let fwd_footer_addr_avail =
