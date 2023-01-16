@@ -2,7 +2,9 @@ use std::ptr::null_mut;
 
 use gibbon_rts_sys::*;
 mod utils;
-use crate::utils::heap::*;
+use crate::utils::heap::test_reverse1;
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 #[test]
 pub fn tests() {
@@ -18,11 +20,15 @@ pub fn tests() {
         assert!(chunk1.end == chunk2.end);
 
         // Test 1.
-        ffi_works();
+        test_ffi_works();
         clear_all();
 
         // Test 2.
-        globals_access();
+        test_globals_access();
+        clear_all();
+
+        // Test 3.
+        test_reverse1();
         clear_all();
 
         // Free storage.
@@ -30,13 +36,13 @@ pub fn tests() {
     }
 }
 
-fn ffi_works() {
+fn test_ffi_works() {
     let chunk = unsafe { gib_alloc_region(1024) };
     assert!(!chunk.start.is_null());
     assert!(!chunk.end.is_null());
 }
 
-fn globals_access() {
+fn test_globals_access() {
     unsafe {
         assert!(!gib_global_read_shadowstacks.is_null());
         assert!(!gib_global_write_shadowstacks.is_null());

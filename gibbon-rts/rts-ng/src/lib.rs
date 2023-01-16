@@ -5,4 +5,4 @@ pub use ffi::rs::*;
 
 mod ffi;
 mod gc;
-mod tagged_pointer;
+pub mod tagged_pointer;
