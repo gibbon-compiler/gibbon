@@ -1,9 +1,10 @@
 use quickcheck::{QuickCheck, TestResult};
+use std::panic;
 use std::ptr::null_mut;
 
 use gibbon_rts_sys::*;
 mod utils;
-use crate::utils::heap::test_reverse1;
+use crate::utils::heap::{test_reverse1, test_split_root};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -33,6 +34,12 @@ pub fn gc_tests() {
         QuickCheck::new()
             .tests(100)
             .quickcheck(qc_test_reverse1 as fn(u8) -> TestResult);
+
+        // Test 4.
+        let result = panic::catch_unwind(|| {
+            test_split_root(4);
+        });
+        assert!(result.is_err());
 
         // Free storage.
         gib_exit();

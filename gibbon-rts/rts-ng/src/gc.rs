@@ -377,8 +377,15 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 }
             }
             GibGcRootProv::Stk => {
-                let root_in_nursery = nursery.contains_addr((*frame).ptr);
-                if !root_in_nursery {
+                let start_in_nursery = nursery.contains_addr((*frame).ptr);
+                let footer_in_nursery = nursery.contains_addr((*frame).endptr);
+
+                // Main todo (2):
+                if start_in_nursery && !footer_in_nursery {
+                    panic!("split root, {:?}", *frame);
+                }
+
+                if !start_in_nursery {
                     dbgprintln!(
                         "Evac packed, skipping oldgen root {:?}",
                         (*frame)

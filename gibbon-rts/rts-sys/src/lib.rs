@@ -36,10 +36,10 @@ pub fn ss_pop(rw: RW) -> *const GibShadowstackFrame {
 }
 
 #[inline(always)]
-pub fn bounds_check(mut ptr: *mut i8, mut endptr: *mut i8, req: isize) {
+pub fn bounds_check(ptr: &mut *mut i8, endptr: &mut *mut i8, req: isize) {
     unsafe {
-        if endptr.offset_from(ptr) < req {
-            gib_grow_region(&mut ptr, &mut endptr);
+        if (*endptr).offset_from(*ptr) < req {
+            gib_grow_region(ptr, endptr);
         }
     }
 }

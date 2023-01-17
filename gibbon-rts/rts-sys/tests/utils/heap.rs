@@ -77,6 +77,10 @@ enum Object {
     KSP4(GibTaggedPtr, GibInt, Box<Object>, Box<Object>),
     KSP5(GibChar, GibBool, GibFloat, Box<Object>, Box<Object>),
     KSP6(GibChar, GibBool, GibFloat, GibInt, Box<Object>, Box<Object>),
+
+    // Meta, control constructors
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     // Indicates that this object should be allocated in a fresh region.
     FreshNurseryReg(usize, Box<Object>),
     FreshOldgenReg(usize, Box<Object>),
@@ -237,12 +241,12 @@ enum SerAction<'a> {
     RestoreDst(*mut i8, *mut i8),
 }
 
-fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: *mut i8) {
+fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: &mut *mut i8) {
     let mut worklist: Vec<SerAction> = Vec::new();
     worklist.push(SerAction::ProcessObj(obj0));
 
     let mut dst = orig_dst;
-    let mut dst_end = orig_dst_end;
+    let mut dst_end = *orig_dst_end;
 
     while !worklist.is_empty() {
         if let Some(act) = worklist.pop() {
@@ -253,7 +257,7 @@ fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: *mut i8) {
                 }
                 SerAction::ProcessObj(obj1) => match obj1 {
                     Object::FreshNurseryReg(size, obj) => {
-                        bounds_check(dst, dst_end, 16);
+                        bounds_check(&mut dst, &mut dst_end, 32);
                         let chunk = unsafe { gib_alloc_region(*size) };
                         unsafe {
                             gib_indirection_barrier_noinline(
@@ -271,7 +275,7 @@ fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: *mut i8) {
                     }
                     Object::FreshOldgenReg(size, obj) => {
                         assert!(!dst.is_null() && !dst_end.is_null());
-                        bounds_check(dst, dst_end, 16);
+                        bounds_check(&mut dst, &mut dst_end, 32);
                         let chunk = unsafe { gib_alloc_region_on_heap(*size) };
                         unsafe {
                             gib_indirection_barrier_noinline(
@@ -289,12 +293,13 @@ fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: *mut i8) {
                     }
                     Object::K0 => {
                         assert!(!dst.is_null() && !dst_end.is_null());
+                        bounds_check(&mut dst, &mut dst_end, 32);
                         let dst_after_tag = write(dst, ObjectTag::K0);
                         dst = dst_after_tag;
                     }
                     Object::KSP2(i, obj) => {
                         assert!(!dst.is_null() && !dst_end.is_null());
-                        bounds_check(dst, dst_end, 48);
+                        bounds_check(&mut dst, &mut dst_end, 32);
                         let dst_after_tag = write(dst, ObjectTag::KSP2);
                         let dst_after_int = write(dst_after_tag, *i);
                         dst = dst_after_int;
@@ -307,6 +312,9 @@ fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: *mut i8) {
             panic!("empty worklist")
         }
     }
+
+    // Update orig_dst_end to point to the end of value.
+    *orig_dst_end = dst_end;
 }
 
 fn deserialize(src: *const i8) -> Object {
@@ -392,6 +400,7 @@ fn print_packed_(src: *const i8) -> *const i8 {
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
+/// Test GC on a simple reverse-like heap.
 pub fn test_reverse1(n: u8) -> bool {
     // Initialize info-table.
     info_table_initialize();
@@ -403,8 +412,8 @@ pub fn test_reverse1(n: u8) -> bool {
     // Put the object on the Gibbon heap.
     let chunk0 = unsafe { gib_alloc_region(128) };
     let dst = chunk0.start;
-    let dst_end = chunk0.end;
-    serialize(&ls, dst, dst_end);
+    let mut dst_end = chunk0.end;
+    serialize(&ls, dst, &mut dst_end);
     // print_packed(dst);
 
     // Trigger GC.
@@ -440,4 +449,45 @@ fn mkrevlist(n: u8) -> Object {
             Box::new(Object::FreshNurseryReg(128, Box::new(next))),
         )
     }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+/// Test GC on a split root---one which starts in the nursery and
+/// ends in oldgen due to eager promotion.
+pub fn test_split_root(n: u8) -> bool {
+    // Initialize info-table.
+    info_table_initialize();
+
+    // Make nursery smaller.
+    let old_size = unsafe { gib_nursery_realloc(gib_global_nurseries, 128) };
+
+    // Create an object to GC.
+    let mut ls = mkrevlist(n);
+    ls = ls.sans_metadata();
+    // println!("{:?}", ls);
+
+    // Put the object on the Gibbon heap.
+    let chunk0 = unsafe { gib_alloc_region(64) };
+    let dst = chunk0.start;
+    let mut dst_end = chunk0.end;
+    serialize(&ls, dst, &mut dst_end);
+    // print_packed(dst);
+
+    // Trigger GC.
+    ss_push(RW::Read, dst, dst_end, OBJECT_T);
+    unsafe {
+        gib_perform_GC(false);
+    }
+
+    // Clear info-table.
+    gib_info_table_clear();
+
+    // Restore nursery.
+    unsafe {
+        gib_nursery_realloc(gib_global_nurseries, old_size);
+    }
+
+    // Return result.
+    true
 }

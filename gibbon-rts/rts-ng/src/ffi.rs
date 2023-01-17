@@ -672,6 +672,10 @@ pub mod c {
      */
 
     extern "C" {
+        pub fn gib_nursery_realloc(
+            nursery: *mut GibNursery,
+            nsize: usize,
+        ) -> usize;
         pub fn gib_init(argc: c_int, argv: *mut *mut c_char) -> c_int;
         pub fn gib_exit() -> c_int;
     }

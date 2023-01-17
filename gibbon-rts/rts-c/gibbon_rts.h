@@ -800,6 +800,7 @@ INLINE_HEADER void clobber() {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+size_t gib_nursery_realloc(GibNursery *nursery, size_t nsize);
 int gib_init(int argc, char **argv);
 int gib_exit(void);
 

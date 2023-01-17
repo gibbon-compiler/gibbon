@@ -1352,7 +1352,7 @@ void gib_print_global_region_count(void)
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void);
 static void gib_storage_free(void);
-static void gib_nursery_initialize(GibNursery *nursery);
+static void gib_nursery_initialize(GibNursery *nursery, size_t nsize);
 static void gib_nursery_free(GibNursery *nursery);
 static void gib_oldgen_initialize(GibOldgen *oldgen);
 static void gib_oldgen_free(GibOldgen *oldgen);
@@ -1377,7 +1377,7 @@ static void gib_storage_initialize(void)
     gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
                                                     sizeof(GibNursery));
     for (n = 0; n < gib_global_num_threads; n++) {
-        gib_nursery_initialize(&(gib_global_nurseries[n]));
+        gib_nursery_initialize(&(gib_global_nurseries[n]), NURSERY_SIZE);
     }
 
     // Initialize old generation.
@@ -1439,21 +1439,25 @@ static void gib_storage_free(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static void gib_nursery_initialize(GibNursery *nursery)
+size_t gib_nursery_realloc(GibNursery *nursery, size_t nsize)
 {
-    nursery->heap_size = NURSERY_SIZE;
-    nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
+    size_t old_size = nursery->heap_size;
+    gib_free(nursery->heap_start);
+    gib_nursery_initialize(nursery, nsize);
+    return old_size;
+}
+
+static void gib_nursery_initialize(GibNursery *nursery, size_t nsize)
+{
+    nursery->heap_size = nsize;
+    nursery->heap_start = (char *) gib_alloc(nsize);
     if (nursery->heap_start == NULL) {
         fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %zu",
-                (size_t) NURSERY_SIZE);
+                (size_t) nsize);
         exit(1);
     }
-    nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
+    nursery->heap_end = nursery->heap_start + nsize;
     nursery->alloc = nursery->heap_end;
-
-// #ifdef _GIBBON_GCSTATS
-//     GC_STATS->mem_allocated += NURSERY_SIZE;
-// #endif
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     fprintf(stderr, "Nursery: start=%p, end=%p, alloc=%p\n",
