@@ -26,23 +26,27 @@ fn main() {
     let dst_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let lib_dir = dst_dir.join("lib");
     fs::create_dir_all(&lib_dir).unwrap();
+
     let gibbon_dir = env::var_os("GIBBONDIR").unwrap();
+    let rts_dir = PathBuf::from(gibbon_dir).join("gibbon-rts");
+    let rts_build_dir = rts_dir.join("build");
+    let rs_rts_so = rts_build_dir.join("libgibbon_rts_ng.so");
+    let c_rts_o = rts_build_dir.join("gibbon_rts.o");
+    let c_rts_a = rts_build_dir.join("gibbon_rts.o");
 
-    let make_rts = Command::new("make")
-        .arg("rts")
-        .current_dir(format!("{}/gibbon-rts", gibbon_dir.to_str().unwrap()))
-        .output()
-        .expect("failed to execute process");
-    eprintln!("make: {}", make_rts.status);
-    eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stdout));
-    eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stderr));
-    assert!(make_rts.status.success());
-
-    copy_dir_all(
-        format!("{}/gibbon-rts/build", gibbon_dir.to_str().unwrap()),
-        &lib_dir,
-    )
-    .unwrap();
+    // Run make if artifacts not built.
+    if !(rs_rts_so.exists() && c_rts_o.exists() && c_rts_a.exists()) {
+        let make_rts = Command::new("make")
+            .arg("rts")
+            .current_dir(rts_dir)
+            .output()
+            .expect("failed to execute process");
+        eprintln!("make: {}", make_rts.status);
+        eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stdout));
+        eprintln!("make: {}", String::from_utf8_lossy(&make_rts.stderr));
+        assert!(make_rts.status.success());
+    }
+    copy_dir_all(rts_build_dir, &lib_dir).unwrap();
 
     println!("cargo:root={}", dst_dir.to_str().unwrap());
     println!("cargo:rustc-link-search={}", lib_dir.to_str().unwrap());
