@@ -180,8 +180,8 @@ pub fn garbage_collect(
             evac_major,
         )?;
 
-        // Collect dead regions.
-        oldgen.collect_regions()?;
+        // // Collect dead regions.
+        // oldgen.collect_regions()?;
 
         // Reset the allocation area and record stats.
         nursery.clear();
@@ -1930,6 +1930,14 @@ impl<'a> GibOldgen<'a> {
             let tmp = &mut (*gen).old_zct;
             (*gen).old_zct = (*gen).new_zct;
             (*gen).new_zct = *tmp;
+        }
+    }
+
+    pub fn clear_zcts(&mut self) {
+        let gen: *mut GibOldgen = self;
+        unsafe {
+            (*gen).old_zct.clear();
+            (*gen).new_zct.clear();
         }
     }
 }

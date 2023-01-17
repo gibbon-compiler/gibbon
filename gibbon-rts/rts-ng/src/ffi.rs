@@ -760,7 +760,7 @@ pub mod rs {
         rstack_ptr: *mut GibShadowstack,
         wstack_ptr: *mut GibShadowstack,
         nursery_ptr: *mut GibNursery,
-        oldgen_ptr: *mut GibOldgen,
+        oldgen_ptr: *mut GibOldgen_,
         gc_stats: *mut GibGcStats,
         force_major: bool,
     ) -> i32 {
@@ -768,7 +768,7 @@ pub mod rs {
         let rstack: &mut GibShadowstack = unsafe { &mut *rstack_ptr };
         let wstack: &mut GibShadowstack = unsafe { &mut *wstack_ptr };
         let nursery: &mut GibNursery = unsafe { &mut *nursery_ptr };
-        let oldgen: &mut GibOldgen = unsafe { &mut *oldgen_ptr };
+        let oldgen: &mut GibOldgen = GibOldgen::from_ffi(oldgen_ptr);
         match gc::garbage_collect(
             rstack,
             wstack,
@@ -873,12 +873,12 @@ pub mod rs {
         rstack_ptr: *mut GibShadowstack,
         wstack_ptr: *mut GibShadowstack,
         nursery_ptr: *mut GibNursery,
-        oldgen_ptr: *mut GibOldgen,
+        oldgen_ptr: *mut GibOldgen_,
     ) -> i32 {
         let rstack: &mut GibShadowstack = unsafe { &mut *rstack_ptr };
         let wstack: &mut GibShadowstack = unsafe { &mut *wstack_ptr };
         let nursery: &mut GibNursery = unsafe { &mut *nursery_ptr };
-        let oldgen: &mut GibOldgen = unsafe { &mut *oldgen_ptr };
+        let oldgen: &mut GibOldgen = GibOldgen::from_ffi(oldgen_ptr);
         match gc::cleanup(rstack, wstack, nursery, oldgen) {
             Ok(()) => 0,
             Err(err) => {

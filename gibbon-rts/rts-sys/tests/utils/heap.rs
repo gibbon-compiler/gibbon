@@ -232,8 +232,6 @@ fn info_table_initialize() {
     gib_info_table_finalize();
 }
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
 enum SerAction<'a> {
     ProcessObj(&'a Object),
     RestoreDst(*mut i8, *mut i8),
@@ -340,8 +338,8 @@ fn deserialize_(src: *const i8) -> (Object, *const i8) {
             deserialize_(pointee)
         }
         _ => {
-            println!("{:?}", tag);
-            todo!()
+            println!("deserialize got {:?}", tag as u8);
+            panic!("error")
         }
     }
 }
@@ -385,21 +383,25 @@ fn print_packed_(src: *const i8) -> *const i8 {
             print!(")");
             src_after_redir_data
         }
-        _ => todo!(),
+        _ => {
+            println!("print_packed got {:?}", tag as u8);
+            panic!("error")
+        }
     }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-pub fn test_reverse1() {
+pub fn test_reverse1(n: u8) -> bool {
     // Initialize info-table.
     info_table_initialize();
 
     // Create an object to GC.
-    let ls = mkrevlist(3);
+    let ls = mkrevlist(n);
+    // println!("{:?}", ls);
 
     // Put the object on the Gibbon heap.
-    let chunk0 = unsafe { gib_alloc_region(1024) };
+    let chunk0 = unsafe { gib_alloc_region(128) };
     let dst = chunk0.start;
     let dst_end = chunk0.end;
     serialize(&ls, dst, dst_end);
@@ -418,18 +420,24 @@ pub fn test_reverse1() {
         // print_packed((*frame).ptr);
         deserialize((*frame).ptr)
     };
-    assert!(ls2 == ls.sans_metadata());
 
     // Clear info-table.
     gib_info_table_clear();
+
+    // Return result.
+    // assert!(ls2 == ls.sans_metadata());
+    ls2 == ls.sans_metadata()
 }
 
 /// Returns a list: Cons n ->i Cons (n-1)  ... ->i Cons 1 -> Nil.
-fn mkrevlist(n: i64) -> Object {
+fn mkrevlist(n: u8) -> Object {
     if n == 0 {
         Object::K0
     } else {
         let next = mkrevlist(n - 1);
-        Object::KSP2(n, Box::new(Object::FreshNurseryReg(128, Box::new(next))))
+        Object::KSP2(
+            n as i64,
+            Box::new(Object::FreshNurseryReg(128, Box::new(next))),
+        )
     }
 }

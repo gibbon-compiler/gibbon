@@ -14,3 +14,6 @@ gibbon-rts-ng = { path = "../rts-ng" }
 
 [lib]
 name = "gibbon_rts_sys"
+
+[dev-dependencies]
+quickcheck = "1"

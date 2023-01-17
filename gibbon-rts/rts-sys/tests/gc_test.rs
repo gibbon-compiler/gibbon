@@ -1,3 +1,4 @@
+use quickcheck::{QuickCheck, TestResult};
 use std::ptr::null_mut;
 
 use gibbon_rts_sys::*;
@@ -7,7 +8,8 @@ use crate::utils::heap::test_reverse1;
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 #[test]
-pub fn tests() {
+pub fn gc_tests() {
+    println!("");
     unsafe {
         // Initialize storage.
         gib_init(0, null_mut());
@@ -28,20 +30,23 @@ pub fn tests() {
         clear_all();
 
         // Test 3.
-        test_reverse1();
-        clear_all();
+        QuickCheck::new()
+            .tests(100)
+            .quickcheck(qc_test_reverse1 as fn(u8) -> TestResult);
 
         // Free storage.
         gib_exit();
     }
 }
 
+/// Test if some simple functions from the FFI work.
 fn test_ffi_works() {
     let chunk = unsafe { gib_alloc_region(1024) };
     assert!(!chunk.start.is_null());
     assert!(!chunk.end.is_null());
 }
 
+/// Test if access to C globals is OK.
 fn test_globals_access() {
     unsafe {
         assert!(!gib_global_read_shadowstacks.is_null());
@@ -52,6 +57,12 @@ fn test_globals_access() {
     }
 }
 
+fn qc_test_reverse1(n: u8) -> TestResult {
+    let res = test_reverse1(n);
+    clear_all();
+    TestResult::from_bool(res)
+}
+
 /// Reset stuff between tests.
 fn clear_all() {
     let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
@@ -59,7 +70,10 @@ fn clear_all() {
         unsafe { &mut *gib_global_read_shadowstacks };
     let wstack: &mut GibShadowstack =
         unsafe { &mut *gib_global_write_shadowstacks };
+    let oldgen: &mut GibOldgen =
+        unsafe { GibOldgen::from_ffi(gib_global_oldgen) };
     nursery.clear();
     rstack.clear();
     wstack.clear();
+    oldgen.clear_zcts();
 }
