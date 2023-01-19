@@ -84,6 +84,10 @@ enum Object {
     // Indicates that this object should be allocated in a fresh region.
     FreshNurseryReg(usize, Box<Object>),
     FreshOldgenReg(usize, Box<Object>),
+    // Initial chunk: the serializer doesn't write indirections to objects
+    // in these chunks.
+    InitNurseryReg(usize, Box<Object>),
+    InitOldgenReg(usize, Box<Object>),
     // Used to indicate cauterization.
     Incomplete,
 }
@@ -97,6 +101,8 @@ impl Object {
             }
             Object::FreshNurseryReg(_, obj) => (*obj).sans_metadata(),
             Object::FreshOldgenReg(_, obj) => (*obj).sans_metadata(),
+            Object::InitNurseryReg(_, obj) => (*obj).sans_metadata(),
+            Object::InitOldgenReg(_, obj) => (*obj).sans_metadata(),
             _ => todo!(),
         }
     }
@@ -123,82 +129,84 @@ enum ObjectTag {
 /// Key into the info table.
 const OBJECT_T: GibDatatype = 7;
 
-fn get_info(
-    tag: &ObjectTag,
-) -> (
-    usize,            // scalar bytes
-    usize,            // num shortcut
-    u8,               // num scalars
-    u8,               // num packed
-    Vec<GibDatatype>, // field tys
-    u8,               // field tys length
-) {
-    match tag {
-        ObjectTag::K0 => (0, 0, 0, 0, Vec::new(), 0),
-        ObjectTag::KS1 => {
-            let size = size_of::<GibInt>();
-            (size, 0, 1, 0, Vec::new(), 0)
-        }
-        ObjectTag::KS2 => {
-            let size = size_of::<GibChar>() + size_of::<GibBool>();
-            (size, 0, 2, 0, Vec::new(), 0)
-        }
-        ObjectTag::KS3 => {
-            let size = size_of::<GibChar>()
-                + size_of::<GibBool>()
-                + size_of::<GibFloat>();
-            (size, 0, 3, 0, Vec::new(), 0)
-        }
-        ObjectTag::KS4 => {
-            let size = size_of::<GibChar>()
-                + size_of::<GibBool>()
-                + size_of::<GibBool>()
-                + size_of::<GibInt>();
-            (size, 0, 4, 0, Vec::new(), 0)
-        }
-        ObjectTag::KP => {
-            todo!()
-        }
-        ObjectTag::KSP2 => {
-            let size = size_of::<GibInt>();
-            let field_tys = vec![OBJECT_T];
-            let len = field_tys.len() as u8;
-            (size, 0, 1, len, field_tys, len)
-        }
-        ObjectTag::KSP3 => {
-            let size = size_of::<GibBool>();
-            let field_tys = vec![OBJECT_T, OBJECT_T];
-            let len = field_tys.len() as u8;
-            (size, 0, 1, len, field_tys, len)
-        }
-        ObjectTag::KSP4 => {
-            let size = size_of::<GibTaggedPtr>() + size_of::<GibInt>();
-            let field_tys = vec![OBJECT_T, OBJECT_T];
-            let len = field_tys.len() as u8;
-            (size, 1, 1, len, field_tys, len)
-        }
-        ObjectTag::KSP5 => {
-            let size = size_of::<GibChar>()
-                + size_of::<GibBool>()
-                + size_of::<GibFloat>();
-            let field_tys = vec![OBJECT_T, OBJECT_T];
-            let len = field_tys.len() as u8;
-            (size, 0, 3, len, field_tys, len)
-        }
-        ObjectTag::KSP6 => {
-            let size = size_of::<GibChar>()
-                + size_of::<GibBool>()
-                + size_of::<GibFloat>()
-                + size_of::<GibInt>();
-            let field_tys = vec![OBJECT_T, OBJECT_T];
-            let len = field_tys.len() as u8;
-            (size, 0, 3, len, field_tys, len)
-        }
-        ObjectTag::Indir => {
-            panic!("INDIRECTION_TAG shouldn't be in the info table")
-        }
-        ObjectTag::Redir => {
-            panic!("REDIRECTION_TAG shouldn't be in the info table")
+impl ObjectTag {
+    fn get_info(
+        &self,
+    ) -> (
+        usize,            // scalar bytes
+        usize,            // num shortcut
+        u8,               // num scalars
+        u8,               // num packed
+        Vec<GibDatatype>, // field tys
+        u8,               // field tys length
+    ) {
+        match self {
+            ObjectTag::K0 => (0, 0, 0, 0, Vec::new(), 0),
+            ObjectTag::KS1 => {
+                let size = size_of::<GibInt>();
+                (size, 0, 1, 0, Vec::new(), 0)
+            }
+            ObjectTag::KS2 => {
+                let size = size_of::<GibChar>() + size_of::<GibBool>();
+                (size, 0, 2, 0, Vec::new(), 0)
+            }
+            ObjectTag::KS3 => {
+                let size = size_of::<GibChar>()
+                    + size_of::<GibBool>()
+                    + size_of::<GibFloat>();
+                (size, 0, 3, 0, Vec::new(), 0)
+            }
+            ObjectTag::KS4 => {
+                let size = size_of::<GibChar>()
+                    + size_of::<GibBool>()
+                    + size_of::<GibBool>()
+                    + size_of::<GibInt>();
+                (size, 0, 4, 0, Vec::new(), 0)
+            }
+            ObjectTag::KP => {
+                todo!()
+            }
+            ObjectTag::KSP2 => {
+                let size = size_of::<GibInt>();
+                let field_tys = vec![OBJECT_T];
+                let len = field_tys.len() as u8;
+                (size, 0, 1, len, field_tys, len)
+            }
+            ObjectTag::KSP3 => {
+                let size = size_of::<GibBool>();
+                let field_tys = vec![OBJECT_T, OBJECT_T];
+                let len = field_tys.len() as u8;
+                (size, 0, 1, len, field_tys, len)
+            }
+            ObjectTag::KSP4 => {
+                let size = size_of::<GibTaggedPtr>() + size_of::<GibInt>();
+                let field_tys = vec![OBJECT_T, OBJECT_T];
+                let len = field_tys.len() as u8;
+                (size, 1, 1, len, field_tys, len)
+            }
+            ObjectTag::KSP5 => {
+                let size = size_of::<GibChar>()
+                    + size_of::<GibBool>()
+                    + size_of::<GibFloat>();
+                let field_tys = vec![OBJECT_T, OBJECT_T];
+                let len = field_tys.len() as u8;
+                (size, 0, 3, len, field_tys, len)
+            }
+            ObjectTag::KSP6 => {
+                let size = size_of::<GibChar>()
+                    + size_of::<GibBool>()
+                    + size_of::<GibFloat>()
+                    + size_of::<GibInt>();
+                let field_tys = vec![OBJECT_T, OBJECT_T];
+                let len = field_tys.len() as u8;
+                (size, 0, 3, len, field_tys, len)
+            }
+            ObjectTag::Indir => {
+                panic!("INDIRECTION_TAG shouldn't be in the info table")
+            }
+            ObjectTag::Redir => {
+                panic!("REDIRECTION_TAG shouldn't be in the info table")
+            }
         }
     }
 }
@@ -221,7 +229,7 @@ fn info_table_initialize() {
     gib_info_table_initialize(8);
     // Initialize info table for rest of the types.
     for tag in tags {
-        let (sb, nshct, ns, np, ft, ftl) = get_info(&tag);
+        let (sb, nshct, ns, np, ft, ftl) = tag.get_info();
         gib_info_table_insert_packed_dcon(
             OBJECT_T,
             tag as u8,
@@ -241,80 +249,89 @@ enum SerAction<'a> {
     RestoreDst(*mut i8, *mut i8),
 }
 
-fn serialize(obj0: &Object, orig_dst: *mut i8, orig_dst_end: &mut *mut i8) {
+fn serialize(obj0: &Object) -> (*const i8, *const i8) {
     let mut worklist: Vec<SerAction> = Vec::new();
-    worklist.push(SerAction::ProcessObj(obj0));
-
-    let mut dst = orig_dst;
-    let mut dst_end = *orig_dst_end;
+    let (orig_dst, mut dst, mut dst_end) = match obj0 {
+        Object::InitNurseryReg(size, obj) => {
+            let chunk0 = unsafe { gib_alloc_region(*size) };
+            worklist.push(SerAction::ProcessObj(obj));
+            (chunk0.start, chunk0.start, chunk0.end)
+        }
+        Object::InitOldgenReg(size, obj) => {
+            let chunk0 = unsafe { gib_alloc_region_on_heap(*size) };
+            worklist.push(SerAction::ProcessObj(obj));
+            (chunk0.start, chunk0.start, chunk0.end)
+        }
+        _ => {
+            let chunk0 = unsafe { gib_alloc_region(1024) };
+            worklist.push(SerAction::ProcessObj(obj0));
+            (chunk0.start, chunk0.start, chunk0.end)
+        }
+    };
 
     while !worklist.is_empty() {
-        if let Some(act) = worklist.pop() {
-            match act {
-                SerAction::RestoreDst(new_dst, new_dst_end) => {
-                    dst = new_dst;
-                    dst_end = new_dst_end;
-                }
-                SerAction::ProcessObj(obj1) => match obj1 {
-                    Object::FreshNurseryReg(size, obj) => {
-                        bounds_check(&mut dst, &mut dst_end, 32);
-                        let chunk = unsafe { gib_alloc_region(*size) };
-                        unsafe {
-                            gib_indirection_barrier_noinline(
-                                dst,
-                                dst_end,
-                                chunk.start,
-                                chunk.end,
-                                OBJECT_T,
-                            );
-                        }
-                        worklist.push(SerAction::RestoreDst(dst, dst_end));
-                        dst = chunk.start;
-                        dst_end = chunk.end;
-                        worklist.push(SerAction::ProcessObj(obj));
-                    }
-                    Object::FreshOldgenReg(size, obj) => {
-                        assert!(!dst.is_null() && !dst_end.is_null());
-                        bounds_check(&mut dst, &mut dst_end, 32);
-                        let chunk = unsafe { gib_alloc_region_on_heap(*size) };
-                        unsafe {
-                            gib_indirection_barrier_noinline(
-                                dst,
-                                dst_end,
-                                chunk.start,
-                                chunk.end,
-                                OBJECT_T,
-                            );
-                        }
-                        worklist.push(SerAction::RestoreDst(dst, dst_end));
-                        dst = chunk.start;
-                        dst_end = chunk.end;
-                        worklist.push(SerAction::ProcessObj(obj));
-                    }
-                    Object::K0 => {
-                        assert!(!dst.is_null() && !dst_end.is_null());
-                        bounds_check(&mut dst, &mut dst_end, 32);
-                        let dst_after_tag = write(dst, ObjectTag::K0);
-                        dst = dst_after_tag;
-                    }
-                    Object::KSP2(i, obj) => {
-                        assert!(!dst.is_null() && !dst_end.is_null());
-                        bounds_check(&mut dst, &mut dst_end, 32);
-                        let dst_after_tag = write(dst, ObjectTag::KSP2);
-                        let dst_after_int = write(dst_after_tag, *i);
-                        dst = dst_after_int;
-                        worklist.push(SerAction::ProcessObj(obj));
-                    }
-                    _ => todo!(),
-                },
+        let Some(act) = worklist.pop() else { panic!("empty worklist") };
+        match act {
+            SerAction::RestoreDst(new_dst, new_dst_end) => {
+                dst = new_dst;
+                dst_end = new_dst_end;
             }
-        } else {
-            panic!("empty worklist")
+            SerAction::ProcessObj(obj1) => match obj1 {
+                Object::FreshNurseryReg(size, obj) => {
+                    bounds_check(&mut dst, &mut dst_end, 32);
+                    let chunk = unsafe { gib_alloc_region(*size) };
+                    unsafe {
+                        gib_indirection_barrier_noinline(
+                            dst,
+                            dst_end,
+                            chunk.start,
+                            chunk.end,
+                            OBJECT_T,
+                        );
+                    }
+                    worklist.push(SerAction::RestoreDst(dst, dst_end));
+                    dst = chunk.start;
+                    dst_end = chunk.end;
+                    worklist.push(SerAction::ProcessObj(obj));
+                }
+                Object::FreshOldgenReg(size, obj) => {
+                    assert!(!dst.is_null() && !dst_end.is_null());
+                    bounds_check(&mut dst, &mut dst_end, 32);
+                    let chunk = unsafe { gib_alloc_region_on_heap(*size) };
+                    unsafe {
+                        gib_indirection_barrier_noinline(
+                            dst,
+                            dst_end,
+                            chunk.start,
+                            chunk.end,
+                            OBJECT_T,
+                        );
+                    }
+                    worklist.push(SerAction::RestoreDst(dst, dst_end));
+                    dst = chunk.start;
+                    dst_end = chunk.end;
+                    worklist.push(SerAction::ProcessObj(obj));
+                }
+                Object::K0 => {
+                    assert!(!dst.is_null() && !dst_end.is_null());
+                    bounds_check(&mut dst, &mut dst_end, 32);
+                    let dst_after_tag = write(dst, ObjectTag::K0);
+                    dst = dst_after_tag;
+                }
+                Object::KSP2(i, obj) => {
+                    assert!(!dst.is_null() && !dst_end.is_null());
+                    bounds_check(&mut dst, &mut dst_end, 32);
+                    let dst_after_tag = write(dst, ObjectTag::KSP2);
+                    let dst_after_int = write(dst_after_tag, *i);
+                    dst = dst_after_int;
+                    worklist.push(SerAction::ProcessObj(obj));
+                }
+                _ => todo!(),
+            },
         }
     }
 
-    // Update orig_dst_end to point to the end of value.
-    *orig_dst_end = dst_end;
+    (orig_dst, dst_end)
 }
 
 fn deserialize(src: *const i8) -> Object {
@@ -405,19 +422,16 @@ pub fn test_reverse1(n: u8) -> bool {
     // Initialize info-table.
     info_table_initialize();
 
-    // Create an object to GC.
-    let ls = mkrevlist(n);
+    // Create an object to evacuate.
+    let ls = Object::InitNurseryReg(128, Box::new(mkrevlist(n)));
     // println!("{:?}", ls);
 
     // Put the object on the Gibbon heap.
-    let chunk0 = unsafe { gib_alloc_region(128) };
-    let dst = chunk0.start;
-    let mut dst_end = chunk0.end;
-    serialize(&ls, dst, &mut dst_end);
-    // print_packed(dst);
+    let (start, end) = serialize(&ls);
+    // print_packed(start);
 
     // Trigger GC.
-    ss_push(RW::Read, dst, dst_end, OBJECT_T);
+    ss_push(RW::Read, start, end, OBJECT_T);
     unsafe {
         gib_perform_GC(false);
     }
@@ -438,7 +452,7 @@ pub fn test_reverse1(n: u8) -> bool {
     ls2 == ls.sans_metadata()
 }
 
-/// Returns a list: Cons n ->i Cons (n-1)  ... ->i Cons 1 -> Nil.
+/// Returns a list: Cons n ->i Cons (n-1)  ... ->i Cons 1 ->i Nil.
 fn mkrevlist(n: u8) -> Object {
     if n == 0 {
         Object::K0
@@ -455,27 +469,21 @@ fn mkrevlist(n: u8) -> Object {
 
 /// Test GC on a split root---one which starts in the nursery and
 /// ends in oldgen due to eager promotion.
-pub fn test_split_root(n: u8) -> bool {
+pub fn test_split_root() -> bool {
     // Initialize info-table.
     info_table_initialize();
 
-    // Make nursery smaller.
-    let old_size = unsafe { gib_nursery_realloc(gib_global_nurseries, 128) };
-
-    // Create an object to GC.
-    let mut ls = mkrevlist(n);
-    ls = ls.sans_metadata();
+    // Create an object to evacuate. It is big enough to trigger
+    // eager promotion in a region of size 64.
+    let ls = Object::InitNurseryReg(64, Box::new(mklist(4)));
     // println!("{:?}", ls);
 
     // Put the object on the Gibbon heap.
-    let chunk0 = unsafe { gib_alloc_region(64) };
-    let dst = chunk0.start;
-    let mut dst_end = chunk0.end;
-    serialize(&ls, dst, &mut dst_end);
-    // print_packed(dst);
+    let (start, end) = serialize(&ls);
+    // print_packed(start);
 
     // Trigger GC.
-    ss_push(RW::Read, dst, dst_end, OBJECT_T);
+    ss_push(RW::Read, start, end, OBJECT_T);
     unsafe {
         gib_perform_GC(false);
     }
@@ -483,11 +491,15 @@ pub fn test_split_root(n: u8) -> bool {
     // Clear info-table.
     gib_info_table_clear();
 
-    // Restore nursery.
-    unsafe {
-        gib_nursery_realloc(gib_global_nurseries, old_size);
-    }
-
-    // Return result.
+    // Always return true for now, GC triggers exception.
     true
+}
+
+/// Returns a list: Cons n Cons (n-1) Cons 1 Nil.
+fn mklist(n: u8) -> Object {
+    if n == 0 {
+        Object::K0
+    } else {
+        Object::KSP2(n as i64, Box::new(mklist(n - 1)))
+    }
 }
