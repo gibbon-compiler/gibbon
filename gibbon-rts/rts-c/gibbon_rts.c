@@ -1566,6 +1566,18 @@ GibShadowstackFrame *gib_shadowstack_pop_noinline(GibShadowstack *stack)
 }
 
 
+GibShadowstackFrame *gib_shadowstack_peek_noinline(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    size_t size = sizeof(GibShadowstackFrame);
+    char *frame_start = stack_alloc_ptr - size;
+    assert(frame_start >= stack_start);
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) frame_start;
+    return frame;
+}
+
+
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Remembered set

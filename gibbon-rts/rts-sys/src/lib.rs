@@ -39,7 +39,16 @@ pub fn ss_pop(rw: RW) -> *const GibShadowstackFrame {
     }
 }
 
-#[inline(always)]
+pub fn ss_peek(rw: RW) -> *const GibShadowstackFrame {
+    unsafe {
+        let sstk = match rw {
+            RW::Read => gib_global_read_shadowstacks,
+            RW::Write => gib_global_write_shadowstacks,
+        };
+        gib_shadowstack_peek_noinline(sstk)
+    }
+}
+
 pub fn bounds_check(ptr: &mut *mut i8, endptr: &mut *mut i8, req: isize) {
     unsafe {
         if (*endptr).offset_from(*ptr) < req {

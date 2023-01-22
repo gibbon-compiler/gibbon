@@ -2,6 +2,7 @@
 
 pub use ffi::c::*;
 pub use ffi::rs::*;
+pub use gc::ValueStats;
 
 mod ffi;
 mod gc;

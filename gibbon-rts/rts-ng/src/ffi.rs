@@ -433,7 +433,7 @@ pub mod c {
     }
 
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Clone)]
     pub struct GibRegionInfo {
         pub id: GibSym,
         pub refcount: u16,
@@ -441,10 +441,21 @@ pub mod c {
         pub first_chunk_footer: *const GibOldgenChunkFooter,
     }
 
+    use std::fmt;
+    impl fmt::Debug for GibRegionInfo {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "GibRegionInfo {{id: {}, refcount: {}, outset: {:?}, first_chunk_footer: {:?} }}",
+                   self.id,
+                   self.refcount,
+                   unsafe { (*self.outset).clone() },
+                   unsafe { (*self.first_chunk_footer).clone() })
+        }
+    }
+
     pub type GibNurseryChunkFooter = u16;
 
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct GibOldgenChunkFooter {
         pub reg_info: *mut GibRegionInfo,
         pub size: usize,
@@ -532,6 +543,9 @@ pub mod c {
             datatype: GibDatatype,
         );
         pub fn gib_shadowstack_pop_noinline(
+            stack: *const GibShadowstack,
+        ) -> *const GibShadowstackFrame;
+        pub fn gib_shadowstack_peek_noinline(
             stack: *const GibShadowstack,
         ) -> *const GibShadowstackFrame;
 

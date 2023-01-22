@@ -279,12 +279,13 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         (*GC_STATS).gc_rootset_sort_time
     );
 
-    #[cfg(debug_assertions)]
-    {
-        for frame in frames.iter() {
-            assert!((*(*frame)).ptr < (*(*frame)).endptr);
-        }
-    }
+    // // [2023.01.22]: This assertion doesn't hold for split roots.
+    // #[cfg(debug_assertions)]
+    // {
+    //     for frame in frames.iter() {
+    //         assert!((*(*frame)).ptr < (*(*frame)).endptr);
+    //     }
+    // }
 
     #[cfg(feature = "verbose_evac")]
     {
@@ -560,8 +561,8 @@ by using the tag.
 
 (2)
 
-Properly handle values that start in the nursery but end in the old generation,
-possibly due to eager promotion.
+Properly handle split roots; values that start in the nursery but end in
+the old generation, possibly due to eager promotion.
 
 */
 
@@ -665,7 +666,7 @@ unsafe fn evacuate_packed(
                         let tagged = TaggedPointer::from_usize(tagged_pointee);
                         let pointee = tagged.untag();
                         let pointee_footer_offset = tagged.get_tag();
-                        let pointee_footer =
+                        let pointee_footer_addr =
                             pointee.add(pointee_footer_offset as usize);
 
                         // Add a forwarding pointer in the source buffer.
@@ -727,8 +728,11 @@ unsafe fn evacuate_packed(
                                 }
 
                                 GibGcRootProv::Stk => {
-                                    if !is_loc0(pointee, pointee_footer, true)
-                                    {
+                                    if !is_loc0(
+                                        pointee,
+                                        pointee_footer_addr,
+                                        true,
+                                    ) {
                                         dbgprintln!(
                                             "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
                                             src,
@@ -783,8 +787,11 @@ unsafe fn evacuate_packed(
                                 }
 
                                 GibGcRootProv::Stk => {
-                                    if !is_loc0(pointee, pointee_footer, true)
-                                    {
+                                    if !is_loc0(
+                                        pointee,
+                                        pointee_footer_addr,
+                                        true,
+                                    ) {
                                         dbgprintln!(
                                             "   inserting ({:?} to {:?}) to so_env, root in nursery",
                                             src,
@@ -803,15 +810,15 @@ unsafe fn evacuate_packed(
                             }
 
                             let pointee_footer_offset = tagged.get_tag();
-                            let pointee_footer =
+                            let pointee_footer_addr =
                                 pointee.add(pointee_footer_offset as usize);
                             handle_old_to_old_indirection(
                                 dst_end1,
-                                pointee_footer,
+                                pointee_footer_addr,
                             );
 
                             (*(st.zct)).insert(
-                                (*(pointee_footer
+                                (*(pointee_footer_addr
                                     as *mut GibOldgenChunkFooter))
                                     .reg_info
                                     as *const GibRegionInfo,
@@ -1780,6 +1787,48 @@ impl<'a> GibNursery {
     }
 }
 
+impl<'a> IntoIterator for &GibNursery {
+    type Item = (*const i8, *const i8, u16);
+    type IntoIter = NurseryIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        NurseryIter::new(self)
+    }
+}
+
+pub struct NurseryIter {
+    run_ptr: *const i8,
+    end_ptr: *const i8,
+}
+
+impl NurseryIter {
+    fn new(nursery: &GibNursery) -> NurseryIter {
+        NurseryIter { run_ptr: (*nursery).heap_end, end_ptr: (*nursery).alloc }
+    }
+}
+
+/// Traverses the nursery in oldest-chunk-first order.
+impl Iterator for NurseryIter {
+    type Item = (*const i8, *const i8, u16);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            if self.run_ptr > self.end_ptr {
+                let chunk_end = self.run_ptr;
+                let footer_start = self.run_ptr.sub(2);
+                let chunk_size: u16 = *(footer_start as *const u16);
+                let chunk_start = footer_start.sub(chunk_size as usize);
+                debug_assert!(chunk_start < footer_start);
+                debug_assert!(footer_start <= chunk_end);
+                self.run_ptr = chunk_start;
+                Some((chunk_start, chunk_end, chunk_size))
+            } else {
+                None
+            }
+        }
+    }
+}
+
 /*
 
 // GC doesn't allocate in the nursery at all.
@@ -2301,6 +2350,140 @@ impl std::fmt::Display for RtsError {
 pub type Result<T> = std::result::Result<T, RtsError>;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Collect object statistics
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+/// All information we might want to know about a Gibbon value.
+#[derive(Debug)]
+pub struct ValueStats {
+    pub start_addr: *const i8,
+    pub start_in_nursery: bool,
+    pub end_addr: *const i8,
+    pub end_in_nursery: bool,
+    pub reg_info: Option<GibRegionInfo>,
+    /// Actual size of the value in bytes.
+    pub size: usize,
+    /// Number of indirections and redirections contained in the value.
+    pub num_indirections: u64,
+    pub num_redirections: u64,
+    /// Number of chunks used.
+    pub num_chunks: u64,
+}
+
+impl Default for ValueStats {
+    fn default() -> Self {
+        ValueStats {
+            start_addr: null(),
+            start_in_nursery: Default::default(),
+            end_addr: null(),
+            end_in_nursery: Default::default(),
+            reg_info: Default::default(),
+            size: Default::default(),
+            num_indirections: Default::default(),
+            num_redirections: Default::default(),
+            num_chunks: Default::default(),
+        }
+    }
+}
+
+impl ValueStats {
+    pub fn from_frame(
+        frame_: *const GibShadowstackFrame,
+        nursery: &GibNursery,
+    ) -> ValueStats {
+        let frame = unsafe { &*frame_ };
+        let mut stats: ValueStats = Default::default();
+        stats.start_addr = (*frame).ptr;
+        stats.start_in_nursery = nursery.contains_addr((*frame).ptr);
+        stats.end_addr = (*frame).endptr;
+        stats.end_in_nursery = nursery.contains_addr((*frame).endptr);
+        if !stats.end_in_nursery {
+            let footer: *const GibOldgenChunkFooter =
+                (*frame).endptr as *const GibOldgenChunkFooter;
+            let reg_info = unsafe { (*((*footer).reg_info)).clone() };
+            stats.reg_info = Some(reg_info);
+        }
+        let mut footer_addrs = HashSet::new();
+        footer_addrs.insert((*frame).endptr);
+        stats.traverse_and_update_stats(
+            &mut footer_addrs,
+            nursery,
+            &(*frame).datatype,
+            stats.start_addr,
+        );
+        stats.num_chunks = footer_addrs.len() as u64;
+        stats
+    }
+
+    /// Update "size", "num_indirections", "num_chunks" fields.
+    fn traverse_and_update_stats(
+        &mut self,
+        footer_addrs: &mut HashSet<*mut i8>,
+        nursery: &GibNursery,
+        ty: &GibDatatype,
+        src: *const i8,
+    ) -> *const i8 {
+        let (tag, src_after_tag): (GibPackedTag, *const i8) =
+            unsafe { read(src) };
+        match tag {
+            CAUTERIZED_TAG | COPIED_TO_TAG | COPIED_TAG => {
+                panic!("saw GC tag {}", tag);
+            }
+
+            INDIRECTION_TAG | REDIRECTION_TAG => {
+                match tag {
+                    INDIRECTION_TAG => self.num_indirections += 1,
+                    REDIRECTION_TAG => self.num_redirections += 1,
+                    _ => unreachable!("tag = {}", tag),
+                }
+                self.size += 9;
+                let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
+                    unsafe { read(src_after_tag) };
+                let tagged = TaggedPointer::from_usize(tagged_pointee);
+                let pointee = tagged.untag();
+                let pointee_footer_offset = tagged.get_tag();
+                let pointee_footer_addr =
+                    unsafe { pointee.add(pointee_footer_offset as usize) };
+                footer_addrs.insert(pointee_footer_addr);
+                let src_after_pointee = self.traverse_and_update_stats(
+                    footer_addrs,
+                    nursery,
+                    ty,
+                    pointee,
+                );
+                match tag {
+                    INDIRECTION_TAG => src_after_indr,
+                    REDIRECTION_TAG => src_after_pointee,
+                    _ => unreachable!("tag = {}", tag),
+                }
+            }
+
+            _ => unsafe {
+                let packed_info: &&[DataconInfo] =
+                    INFO_TABLE.get_unchecked(*ty as usize);
+                let DataconInfo {
+                    scalar_bytes, field_tys, num_shortcut, ..
+                } = packed_info.get_unchecked(tag as usize);
+                let src_after_shortcuts = src_after_tag.add(*num_shortcut * 8);
+                let src_after_scalars = src_after_shortcuts.add(*scalar_bytes);
+                self.size += 1 + (*num_shortcut * 8) + *scalar_bytes;
+                let mut src = src_after_scalars;
+                for fty in field_tys {
+                    src = self.traverse_and_update_stats(
+                        footer_addrs,
+                        nursery,
+                        ty,
+                        src,
+                    );
+                }
+                src
+            },
+        }
+    }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Printf debugging functions
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -2444,47 +2627,5 @@ impl std::fmt::Display for OldGenerationChunkInfo {
         write!(f,
                "OldGenerationChunkInfo {{ start: {:?}, end: {:?}, read_frames: {:?}, write_frames: {:?} }}",
                (*self).start, (*self).end, read_frames_str, write_frames_str)
-    }
-}
-
-impl<'a> IntoIterator for &GibNursery {
-    type Item = (*const i8, *const i8, u16);
-    type IntoIter = NurseryIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        NurseryIter::new(self)
-    }
-}
-
-pub struct NurseryIter {
-    run_ptr: *const i8,
-    end_ptr: *const i8,
-}
-
-impl NurseryIter {
-    fn new(nursery: &GibNursery) -> NurseryIter {
-        NurseryIter { run_ptr: (*nursery).heap_end, end_ptr: (*nursery).alloc }
-    }
-}
-
-/// Traverses the nursery in oldest-chunk-first order.
-impl Iterator for NurseryIter {
-    type Item = (*const i8, *const i8, u16);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            if self.run_ptr > self.end_ptr {
-                let chunk_end = self.run_ptr;
-                let footer_start = self.run_ptr.sub(2);
-                let chunk_size: u16 = *(footer_start as *const u16);
-                let chunk_start = footer_start.sub(chunk_size as usize);
-                debug_assert!(chunk_start < footer_start);
-                debug_assert!(footer_start <= chunk_end);
-                self.run_ptr = chunk_start;
-                Some((chunk_start, chunk_end, chunk_size))
-            } else {
-                None
-            }
-        }
     }
 }

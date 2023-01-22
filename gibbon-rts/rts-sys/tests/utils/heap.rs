@@ -249,9 +249,9 @@ enum SerAction<'a> {
     RestoreDst(*mut i8, *mut i8),
 }
 
-fn serialize(obj0: &Object) -> (*const i8, *const i8) {
+fn serialize(obj_0: &Object) -> (*const i8, *const i8) {
     let mut worklist: Vec<SerAction> = Vec::new();
-    let (orig_dst, mut dst, mut dst_end) = match obj0 {
+    let (orig_dst, mut dst, mut dst_end) = match obj_0 {
         Object::InitNurseryReg(size, obj) => {
             let chunk0 = unsafe { gib_alloc_region(*size) };
             worklist.push(SerAction::ProcessObj(obj));
@@ -264,7 +264,7 @@ fn serialize(obj0: &Object) -> (*const i8, *const i8) {
         }
         _ => {
             let chunk0 = unsafe { gib_alloc_region(1024) };
-            worklist.push(SerAction::ProcessObj(obj0));
+            worklist.push(SerAction::ProcessObj(obj_0));
             (chunk0.start, chunk0.start, chunk0.end)
         }
     };
@@ -276,7 +276,7 @@ fn serialize(obj0: &Object) -> (*const i8, *const i8) {
                 dst = new_dst;
                 dst_end = new_dst_end;
             }
-            SerAction::ProcessObj(obj1) => match obj1 {
+            SerAction::ProcessObj(obj_1) => match obj_1 {
                 Object::FreshNurseryReg(size, obj) => {
                     bounds_check(&mut dst, &mut dst_end, 32);
                     let chunk = unsafe { gib_alloc_region(*size) };
@@ -288,6 +288,7 @@ fn serialize(obj0: &Object) -> (*const i8, *const i8) {
                             chunk.end,
                             OBJECT_T,
                         );
+                        dst = dst.add(9);
                     }
                     worklist.push(SerAction::RestoreDst(dst, dst_end));
                     dst = chunk.start;
@@ -306,6 +307,7 @@ fn serialize(obj0: &Object) -> (*const i8, *const i8) {
                             chunk.end,
                             OBJECT_T,
                         );
+                        dst = dst.add(9);
                     }
                     worklist.push(SerAction::RestoreDst(dst, dst_end));
                     dst = chunk.start;
@@ -326,6 +328,15 @@ fn serialize(obj0: &Object) -> (*const i8, *const i8) {
                     dst = dst_after_int;
                     worklist.push(SerAction::ProcessObj(obj));
                 }
+                Object::KSP3(b, obj1, obj2) => {
+                    assert!(!dst.is_null() && !dst_end.is_null());
+                    bounds_check(&mut dst, &mut dst_end, 32);
+                    let dst_after_tag = write(dst, ObjectTag::KSP3);
+                    let dst_after_bool = write(dst_after_tag, *b);
+                    dst = dst_after_bool;
+                    worklist.push(SerAction::ProcessObj(obj2));
+                    worklist.push(SerAction::ProcessObj(obj1));
+                }
                 _ => todo!(),
             },
         }
@@ -344,9 +355,18 @@ fn deserialize_(src: *const i8) -> (Object, *const i8) {
     match tag {
         ObjectTag::K0 => (Object::K0, src_after_tag),
         ObjectTag::KSP2 => {
-            let (i, src_after_int): (i64, *const i8) = read(src_after_tag);
+            let (i, src_after_int): (GibInt, _) = read(src_after_tag);
             let (field1, src_after_field1) = deserialize_(src_after_int);
             (Object::KSP2(i, Box::new(field1)), src_after_field1)
+        }
+        ObjectTag::KSP3 => {
+            let (b, src_after_bool): (GibBool, _) = read(src_after_tag);
+            let (field1, src_after_field1) = deserialize_(src_after_bool);
+            let (field2, src_after_field2) = deserialize_(src_after_field1);
+            (
+                Object::KSP3(b, Box::new(field1), Box::new(field2)),
+                src_after_field2,
+            )
         }
         ObjectTag::Indir => {
             let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
@@ -383,11 +403,21 @@ fn print_packed_(src: *const i8) -> *const i8 {
         }
         ObjectTag::KSP2 => {
             print!("{:p}:(KSP2 ", src);
-            let (i, src_after_int): (i64, *const i8) = read(src_after_tag);
+            let (i, src_after_int): (GibInt, _) = read(src_after_tag);
             print!("{} ", i);
             let src_after_field1 = print_packed_(src_after_int);
             print!(")");
             src_after_field1
+        }
+        ObjectTag::KSP3 => {
+            print!("{:p}:(KSP3 ", src);
+            let (b, src_after_bool): (GibBool, _) = read(src_after_tag);
+            print!("{} ", b);
+            let src_after_field1 = print_packed_(src_after_bool);
+            print!(" ");
+            let src_after_field2 = print_packed_(src_after_field1);
+            print!(")");
+            src_after_field2
         }
         ObjectTag::Indir => {
             let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
@@ -437,18 +467,14 @@ pub fn test_reverse1(n: u8) -> bool {
     }
 
     // Reconstruct packed value after GC.
-    let ls2 = unsafe {
-        let stk = gib_global_read_shadowstacks as *const GibShadowstack;
-        let frame = (*stk).start as *const GibShadowstackFrame;
-        // print_packed((*frame).ptr);
-        deserialize((*frame).ptr)
-    };
+    let frame = ss_peek(RW::Read);
+    // print_packed((*frame).ptr);
+    let ls2 = unsafe { deserialize((*frame).ptr) };
 
     // Clear info-table.
     gib_info_table_clear();
 
     // Return result.
-    // assert!(ls2 == ls.sans_metadata());
     ls2 == ls.sans_metadata()
 }
 
@@ -502,4 +528,59 @@ fn mklist(n: u8) -> Object {
     } else {
         Object::KSP2(n as i64, Box::new(mklist(n - 1)))
     }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+/// Usual redirection pointers are copied as is since they point to oldgen
+/// data due to eager promotion. However, any redirections encountered while
+/// inlining objects pointed to by indirections should not be copied as is.
+/// Copying them directly breaks the invariant that redirections should
+/// always be the last thing in a chunk.
+pub fn test_redirections_in_inlined_data() -> bool {
+    // Initialize info-table.
+    info_table_initialize();
+
+    // Create objects to evacuate.
+    // The first packed field of 'ls' lives in its own region and is is big
+    // enough to trigger eager promotion, and thus will have a redirection.
+    // This redirection should not be copied directly!
+    let ls = Object::KSP3(
+        // A scalar field.
+        true,
+        // This will turn into an indirection pointer due to FreshNurseryReg.
+        Box::new(Object::FreshNurseryReg(64, Box::new(mklist(4)))),
+        // A packed field that will be inaccessible if a redirection pointer
+        // in the previous field is inlined.
+        Box::new(Object::K0),
+    );
+    // println!("{:?}", ls);
+
+    // Put the object on the Gibbon heap.
+    let (start, end) = serialize(&ls);
+    // print_packed(start);
+
+    // Trigger GC.
+    ss_push(RW::Read, start, end, OBJECT_T);
+    let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
+    let stats = ValueStats::from_frame(ss_peek(RW::Read), nursery);
+    // println!("stats: {:?}", stats);
+    assert_eq!(stats.num_indirections, 1);
+    assert_eq!(stats.num_redirections, 1);
+    unsafe {
+        gib_perform_GC(false);
+    }
+
+    // Reconstruct packed value after GC.
+    let frame = ss_peek(RW::Read);
+    // print_packed((*frame).ptr);
+    let ls2 = unsafe { deserialize((*frame).ptr) };
+    let stats2 = ValueStats::from_frame(frame, nursery);
+    // println!("stats2: {:?}", stats2);
+
+    // Clear info-table.
+    gib_info_table_clear();
+
+    // Check that the redirection is not copied as is.
+    stats2.num_redirections == 0
 }

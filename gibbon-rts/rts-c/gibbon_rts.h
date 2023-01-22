@@ -542,6 +542,7 @@ void gib_shadowstack_push_noinline(
     uint32_t datatype
 );
 GibShadowstackFrame *gib_shadowstack_pop_noinline(GibShadowstack *stack);
+GibShadowstackFrame *gib_shadowstack_peek_noinline(GibShadowstack *stack);
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

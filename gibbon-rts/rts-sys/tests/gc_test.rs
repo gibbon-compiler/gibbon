@@ -4,7 +4,9 @@ use std::ptr::null_mut;
 
 use gibbon_rts_sys::*;
 mod utils;
-use crate::utils::heap::{test_reverse1, test_split_root};
+use crate::utils::heap::{
+    test_redirections_in_inlined_data, test_reverse1, test_split_root,
+};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -40,6 +42,11 @@ pub fn gc_tests() {
             test_split_root();
         });
         assert!(result.is_err());
+        clear_all();
+
+        // Test 5.
+        test_redirections_in_inlined_data();
+        clear_all();
 
         // Free storage.
         gib_exit();
