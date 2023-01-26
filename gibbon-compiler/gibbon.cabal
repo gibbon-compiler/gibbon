@@ -61,6 +61,7 @@ library
                        Gibbon.Passes.Fusion2
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals
+                       Gibbon.Passes.CFG
                        Gibbon.Passes.InferLocations
                        Gibbon.Passes.RegionsInwards
                        Gibbon.Passes.RemoveCopies
