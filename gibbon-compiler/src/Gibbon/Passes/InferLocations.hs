@@ -1237,6 +1237,15 @@ cleanExp e =
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))
       PrimAppE pr es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (PrimAppE pr es', S.unions ls')
+      -- RequestEndOf and AddFixed actually bind locations outside LetLoc forms,
+      -- these should be removed from the set of free locations.
+      LetE (v,ls,t,e1@(PrimAppE RequestEndOf _)) e2 ->
+                        let (e1', s1') = cleanExp e1
+                            (e2', s2') = cleanExp e2
+                        in (LetE (v,ls,t,e1') e2', S.delete v (S.unions [s1',s2',S.fromList ls]))
+      LetE (v,ls,t,e1@(Ext (L2.AddFixed _cur _i))) e2 ->
+                        let (e2', s2') = cleanExp e2
+                        in (LetE (v,ls,t,e1) e2', S.delete v (S.unions [s2',S.fromList ls]))
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
                                  (e2', s2') = cleanExp e2
                              in (LetE (v,ls,t,e1') e2', S.unions [s1',s2',S.fromList ls])
@@ -1283,7 +1292,6 @@ cleanExp e =
                                          in (Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
-      Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
