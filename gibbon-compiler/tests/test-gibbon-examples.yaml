@@ -72,6 +72,10 @@ tests:
   - name: test11_fundata.gib
   - name: test13b_build.gib
   - name: test13_build.gib
+  - name: Test185.hs
+    answer-file: examples/Test185.ans
+    # Failing due to a bug in AddTraversals.
+    failing: [gibbon1]
 
   # Needs manual inspection.
   - name: test14_repair.gib

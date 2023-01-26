@@ -29,6 +29,7 @@ module Gibbon.Passes.RouteEnds
     ( routeEnds ) where
 
 import qualified Data.List as L
+import Data.Maybe ( fromJust )
 import Data.Map as M
 import Data.Set as S
 import Control.Monad
@@ -239,7 +240,12 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                          PackedTy _ loc -> M.insert a loc acc
                                          _ -> acc)
                         M.empty (zip funArgs tyins)
-               initVEnv = M.fromList $ zip funArgs tyins
+               pakdLocs = concatMap
+                            (\t -> case t of
+                                     PackedTy _ loc -> [(loc, t)]
+                                     ProdTy ys -> pakdLocs ys
+                                     _ -> [])
+               initVEnv = M.fromList $ pakdLocs tyins ++ zip funArgs tyins
                env2 = Env2 initVEnv (initFunEnv fundefs)
            funBody' <- bindReturns funBody
            funBody'' <- exp fns retlocs emptyRel lenv M.empty env2 funBody'
@@ -345,11 +351,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                         (Just jump) = L1.sizeOfTy ty
                                         e' = Ext $ LetLocE l2 (AfterConstantLE jump l1) e
                                     return (eor', e')
-
                                vars = L.map fst vls
-                               env2' = extendsVEnv (M.fromList (zip vars argtys)) env2
+                               locs = L.map snd vls
+                               env2' = extendsVEnv (M.fromList (zip locs argtys ++ zip vars argtys)) env2
                                lenv' = M.union lenv $ M.fromList vls
-
                            (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
                            e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
                            return (dc, vls, e'')
@@ -521,7 +526,24 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                wrapBody e ((l1,l2):ls) =
                  case M.lookup l1 afterenv of
                    Nothing -> wrapBody e ls
-                   Just la -> wrapBody ((Ext (LetLocE la (FromEndLE l2) e))) ls
+                   Just la ->
+                     let go loc acc =
+                           case M.lookup loc (vEnv env2) of
+                             Just ty
+                               | isScalarTy ty ->
+                                 case M.lookup loc afterenv of
+                                   Nothing -> acc
+                                   Just lb -> go lb (acc ++ [(lb,loc,fromJust $ sizeOfTy ty)])
+                               | otherwise -> acc
+                             Nothing -> acc
+                         scalar_witnesses = go la []
+                         bind_witnesses bod ls =
+                           L.foldr (\(v,w,sz) acc ->
+                                     Ext $ LetLocE v (AfterConstantLE sz w) acc)
+                           bod ls
+                         bod' = bind_witnesses e scalar_witnesses
+                         bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
+                     in wrapBody bod'' ls
                wrapBody e [] = e
 
                -- Process a let bound fn app.
