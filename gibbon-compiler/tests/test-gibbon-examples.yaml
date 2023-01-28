@@ -74,8 +74,8 @@ tests:
   - name: test13_build.gib
   - name: Test185.hs
     answer-file: examples/Test185.ans
-    # Failing due to a bug in AddTraversals.
-    failing: [gibbon1]
+    # Scalar fields after packed not allowed
+    failing: [gibbon1,gibbon2,gibbon3]
 
   # Needs manual inspection.
   - name: test14_repair.gib
