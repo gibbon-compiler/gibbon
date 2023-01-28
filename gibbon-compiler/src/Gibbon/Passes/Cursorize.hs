@@ -636,6 +636,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
           bod = case vty of
                   PackedTy{} -> VarE (toEndV v)
                   CursorTy   -> VarE (toEndV v)
+{-
                   IntTy -> let sizeVal = LitE (fromJust $ sizeOfTy IntTy)
                                rhs = Ext $ AddCursor loc sizeVal
                            in rhs
@@ -643,6 +644,9 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                                  rhs = Ext $ AddCursor loc sizeVal
                              in rhs
                   BoolTy -> let sizeVal = LitE (fromJust $ sizeOfTy BoolTy)
+                                rhs = Ext $ AddCursor loc sizeVal
+                            in rhs
+                  CharTy -> let sizeVal = LitE (fromJust $ sizeOfTy CharTy)
                                 rhs = Ext $ AddCursor loc sizeVal
                             in rhs
                   SymTy -> let sizeVal = LitE (fromJust $ sizeOfTy SymTy)
@@ -654,14 +658,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                   ListTy elty -> let sizeVal = LitE (fromJust $ sizeOfTy (ListTy elty))
                                      rhs = Ext $ AddCursor loc sizeVal
                                  in rhs
-                  -- IntTy -> let sizeVar = varAppend "sizeof_" v
-                  --              sizeVal = Ext $ SizeOfScalar v
-                  --              rhs = Ext $ AddCursor loc (VarE (sizeVar))
-                  --          in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
-                  -- FloatTy -> let sizeVar = varAppend "sizeof_" v
-                  --                sizeVal = Ext $ SizeOfScalar v
-                  --                rhs = Ext $ AddCursor loc (VarE (sizeVar))
-                  --            in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+-}
                   oth -> error $ "cursorizeLocExp: AfterVariable TODO " ++ sdoc oth
       if isBound loc tenv
       then if was_stolen

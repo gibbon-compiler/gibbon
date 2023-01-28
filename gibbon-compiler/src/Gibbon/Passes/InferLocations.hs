@@ -675,6 +675,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                                                FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                                                SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                                                BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
                                                _ -> return $ ArgVar v
                              (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                              (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)

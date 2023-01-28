@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Gibbon.Passes.Simplifier ( simplifyL1, lateInlineTriv ) where
+module Gibbon.Passes.Simplifier ( simplifyL1, lateInlineTriv, simplifyLocBinds ) where
 
 import Data.Functor.Foldable as Foldable
 import qualified Data.Set as S
@@ -10,6 +10,7 @@ import qualified Data.List as L ( isPrefixOf )
 import Gibbon.Common
 import Gibbon.Language
 import Gibbon.L1.Syntax
+import Gibbon.L2.Syntax
 import qualified Gibbon.L4.Syntax as L4
 import Gibbon.Passes.Freshen (freshNames1, freshFun1)
 
@@ -93,6 +94,118 @@ simplifyL1 p0 = do
     p3 <- deadFunElim p2
     pure p3
 
+--------------------------------------------------------------------------------
+
+simplifyLocBinds :: Prog2 -> PassM Prog2
+simplifyLocBinds (Prog ddefs fundefs mainExp) = do
+    let fundefs' = M.map gofun fundefs
+    let mainExp' = case mainExp of
+                     Just (e,ty) -> Just (go0 M.empty M.empty e, ty)
+                     Nothing     -> Nothing
+    pure $ Prog ddefs fundefs' mainExp'
+
+  where
+    gofun f@FunDef{funBody} =
+        let funBody' = go0 M.empty M.empty funBody
+        in f { funBody = funBody' }
+
+    -- partially evaluate location arithmetic
+    go :: M.Map LocVar (LocVar,Int) -> Exp2 -> Exp2
+    go env ex =
+      case ex of
+        AppE f locs args -> AppE f locs (map (go env) args)
+        PrimAppE p args -> PrimAppE p (map (go env) args)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go env rhs)) (go env bod)
+        IfE a b c -> IfE (go env a) (go env b) (go env c)
+        MkProdE args -> MkProdE (map (go env) args)
+        ProjE i bod -> ProjE i (go env bod)
+        CaseE scrt brs -> CaseE (go env scrt) (map (\(a,b,c) -> (a,b,go env c)) brs)
+        DataConE loc dcon args -> DataConE loc dcon (map (go env) args)
+        TimeIt e ty b -> TimeIt (go env e) ty b
+        WithArenaE v bod -> WithArenaE v (go env bod)
+        SpawnE f locs args -> SpawnE f locs (map (go env) args)
+        Ext ext ->
+          case ext of
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go env bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go env bod))
+            LetLocE loc (AfterConstantLE i loc2) bod ->
+              case (M.lookup loc2 env) of
+                Nothing ->
+                  Ext $ LetLocE loc (AfterConstantLE i loc2) $
+                        go (M.insert loc (loc2,i) env) bod
+                Just (loc3,j) ->
+                  Ext $ LetLocE loc (AfterConstantLE (i+j) loc3) $
+                        go (M.insert loc (loc3,i+j) env) bod
+            LetLocE loc rhs bod -> Ext (LetLocE loc rhs (go env bod))
+            LetAvail vars bod -> Ext (LetAvail vars (go env bod))
+            _ -> Ext ext
+        _ -> ex
+
+    -- drop dead bindings
+    go2 :: Exp2 -> Exp2
+    go2 ex =
+      case ex of
+        AppE f locs args -> AppE f locs (map go2 args)
+        PrimAppE p args -> PrimAppE p (map go2 args)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go2 rhs)) (go2 bod)
+        IfE a b c -> IfE (go2 a) (go2 b) (go2 c)
+        MkProdE args -> MkProdE (map go2 args)
+        ProjE i bod -> ProjE i (go2 bod)
+        CaseE scrt brs -> CaseE (go2 scrt) (map (\(a,b,c) -> (a,b,go2 c)) brs)
+        DataConE loc dcon args -> DataConE loc dcon (map go2 args)
+        TimeIt e ty b -> TimeIt (go2 e) ty b
+        WithArenaE v bod -> WithArenaE v (go2 bod)
+        SpawnE f locs args -> SpawnE f locs (map go2 args)
+        Ext ext ->
+          case ext of
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go2 bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go2 bod))
+            LetLocE loc rhs bod ->
+              let bod' = go2 bod
+                  free_vars = (allFreeVars bod')
+              in
+                if (loc `elem` free_vars)
+                then Ext (LetLocE loc rhs bod')
+                else bod'
+            LetAvail vars bod -> Ext (LetAvail vars (go2 bod))
+            _ -> Ext ext
+        _ -> ex
+
+
+    -- partially evaluate location arithmetic
+    go0 :: M.Map LocExp LocVar -> M.Map LocVar LocVar -> Exp2 -> Exp2
+    go0 env1 env2 ex =
+      case ex of
+        AppE f locs args -> AppE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        PrimAppE p args -> PrimAppE p (map (go0 env1 env2) args)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
+        IfE a b c -> IfE (go0 env1 env2 a) (go0 env1 env2 b) (go0 env1 env2 c)
+        MkProdE args -> MkProdE (map (go0 env1 env2) args)
+        ProjE i bod -> ProjE i (go0 env1 env2 bod)
+        CaseE scrt brs -> CaseE (go0 env1 env2 scrt) (map (\(a,b,c) -> (a,b,go0 env1 env2 c)) brs)
+        DataConE loc dcon args -> DataConE (substloc env2 loc) dcon (map (go0 env1 env2) args)
+        TimeIt e ty b -> TimeIt (go0 env1 env2 e) ty b
+        WithArenaE v bod -> WithArenaE v (go0 env1 env2 bod)
+        SpawnE f locs args -> SpawnE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        Ext ext ->
+          case ext of
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go0 env1 env2 bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
+            LetLocE loc rhs bod ->
+              let rhs' = case rhs of
+                           AfterConstantLE i loc2 -> AfterConstantLE i (substloc env2 loc2)
+                           AfterVariableLE v loc2 b -> AfterVariableLE v (substloc env2 loc2) b
+                           _ -> rhs
+              in case M.lookup rhs' env1 of
+                Nothing  -> Ext (LetLocE loc rhs' (go0 (M.insert rhs' loc env1) env2 bod))
+                Just new -> go0 env1 (M.insert loc new env2) bod
+            LetAvail vars bod -> Ext (LetAvail vars (go0 env1 env2 bod))
+            _ -> Ext ext
+        _ -> ex
+      where
+        substloc env loc = case M.lookup loc env of
+                             Nothing  -> loc
+                             Just new -> new
 
 --------------------------------------------------------------------------------
 
