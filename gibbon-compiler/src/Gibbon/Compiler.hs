@@ -622,7 +622,7 @@ passes config@Config{dynflags} l0 = do
 
               -- Note: L1 -> L2
               l2 <- goE2 "inferLocations"  inferLocs    l1
-              l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- go "regionsInwards"  regionsInwards l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -675,11 +675,10 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
-                  l2 <- go "simplifyLocBinds" simplifyLocBinds l2
+                  l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "regionsInwards" regionsInwards l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
-                  l2 <- go "simplifyLocBinds" simplifyLocBinds l2
                   l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
@@ -701,14 +700,14 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              -- L2 program no longer typechecks while these next passes run
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds False) l2
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               -- l2 <- if gibbon1
               --       then pure l2

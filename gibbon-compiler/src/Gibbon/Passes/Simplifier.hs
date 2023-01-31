@@ -98,17 +98,21 @@ simplifyL1 p0 = do
 
 --------------------------------------------------------------------------------
 
-simplifyLocBinds :: Prog2 -> PassM Prog2
-simplifyLocBinds (Prog ddefs fundefs mainExp) = do
+simplifyLocBinds :: Bool -> Prog2 -> PassM Prog2
+simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     let fundefs' = M.map gofun fundefs
     let mainExp' = case mainExp of
-                     Just (e,ty) -> Just (go2 (go M.empty (go0 M.empty M.empty e)), ty)
+                     Just (e,ty) -> Just (simpl e, ty)
                      Nothing     -> Nothing
     pure $ Prog ddefs fundefs' mainExp'
 
   where
+    simpl = if only_cse
+              then go0 M.empty M.empty
+              else go2 . go M.empty . go0 M.empty M.empty
+
     gofun f@FunDef{funBody} =
-        let funBody' = go2 (go M.empty (go0 M.empty M.empty funBody))
+        let funBody' = simpl funBody
         in f { funBody = funBody' }
 
     -- partially evaluate location arithmetic
