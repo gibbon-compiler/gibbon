@@ -185,6 +185,8 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
     skip: true
+    answer-file: examples/bench_tree_insert.ans
+    failing: [interp1]
 
   - name: bench_repmax.gib
     bench: true

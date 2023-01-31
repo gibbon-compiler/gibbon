@@ -102,13 +102,13 @@ simplifyLocBinds :: Prog2 -> PassM Prog2
 simplifyLocBinds (Prog ddefs fundefs mainExp) = do
     let fundefs' = M.map gofun fundefs
     let mainExp' = case mainExp of
-                     Just (e,ty) -> Just (go2 (go M.empty e), ty)
+                     Just (e,ty) -> Just (go2 (go M.empty (go0 M.empty M.empty e)), ty)
                      Nothing     -> Nothing
     pure $ Prog ddefs fundefs' mainExp'
 
   where
     gofun f@FunDef{funBody} =
-        let funBody' = go2 (go M.empty funBody)
+        let funBody' = go2 (go M.empty (go0 M.empty M.empty funBody))
         in f { funBody = funBody' }
 
     -- partially evaluate location arithmetic
@@ -172,6 +172,41 @@ simplifyLocBinds (Prog ddefs fundefs mainExp) = do
             LetAvail vars bod -> Ext (LetAvail vars (go2 bod))
             _ -> Ext ext
         _ -> ex
+
+    -- partially evaluate location arithmetic
+    go0 :: M.Map LocExp LocVar -> M.Map LocVar LocVar -> Exp2 -> Exp2
+    go0 env1 env2 ex =
+      case ex of
+        AppE f locs args -> AppE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        PrimAppE p args -> PrimAppE p (map (go0 env1 env2) args)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
+        IfE a b c -> IfE (go0 env1 env2 a) (go0 env1 env2 b) (go0 env1 env2 c)
+        MkProdE args -> MkProdE (map (go0 env1 env2) args)
+        ProjE i bod -> ProjE i (go0 env1 env2 bod)
+        CaseE scrt brs -> CaseE (go0 env1 env2 scrt) (map (\(a,b,c) -> (a,b,go0 env1 env2 c)) brs)
+        DataConE loc dcon args -> DataConE (substloc env2 loc) dcon (map (go0 env1 env2) args)
+        TimeIt e ty b -> TimeIt (go0 env1 env2 e) ty b
+        WithArenaE v bod -> WithArenaE v (go0 env1 env2 bod)
+        SpawnE f locs args -> SpawnE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        Ext ext ->
+          case ext of
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go0 env1 env2 bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
+            LetLocE loc rhs bod ->
+              let rhs' = case rhs of
+                           AfterConstantLE i loc2 -> AfterConstantLE i (substloc env2 loc2)
+                           AfterVariableLE v loc2 b -> AfterVariableLE v (substloc env2 loc2) b
+                           _ -> rhs
+              in case M.lookup rhs' env1 of
+                Nothing  -> Ext (LetLocE loc rhs' (go0 (M.insert rhs' loc env1) env2 bod))
+                Just new -> go0 env1 (M.insert loc new env2) bod
+            LetAvail vars bod -> Ext (LetAvail vars (go0 env1 env2 bod))
+            _ -> Ext ext
+        _ -> ex
+      where
+        substloc env loc = case M.lookup loc env of
+                             Nothing  -> loc
+                             Just new -> new
 
 --------------------------------------------------------------------------------
 

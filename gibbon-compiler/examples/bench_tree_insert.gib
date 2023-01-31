@@ -30,8 +30,8 @@
                        (Node n1 (Leaf n) (Null))
                        (Node n1 (Null) (Leaf n)))]
     [(Node n1 l r) (if (< n1 n)
-                       (Node n1 l (tree-insert r n))
-                       (Node n1 (tree-insert l n) r))]))
+                       (Node n1 (copy-packed l) (tree-insert r n))
+                       (Node n1 (tree-insert l n) (copy-packed r)))]))
 
 (define (loop [tr : Tree] [n : Int]) : Tree
   (if (= n 0)
