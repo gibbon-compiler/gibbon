@@ -393,10 +393,10 @@ pub mod c {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct GibOldgen<'a> {
-        pub rem_set: &'a mut GibRememberedSet,
-        pub old_zct: &'a mut Zct,
-        pub new_zct: &'a mut Zct,
+    pub struct GibOldgen {
+        pub rem_set: *mut GibRememberedSet,
+        pub old_zct: *mut Zct,
+        pub new_zct: *mut Zct,
     }
 
     #[repr(C)]
@@ -508,10 +508,10 @@ pub mod c {
         pub static gib_global_oldgen: *mut GibOldgen_;
     }
 
-    impl GibOldgen<'_> {
+    impl GibOldgen {
         pub fn from_ffi(
             oldgen_ptr: *mut GibOldgen_,
-        ) -> &'static mut GibOldgen<'static> {
+        ) -> &'static mut GibOldgen {
             unsafe { &mut *(oldgen_ptr as *mut GibOldgen) }
         }
     }
