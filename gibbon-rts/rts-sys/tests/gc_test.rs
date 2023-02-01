@@ -4,9 +4,7 @@ use std::ptr::null_mut;
 
 use gibbon_rts_sys::*;
 mod utils;
-use crate::utils::heap::{
-    test_redirections_in_inlined_data, test_reverse1, test_split_root,
-};
+use crate::utils::heap::{test_redirections_in_inlined_data, test_reverse1, test_split_root};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -33,9 +31,7 @@ pub fn gc_tests() {
         clear_all();
 
         // Test 3.
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(qc_test_reverse1 as fn(u8) -> TestResult);
+        QuickCheck::new().tests(100).quickcheck(qc_test_reverse1 as fn(u8) -> TestResult);
 
         // Test 4.
         let result = panic::catch_unwind(|| {
@@ -80,12 +76,9 @@ fn qc_test_reverse1(n: u8) -> TestResult {
 /// Reset stuff between tests.
 fn clear_all() {
     let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
-    let rstack: &mut GibShadowstack =
-        unsafe { &mut *gib_global_read_shadowstacks };
-    let wstack: &mut GibShadowstack =
-        unsafe { &mut *gib_global_write_shadowstacks };
-    let oldgen: &mut GibOldgen =
-        unsafe { GibOldgen::from_ffi(gib_global_oldgen) };
+    let rstack: &mut GibShadowstack = unsafe { &mut *gib_global_read_shadowstacks };
+    let wstack: &mut GibShadowstack = unsafe { &mut *gib_global_write_shadowstacks };
+    let oldgen: &mut GibOldgen = unsafe { GibOldgen::from_ffi(gib_global_oldgen) };
     nursery.clear();
     rstack.clear();
     wstack.clear();

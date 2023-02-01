@@ -133,10 +133,7 @@ pub mod c {
             key: GibSym,
             val: GibPtr,
         ) -> *mut GibSymDict;
-        pub fn gib_dict_lookup_ptr(
-            ptr: *mut GibSymDict,
-            key: GibSym,
-        ) -> GibPtr;
+        pub fn gib_dict_lookup_ptr(ptr: *mut GibSymDict, key: GibSym) -> GibPtr;
     }
 
     /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -233,17 +230,10 @@ pub mod c {
     }
 
     extern "C" {
-        pub fn gib_vector_alloc(
-            num: GibInt,
-            elt_size: usize,
-        ) -> *mut GibVector;
+        pub fn gib_vector_alloc(num: GibInt, elt_size: usize) -> *mut GibVector;
         pub fn gib_vector_length(vec: *mut GibVector) -> GibInt;
         pub fn gib_vector_is_empty(vec: *mut GibVector) -> GibBool;
-        pub fn gib_vector_slice(
-            i: GibInt,
-            n: GibInt,
-            vec: *mut GibVector,
-        ) -> *mut GibVector;
+        pub fn gib_vector_slice(i: GibInt, n: GibInt, vec: *mut GibVector) -> *mut GibVector;
         pub fn gib_vector_nth(vec: *mut GibVector, i: GibInt) -> *mut c_void;
         pub fn gib_vector_inplace_update(
             vec: *mut GibVector,
@@ -265,10 +255,7 @@ pub mod c {
         */
         pub fn gib_vector_concat(vec: *mut GibVector) -> *mut GibVector;
         pub fn gib_vector_free(vec: *mut GibVector);
-        pub fn gib_vector_merge(
-            vec1: *mut GibVector,
-            vec2: *mut GibVector,
-        ) -> *mut GibVector;
+        pub fn gib_vector_merge(vec1: *mut GibVector, vec2: *mut GibVector) -> *mut GibVector;
         pub fn gib_print_timing_array(times: *mut GibVector);
         pub fn gib_sum_timing_array(times: *mut GibVector) -> f64;
     }
@@ -291,10 +278,7 @@ pub mod c {
         pub fn gib_list_bumpalloc_restore_state();
         pub fn gib_list_alloc(data_size: usize) -> *mut GibList;
         pub fn gib_list_is_empty(ls: *mut GibList) -> GibBool;
-        pub fn gib_list_cons(
-            elt: *mut c_void,
-            ls: *mut GibList,
-        ) -> *mut GibList;
+        pub fn gib_list_cons(elt: *mut c_void, ls: *mut GibList) -> *mut GibList;
         pub fn gib_list_head(ls: *mut GibList) -> *mut c_void;
         pub fn gib_list_tail(ls: *mut GibList) -> *mut GibList;
         pub fn gib_list_free(ls: *mut GibList);
@@ -444,11 +428,14 @@ pub mod c {
     use std::fmt;
     impl fmt::Debug for GibRegionInfo {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "GibRegionInfo {{id: {}, refcount: {}, outset: {:?}, first_chunk_footer: {:?} }}",
-                   self.id,
-                   self.refcount,
-                   unsafe { (*self.outset).clone() },
-                   unsafe { (*self.first_chunk_footer).clone() })
+            write!(
+                f,
+                "GibRegionInfo {{id: {}, refcount: {}, outset: {:?}, first_chunk_footer: {:?} }}",
+                self.id,
+                self.refcount,
+                unsafe { (*self.outset).clone() },
+                unsafe { (*self.first_chunk_footer).clone() }
+            )
         }
     }
 
@@ -482,10 +469,7 @@ pub mod c {
         // Region allocation.
         pub fn gib_alloc_region(size: usize) -> GibChunk;
         pub fn gib_alloc_region_on_heap(size: usize) -> GibChunk;
-        pub fn gib_grow_region(
-            writeloc_addr: *mut *mut c_char,
-            footer_addr: *mut *mut c_char,
-        );
+        pub fn gib_grow_region(writeloc_addr: *mut *mut c_char, footer_addr: *mut *mut c_char);
         pub fn gib_free_region(footer_ptr: *mut c_char);
 
         /// Trigger GC.
@@ -509,9 +493,7 @@ pub mod c {
     }
 
     impl GibOldgen {
-        pub fn from_ffi(
-            oldgen_ptr: *mut GibOldgen_,
-        ) -> &'static mut GibOldgen {
+        pub fn from_ffi(oldgen_ptr: *mut GibOldgen_) -> &'static mut GibOldgen {
             unsafe { &mut *(oldgen_ptr as *mut GibOldgen) }
         }
     }
@@ -672,10 +654,7 @@ pub mod c {
         // TODO: timespec.
         pub fn gib_difftimespecs(t0: *mut c_void, t1: *mut c_void) -> f64;
         */
-        pub fn gib_compare_doubles(
-            a: *const c_void,
-            b: *const c_void,
-        ) -> c_int;
+        pub fn gib_compare_doubles(a: *const c_void, b: *const c_void) -> c_int;
         pub fn gib_expll(base: GibInt, pow: GibInt) -> GibInt;
         pub fn gib_get_num_processors() -> GibInt;
     }
@@ -686,10 +665,7 @@ pub mod c {
      */
 
     extern "C" {
-        pub fn gib_nursery_realloc(
-            nursery: *mut GibNursery,
-            nsize: usize,
-        ) -> usize;
+        pub fn gib_nursery_realloc(nursery: *mut GibNursery, nsize: usize) -> usize;
         pub fn gib_init(argc: c_int, argv: *mut *mut c_char) -> c_int;
         pub fn gib_exit() -> c_int;
     }
@@ -741,10 +717,8 @@ pub mod rs {
         c_field_tys: *const GibDatatype,
         c_field_tys_length: u8,
     ) -> i32 {
-        let field_tys: Vec<GibDatatype> = unsafe {
-            slice::from_raw_parts(c_field_tys, c_field_tys_length as usize)
-                .to_vec()
-        };
+        let field_tys: Vec<GibDatatype> =
+            unsafe { slice::from_raw_parts(c_field_tys, c_field_tys_length as usize).to_vec() };
         match gc::info_table_insert_packed_dcon(
             datatype,
             datacon,
@@ -765,10 +739,7 @@ pub mod rs {
     }
 
     #[no_mangle]
-    pub extern "C" fn gib_info_table_insert_scalar(
-        datatype: GibDatatype,
-        size: usize,
-    ) -> i32 {
+    pub extern "C" fn gib_info_table_insert_scalar(datatype: GibDatatype, size: usize) -> i32 {
         gc::info_table_insert_scalar(datatype, size);
         0
     }
@@ -787,14 +758,7 @@ pub mod rs {
         let wstack: &mut GibShadowstack = unsafe { &mut *wstack_ptr };
         let nursery: &mut GibNursery = unsafe { &mut *nursery_ptr };
         let oldgen: &mut GibOldgen = GibOldgen::from_ffi(oldgen_ptr);
-        match gc::garbage_collect(
-            rstack,
-            wstack,
-            nursery,
-            oldgen,
-            gc_stats,
-            force_major,
-        ) {
+        match gc::garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, force_major) {
             Ok(()) => 0,
             Err(err) => {
                 if cfg!(debug_assertions) {
@@ -806,9 +770,7 @@ pub mod rs {
     }
 
     #[no_mangle]
-    pub extern "C" fn gib_free_region_(
-        footer: *const GibOldgenChunkFooter,
-    ) -> i32 {
+    pub extern "C" fn gib_free_region_(footer: *const GibOldgenChunkFooter) -> i32 {
         unsafe {
             match gc::free_region(footer, null_mut()) {
                 Ok(()) => 0,
@@ -839,9 +801,7 @@ pub mod rs {
         chunk_size: usize,
         refcount: u16,
     ) -> *mut i8 {
-        unsafe {
-            gc::init_footer_at(chunk_end, null_mut(), chunk_size, refcount)
-        }
+        unsafe { gc::init_footer_at(chunk_end, null_mut(), chunk_size, refcount) }
     }
 
     #[no_mangle]
@@ -867,9 +827,7 @@ pub mod rs {
     }
 
     #[no_mangle]
-    pub extern "C" fn gib_clone_outset(
-        outset: *const Outset,
-    ) -> *const Outset {
+    pub extern "C" fn gib_clone_outset(outset: *const Outset) -> *const Outset {
         unsafe {
             let outset2: Outset = (*outset).clone();
             Box::into_raw(Box::new(outset2))
@@ -937,9 +895,7 @@ pub mod rs {
         oldgen: *const GibOldgen,
     ) {
         unsafe {
-            gc::print_nursery_and_oldgen(
-                &*rstack, &*wstack, &*nursery, &*oldgen,
-            );
+            gc::print_nursery_and_oldgen(&*rstack, &*wstack, &*nursery, &*oldgen);
         }
     }
 }

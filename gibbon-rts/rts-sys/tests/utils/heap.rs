@@ -96,9 +96,7 @@ impl Object {
     fn sans_metadata(&self) -> Object {
         match self {
             Object::K0 => Object::K0,
-            Object::KSP2(i, obj) => {
-                Object::KSP2(*i, Box::new((*obj).sans_metadata()))
-            }
+            Object::KSP2(i, obj) => Object::KSP2(*i, Box::new((*obj).sans_metadata())),
             Object::FreshNurseryReg(_, obj) => (*obj).sans_metadata(),
             Object::FreshOldgenReg(_, obj) => (*obj).sans_metadata(),
             Object::InitNurseryReg(_, obj) => (*obj).sans_metadata(),
@@ -151,9 +149,7 @@ impl ObjectTag {
                 (size, 0, 2, 0, Vec::new(), 0)
             }
             ObjectTag::KS3 => {
-                let size = size_of::<GibChar>()
-                    + size_of::<GibBool>()
-                    + size_of::<GibFloat>();
+                let size = size_of::<GibChar>() + size_of::<GibBool>() + size_of::<GibFloat>();
                 (size, 0, 3, 0, Vec::new(), 0)
             }
             ObjectTag::KS4 => {
@@ -185,9 +181,7 @@ impl ObjectTag {
                 (size, 1, 1, len, field_tys, len)
             }
             ObjectTag::KSP5 => {
-                let size = size_of::<GibChar>()
-                    + size_of::<GibBool>()
-                    + size_of::<GibFloat>();
+                let size = size_of::<GibChar>() + size_of::<GibBool>() + size_of::<GibFloat>();
                 let field_tys = vec![OBJECT_T, OBJECT_T];
                 let len = field_tys.len() as u8;
                 (size, 0, 3, len, field_tys, len)
@@ -363,14 +357,10 @@ fn deserialize_(src: *const i8) -> (Object, *const i8) {
             let (b, src_after_bool): (GibBool, _) = read(src_after_tag);
             let (field1, src_after_field1) = deserialize_(src_after_bool);
             let (field2, src_after_field2) = deserialize_(src_after_field1);
-            (
-                Object::KSP3(b, Box::new(field1), Box::new(field2)),
-                src_after_field2,
-            )
+            (Object::KSP3(b, Box::new(field1), Box::new(field2)), src_after_field2)
         }
         ObjectTag::Indir => {
-            let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
-                read(src_after_tag);
+            let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) = read(src_after_tag);
             let tagged = TaggedPointer::from_usize(tagged_pointee);
             let pointee = tagged.untag();
             let (field, _) = deserialize_(pointee);
@@ -420,8 +410,7 @@ fn print_packed_(src: *const i8) -> *const i8 {
             src_after_field2
         }
         ObjectTag::Indir => {
-            let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
-                read(src_after_tag);
+            let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) = read(src_after_tag);
             let tagged = TaggedPointer::from_usize(tagged_pointee);
             let pointee = tagged.untag();
             print!("{:p}:(->i ", src);
@@ -484,10 +473,7 @@ fn mkrevlist(n: u8) -> Object {
         Object::K0
     } else {
         let next = mkrevlist(n - 1);
-        Object::KSP2(
-            n as i64,
-            Box::new(Object::FreshNurseryReg(128, Box::new(next))),
-        )
+        Object::KSP2(n as i64, Box::new(Object::FreshNurseryReg(128, Box::new(next))))
     }
 }
 
