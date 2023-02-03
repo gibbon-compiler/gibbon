@@ -173,7 +173,7 @@ pub fn garbage_collect(
 
         // Evacuate readers.
         let mut so_env = HashMap::new();
-        evacuate_shadowstack(&mut so_env, nursery, oldgen, rstack, evac_major)?;
+        evacuate_roots(&mut so_env, nursery, oldgen, rstack, evac_major)?;
 
         // // Collect dead regions.
         // oldgen.collect_regions()?;
@@ -247,7 +247,7 @@ fn restore_writers(
 
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
-unsafe fn evacuate_shadowstack(
+unsafe fn evacuate_roots(
     so_env: &mut SkipoverEnv,
     nursery: &GibNursery,
     oldgen: &mut GibOldgen,
@@ -256,14 +256,6 @@ unsafe fn evacuate_shadowstack(
 ) -> Result<()> {
     let rem_set: &mut GibShadowstack = unsafe { &mut *((*oldgen).rem_set) };
     let frames = record_time!(sort_roots(rstack, rem_set), (*GC_STATS).gc_rootset_sort_time);
-
-    // // [2023.01.22]: This assertion doesn't hold for split roots.
-    // #[cfg(debug_assertions)]
-    // {
-    //     for frame in frames.iter() {
-    //         assert!((*(*frame)).ptr < (*(*frame)).endptr);
-    //     }
-    // }
 
     #[cfg(feature = "verbose_evac")]
     {
@@ -278,162 +270,188 @@ unsafe fn evacuate_shadowstack(
 
         match (*frame).gc_root_prov {
             GibGcRootProv::RemSet => {
-                let (tagged_src, _): (GibTaggedPtr, _) = read((*frame).ptr);
-                let tagged = TaggedPointer::from_usize(tagged_src);
-                let src = tagged.untag();
-                let src_footer_offset = tagged.get_tag();
-                // let src_end = src.add(src_footer_offset as usize);
-                let (tag, src_after_tag): (GibPackedTag, *mut i8) = read_mut(src);
-                match tag {
-                    // If the data is already evacuated, don't allocate a fresh
-                    // destination region. Just update the root to point to the
-                    // evacuated data.
-                    COPIED_TAG | COPIED_TO_TAG => {
-                        evacuate_copied(frame, tag, src, src_after_tag);
-                    }
-                    _ => {
-                        // Allocate space in the destination.
-                        let (dst, dst_end) = Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
-                        // Evacuate the data.
-                        let mut st = EvacState { so_env, nursery, oldgen, evac_major };
-                        let (src_after, dst_after, dst_after_end, _forwarded) =
-                            evacuate_packed(&mut st, frame, dst, dst_end);
-                        // Update the indirection pointer in oldgen region.
-                        let offset = dst_end.offset_from(dst);
-                        let tagged: u64 = TaggedPointer::new(dst, offset as u16).as_u64();
-
-                        dbgprintln!("+Restoring reader {:?} to {:?}", (*frame).ptr, dst);
-
-                        write((*frame).ptr, tagged);
-
-                        dbgprintln!(
-                            "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
-                            (*frame).ptr,
-                            dst,
-                            offset
-                        );
-
-                        // Update the outset in oldgen region.
-                        //
-                        // We don't need to update the refcount here because we've
-                        // already created the new region with an initial refcount
-                        // of 1 above.
-                        add_to_outset((*frame).endptr, dst_end);
-
-                        // Note [Adding a forwarding pointer at the end of every chunk].
-                        // Compute chunk size.
-                        let src_footer: *mut GibNurseryChunkFooter =
-                            (*frame).endptr as *mut GibNurseryChunkFooter;
-                        let chunk_size = *src_footer as usize;
-                        let is_loc_0 = (src_footer_offset as usize) == chunk_size;
-
-                        // Write a forwarding pointer if we burned a hole in
-                        // the middle of a buffer.
-                        if is_loc_0 {
-                            // Write forwarding pointer at the end of chunk.
-                            debug_assert!(dst_after < dst_after_end);
-                            write_forwarding_pointer_at(
-                                src_after,
-                                dst_after,
-                                dst_after_end.offset_from(dst_after) as u16,
-                            );
-                        } else {
-                            // No forwarding pointer can be written,
-                            // add an entry o forwarding env.
-                            // TODO:
-                        }
-                    }
-                }
+                evacuate_remset_root(frame, so_env, nursery, oldgen, evac_major)?;
             }
             GibGcRootProv::Stk => {
                 let start_in_nursery = nursery.contains_addr((*frame).ptr);
-                let footer_in_nursery = nursery.contains_addr((*frame).endptr);
-
-                // Main todo (2):
-                if start_in_nursery && !footer_in_nursery {
-                    panic!("split root, {:?}", *frame);
-                }
-
                 if !start_in_nursery {
                     dbgprintln!("Evac packed, skipping oldgen root {:?}", (*frame));
-
-                    let _footer = (*frame).endptr as *const GibOldgenChunkFooter;
                     /*
+                    let _footer = (*frame).endptr as *const GibOldgenChunkFooter;
                     if (*((*footer).reg_info)).refcount == 0 {
                         (*zct).insert((*footer).reg_info);
                     }
                      */
                     continue;
                 }
-
-                let src = (*frame).ptr;
-                let src_end = (*frame).endptr;
-                let (tag, src_after_tag): (GibPackedTag, *mut i8) = read_mut(src);
-
-                match tag {
-                    // If the data is already evacuated, don't allocate a fresh
-                    // destination region. Just update the root to point to the
-                    // evacuated data.
-                    COPIED_TAG | COPIED_TO_TAG => {
-                        evacuate_copied(frame, tag, src, src_after_tag);
-                    }
-                    _ => {
-                        // We already know that this root is in the nursery.
-
-                        // Compute chunk size.
-                        let src_footer: *mut GibNurseryChunkFooter =
-                            (*frame).endptr as *mut GibNurseryChunkFooter;
-                        let chunk_size = *src_footer as usize;
-
-                        // Allocate space in the destination.
-                        let (dst, dst_end) = Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
-                        // Update ZCT.
-                        /*
-                        let footer = dst_end as *const GibOldgenChunkFooter;
-                        record_time!(
-                            (*(st.zct)).insert((*footer).reg_info),
-                            (*GC_STATS).gc_zct_mgmt_time
-                        );
-                         */
-
-                        // Evacuate the data.
-                        let mut st = EvacState { so_env, nursery, oldgen, evac_major };
-                        let (src_after, dst_after, dst_after_end, forwarded) =
-                            evacuate_packed(&mut st, frame, dst, dst_end);
-
-                        dbgprintln!("+Restoring reader {:?} to {:?}", (*frame).ptr, dst);
-
-                        // Update the pointers in shadow-stack.
-                        (*frame).ptr = dst;
-                        // TODO: AUDITME.
-                        // (*frame).endptr = dst_after_end;
-                        (*frame).endptr = dst_end;
-
-                        // Note [Adding a forwarding pointer at the end of every chunk].
-                        let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
-                        if !forwarded {
-                            if is_loc_0 {
-                                // Write forwarding pointer at the end of chunk.
-                                debug_assert!(dst_after < dst_after_end);
-                                write_forwarding_pointer_at(
-                                    src_after,
-                                    dst_after,
-                                    dst_after_end.offset_from(dst_after) as u16,
-                                );
-                            } else {
-                                // No forwarding pointer can be written,
-                                // add an entry o forwarding env.
-                                // TODO:
-                            }
-                        }
-                    }
-                }
+                evacuate_nursery_root(frame, so_env, nursery, oldgen, evac_major)?;
             }
         }
     }
     // Clear the remembered set.
     rem_set.clear();
     Ok(())
+}
+
+#[inline(always)]
+unsafe fn evacuate_remset_root(
+    frame: *mut GibShadowstackFrame,
+    so_env: &mut SkipoverEnv,
+    nursery: &GibNursery,
+    oldgen: &mut GibOldgen,
+    evac_major: bool,
+) -> Result<()> {
+    let (tagged_src, _): (GibTaggedPtr, _) = read((*frame).ptr);
+    let tagged = TaggedPointer::from_usize(tagged_src);
+    let src = tagged.untag();
+    let src_footer_offset = tagged.get_tag();
+    let src_end = src.add(src_footer_offset as usize);
+
+    let (tag, src_after_tag): (GibPackedTag, *mut i8) = read_mut(src);
+    // If the data is already evacuated, don't allocate a fresh
+    // destination region. Just update the root to point to the
+    // evacuated data.
+    if tag == COPIED_TAG || tag == COPIED_TO_TAG {
+        evacuate_copied(frame, tag, src, src_after_tag);
+    } else {
+        let (dst, dst_end, is_loc_0) = first_chunk(nursery, oldgen, src, src_end, 1)?;
+        // Evacuate the data.
+        let mut st = EvacState { so_env, nursery, oldgen, evac_major };
+        let (src_after, dst_after, dst_after_end, _forwarded) =
+            evacuate_packed(&mut st, frame, dst, dst_end);
+        // Update the indirection pointer in oldgen region.
+        let offset = dst_end.offset_from(dst);
+        let tagged: u64 = TaggedPointer::new(dst, offset as u16).as_u64();
+        dbgprintln!("+Restoring reader {:?} to {:?}", (*frame).ptr, dst);
+        write((*frame).ptr, tagged);
+
+        dbgprintln!(
+            "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
+            (*frame).ptr,
+            dst,
+            offset
+        );
+
+        // Update the outset in oldgen region.
+        //
+        // We don't need to update the refcount here because we've
+        // already created the new region with an initial refcount
+        // of 1 above.
+        add_to_outset((*frame).endptr, dst_end);
+
+        // Note [Adding a forwarding pointer at the end of every chunk].
+        // Write a forwarding pointer if we burned a hole in
+        // the middle of a buffer.
+        if is_loc_0 {
+            // Write forwarding pointer at the end of chunk.
+            debug_assert!(dst_after < dst_after_end);
+            write_forwarding_pointer_at(
+                src_after,
+                dst_after,
+                dst_after_end.offset_from(dst_after) as u16,
+            );
+        } else {
+            // No forwarding pointer can be written,
+            // add an entry o forwarding env.
+            // TODO:
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+unsafe fn evacuate_nursery_root(
+    frame: *mut GibShadowstackFrame,
+    so_env: &mut SkipoverEnv,
+    nursery: &GibNursery,
+    oldgen: &mut GibOldgen,
+    evac_major: bool,
+) -> Result<()> {
+    let src = (*frame).ptr;
+    let src_end = (*frame).endptr;
+    let (tag, src_after_tag): (GibPackedTag, *mut i8) = read_mut(src);
+    // If the data is already evacuated, don't allocate a fresh
+    // destination region. Just update the root to point to the
+    // evacuated data.
+    if tag == COPIED_TAG || tag == COPIED_TO_TAG {
+        evacuate_copied(frame, tag, src, src_after_tag);
+    } else {
+        let (dst, dst_end, is_loc_0) = first_chunk(nursery, oldgen, src, src_end, 0)?;
+
+        // Update ZCT.
+        /*
+        let footer = dst_end as *const GibOldgenChunkFooter;
+        record_time!(
+            (*(st.zct)).insert((*footer).reg_info),
+            (*GC_STATS).gc_zct_mgmt_time
+        );
+         */
+
+        // Evacuate the data.
+        let mut st = EvacState { so_env, nursery, oldgen, evac_major };
+        let (src_after, dst_after, dst_after_end, forwarded) =
+            evacuate_packed(&mut st, frame, dst, dst_end);
+        dbgprintln!("+Restoring reader {:?} to {:?}", (*frame).ptr, dst);
+
+        // Update the pointers in shadow-stack.
+        (*frame).ptr = dst;
+        // TODO: AUDITME.
+        // (*frame).endptr = dst_after_end;
+        (*frame).endptr = dst_end;
+
+        // Note [Adding a forwarding pointer at the end of every chunk].
+        if !forwarded {
+            if is_loc_0 {
+                // Write forwarding pointer at the end of chunk.
+                debug_assert!(dst_after < dst_after_end);
+                write_forwarding_pointer_at(
+                    src_after,
+                    dst_after,
+                    dst_after_end.offset_from(dst_after) as u16,
+                );
+            } else {
+                // No forwarding pointer can be written,
+                // add an entry o forwarding env.
+                // TODO:
+            }
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+unsafe fn first_chunk(
+    nursery: &GibNursery,
+    oldgen: &mut GibOldgen,
+    src: *const i8,
+    src_end: *const i8,
+    refcount: u16,
+) -> Result<(*mut i8, *mut i8, bool)> {
+    // We already know that the start of this root is in the nursery.
+    let footer_in_nursery = nursery.contains_addr(src_end);
+    if footer_in_nursery {
+        let src_footer = src_end as *mut GibNurseryChunkFooter;
+        let chunk_size = *src_footer as isize;
+        let is_loc_0 = src_end.offset_from(src) == chunk_size;
+        // Initialize the footer with refcount 1.
+        let (dst, dst_end) = Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, refcount)?;
+        Ok((dst, dst_end, is_loc_0))
+    } else {
+        let src_footer = src_end as *mut GibOldgenChunkFooter;
+        let (dst, footer_end) = Heap::allocate(oldgen, CHUNK_SIZE)?;
+        let footer_start = footer_end.sub(size_of::<GibOldgenChunkFooter>());
+        let new_footer = footer_start as *mut GibOldgenChunkFooter;
+        // Link footers.
+        let reg_info: *mut GibRegionInfo = (*src_footer).reg_info;
+        (*new_footer).reg_info = reg_info;
+        (*new_footer).next = (*reg_info).first_chunk_footer as *mut GibOldgenChunkFooter;
+        (*new_footer).size = CHUNK_SIZE - size_of::<GibOldgenChunkFooter>();
+        (*reg_info).first_chunk_footer = new_footer;
+        // For remembered set roots:
+        // bump the refcount to account for the oldgen->nursery pointer.
+        (*reg_info).refcount += refcount;
+        Ok((dst, footer_start, false))
+    }
 }
 
 #[inline(always)]
@@ -619,7 +637,7 @@ unsafe fn evacuate_packed(
                     COPIED_TO_TAG | COPIED_TAG => {
                         forwarded = true; // i.e. ALREADY forwarded.
                         let tagged_fwd_ptr = record_time!(
-                            { find_forwarding_pointer(tag, src, src_after_tag,) },
+                            find_forwarding_pointer(tag, src, src_after_tag,),
                             (*GC_STATS).gc_find_fwdptr_time
                         );
                         let fwd_ptr = tagged_fwd_ptr.untag();
@@ -945,7 +963,6 @@ unsafe fn evacuate_packed(
                             let next_chunk_footer_offset = tagged.get_tag();
                             let footer2 = next_chunk.add(next_chunk_footer_offset as usize)
                                 as *mut GibOldgenChunkFooter;
-
                             dbgprintln!(
                                 "   reconciling footers {:?}, {:?} and {:?}, {:?}",
                                 (*footer1),
@@ -953,7 +970,6 @@ unsafe fn evacuate_packed(
                                 (*footer2),
                                 *((*footer2).reg_info),
                             );
-
                             // Reconcile RegionInfo objects.
                             let reg_info1 = (*footer1).reg_info;
                             let reg_info2 = (*footer2).reg_info;
@@ -962,7 +978,6 @@ unsafe fn evacuate_packed(
                             (*reg_info2).first_chunk_footer = (*reg_info1).first_chunk_footer;
                             (*footer1).next = footer2;
                             (*footer1).reg_info = reg_info2;
-
                             dbgprintln!(
                                 "   reconciled footer {:?}, {:?}",
                                 (*footer1),
@@ -1823,20 +1838,15 @@ impl Heap for GibOldgen {
     }
 
     fn allocate_first_chunk(&mut self, size: usize, refcount: u16) -> Result<(*mut i8, *mut i8)> {
-        let total_size = size + size_of::<GibOldgenChunkFooter>();
-        let (start, end) = self.allocate(total_size)?;
-
-        dbgprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
-
-        let footer_start = unsafe { init_footer_at(end, null_mut(), total_size, refcount) };
-
+        let (start, end) = self.allocate(size)?;
+        let footer_start = unsafe { init_footer_at(end, null_mut(), size, refcount) };
         #[cfg(feature = "gcstats")]
         {
             unsafe {
                 (*GC_STATS).oldgen_regions += 1;
             }
         }
-
+        dbgprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
         Ok((start, footer_start))
     }
 

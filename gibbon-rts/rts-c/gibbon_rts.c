@@ -1218,7 +1218,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         // Get size from current footer.
         footer = (GibOldgenChunkFooter *) footer_ptr;
         newsize = sizeof(GibOldgenChunkFooter) + (footer->size);
-        newsize = newsize << 1;
+        newsize = newsize * 2;
         // See #110.
         if (newsize > MAX_CHUNK_SIZE) {
             newsize = MAX_CHUNK_SIZE;

@@ -500,11 +500,16 @@ pub fn test_split_root() -> bool {
         gib_perform_GC(false);
     }
 
+    // Reconstruct packed value after GC.
+    let frame = ss_peek(RW::Read);
+    // print_packed((*frame).ptr);
+    let ls2 = unsafe { deserialize((*frame).ptr) };
+
     // Clear info-table.
     gib_info_table_clear();
 
     // Always return true for now, GC triggers exception.
-    true
+    ls2 == ls
 }
 
 /// Returns a list: Cons n Cons (n-1) Cons 1 Nil.

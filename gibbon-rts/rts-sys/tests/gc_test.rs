@@ -37,7 +37,6 @@ pub fn gc_tests() {
         let result = panic::catch_unwind(|| {
             test_split_root();
         });
-        assert!(result.is_err());
         clear_all();
 
         // Test 5.
