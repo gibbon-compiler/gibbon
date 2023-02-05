@@ -499,3 +499,12 @@ tests:
 
   - name: wildcard_case.hs
     answer-file: examples/wildcard_case.ans
+
+
+  # GC benchmarks
+  - name: Reverse.hs
+    dir: examples/gc
+    answer-file: examples/gc/Reverse.ans
+    size-param: 1000000
+    bench: true
+    failing: [interp1]

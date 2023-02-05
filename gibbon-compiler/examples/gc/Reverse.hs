@@ -8,7 +8,6 @@ copyPList ls =
     Nil -> Nil
     Cons i rst -> Cons i (copyPList rst)
 
-
 reverse :: PList -> PList -> PList
 reverse xs acc =
   case xs of

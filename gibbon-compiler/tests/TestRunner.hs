@@ -29,6 +29,7 @@ import           Data.Monoid
 #endif
 
 import qualified Data.Text as T
+import qualified Data.Text.Internal.Search as T
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -235,20 +236,14 @@ newtype BenchResult = BenchResult Double
 -- Ugh.. just parse it by hand for now
 readBenchResult :: String -> BenchResult
 readBenchResult str =
-    if isInfixOf "BATCHTIME" str
-    then readIterate
-    else readTime
+  case selftimed_indices of
+    []    -> error $ "no SELFTIMED found in:\n" ++ show str
+    [one] -> let (selftimed:_) = lines (drop one str)
+                 timing_info = selftimed \\ "SELFTIMED: "
+             in BenchResult (toRealFloat $ read timing_info)
+    oth   -> error $ "multiple SELFTIMED found in:\n" ++ show str
   where
-    readIterate =
-        let (_iters:_size:_batchtime:selftimed:_oth) = lines str
-            timing_info = selftimed \\ "SELFTIMED: "
-        in BenchResult (toRealFloat $ read timing_info)
-
-    -- Read the output of Gibbon (time).
-    readTime =
-        let (_size:selftimed:_oth) = lines str
-            timing_info = selftimed \\ "SELFTIMED: "
-        in BenchResult (toRealFloat $ read timing_info)
+    selftimed_indices = T.indices "SELFTIMED: " (T.pack str)
 
 {-
 
