@@ -4,7 +4,7 @@
 *.err
 *.exe
 test*.c
-*.ans
+build_tmp/*
 *.parsed
 *.ll
 test24_output.bin

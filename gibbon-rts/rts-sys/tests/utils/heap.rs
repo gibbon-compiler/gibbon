@@ -650,7 +650,10 @@ pub fn test_redirections_in_inlined_data2() {
                                 Box::new(Object::KSP2(4, Box::new(Object::K0))),
                             )),
                         )),
-                        Box::new(Object::KSP2(16, Box::new(Object::K0))),
+                        Box::new(Object::GrowRegion(Box::new(Object::KSP2(
+                            16,
+                            Box::new(Object::K0),
+                        )))),
                     )),
                 )),
                 Box::new(Object::KSP2(32, Box::new(Object::K0))),
@@ -674,7 +677,7 @@ pub fn test_redirections_in_inlined_data2() {
     let stats = ValueStats::from_frame(ss_peek(RW::Read), nursery);
     // println!("stats: {:?}", stats);
     assert_eq!(stats.num_indirections, 3);
-    assert_eq!(stats.num_redirections, 1);
+    assert_eq!(stats.num_redirections, 2);
     unsafe {
         gib_perform_GC(false);
     }
@@ -692,7 +695,7 @@ pub fn test_redirections_in_inlined_data2() {
     gib_info_table_clear();
 
     // Check if aborting the inlining works.
-    assert!(stats2.num_redirections == 1);
-    assert!(stats2.num_indirections == 1);
+    assert!(stats2.num_redirections == 2);
+    assert!(stats2.num_indirections == 2);
     assert!(obj2 == obj.sans_metadata());
 }
