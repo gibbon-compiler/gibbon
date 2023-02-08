@@ -587,7 +587,7 @@ INLINE_HEADER void gib_remset_reset(GibRememberedSet *set)
  *
  */
 
-void gib_handle_old_to_old_indirection(
+void gib_add_old_to_old_indirection(
     char *from_footer,
     char *to_footer
 );
@@ -615,7 +615,7 @@ INLINE_HEADER void gib_indirection_barrier(
     // old-to-old indirections.
 
 #ifdef _GIBBON_NONGENGC
-    gib_handle_old_to_old_indirection(from_footer, to_footer);
+    gib_add_old_to_old_indirection(from_footer, to_footer);
 #else
 
 #ifdef _GIBBON_DEBUG
@@ -647,7 +647,7 @@ INLINE_HEADER void gib_indirection_barrier(
 #endif
 
             // (4) oldgen -> oldgen
-            gib_handle_old_to_old_indirection(from_footer, to_footer);
+            gib_add_old_to_old_indirection(from_footer, to_footer);
             return;
         }
     } else {
@@ -722,7 +722,7 @@ int gib_garbage_collect(
     bool force_major
 );
 int gib_free_region_(GibOldgenChunkFooter *footer);
-void gib_handle_old_to_old_indirection(
+void gib_add_old_to_old_indirection(
     char *from_footer,
     char *to_footer
 );

@@ -90,6 +90,8 @@ enum Object {
     InitOldgenReg(usize, Box<Object>),
     // Used to indicate cauterization.
     Incomplete,
+    // Used to indicate end-of-chunk.
+    GrowRegion(Box<Object>),
 }
 
 impl Object {
@@ -97,11 +99,17 @@ impl Object {
         match self {
             Object::K0 => Object::K0,
             Object::KSP2(i, obj) => Object::KSP2(*i, Box::new((*obj).sans_metadata())),
+            Object::KSP3(i, obj1, obj2) => Object::KSP3(
+                *i,
+                Box::new((*obj1).sans_metadata()),
+                Box::new((*obj2).sans_metadata()),
+            ),
             Object::FreshNurseryReg(_, obj) => (*obj).sans_metadata(),
             Object::FreshOldgenReg(_, obj) => (*obj).sans_metadata(),
             Object::InitNurseryReg(_, obj) => (*obj).sans_metadata(),
             Object::InitOldgenReg(_, obj) => (*obj).sans_metadata(),
-            _ => todo!(),
+            Object::GrowRegion(obj) => (*obj).sans_metadata(),
+            oth => todo!("{:?}", oth),
         }
     }
 }
@@ -308,6 +316,12 @@ fn serialize(obj_0: &Object) -> (*const i8, *const i8) {
                     dst_end = chunk.end;
                     worklist.push(SerAction::ProcessObj(obj));
                 }
+                Object::GrowRegion(obj) => {
+                    unsafe {
+                        gib_grow_region(&mut dst, &mut dst_end);
+                    }
+                    worklist.push(SerAction::ProcessObj(obj));
+                }
                 Object::K0 => {
                     assert!(!dst.is_null() && !dst_end.is_null());
                     bounds_check(&mut dst, &mut dst_end, 32);
@@ -385,14 +399,15 @@ fn print_packed(src: *const i8) {
 }
 
 fn print_packed_(src: *const i8) -> *const i8 {
+    // print!("{:p}:", src);
     let (tag, src_after_tag) = read(src);
     match tag {
         ObjectTag::K0 => {
-            print!("{:p}:(K0) ", src);
+            print!("(K0)");
             src_after_tag
         }
         ObjectTag::KSP2 => {
-            print!("{:p}:(KSP2 ", src);
+            print!("(KSP2 ");
             let (i, src_after_int): (GibInt, _) = read(src_after_tag);
             print!("{} ", i);
             let src_after_field1 = print_packed_(src_after_int);
@@ -400,7 +415,7 @@ fn print_packed_(src: *const i8) -> *const i8 {
             src_after_field1
         }
         ObjectTag::KSP3 => {
-            print!("{:p}:(KSP3 ", src);
+            print!("(KSP3 ");
             let (b, src_after_bool): (GibBool, _) = read(src_after_tag);
             print!("{} ", b);
             let src_after_field1 = print_packed_(src_after_bool);
@@ -413,7 +428,7 @@ fn print_packed_(src: *const i8) -> *const i8 {
             let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) = read(src_after_tag);
             let tagged = TaggedPointer::from_usize(tagged_pointee);
             let pointee = tagged.untag();
-            print!("{:p}:(->i ", src);
+            print!("(->i ");
             print_packed_(pointee);
             print!(")");
             src_after_indr
@@ -422,7 +437,7 @@ fn print_packed_(src: *const i8) -> *const i8 {
             let (tagged_pointee, _): (GibTaggedPtr, _) = read(src_after_tag);
             let tagged = TaggedPointer::from_usize(tagged_pointee);
             let pointee = tagged.untag();
-            print!("{:p}:(->r ", src);
+            print!("(->r ");
             let src_after_redir_data = print_packed_(pointee);
             print!(")");
             src_after_redir_data
@@ -481,7 +496,7 @@ fn mkrevlist(n: u8) -> Object {
 
 /// Test GC on a split root---one which starts in the nursery and
 /// ends in oldgen due to eager promotion.
-pub fn test_split_root() -> bool {
+pub fn test_split_root() {
     // Initialize info-table.
     info_table_initialize();
 
@@ -508,8 +523,8 @@ pub fn test_split_root() -> bool {
     // Clear info-table.
     gib_info_table_clear();
 
-    // Always return true for now, GC triggers exception.
-    ls2 == ls
+    // Return result.
+    assert!(ls2 == ls.sans_metadata());
 }
 
 /// Returns a list: Cons n Cons (n-1) Cons 1 Nil.
@@ -528,35 +543,60 @@ fn mklist(n: u8) -> Object {
 /// inlining objects pointed to by indirections should not be copied as is.
 /// Copying them directly breaks the invariant that redirections should
 /// always be the last thing in a chunk.
-pub fn test_redirections_in_inlined_data() -> bool {
+pub fn test_redirections_in_inlined_data() {
     // Initialize info-table.
     info_table_initialize();
 
     // Create objects to evacuate.
-    // The first packed field of 'ls' lives in its own region and is is big
+    // The first packed field of 'obj' lives in its own region and is is big
     // enough to trigger eager promotion, and thus will have a redirection.
+    //
     // This redirection should not be copied directly!
-    let ls = Object::KSP3(
-        // A scalar field.
-        true,
+    //
+    // This object is extra complicated to test the abort-inlining-and-rewind
+    // code with the redirection pointer occurring 2 or 3 levels deep in a
+    // hierarchy of indirections. Only the lowermost indirected data should
+    // be copied again to a new buffer.
+    let obj = Object::KSP3(
+        false,
         // This will turn into an indirection pointer due to FreshNurseryReg.
-        Box::new(Object::FreshNurseryReg(64, Box::new(mklist(4)))),
+        Box::new(Object::FreshNurseryReg(
+            128,
+            Box::new(Object::KSP3(
+                false,
+                // This will turn into an indirection pointer due to FreshNurseryReg.
+                Box::new(Object::FreshNurseryReg(
+                    128,
+                    Box::new(Object::KSP3(
+                        true,
+                        // This will turn into an redirection pointer due to GrowRegion
+                        // and K0 will be written in a new oldgen chunk.
+                        Box::new(Object::GrowRegion(Box::new(Object::K0))),
+                        // This will also be written in the oldgen chunk.
+                        Box::new(Object::KSP2(16, Box::new(Object::K0))),
+                    )),
+                )),
+                Box::new(Object::KSP3(false, Box::new(Object::K0), Box::new(Object::K0))),
+            )),
+        )),
         // A packed field that will be inaccessible if a redirection pointer
         // in the previous field is inlined.
-        Box::new(Object::K0),
+        Box::new(Object::KSP2(32, Box::new(Object::K0))),
     );
-    // println!("{:?}", ls);
+    // println!("{:?}", obj);
 
     // Put the object on the Gibbon heap.
-    let (start, end) = serialize(&ls);
-    // print_packed(start);
+    let (start, end) = serialize(&obj);
+    // unsafe {
+    //     print_packed(start);
+    // }
 
     // Trigger GC.
     ss_push(RW::Read, start, end, OBJECT_T);
     let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
     let stats = ValueStats::from_frame(ss_peek(RW::Read), nursery);
     // println!("stats: {:?}", stats);
-    assert_eq!(stats.num_indirections, 1);
+    assert_eq!(stats.num_indirections, 2);
     assert_eq!(stats.num_redirections, 1);
     unsafe {
         gib_perform_GC(false);
@@ -564,14 +604,95 @@ pub fn test_redirections_in_inlined_data() -> bool {
 
     // Reconstruct packed value after GC.
     let frame = ss_peek(RW::Read);
-    // print_packed((*frame).ptr);
-    let ls2 = unsafe { deserialize((*frame).ptr) };
+    // unsafe {
+    //     print_packed((*frame).ptr);
+    // }
+    let obj2 = unsafe { deserialize((*frame).ptr) };
     let stats2 = ValueStats::from_frame(frame, nursery);
     // println!("stats2: {:?}", stats2);
 
     // Clear info-table.
     gib_info_table_clear();
 
-    // Check that the redirection is not copied as is.
-    stats2.num_redirections == 0
+    // Check if aborting the inlining works.
+    assert!(stats2.num_redirections == 1);
+    assert!(stats2.num_indirections == 1);
+    assert!(obj2 == obj.sans_metadata());
+}
+
+// A variation of the above test.
+pub fn test_redirections_in_inlined_data2() {
+    info_table_initialize();
+    let obj = Object::KSP3(
+        false,
+        // This will turn into an indirection pointer due to FreshNurseryReg.
+        Box::new(Object::FreshNurseryReg(
+            128,
+            Box::new(Object::KSP3(
+                false,
+                // This will turn into an indirection pointer due to FreshNurseryReg.
+                Box::new(Object::FreshNurseryReg(
+                    128,
+                    Box::new(Object::KSP3(
+                        false,
+                        // This will turn into an indirection pointer due to FreshNurseryReg.
+                        Box::new(Object::FreshNurseryReg(
+                            128,
+                            Box::new(Object::KSP3(
+                                true,
+                                // This will turn into an redirection pointer due to GrowRegion
+                                // and K0 will be written in a new oldgen chunk.
+                                Box::new(Object::GrowRegion(Box::new(Object::KSP2(
+                                    2,
+                                    Box::new(Object::K0),
+                                )))),
+                                // This will also be written in the oldgen chunk.
+                                Box::new(Object::KSP2(4, Box::new(Object::K0))),
+                            )),
+                        )),
+                        Box::new(Object::KSP2(16, Box::new(Object::K0))),
+                    )),
+                )),
+                Box::new(Object::KSP2(32, Box::new(Object::K0))),
+            )),
+        )),
+        // A packed field that will be inaccessible if a redirection pointer
+        // in the previous field is inlined.
+        Box::new(Object::KSP2(64, Box::new(Object::K0))),
+    );
+    // println!("{:?}", obj);
+
+    // Put the object on the Gibbon heap.
+    let (start, end) = serialize(&obj);
+    // unsafe {
+    //     print_packed(start);
+    // }
+
+    // Trigger GC.
+    ss_push(RW::Read, start, end, OBJECT_T);
+    let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
+    let stats = ValueStats::from_frame(ss_peek(RW::Read), nursery);
+    // println!("stats: {:?}", stats);
+    assert_eq!(stats.num_indirections, 3);
+    assert_eq!(stats.num_redirections, 1);
+    unsafe {
+        gib_perform_GC(false);
+    }
+
+    // Reconstruct packed value after GC.
+    let frame = ss_peek(RW::Read);
+    // unsafe {
+    //     print_packed((*frame).ptr);
+    // }
+    let obj2 = unsafe { deserialize((*frame).ptr) };
+    let stats2 = ValueStats::from_frame(frame, nursery);
+    // println!("stats2: {:?}", stats2);
+
+    // Clear info-table.
+    gib_info_table_clear();
+
+    // Check if aborting the inlining works.
+    assert!(stats2.num_redirections == 1);
+    assert!(stats2.num_indirections == 1);
+    assert!(obj2 == obj.sans_metadata());
 }

@@ -1615,7 +1615,7 @@ void gib_indirection_barrier_noinline(
     // old-to-old indirections.
 
 #ifdef _GIBBON_NONGENGC
-    gib_handle_old_to_old_indirection(from_footer, to_footer);
+    gib_add_old_to_old_indirection(from_footer, to_footer);
 #else
 
 #ifdef _GIBBON_DEBUG
@@ -1647,7 +1647,7 @@ void gib_indirection_barrier_noinline(
 #endif
 
             // (4) oldgen -> oldgen
-            gib_handle_old_to_old_indirection(from_footer, to_footer);
+            gib_add_old_to_old_indirection(from_footer, to_footer);
             return;
         }
     } else {

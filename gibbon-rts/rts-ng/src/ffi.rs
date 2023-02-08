@@ -785,12 +785,12 @@ pub mod rs {
     }
 
     #[no_mangle]
-    pub extern "C" fn gib_handle_old_to_old_indirection(
+    pub extern "C" fn gib_add_old_to_old_indirection(
         from_footer_ptr: *mut i8,
         to_footer_ptr: *mut i8,
     ) {
         unsafe {
-            gc::handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
+            gc::add_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
         }
     }
 
