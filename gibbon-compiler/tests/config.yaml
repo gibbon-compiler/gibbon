@@ -78,6 +78,8 @@ tests:
     answer-file: examples/Test185.ans
     # Failing due to a bug in AddTraversals.
     failing: [gibbon1]
+  - name: Test187.hs
+    answer-file: examples/Test187.ans
 
   # Needs manual inspection.
   - name: test14_repair.gib

@@ -10,7 +10,7 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked)
     where
 
 {-
@@ -96,6 +96,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
+import qualified Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
 import Gibbon.Passes.Flatten (flattenL1)
@@ -209,6 +210,7 @@ type Result = (Exp2, Ty2, [Constraint])
 data DCArg = ArgFixed Int
            | ArgVar Var
            | ArgCopy Var Var Var [LocVar]
+  deriving Show
 
 inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
@@ -1705,6 +1707,101 @@ emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
+
+
+--------------------------------------------------------------------------------
+
+-- | Adds 'copyPacked' calls in certain places that inferLocs is not able to.
+copyOutOfOrderPacked :: Prog1 -> PassM Prog1
+copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
+    mnExp' <- case mnExp of
+                   Nothing -> pure Nothing
+                   Just (ex,ty) -> do ex' <- go init_fun_env [] ex
+                                      pure $ Just (ex', ty)
+    fndefs' <- mapM fd fndefs
+    let prg' = Prog ddfs fndefs' mnExp'
+    p0 <- flattenL1 prg'
+    inlineTriv p0
+  where
+    init_fun_env = progToEnv prg
+
+    fd :: FunDef1 -> PassM FunDef1
+    fd fn@FunDef{funArgs,funBody,funTy} = do
+        let env2 = L1.extendsVEnv (M.fromList $ zip funArgs (fst funTy)) init_fun_env
+        funBody' <- go env2 funArgs funBody
+        pure $ fn { funBody = funBody' }
+
+    go :: Env2 Ty1 -> [Var] -> Exp1 -> PassM Exp1
+    go env2 order ex =
+      case ex of
+        DataConE loc dcon args -> do
+          -- assumption: program is in ANF
+          let idxs = [(v, fromJust $ L.findIndex (== v) order) | VarE v <- args]
+          let needs_copy = case idxs of
+                             []     -> M.empty
+                             (x:xs) -> snd $
+                                         foldl (\((prev_w,prev_idx), ncs) (w,idx) ->
+                                                if idx < prev_idx
+                                                then ((w,idx), M.insert w prev_w ncs)
+                                                else ((w,idx), ncs))
+                                           (x, M.empty) xs
+          let args' = map (\arg -> case arg of
+                                     VarE w ->
+                                       case M.lookup w needs_copy of
+                                         Nothing     -> VarE w
+                                         Just prev_w ->
+                                           case (L1.lookupVEnv w env2, L1.lookupVEnv prev_w env2) of
+                                             (PackedTy tycon _, PackedTy _ _) ->
+                                               let f = mkCopyFunName tycon
+                                               in dbgTrace 3 ("Copying " ++ fromVar w) $
+                                                  AppE f [] [VarE w]
+                                             _ -> VarE w
+                                     _ -> arg)
+                      args
+          pure $ DataConE loc dcon args'
+        ----------------------------------------
+        VarE{}    -> pure ex
+        LitE{}    -> pure ex
+        CharE{}   -> pure ex
+        FloatE{}  -> pure ex
+        LitSymE{} -> pure ex
+        AppE v locs ls -> do
+          ls' <- mapM (go env2 order) ls
+          pure $ AppE v locs ls'
+        PrimAppE pr args -> do
+          args' <- mapM (go env2 order) args
+          pure $ PrimAppE pr args'
+        LetE (v,locs,ty,rhs) bod -> do
+          rhs' <- go env2 order rhs
+          bod' <- go (L1.extendVEnv v ty env2) (order ++ [v]) bod
+          pure $ LetE (v,locs,ty,rhs') bod'
+        IfE a b c  -> IfE <$> (go env2 order a) <*> (go env2 order b) <*> (go env2 order c)
+        MkProdE ls -> MkProdE <$> mapM (go env2 order) ls
+        ProjE i arg -> (ProjE i) <$> go env2 order arg
+        CaseE scrt ls -> do
+          scrt' <- go env2 order scrt
+          let doPat (dcon,vs,rhs) = do
+                let vars = map fst vs
+                let tys = lookupDataCon ddfs dcon
+                let env2' = L1.extendsVEnv (M.fromList (zip vars tys)) env2
+                rhs' <- go env2' (order ++ vars) rhs
+                pure (dcon,vs,rhs')
+          ls' <- mapM doPat ls
+          pure $ CaseE scrt' ls'
+        TimeIt arg ty b -> do
+          arg' <- go env2 order arg
+          pure $ TimeIt arg' ty b
+        WithArenaE a e  -> WithArenaE a <$> go env2 order e
+        SpawnE fn locs ls -> do
+          ls' <- mapM (go env2 order) ls
+          pure $ SpawnE fn locs ls'
+        SyncE -> pure SyncE
+        Ext (BenchE fn locs args b) -> do
+          args' <- mapM (go env2 order) args
+          pure $ Ext (BenchE fn locs args' b)
+        Ext (L1.AddFixed{}) -> pure ex
+        MapE{}  -> error "copyOutOfOrderPacked: todo MapE"
+        FoldE{} -> error "copyOutOfOrderPacked: todo FoldE"
 
 
 {--
