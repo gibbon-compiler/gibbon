@@ -51,9 +51,6 @@ traversal1 t1 = case t1 of
 
                               
 
-
-
-
 traversal2 :: TestCopyPacked -> TestCopyPacked 
 traversal2 t1 = case t1 of
                     Nil -> Nil 
@@ -100,7 +97,7 @@ traversal7 t1 = case t1 of
                      Nil -> Nil 
                      T1 r1 s1 rst -> let r1'  = processR1 r1
                                          rst' = traversal7 rst
-                                       in T6 rst' s1 r1 
+                                       in T6 rst' s1 r1' 
   
 
 gibbon_main = let
