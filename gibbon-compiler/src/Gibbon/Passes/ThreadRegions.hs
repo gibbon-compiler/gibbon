@@ -108,10 +108,11 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
   bod' <- threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs M.empty S.empty S.empty funBody
   -- Boundschecking
   dflags <- getDynFlags
-  let bod'' = if gopt Opt_BigInfiniteRegions dflags
-              then bod'
-              -- This function is always given a BigInfinite region.
-              else if isCopySansPtrsFunName funName
+  let (free_rlocs,free_wlocs) = (S.fromList (inLocVars funTy), S.fromList (outLocVars funTy))
+  (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env initRegEnv
+  let no_eager_promote = gopt Opt_NoEagerPromote dflags
+  let bod'' = -- This function is always given a BigInfinite region.
+              if gopt Opt_BigInfiniteRegions dflags || isCopySansPtrsFunName funName
               then bod'
               else
                 let packed_outs = getPackedTys (unTy2 (arrOut funTy))
@@ -122,21 +123,29 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                                            _ -> acc)
                                     M.empty
                                     packed_outs
-                in foldr
-                     (\(LRM loc reg mode) acc ->
-                        if mode == Output
-                        then let rv = regionToVar reg
-                                 end_rv = toEndV rv
-                                 -- rv = end_reg
-                                 bc = boundsCheck ddefs (locs_tycons M.! loc)
-                                 locarg = NewL2.Loc (LREM loc rv end_rv mode)
-                                 regarg = NewL2.EndOfReg rv mode end_rv
-                             in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
-                                LetE ("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg) acc
-                        else acc)
-                     bod'
-                     (locVars funTy)
+                    boundschecks = concatMap
+                                     (\(LRM loc reg mode) ->
+                                        if mode == Output
+                                        then let rv = regionToVar reg
+                                                 end_rv = toEndV rv
+                                                 -- rv = end_reg
+                                                 bc = boundsCheck ddefs (locs_tycons M.! loc)
+                                                 locarg = NewL2.Loc (LREM loc rv end_rv mode)
+                                                 regarg = NewL2.EndOfReg rv mode end_rv
+                                             in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
+                                                -- maintain shadowstack in no eager promotion mode
+                                                [("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg)]
+                                        else [])
+                                     (locVars funTy)
+                in
+                   -- If eager promotion is disabled, growing a region can also trigger a GC.
+                   if no_eager_promote
+                   then mkLets (rpush ++ wpush ++ boundschecks ++ wpop ++ rpop) bod'
+                   else mkLets boundschecks bod'
+
   return $ f {funBody = bod''}
+
+
 
 threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> [LREM] -> RegEnv -> Env2 Ty2
                  -> RightmostRegEnv -> AllocEnv -> AllocEnv -> PkdEnv
@@ -296,7 +305,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
-        (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
+        (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
         emit_ss <- emit_ss_instrs
         if emit_ss
           then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
@@ -436,7 +445,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
               free = ss_free_locs (S.singleton (regionToVar r)) env2 bod
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
-          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
+          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
           emit_ss <- emit_ss_instrs
           bod' <- go bod
           if emit_ss
@@ -541,38 +550,41 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                              M.keysSet (M.filter (not . isPackedTy . unTy2) (vEnv env20)) `S.union`
                              M.keysSet (fEnv env20)))
 
-    hole_tycon = "HOLE"
-
-    ss_ops :: S.Set Var -> S.Set Var ->
-              PassM
-              ([(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)],
-               [(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)])
-    ss_ops free_rlocs free_wlocs = do
-          rpush <- (foldrM (\x acc -> do
-                             push <- gensym "ss_push"
-                             let tycon = rlocs_env # x
-                             if tycon == hole_tycon
-                             then pure acc
-                             else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Read x (toEndV (renv # x)) tycon) : acc))
-                           []
-                           free_rlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
-          wpush <- (foldrM (\x acc -> do
-                             push <- gensym "ss_push"
-                             let tycon = wlocs_env # x
-                             if tycon == hole_tycon
-                             then pure acc
-                             else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Write x (toEndV (renv # x)) tycon) : acc))
-                           []
-                           free_wlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
-          let rpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse rpush)
-              wpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse wpush)
-          pure (rpush,wpush,rpop,wpop)
-
     updRLocsEnv t acc =
                  case t of
                    PackedTy tycon loc -> M.insert loc tycon acc
                    ProdTy tys -> foldr updRLocsEnv acc tys
                    _ -> acc
+
+
+hole_tycon :: String
+hole_tycon = "HOLE"
+
+ss_ops :: S.Set Var -> S.Set Var -> AllocEnv -> AllocEnv -> RegEnv ->
+          PassM
+          ([(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)],
+           [(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)])
+ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv = do
+      rpush <- (foldrM (\x acc -> do
+                         push <- gensym "ss_push"
+                         let tycon = rlocs_env # x
+                         if tycon == hole_tycon
+                         then pure acc
+                         else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Read x (toEndV (renv # x)) tycon) : acc))
+                       []
+                       free_rlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
+      wpush <- (foldrM (\x acc -> do
+                         push <- gensym "ss_push"
+                         let tycon = wlocs_env # x
+                         if tycon == hole_tycon
+                         then pure acc
+                         else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Write x (toEndV (renv # x)) tycon) : acc))
+                       []
+                       free_wlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
+      let rpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse rpush)
+          wpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse wpush)
+      pure (rpush,wpush,rpop,wpop)
+
 
 -- Inspect an AST and return locations in a RetE form.
 findRetLocs :: Exp2 -> [LocArg]

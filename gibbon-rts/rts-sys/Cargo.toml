@@ -10,7 +10,7 @@ links = "gibbon_rts"
 build = "build.rs"
 
 [dependencies]
-gibbon-rts-ng = { path = "../rts-ng" }
+gibbon-rts-ng = { path = "../rts-ng", features = ["gcstats"] }
 
 [lib]
 name = "gibbon_rts_sys"

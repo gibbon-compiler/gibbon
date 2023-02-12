@@ -699,3 +699,61 @@ pub fn test_redirections_in_inlined_data2() {
     assert!(stats2.num_indirections == 2);
     assert!(obj2 == obj.sans_metadata());
 }
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+pub fn test_no_eager_promote() {
+    // Initialize info-table.
+    info_table_initialize();
+
+    // Get the globals.
+    let nursery: &mut GibNursery = unsafe { &mut *gib_global_nurseries };
+    let gc_stats: &mut GibGcStats = unsafe { &mut *gib_global_gc_stats };
+
+    // Shrink the nursery.
+    let old_size: usize = unsafe { gib_nursery_realloc(nursery, 1024) };
+
+    let obj = Object::InitNurseryReg(64, Box::new(mklist_with_redir(4)));
+    // println!("{:?}", obj);
+
+    // Put the object on the Gibbon heap.
+    let (start, end) = serialize(&obj);
+    // unsafe { print_packed(start) };
+    assert!(gc_stats.nursery_regions == 1);
+    assert!(gc_stats.nursery_chunks == 3);
+    assert!(gc_stats.oldgen_chunks == 1);
+
+    // Trigger GC.
+    ss_push(RW::Read, start, end, OBJECT_T);
+    let stats = ValueStats::from_frame(ss_peek(RW::Read), nursery);
+    assert_eq!(stats.num_redirections, 4);
+    unsafe {
+        gib_perform_GC(false);
+    }
+
+    // Reconstruct packed value after GC.
+    let frame = ss_peek(RW::Read);
+    // unsafe { print_packed((*frame).ptr) };
+    let obj2 = unsafe { deserialize((*frame).ptr) };
+    let stats2 = ValueStats::from_frame(frame, nursery);
+    assert_eq!(stats2.num_redirections, 1);
+
+    // Clear info-table.
+    gib_info_table_clear();
+
+    // Restore nursery to its original size.
+    unsafe {
+        gib_nursery_realloc(nursery, old_size);
+    }
+
+    // Test.
+    assert!(obj2 == obj.sans_metadata());
+}
+
+fn mklist_with_redir(n: u8) -> Object {
+    if n == 0 {
+        Object::K0
+    } else {
+        Object::KSP2(n as i64, Box::new(Object::GrowRegion(Box::new(mklist_with_redir(n - 1)))))
+    }
+}

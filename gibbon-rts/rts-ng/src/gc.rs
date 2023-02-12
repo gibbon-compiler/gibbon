@@ -34,6 +34,9 @@ const MAX_CHUNK_SIZE: usize = 65500;
 /// when oldgen has X bytes or a region has Y depth.
 const COLLECT_MAJOR_K: u8 = 4;
 
+/// Whether eager promotion is enabled.
+const EAGER_PROMOTION: bool = true;
+
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut GibGcStats = null_mut();
 
@@ -899,6 +902,8 @@ unsafe fn evacuate_packed(
                             forwarded = true;
                         }
 
+                        let next_chunk_in_nursery = st.nursery.contains_addr(next_chunk);
+
                         // Instead of copying oldgen objects when inlining is
                         // underway, we go back to the most recent indirection,
                         // copy the pointed-to data in a new buffer, and write
@@ -913,7 +918,7 @@ unsafe fn evacuate_packed(
                         // (2) if it points in the nursery, the object it points
                         //     to will occur BEFORE this redirection, and thus
                         //     we will have filled in that shortcut pointer.
-                        if inlining_underway {
+                        if !next_chunk_in_nursery && inlining_underway {
                             let mut saw_indirection = false;
                             while let Some(top) = worklist.pop() {
                                 match top {
@@ -930,7 +935,7 @@ unsafe fn evacuate_packed(
                                         // (0): Copy this redirection here as is so that it
                                         //      can be copied again in the new buffer.
                                         let dst_after_tag = write(dst, REDIRECTION_TAG);
-                                        let dst_after_redir =
+                                        let _dst_after_redir =
                                             write(dst_after_tag, tagged_next_chunk);
 
                                         // (1) Create a new buffer.
@@ -1000,7 +1005,7 @@ unsafe fn evacuate_packed(
                                 &worklist[..std::cmp::min(5, worklist.len())]
                             );
                             worklist_next!(worklist, next_action);
-                        } else if st.evac_major || st.nursery.contains_addr(next_chunk) {
+                        } else if st.evac_major || next_chunk_in_nursery {
                             // If the next chunk is in the nursery, continue evacuation there.
                             // Otherwise, write a redireciton node at dst (pointing to
                             // the start of the oldgen chunk), link the footers and reconcile
@@ -1399,10 +1404,10 @@ unsafe fn evacuate_packed_simpl(
 
                     REDIRECTION_TAG => {
                         dbgprintln!("   [SIMPL] copying redirection as is");
-                        let (tagged_next_chunk, src_after_next_chunk): (GibTaggedPtr, _) =
+                        let (tagged_next_chunk, _src_after_next_chunk): (GibTaggedPtr, _) =
                             read(src_after_tag);
                         let dst_after_tag = write(dst, REDIRECTION_TAG);
-                        let dst_after_indr = write(dst_after_tag, tagged_next_chunk);
+                        let _dst_after_indr = write(dst_after_tag, tagged_next_chunk);
                         dbgprintln!("++[SIMPL] Copy complete, reached redirection, {:?}", src);
                         break;
                     }
@@ -1443,11 +1448,6 @@ unsafe fn evacuate_packed_simpl(
             }
         }
     }
-}
-
-/// Traverse a packed value and return its end.
-fn traverse(src: *const i8) -> *const i8 {
-    todo!()
 }
 
 fn sort_roots(

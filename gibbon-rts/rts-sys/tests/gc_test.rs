@@ -5,14 +5,14 @@ use std::ptr::null_mut;
 use gibbon_rts_sys::*;
 mod utils;
 use crate::utils::heap::{
-    test_redirections_in_inlined_data, test_redirections_in_inlined_data2, test_reverse1,
-    test_split_root,
+    test_no_eager_promote, test_redirections_in_inlined_data, test_redirections_in_inlined_data2,
+    test_reverse1, test_split_root,
 };
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 #[test]
-pub fn gc_tests() {
+pub fn gc_tests1() {
     println!("");
     unsafe {
         // Initialize storage.
@@ -44,6 +44,22 @@ pub fn gc_tests() {
         test_redirections_in_inlined_data();
         clear_all();
         test_redirections_in_inlined_data2();
+        clear_all();
+
+        // Free storage.
+        gib_exit();
+    }
+}
+
+#[test]
+pub fn gc_tests2() {
+    println!("");
+    unsafe {
+        // Initialize storage.
+        gib_init(0, null_mut());
+
+        // Test 1.
+        test_no_eager_promote();
         clear_all();
 
         // Free storage.

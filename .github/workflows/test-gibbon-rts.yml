@@ -33,4 +33,13 @@ jobs:
           cd gibbon-rts/
           make all
           cargo build -v
-          cargo test -- --nocapture --test-threads 1
+          cargo test gc_tests1 -- --nocapture --test-threads 1
+
+      - name: build and test (no eager promotion)
+        run: |
+          export GIBBONDIR=`pwd`
+          cd gibbon-rts/
+          make clean
+          make GCSTATS=1 NO_EAGER_PROMOTE=1
+          cargo build -v
+          cargo test gc_tests2 -- --nocapture --test-threads 1

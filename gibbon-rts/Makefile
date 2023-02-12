@@ -17,7 +17,7 @@
 
 CC        := gcc
 AR        := gcc-ar
-CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -std=gnu11 -O3 -flto
+CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -std=gnu11 -flto
 RSC       := cargo
 RSFLAGS   := -v
 VERBOSITY := 1
@@ -29,6 +29,7 @@ ifeq ($(MODE), debug)
 	CFLAGS += -O0 -g -D_GIBBON_DEBUG
 	RSFLAGS += --features=verbose_evac
 else
+	CFLAGSS += -O3
 	RSFLAGS += --release
 endif
 
@@ -36,21 +37,29 @@ ifeq ($(GC), nongen)
 	CFLAGS += -D_GIBBON_NONGENGC
 endif
 
-ifeq ($(BUMPALLOC), 1)
+ifeq ($(GCSTATS), 1)
 	CFLAGS += -D_GIBBON_GCSTATS
 	RSFLAGS += --features=gcstats
 endif
 
-ifeq ($(BUMPALLOC), 1)
+ifeq ($(PRINT_GCSTATS), 1)
+	CFLAGS += -D_GIBBON_PRINT_GCSTATS
+endif
+
+ifeq ($(POINTER), 1)
 	CFLAGS += -D_GIBBON_POINTER
 endif
 
-ifeq ($(BUMPALLOC), 1)
+ifeq ($(PARALLEL), 1)
 	CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
 endif
 
 ifeq ($(BUMPALLOC), 1)
 	CFLAGS += -D_GIBBON_BUMPALLOC_LISTS -D_GIBBON_BUMPALLOC_HEAP
+endif
+
+ifeq ($(NO_EAGER_PROMOTE), 1)
+	CFLAGS += -D_GIBBON_NO_EAGER_PROMOTE
 endif
 
 # Assume current directory if not set.

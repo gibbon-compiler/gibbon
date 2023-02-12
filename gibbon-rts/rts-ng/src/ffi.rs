@@ -407,6 +407,8 @@ pub mod c {
         pub redirs_not_inlined: u64,
         pub nursery_regions: u64,
         pub oldgen_regions: u64,
+        pub nursery_chunks: u64,
+        pub oldgen_chunks: u64,
         pub gc_elapsed_time: f64,
         pub gc_cpu_time: f64,
         pub gc_rootset_sort_time: f64,
@@ -595,6 +597,16 @@ pub mod c {
             // Data type written at from/to.
             datatype: GibDatatype,
         );
+    }
+
+    /*
+     * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     * GC statistics
+     * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     */
+
+    extern "C" {
+        pub static gib_global_gc_stats: *mut GibGcStats;
     }
 
     /*

@@ -951,11 +951,9 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 #if defined NURSERY_SIZE
 
-#if NURSERY_SIZE < 64
+#if NURSERY_SIZE < 1024
 // The nursery size provided is too small, set it to 64 bytes.
-#define NURSERY_SIZE 64
-#else
-// The nursery size provided at compile time is OK.
+#define NURSERY_SIZE 1024
 #endif
 
 // NURSERY_SIZE not defined, initialize it to a default value.
@@ -964,7 +962,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 #endif
 
 // If a region is over this size, alloc to refcounted heap directly.
-#define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
+static size_t nursery_region_max_size = (NURSERY_SIZE / 2);
 
 // TODO: The shadow stack doesn't grow and we don't check for
 // overflows at the moment. But this stack probably wouldn't overflow since
@@ -1022,8 +1020,14 @@ typedef struct gib_gc_stats {
     // Number of regions in the nursery (maintained by C RTS).
     uint64_t nursery_regions;
 
-    // Number of regions in the old generation (maintained by Rust RTS).
+    // Number of regions in the old generation (maintained by C and Rust RTS).
     uint64_t oldgen_regions;
+
+    // Number of chunks created due to growing regions in the nursery (maintained by C RTS).
+    uint64_t nursery_chunks;
+
+    // Number of chunks created due to growing regions in the old generation (maintained by Rust RTS).
+    uint64_t oldgen_chunks;
 
     // Total GC time (maintained by C RTS).
     double gc_elapsed_time;
@@ -1104,13 +1108,68 @@ void gib_check_rust_struct_sizes(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size);
+STATIC_INLINE void gib_perform_GC_(bool force_major);
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~
+ * Region allocation
+ * ~~~~~~~~~~~~~~~~~~~~
+ */
+
+GibChunk gib_alloc_region(size_t size);
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected);
+GibChunk gib_alloc_region_on_heap(size_t size);
+
 
 GibChunk gib_alloc_region(size_t size)
 {
-    return gib_alloc_region_in_nursery(size);
+    return gib_alloc_region_in_nursery_fast(size, false);
+}
+
+STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
+{
+    GibNursery *nursery = DEFAULT_NURSERY;
+    char *old = nursery->alloc;
+    char *bump = old - size - sizeof(GibNurseryChunkFooter);
+    if (LIKELY((bump >= nursery->heap_start))) {
+
+#ifdef _GIBBON_GCSTATS
+        GC_STATS->nursery_regions++;
+#endif
+        nursery->alloc = bump;
+        char *footer = old - sizeof(GibNurseryChunkFooter);
+        *(GibNurseryChunkFooter *) footer = size;
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        fprintf(stderr, "Allocated a nursery chunk of size %ld, (%p, %p).\n",
+                size, bump, footer);
+#endif
+
+        return (GibChunk) {bump, footer};
+    } else {
+        return gib_alloc_region_in_nursery_slow(size, collected);
+    }
+}
+
+static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
+{
+    if (UNLIKELY((size > nursery_region_max_size))) {
+        return gib_alloc_region_on_heap(size);
+    }
+    if (collected) {
+        fprintf(stderr, "Couldn't free space after garbage collection.\n");
+        exit(1);
+    }
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Performing a minor collection.\n");
+    fflush(stderr);
+#endif
+
+    gib_perform_GC_(false);
+
+    return gib_alloc_region_in_nursery_fast(size, true);
 }
 
 GibChunk gib_alloc_region_on_heap(size_t size)
@@ -1122,92 +1181,58 @@ GibChunk gib_alloc_region_on_heap(size_t size)
     }
     char *heap_end = heap_start + size;
     char *footer_start = gib_init_footer_at(heap_end, size, 1);
+
 #ifdef _GIBBON_GCSTATS
+    GC_STATS->oldgen_regions++;
     GC_STATS->mem_allocated += size;
 #endif
+
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
                 size, heap_start, footer_start);
 #endif
+
     return (GibChunk) {heap_start, footer_start};
 }
 
-STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size)
-{
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->nursery_regions++;
-#endif
-    return gib_alloc_region_in_nursery_fast(size, false);
-}
 
-STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
-{
-    GibNursery *nursery = DEFAULT_NURSERY;
-    char *old = nursery->alloc;
-    char *bump = old - size - sizeof(GibNurseryChunkFooter);
-    if (LIKELY((bump >= nursery->heap_start))) {
-        nursery->alloc = bump;
-        char *footer = old - sizeof(GibNurseryChunkFooter);
-        *(GibNurseryChunkFooter *) footer = size;
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Allocated a nursery chunk of size %ld, (%p, %p).\n",
-                size, bump, footer);
-#endif
-        return (GibChunk) {bump, footer};
-    } else {
-        return gib_alloc_region_in_nursery_slow(size, collected);
-    }
-}
+/*
+ * ~~~~~~~~~~~~~~~~~~~~
+ * Region growth
+ * ~~~~~~~~~~~~~~~~~~~~
+ */
 
-static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
-{
-    if (UNLIKELY((size > NURSERY_REGION_MAX_SIZE))) {
-        return gib_alloc_region_on_heap(size);
-    }
-    if (collected) {
-        fprintf(stderr, "Couldn't free space after garbage collection.\n");
-        exit(1);
-    }
-    GibNursery *nursery = DEFAULT_NURSERY;
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldgen *oldgen = DEFAULT_GENERATION;
-    GibGcStats *gc_stats = GC_STATS;
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Performing a minor collection.\n");
-    fflush(stderr);
-#endif
-
-#ifdef _GIBBON_GCSTATS
-    struct timespec begin;
-    struct timespec end;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
-    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
-    if (err < 0) {
-        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
-        exit(1);
-    }
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
-    gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
-#else
-    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
-    if (err < 0) {
-        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
-        exit(1);
-    }
-#endif
-
-    return gib_alloc_region_in_nursery_fast(size, true);
-}
+void gib_grow_region(char **writeloc_addr, char **footer_addr);
+STATIC_INLINE void gib_grow_region_in_nursery_fast(
+    bool collected,
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+);
+static void gib_grow_region_in_nursery_slow(
+    bool collected,
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+);
+STATIC_INLINE void gib_grow_region_on_heap(
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+);
 
 void gib_grow_region(char **writeloc_addr, char **footer_addr)
 {
     char *footer_ptr = *footer_addr;
     size_t newsize;
     bool old_chunk_in_nursery;
-    GibOldgenChunkFooter *footer = NULL;
+    GibOldgenChunkFooter *old_footer = NULL;
 
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
@@ -1215,53 +1240,172 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         newsize = oldsize * 2;
     } else {
         old_chunk_in_nursery = false;
-        // Get size from current footer.
-        footer = (GibOldgenChunkFooter *) footer_ptr;
-        newsize = sizeof(GibOldgenChunkFooter) + (footer->size);
+        old_footer = (GibOldgenChunkFooter *) footer_ptr;
+        newsize = sizeof(GibOldgenChunkFooter) + (old_footer->size);
         newsize = newsize * 2;
-        // See #110.
         if (newsize > MAX_CHUNK_SIZE) {
             newsize = MAX_CHUNK_SIZE;
         }
     }
 
-    // Allocate.
-    char *heap_start = (char *) gib_alloc(newsize);
-    if (heap_start == NULL) {
-        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", newsize);
+#ifdef _GIBBON_NO_EAGER_PROMOTE
+    gib_grow_region_in_nursery_fast(
+        false,
+        old_chunk_in_nursery,
+        newsize,
+        old_footer,
+        writeloc_addr,
+        footer_addr
+    );
+#else
+    gib_grow_region_on_heap(
+        old_chunk_in_nursery,
+        newsize,
+        old_footer,
+        writeloc_addr,
+        footer_addr
+    );
+#endif
+
+}
+
+STATIC_INLINE void gib_grow_region_in_nursery_fast(
+    bool collected,
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+) {
+    GibNursery *nursery = DEFAULT_NURSERY;
+    char *old = nursery->alloc;
+    char *bump = old - size - sizeof(GibNurseryChunkFooter);
+
+    if (bump >= nursery->heap_start) {
+
+#ifdef _GIBBON_GCSTATS
+        GC_STATS->nursery_chunks++;
+#endif
+
+        nursery->alloc = bump;
+        char *footer = old - sizeof(GibNurseryChunkFooter);
+        *(GibNurseryChunkFooter *) footer = size;
+        char *heap_start = bump;
+        char *heap_end = footer;
+
+        // Write a redirection tag at writeloc and make it point to the start of
+        // this fresh chunk, but store a tagged pointer here.
+        uint16_t new_footer_offset = heap_end - heap_start;
+        GibTaggedPtr tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
+        GibCursor writeloc = *writeloc_addr;
+        *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
+        writeloc += 1;
+        *(GibTaggedPtr *) writeloc = tagged;
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        fprintf(stderr, "Growing a region without eager promotion old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d\n",
+                *writeloc_addr, *footer_addr, old_chunk_in_nursery, heap_start, heap_end, true);
+        fprintf(stderr, "  allocated %zu bytes in the nursery\n", size);
+        fprintf(stderr, "  wrote a redirection pointer at %p to %p\n", *writeloc_addr, heap_start);
+#endif
+
+        // Update start and end cursors.
+        *(char **) writeloc_addr = heap_start;
+        *(char **) footer_addr = heap_end;
+
+        return;
+
+    } else {
+        gib_grow_region_in_nursery_slow(
+            collected,
+            old_chunk_in_nursery,
+            size,
+            old_footer,
+            writeloc_addr,
+            footer_addr
+        );
+
+        return;
+    }
+}
+
+static void gib_grow_region_in_nursery_slow(
+    bool collected,
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+) {
+    // TODO: grow the nursery up to an upper bound?
+    if (size > nursery_region_max_size) {
+        gib_grow_region_on_heap(
+            old_chunk_in_nursery,
+            size,
+            old_footer,
+            writeloc_addr,
+            footer_addr
+        );
+        return;
+    }
+
+    if (collected) {
+        fprintf(stderr, "Couldn't free space after garbage collection.\n");
         exit(1);
     }
-    char *heap_end = heap_start + newsize;
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Performing a minor collection.\n");
+    fflush(stderr);
+#endif
+
+    gib_perform_GC_(false);
+
+    gib_grow_region_in_nursery_fast(
+        true,
+        old_chunk_in_nursery,
+        size,
+        old_footer,
+        writeloc_addr,
+        footer_addr
+    );
+}
+
+STATIC_INLINE void gib_grow_region_on_heap(
+    bool old_chunk_in_nursery,
+    size_t size,
+    GibOldgenChunkFooter *old_footer,
+    char **writeloc_addr,
+    char **footer_addr
+) {
+    char *heap_start = (char *) gib_alloc(size);
+    if (heap_start == NULL) {
+        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", size);
+        exit(1);
+    }
+    char *heap_end = heap_start + size;
+
 #ifdef _GIBBON_GCSTATS
-    GC_STATS->mem_allocated += newsize;
+    GC_STATS->oldgen_chunks++;
+    GC_STATS->mem_allocated += size;
 #endif
 
     // Write a new footer for this chunk and link it with the old chunk's footer.
     char *new_footer_start = NULL;
     GibOldgenChunkFooter *new_footer = NULL;
     if (old_chunk_in_nursery) {
-        new_footer_start = gib_init_footer_at(heap_end, newsize, 0);
+        new_footer_start = gib_init_footer_at(heap_end, size, 0);
         new_footer = (GibOldgenChunkFooter *) new_footer_start;
         gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     } else {
         new_footer_start = heap_end - sizeof(GibOldgenChunkFooter);
         new_footer = (GibOldgenChunkFooter *) new_footer_start;
-        new_footer->reg_info = footer->reg_info;
+        new_footer->reg_info = old_footer->reg_info;
         new_footer->size = (size_t) (new_footer_start - heap_start);
         new_footer->next = (GibOldgenChunkFooter *) NULL;
         // Link with the old chunk's footer.
-        footer->next = (GibOldgenChunkFooter *) new_footer;
+        old_footer->next = (GibOldgenChunkFooter *) new_footer;
     }
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p)\n",
-            *writeloc_addr, footer_ptr, old_chunk_in_nursery, heap_start, new_footer_start);
-    GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
-    fprintf(stderr,
-            "  allocated %zu bytes for region %" PRIu64 "\n",
-            newsize,
-            (new_footer->reg_info)->id);
-#endif
 
     // Write a redirection tag at writeloc and make it point to the start of
     // this fresh chunk, but store a tagged pointer here.
@@ -1273,6 +1417,12 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     *(GibTaggedPtr *) writeloc = tagged;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d \n",
+            *writeloc_addr, *footer_addr, old_chunk_in_nursery, heap_start, new_footer_start, false);
+    fprintf(stderr,
+            "  allocated %zu bytes for region %" PRIu64 " on the heap\n",
+            size,
+            (new_footer->reg_info)->id);
     fprintf(stderr, "  wrote a redirection pointer at %p to %p\n",
             *writeloc_addr, heap_start);
 #endif
@@ -1283,6 +1433,13 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
     return;
 }
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~
+ * Other stuff
+ * ~~~~~~~~~~~~~~~~~~~~
+ */
 
 void gib_free_region(char *footer_ptr)
 {
@@ -1298,16 +1455,38 @@ void gib_free_region(char *footer_ptr)
 
 void gib_perform_GC(bool force_major)
 {
+    gib_perform_GC_(force_major);
+}
+
+STATIC_INLINE void gib_perform_GC_(bool force_major)
+{
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibOldgen *oldgen = DEFAULT_GENERATION;
     GibGcStats *gc_stats = GC_STATS;
+
+#ifdef _GIBBON_GCSTATS
+    struct timespec begin;
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
     int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, force_major);
     if (err < 0) {
         fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
         exit(1);
     }
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
+    gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
+#else
+    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, force_major);
+    if (err < 0) {
+        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
+        exit(1);
+    }
+#endif
+
+    return;
 }
 
 static void gib_bump_global_region_count(void);
@@ -1439,11 +1618,12 @@ static void gib_storage_free(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-size_t gib_nursery_realloc(GibNursery *nursery, size_t nsize)
+size_t gib_nursery_realloc(GibNursery *nursery, size_t size)
 {
     size_t old_size = nursery->heap_size;
     gib_free(nursery->heap_start);
-    gib_nursery_initialize(nursery, nsize);
+    gib_nursery_initialize(nursery, size);
+    nursery_region_max_size = size / 2;
     return old_size;
 }
 
@@ -1666,7 +1846,7 @@ void gib_indirection_barrier_noinline(
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Gc statistics
+ * GC statistics
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -2097,11 +2277,6 @@ int gib_init(int argc, char **argv)
     // Minimal test to see if FFI is set up correctly.
     gib_check_rust_struct_sizes();
 
-#ifdef _GIBBON_GCSTATS
-    // Print GC statistics.
-    gib_gc_stats_print(GC_STATS);
-#endif
-
 #endif // ifndef _GIBBON_POINTER
 
     return 0;
@@ -2114,6 +2289,12 @@ int gib_exit(void)
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibOldgen *oldgen = DEFAULT_GENERATION;
+
+#ifdef _GIBBON_PRINT_GCSTATS
+    // Print GC statistics.
+    gib_gc_stats_print(GC_STATS);
+#endif
+
 
     // Free all objects initialized by the Rust RTS.
     gib_free(gib_global_bench_prog_param);

@@ -13,10 +13,17 @@
  * CPP macros used in the RTS:
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *
- * (1) _GIBBON_VERBOSITY=int     verbosity level for debug output
- * (2) _GIBBON_DEBUG             enables various assertions if present
- * (3) _GIBBON_GCSTATS           collect and print GC statistics if present
- * (4) _GIBBON_NONGENGC          only use old reference counted GC if present
+ * _GIBBON_VERBOSITY=int     verbosity level for debug output
+ * _GIBBON_DEBUG             enables various assertions if present
+ * _GIBBON_GCSTATS           collect GC statistics if present
+ * _GIBBON_PRINT_GCSTATS     print GC statistics if present
+ * _GIBBON_NONGENGC          only use old reference counted GC if present
+ * _GIBBON_BOUNDSCHECK       boundscheck vector accesses
+ * _GIBBON_BUMPALLOC_LISTS   bump allocated linked lists
+ * _GIBBON_BUMPALLOC_HEAP    bump allocated gib_alloc
+ * _GIBBON_POINTER           pointer mode gib_alloc
+ * _GIBBON_PARALLEL          parallel mode
+ * _GIBBON_NO_EAGER_PROMOTE  disable eager promotion
  *
  */
 
@@ -419,6 +426,9 @@ extern GibOldgen *gib_global_oldgen;
 // parallel mutators.. These arrays are abstract enough for now.
 extern GibShadowstack *gib_global_read_shadowstacks;
 extern GibShadowstack *gib_global_write_shadowstacks;
+
+// Collect GC statistics.
+extern GibGcStats *gib_global_gc_stats;
 
 // Convenience macros since we don't really need the arrays of nurseries and
 // shadowstacks since mutators are still sequential.
