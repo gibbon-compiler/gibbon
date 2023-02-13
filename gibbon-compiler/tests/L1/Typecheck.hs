@@ -127,7 +127,9 @@ t1Prog = Prog {ddefs = M.fromList [],
                             funBody = PrimAppE MulP
                                       [(VarE "x_y1"), (VarE "x_y1")],
                             funMeta = FunMeta { funInline = Inline,
-                                                funRec = NotRec
+                                                funRec = NotRec,
+                                                funCanTriggerGC = False
+
                                               }
                            }),
                    ("add2",
@@ -138,7 +140,8 @@ t1Prog = Prog {ddefs = M.fromList [],
                                       [(VarE "x_y0"),
                                        (VarE "x_y0")],
                             funMeta = FunMeta { funInline = Inline,
-                                                funRec = NotRec
+                                                funRec = NotRec,
+                                                funCanTriggerGC = False
                                               }
                            })],
         mainExp = Just
