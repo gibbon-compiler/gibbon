@@ -1053,8 +1053,10 @@ specLambdasExp ddefs env2 ex =
                         , funArgs = arg_vars ++ vars1
                         , funTy   = ty'
                         , funBody = lam_bod'
-                        , funRec = NotRec
-                        , funInline = Inline
+                        , funMeta = FunMeta { funRec = NotRec
+                                            , funInline = Inline
+                                            , funCanTriggerGC = False
+                                            }
                         }
             env2' = extendFEnv v' ty' env2
         state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
@@ -1073,8 +1075,10 @@ specLambdasExp ddefs env2 ex =
                         , funArgs = arg_vars ++ vars
                         , funTy   = ty'
                         , funBody = lam_bod'
-                        , funRec = NotRec
-                        , funInline = Inline
+                        , funMeta = FunMeta { funRec = NotRec
+                                            , funInline = Inline
+                                            , funCanTriggerGC = False
+                                            }
                         }
             env2' = extendFEnv v' (ForAll [] ty) env2
         state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
@@ -1149,8 +1153,10 @@ specLambdasExp ddefs env2 ex =
                                 , funArgs = args
                                 , funTy   = ForAll [] (ArrowTy argtys retty)
                                 , funBody = e0'
-                                , funRec = NotRec
-                                , funInline = NoInline
+                                , funMeta = FunMeta { funRec = NotRec
+                                                    , funInline = NoInline
+                                                    , funCanTriggerGC = False
+                                                    }
                                 }
                 pure (Just fn, binds, AppE fnname [] (map VarE args))
           let mb_insert mb_fn mp = case mb_fn of
@@ -1545,8 +1551,10 @@ genCopyFn DDef{tyName, dataCons} = do
                   , funArgs = [arg]
                   , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (PackedTy (fromVar tyName) [])))
                   , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
+                  , funMeta = FunMeta { funRec = Rec
+                                      , funInline = NoInline
+                                      , funCanTriggerGC = False
+                                      }
                   }
 
 genCopySansPtrsFn :: DDef0 -> PassM FunDef0
@@ -1567,8 +1575,10 @@ genCopySansPtrsFn DDef{tyName,dataCons} = do
                   , funArgs = [arg]
                   , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (PackedTy (fromVar tyName) [])))
                   , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
+                  , funMeta = FunMeta  { funRec = Rec
+                                       , funInline = NoInline
+                                       , funCanTriggerGC = False
+                                       }
                   }
 
 
@@ -1592,8 +1602,10 @@ genTravFn DDef{tyName, dataCons} = do
                   , funArgs = [arg]
                   , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (ProdTy [])))
                   , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
+                  , funMeta = FunMeta  { funRec = Rec
+                                       , funInline = NoInline
+                                       , funCanTriggerGC = False
+                                       }
                   }
 
 
@@ -1633,8 +1645,10 @@ genPrintFn DDef{tyName, dataCons} = do
                   , funArgs = [arg]
                   , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (ProdTy [])))
                   , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
+                  , funMeta = FunMeta  { funRec = Rec
+                                       , funInline = NoInline
+                                       , funCanTriggerGC = False
+                                       }
                   }
 
 
@@ -1678,7 +1692,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
       fn_name <- lift $ gensym "caseFn"
       args <- mapM (\x -> lift $ gensym x) free
       let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
-      let fn = FunDef fn_name args fn_ty ex' NotRec NoInline
+      let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False)
       state (\s -> ((AppE fn_name [] (map VarE free)), M.insert fn_name fn s))
 
     go :: Bool -> Env2 Ty0 -> Exp0 -> FloatM Exp0

@@ -159,10 +159,13 @@ instance Pretty FunRec where
 instance Pretty FunInline where
     pprintWithStyle _sty = text . show
 
+instance Pretty FunMeta where
+    pprintWithStyle _sty = text . show
+
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
-    pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
-        braces (text "rec:" <+> pprintWithStyle sty funRec <> text ", inline:" <+> pprintWithStyle sty funInline) $$
+    pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody,funMeta} =
+        braces (text "meta:" <+> pprintWithStyle sty funMeta) $$
           text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
             $$ renderBod <> text "\n"
       where

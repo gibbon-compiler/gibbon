@@ -98,7 +98,7 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
 
 -- |
 cursorizeFunDef :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
-cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funRec,funInline} = do
+cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
   let inLocs  = inLocVars funTy
       outLocs = outLocVars funTy
       outRegs = outRegVars funTy
@@ -133,7 +133,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funRec,funInl
          then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv M.empty funBody
          else cursorizeExp ddefs fundefs M.empty initTyEnv M.empty funBody
   let bod' = inCurBinds bod
-      fn = FunDef funName funargs funTy' bod' funRec funInline
+      fn = FunDef funName funargs funTy' bod' funMeta
   return fn
 
   where

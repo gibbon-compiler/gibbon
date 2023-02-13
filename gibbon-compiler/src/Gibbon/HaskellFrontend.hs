@@ -169,7 +169,7 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel type_syns funtys) decls
         let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
-            funs' = foldr (\v acc -> M.update (\fn -> Just (fn {funInline = Inline})) v acc) funs inlines
+            funs' = foldr (\v acc -> M.update (\fn@(FunDef{funMeta}) -> Just (fn { funMeta = funMeta { funInline = Inline }})) v acc) funs inlines
         imported_progs' <- mapM id imported_progs
         let (defs0,funs0) =
               foldr
@@ -965,8 +965,10 @@ collectTopLevel type_syns env decl =
                                                    , funArgs = args
                                                    , funTy   = fun_ty
                                                    , funBody = fixupSpawn (mkLets binds bod')
-                                                   , funRec  = NotRec
-                                                   , funInline = NoInline
+                                                   , funMeta = FunMeta { funRec = NotRec
+                                                                       , funInline = NoInline
+                                                                       , funCanTriggerGC = False
+                                                                       }
                                                    })
 
                -- This is a top-level function that doesn't take any arguments.
@@ -978,8 +980,10 @@ collectTopLevel type_syns env decl =
                                                , funArgs = []
                                                , funTy   = fun_ty''
                                                , funBody = fixupSpawn rhs'
-                                               , funRec  = NotRec
-                                               , funInline = NoInline
+                                               , funMeta = FunMeta { funRec = NotRec
+                                                                   , funInline = NoInline
+                                                                   , funCanTriggerGC = False
+                                                                   }
                                                })
 
 
@@ -988,8 +992,10 @@ collectTopLevel type_syns env decl =
                                                   , funArgs = args
                                                   , funTy   = ty
                                                   , funBody = fixupSpawn bod
-                                                  , funRec  = NotRec
-                                                  , funInline = NoInline
+                                                  , funMeta = FunMeta { funRec = NotRec
+                                                                      , funInline = NoInline
+                                                                      , funCanTriggerGC = False
+                                                                      }
                                                   })
 
     InlineSig _ _ _ qname -> pure $ Just $ HInline (toVar $ qnameToStr qname)

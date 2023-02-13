@@ -219,7 +219,7 @@ inferLocs initPrg = do
                           inlineTriv p0
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod _isrec _inline) -> do
+          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod _meta) -> do
                   let has_par = hasSpawns bod
                   lift $ lift $ convertFunTy (intys,outty,has_par)
           let fe = FullEnv dfs' M.empty fenv
@@ -230,14 +230,14 @@ inferLocs initPrg = do
               (me',ty') <- inferExp' fe me [] NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
-          fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod isrec inline) -> do
+          fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod meta) -> do
                                    let arrty = lookupFEnv fn fe
                                        fe' = extendsVEnv (M.fromList $ fragileZip fa (arrIns arrty)) fe
                                        boundLocs = concat $ map locsInTy (arrIns arrty ++ [arrOut arrty])
                                    dest <- destFromType (arrOut arrty)
                                    mapM_ fixType_ (arrIns arrty)
                                    (fbod',_) <- inferExp' fe' fbod boundLocs dest
-                                   return $ FunDef fn fa arrty fbod' isrec inline
+                                   return $ FunDef fn fa arrty fbod' meta
           return $ Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of

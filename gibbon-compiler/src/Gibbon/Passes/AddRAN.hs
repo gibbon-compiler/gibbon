@@ -578,6 +578,8 @@ genRelOffsetsFunNameFn needRANsTyCons ddfs DDef{tyName, dataCons} = do
                   , funArgs = [arg]
                   , funTy   = ( [PackedTy (fromVar tyName) ()], PackedTy (fromVar tyName) () )
                   , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
+                  , funMeta = FunMeta { funRec = Rec
+                                      , funInline = NoInline
+                                      , funCanTriggerGC = False
+                                      }
                   }

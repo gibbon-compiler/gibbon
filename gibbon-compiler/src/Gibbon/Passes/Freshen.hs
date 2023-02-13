@@ -48,14 +48,14 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
                    ++ " in the constructor:\n" ++ msg
 
 freshFun :: FunDef Exp0 -> PassM (FunDef Exp0)
-freshFun (FunDef nam nargs funty bod isrec inline) =
+freshFun (FunDef nam nargs funty bod meta) =
     do nargs' <- mapM gensym nargs
        let msubst = (M.fromList $ zip nargs nargs')
        (tvenv, funty') <- freshTyScheme funty
        funty'' <- freshDictTyScheme msubst funty'
        bod' <- freshExp msubst tvenv bod
        let nam' = cleanFunName nam
-       pure $ FunDef nam' nargs' funty'' bod' isrec inline
+       pure $ FunDef nam' nargs' funty'' bod' meta
 
 --
 freshTyScheme :: TyScheme -> PassM (TyVarEnv Ty0, TyScheme)
@@ -312,12 +312,12 @@ freshNames1 (L1.Prog defs funs main) =
        return $ L1.Prog defs funs' main'
 
 freshFun1 :: L1.FunDef1 -> PassM L1.FunDef1
-freshFun1 (FunDef nam nargs (targ,ty) bod isrec inline) = do
+freshFun1 (FunDef nam nargs (targ,ty) bod meta) = do
     nargs' <- mapM gensym nargs
     let msubst = (M.fromList $ zip nargs nargs')
     bod' <- freshExp1 msubst bod
     -- let nam' = cleanFunName nam
-    return $ FunDef nam nargs' (targ,ty) bod' isrec inline
+    return $ FunDef nam nargs' (targ,ty) bod' meta
 
 
 freshExp1 :: VarEnv -> L1.Exp1 -> PassM L1.Exp1
