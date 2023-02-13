@@ -281,13 +281,12 @@ revertDDef (DDef tyargs a b) =
          L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs (unTy2 y))) tys)) b)
 
 revertFunDef :: FunDef2 -> FunDef1
-revertFunDef FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
+revertFunDef FunDef{funName,funArgs,funTy,funBody,funMeta} =
   FunDef { funName = funName
          , funArgs = funArgs
          , funTy   = (L.map (stripTyLocs . unTy2) (Old.arrIns funTy), stripTyLocs (unTy2 (Old.arrOut funTy)))
          , funBody = revertExp funBody
-         , funRec  = funRec
-         , funInline = funInline
+         , funMeta = funMeta
          }
 
 revertExp :: Exp2 -> Exp1

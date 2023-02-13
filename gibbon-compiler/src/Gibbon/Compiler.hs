@@ -711,6 +711,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "inferFunAllocs"   inferFunAllocs l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds False) l2
               l2 <- go "addRedirectionCon" addRedirectionCon l2
@@ -726,8 +728,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2' <- go "threadRegions"    threadRegions l2'
-              l2 <- go "inferFunAllocs"   inferFunAllocs l2
-              l2 <- go "threadRegions"    threadRegions  l2
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
