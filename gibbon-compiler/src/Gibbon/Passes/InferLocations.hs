@@ -1857,6 +1857,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
           args' <- mapM (go env2 order) args
           pure $ Ext (BenchE fn locs args' b)
         Ext (L1.AddFixed{}) -> pure ex
+        Ext (L1.StartOfPkdCursor{}) -> pure ex
         MapE{}  -> error "copyOutOfOrderPacked: todo MapE"
         FoldE{} -> error "copyOutOfOrderPacked: todo FoldE"
 

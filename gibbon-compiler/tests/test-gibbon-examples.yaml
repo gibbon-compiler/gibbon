@@ -76,6 +76,9 @@ tests:
     answer-file: examples/Test185.ans
     # Scalar fields after packed not allowed
     failing: [gibbon1,gibbon2,gibbon3]
+  - name: SS.hs
+    dir: examples/gc
+    answer-file: examples/gc/SS.ans
 
   # Needs manual inspection.
   - name: test14_repair.gib

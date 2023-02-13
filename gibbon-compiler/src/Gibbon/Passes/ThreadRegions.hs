@@ -92,7 +92,7 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
-threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
+threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
@@ -139,7 +139,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                                      (locVars funTy)
                 in
                    -- If eager promotion is disabled, growing a region can also trigger a GC.
-                   if no_eager_promote
+                   if no_eager_promote && funCanTriggerGC funMeta
                    then mkLets (rpush ++ wpush ++ boundschecks ++ wpop ++ rpop) bod'
                    else mkLets boundschecks bod'
 
@@ -307,7 +307,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
         (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
         emit_ss <- emit_ss_instrs
-        if emit_ss
+        if emit_ss && funCanTriggerGC (funMeta (fundefs # f))
           then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
                   (pure $ mkLets binds bod3)
           else pure $ mkLets [(v, newretlocs, ty, AppE f newapplocs args)] bod3
@@ -380,8 +380,17 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
        let env2' = extendVEnv v ty env2
            rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
            wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
-       LetE (v, newretlocs,ty, rhs') <$>
-         threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env region_locs ran_env indirs redirs bod
+       bod1 <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env region_locs ran_env indirs redirs bod
+       let -- free = S.fromList $ freeLocVars bod
+            free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
+            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
+            free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
+       (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
+       emit_ss <- emit_ss_instrs
+       if emit_ss
+         then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, rhs')] ++ wpop ++ rpop
+                 (pure $ mkLets binds bod1)
+         else pure $ mkLets [(v, newretlocs, ty, rhs')] bod1
 
     LetE (v,locs,ty,rhs@(Ext (AllocateTagHere x x_tycon))) bod -> do
       let -- x_tycon = (wlocs_env # x)
@@ -581,8 +590,9 @@ ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv = do
                          else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Write x (toEndV (renv # x)) tycon) : acc))
                        []
                        free_wlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
-      let rpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse rpush)
-          wpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse wpush)
+      let fn = (\(_x,locs,ty,Ext (SSPush a b c _)) -> gensym "ss_pop" >>= \y -> pure (y,locs,ty,Ext (SSPop a b c)))
+      rpop <- mapM fn (reverse rpush)
+      wpop <- mapM fn (reverse wpush)
       pure (rpush,wpush,rpop,wpop)
 
 

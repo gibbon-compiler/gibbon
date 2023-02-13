@@ -55,7 +55,7 @@ static GibInt gib_global_iters_param = 1;
 static char *gib_global_bench_prog_param = (char *) NULL;
 static char *gib_global_benchfile_param = (char *) NULL;
 static char *gib_global_arrayfile_param = (char *) NULL;
-static uint64_t gib_global_arrayfile_length_param = -1;
+static uint64_t gib_global_arrayfile_length_param = 0;
 
 // Number of regions allocated.
 static int64_t gib_global_region_count = 0;

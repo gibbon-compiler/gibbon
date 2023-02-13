@@ -66,5 +66,11 @@ inferExp fenv expr =
     Ext (AddFixed{})       -> False
     Ext (GetCilkWorkerNum) -> False
     Ext (LetAvail _ e)     -> go e
+    Ext (StartOfPkdCursor{})    -> False
+    Ext (TagCursor{})           -> False
+    Ext (AllocateTagHere{})     -> False
+    Ext (AllocateScalarsHere{}) -> False
+    Ext (SSPush{})              -> False
+    Ext (SSPop{})               -> False
   where
     go = inferExp fenv
