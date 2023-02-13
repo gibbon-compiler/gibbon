@@ -1248,15 +1248,28 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         }
     }
 
-#ifdef _GIBBON_NO_EAGER_PROMOTE
-    gib_grow_region_in_nursery_fast(
-        false,
-        old_chunk_in_nursery,
-        newsize,
-        old_footer,
-        writeloc_addr,
-        footer_addr
-    );
+#ifdef _GIBBON_DISABLE_EAGER_PROMOTION
+    // If the old chunk is in nursery, try to grow it in the nursery.
+    // Otherwise put it on the heap since we don't have a remembered set for
+    // redirection pointers yet.
+    if (old_chunk_in_nursery) {
+        gib_grow_region_in_nursery_fast(
+            false,
+            old_chunk_in_nursery,
+            newsize,
+            old_footer,
+            writeloc_addr,
+            footer_addr
+        );
+    } else {
+        gib_grow_region_on_heap(
+            old_chunk_in_nursery,
+            newsize,
+            old_footer,
+            writeloc_addr,
+            footer_addr
+        );
+    }
 #else
     gib_grow_region_on_heap(
         old_chunk_in_nursery,

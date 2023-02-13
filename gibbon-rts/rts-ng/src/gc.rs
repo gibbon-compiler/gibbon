@@ -35,7 +35,11 @@ const MAX_CHUNK_SIZE: usize = 65500;
 const COLLECT_MAJOR_K: u8 = 4;
 
 /// Whether eager promotion is enabled.
+#[cfg(not(feature = "disable_eager_promotion"))]
 const EAGER_PROMOTION: bool = true;
+
+#[cfg(feature = "disable_eager_promotion")]
+const EAGER_PROMOTION: bool = false;
 
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut GibGcStats = null_mut();
@@ -516,29 +520,22 @@ enum EvacAction {
 
 /*
 
-[2022.09.06] Main todos:
-
-(1)
-
-Suppose there is an indirection pointer pointing to a an address ABC within the
-nursery. However, the address ABC contains a redirection pointer. Under the usual
-policy the GC will inline this indirection, which is BAD. Redirections stop
-evacuation; they always point to an oldgen chunk and there's never any data
-after them. But inlining a redirection breaks these assumptions. Since the GC
-can very well write data after the inlined redirection. The following code
-prevents this inlining. Instead, it'll make the GC write an indirection pointer
-pointing to the target of the redirection.
-
-Also, make indirection/redirection branches use the proper end-of-input-region
-by using the tag.
-
-[2022.11.30]: this is implemented but redirection pointers are still buggy.
+[2023.02.12] Main todos:
 
 
-(2)
+(+) no eager promotion mode:
 
-Properly handle split roots; values that start in the nursery but end in
-the old generation, possibly due to eager promotion.
+Where should write cursors be restored?
+If in oldgen, then eager promotion is delayed only until the first GC. But
+it is difficult to restore them in the nursery. We would need a new kind of
+remembered set for redirection pointers that can tell us that multiple objects
+live at a given address, and their types.
+
+Also, can we grow the nursery and simplify the write barrier?
+
+
+(+) todo.
+
 
 */
 
