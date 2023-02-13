@@ -79,6 +79,7 @@ import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.FollowIndirections (followIndirections)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
+import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
@@ -626,7 +627,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
-              l2 <- go "threadRegions"    threadRegions l2
+              l2 <- go "inferFunAllocs"   inferFunAllocs l2
+              l2 <- go "threadRegions"    threadRegions  l2
 
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
