@@ -37,9 +37,14 @@ const COLLECT_MAJOR_K: u8 = 4;
 /// Whether eager promotion is enabled.
 #[cfg(not(feature = "disable_eager_promotion"))]
 const EAGER_PROMOTION: bool = true;
-
 #[cfg(feature = "disable_eager_promotion")]
 const EAGER_PROMOTION: bool = false;
+
+/// Whether burn-mode is enabled.
+#[cfg(not(feature = "noburn"))]
+const BURN: bool = true;
+#[cfg(feature = "noburn")]
+const BURN: bool = false;
 
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut GibGcStats = null_mut();
@@ -575,7 +580,7 @@ unsafe fn evacuate_packed(
     // Address of the field after the indirection being inlined. When we reach a
     // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
-    let mut burn = true;
+    let mut burn = BURN && true;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -600,7 +605,7 @@ unsafe fn evacuate_packed(
 
                 if new_src == inlining_underway_upto {
                     inlining_underway = false;
-                    burn = true;
+                    burn = BURN && true;
                 }
                 src = new_src;
                 worklist_next!(worklist, next_action);
@@ -1020,7 +1025,7 @@ unsafe fn evacuate_packed(
                             }
 
                             if !st.evac_major && inlining_underway {
-                                burn = false;
+                                burn = BURN && false;
                             }
                             src = next_chunk;
                             // Same type, new location to evac from:
