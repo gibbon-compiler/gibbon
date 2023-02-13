@@ -19,7 +19,7 @@ module Gibbon.Language.Syntax
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
     -- * Function definitions
-  , FunctionTy(..), FunDefs, FunDef(..), FunRec(..), FunInline(..)
+  , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..)
   , insertFD, fromListFD, initFunEnv
 
     -- * Programs
@@ -186,13 +186,20 @@ data FunRec = Rec | NotRec | TailRec
 data FunInline = Inline | NoInline | Inlineable
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
+data FunMeta = FunMeta
+  { funRec    :: FunRec
+  , funInline :: FunInline
+    -- Whether the transitive closure of this function can trigger GC.
+  , funCanTriggerGC :: Bool
+  }
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
 -- | A function definiton indexed by a type and expression.
 data FunDef ex = FunDef { funName   :: Var
                         , funArgs   :: [Var]
                         , funTy     :: ArrowTy (TyOf ex)
                         , funBody   :: ex
-                        , funRec    :: FunRec
-                        , funInline :: FunInline
+                        , funMeta   :: FunMeta
                         }
 
 deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)

@@ -63,7 +63,7 @@ import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
 import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simplifyLocBinds)
 import           Gibbon.Passes.DirectL3       (directL3)
-import           Gibbon.Passes.InferLocations (inferLocs)
+import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked)
 import           Gibbon.Passes.Simplifier     (simplifyLocBinds)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
 import           Gibbon.Passes.RegionsInwards (regionsInwards)
@@ -78,6 +78,7 @@ import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.FollowPtrs     (followPtrs)
 import           Gibbon.NewL2.FromOldL2       (fromOldL2)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
+import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
@@ -621,6 +622,8 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
+              l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              l1 <- go "L1.typecheck"    L1.tcProg     l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -674,6 +677,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
+                  l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+                  l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
@@ -721,6 +726,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2' <- go "threadRegions"    threadRegions l2'
+              l2 <- go "inferFunAllocs"   inferFunAllocs l2
+              l2 <- go "threadRegions"    threadRegions  l2
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)

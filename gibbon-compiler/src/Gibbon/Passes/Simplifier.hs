@@ -21,9 +21,9 @@ import Gibbon.Passes.Freshen (freshNames1, freshFun1)
 markRecFns :: Prog1 -> PassM Prog1
 markRecFns (Prog ddefs fundefs main) = do
     let fundefs' = M.map
-                     (\fn@FunDef{funName,funBody} ->
+                     (\fn@FunDef{funName,funBody,funMeta} ->
                           if funName `S.member` (gFreeVars funBody)
-                          then fn { funRec = Rec }
+                          then fn { funMeta = funMeta { funRec = Rec } }
                           else fn)
                      fundefs
     pure (Prog ddefs fundefs' main)
@@ -46,7 +46,7 @@ inlineFuns (Prog ddefs fundefs main) = do
       case ex of
         AppEF f [] args -> do
             let fn = fundefs M.! f
-            if funInline fn == Inline && funRec fn == NotRec
+            if funInline (funMeta fn) == Inline && funRec (funMeta fn) == NotRec
               then do
                 FunDef{funArgs,funTy,funBody} <- freshFun1 fn
                 let in_tys = fst funTy
