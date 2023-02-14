@@ -27,10 +27,13 @@ CFLAGS += $(USER_CFLAGS) -D_GIBBON_VERBOSITY=$(VERBOSITY)
 
 ifeq ($(MODE), debug)
 	CFLAGS += -O0 -g -D_GIBBON_DEBUG
-	RSFLAGS += --features=verbose_evac
 else
 	CFLAGSS += -O3
 	RSFLAGS += --release
+endif
+
+ifeq ($(shell test $(VERBOSITY) -gt 2; echo $$?),0)
+	RSFLAGS += --features=verbose_evac
 endif
 
 ifeq ($(GC), nongen)
@@ -60,6 +63,15 @@ endif
 
 ifeq ($(DISABLE_EAGER_PROMOTION), 1)
 	CFLAGS += -D_GIBBON_DISABLE_EAGER_PROMOTION
+	RSFLAGS += --features=disable_eager_promotion
+endif
+
+ifeq ($(NOBURN), 1)
+	RSFLAGS += --features=noburn
+endif
+
+ifeq ($(NOCOMPACT), 1)
+	RSFLAGS += --features=nocompact
 endif
 
 # Assume current directory if not set.

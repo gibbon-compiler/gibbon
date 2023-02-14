@@ -46,6 +46,12 @@ const BURN: bool = true;
 #[cfg(feature = "noburn")]
 const BURN: bool = false;
 
+/// Whether compaction is enabled.
+#[cfg(not(feature = "nocompact"))]
+const COMPACT: bool = true;
+#[cfg(feature = "nocompact")]
+const COMPACT: bool = false;
+
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut GibGcStats = null_mut();
 
@@ -216,7 +222,6 @@ fn cauterize_writers(nursery: &GibNursery, wstack: &GibShadowstack) -> Result<()
     Ok(())
 }
 
-/// See Note [Restoring uncauterized write cursors].
 fn restore_writers(
     wstack: &mut GibShadowstack,
     nursery: &GibNursery,
@@ -351,7 +356,6 @@ unsafe fn evacuate_remset_root(
         // of 1 above.
         add_to_outset((*frame).endptr, dst_end);
 
-        // Note [Adding a forwarding pointer at the end of every chunk].
         // Write a forwarding pointer if we burned a hole in
         // the middle of a buffer.
         if is_loc_0 {
@@ -411,7 +415,6 @@ unsafe fn evacuate_nursery_root(
         // (*frame).endptr = dst_after_end;
         (*frame).endptr = dst_end;
 
-        // Note [Adding a forwarding pointer at the end of every chunk].
         if !forwarded {
             if is_loc_0 {
                 // Write forwarding pointer at the end of chunk.
@@ -645,7 +648,6 @@ unsafe fn evacuate_packed(
                         break; // no change to src, dst, dst_end
                     }
 
-                    // See Note [Maintaining sharing, Copied and CopiedTo tags].
                     COPIED_TO_TAG | COPIED_TAG => {
                         forwarded = true; // i.e. ALREADY forwarded.
                         let tagged_fwd_ptr = record_time!(
@@ -752,79 +754,135 @@ unsafe fn evacuate_packed(
                         // Otherwise, write an indirection node at dst and adjust the
                         // refcount and outset.
                         if st.evac_major || st.nursery.contains_addr(pointee) {
-                            dbgprintln!("   inlining indirection");
+                            if COMPACT {
+                                dbgprintln!("   inlining indirection");
 
-                            // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
-                            if !worklist.is_empty() {
-                                worklist.push(EvacAction::RestoreSrc(
-                                    src_after_indr1,
-                                    dst,
-                                    dst_end,
-                                    next_ty,
-                                ));
-                            } else {
-                                dbgprintln!("   tail optimization!");
-                            }
-
-                            if !inlining_underway {
-                                inlining_underway = true;
-                                inlining_underway_upto = src_after_indr1;
-                            }
-
-                            src = pointee;
-
-                            #[cfg(feature = "gcstats")]
-                            {
-                                (*GC_STATS).indirs_inlined += 1;
-                            }
-
-                            // Update the burned environment if we're evacuating a root
-                            // from the remembered set or if we're evacuating an
-                            // indirection pointer that points to a non-zero location.
-                            match (*frame).gc_root_prov {
-                                GibGcRootProv::RemSet => {
-                                    dbgprintln!(
-                                        "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
-                                        src,
-                                    );
-                                    worklist.push(EvacAction::SkipoverEnvWrite(pointee));
+                                // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
+                                if !worklist.is_empty() {
+                                    worklist.push(EvacAction::RestoreSrc(
+                                        src_after_indr1,
+                                        dst,
+                                        dst_end,
+                                        next_ty,
+                                    ));
+                                } else {
+                                    dbgprintln!("   tail optimization!");
                                 }
 
-                                GibGcRootProv::Stk => {
-                                    if !is_loc0(pointee, pointee_footer_addr, true) {
+                                if !inlining_underway {
+                                    inlining_underway = true;
+                                    inlining_underway_upto = src_after_indr1;
+                                }
+
+                                src = pointee;
+
+                                #[cfg(feature = "gcstats")]
+                                {
+                                    (*GC_STATS).indirs_inlined += 1;
+                                }
+
+                                // Update the burned environment if we're evacuating a root
+                                // from the remembered set or if we're evacuating an
+                                // indirection pointer that points to a non-zero location.
+                                //
+                                // Also update the forwarding environment.
+                                match (*frame).gc_root_prov {
+                                    GibGcRootProv::RemSet => {
                                         dbgprintln!(
-                                            "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                            "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
                                             src,
                                         );
-
                                         worklist.push(EvacAction::SkipoverEnvWrite(pointee));
-                                    } else {
-                                        dbgprintln!(
-                                            "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
-                                            pointee,
-                                            src
-                                        );
+                                    }
+
+                                    GibGcRootProv::Stk => {
+                                        if !is_loc0(pointee, pointee_footer_addr, true) {
+                                            dbgprintln!(
+                                                "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                                src,
+                                            );
+                                            worklist.push(EvacAction::SkipoverEnvWrite(pointee));
+                                        } else {
+                                            dbgprintln!(
+                                                "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
+                                                pointee,
+                                                src,
+                                            );
+                                        }
                                     }
                                 }
-                            }
 
-                            // Same type, new location to evac from:
-                            next_action = EvacAction::ProcessTy(next_ty, mb_shortcut_addr);
-                            continue;
+                                // Same type, new location to evac from:
+                                next_action = EvacAction::ProcessTy(next_ty, mb_shortcut_addr);
+                                continue;
+                            } else {
+                                dbgprintln!("   [nocompact mode] not inlining indirection");
+
+                                // Create a new region for this value, evacuate it there,
+                                // and write an indirection to it in the current region.
+                                let (new_dst, new_dst_end) =
+                                    Heap::allocate_first_chunk(st.oldgen, CHUNK_SIZE, 0).unwrap();
+                                let new_tagged = TaggedPointer::new(
+                                    new_dst,
+                                    new_dst_end.offset_from(new_dst) as u16,
+                                )
+                                .as_u64();
+                                let fake_frame = GibShadowstackFrame {
+                                    ptr: pointee,
+                                    endptr: pointee_footer_addr,
+                                    gc_root_prov: GibGcRootProv::Stk,
+                                    datatype: next_ty,
+                                };
+                                let (_src_after, _dst_after, _dst_after_end, _forwarded) =
+                                    evacuate_packed(st, &fake_frame, new_dst, new_dst_end);
+                                // TODO: we're going to burn pointee, create an entry for it in
+                                // the forwarding environment and skip-over environment.
+                                let space_reqd = 32;
+                                let (dst1, dst_end1) =
+                                    Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
+                                let dst_after_tag = write(dst1, INDIRECTION_TAG);
+                                let dst_after_indr = write(dst_after_tag, new_tagged);
+                                add_old_to_old_indirection(dst_end1, pointee_footer_addr);
+                                write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
+
+                                src = src_after_indr1;
+                                dst = dst_after_indr;
+                                dst_end = dst_end1;
+
+                                dbgprintln!(
+                                    "   wrote tagged indirection pointer {:?} -> ({:p},{:?})",
+                                    dst_after_tag,
+                                    tagged.untag() as *const i8,
+                                    tagged.get_tag()
+                                );
+
+                                #[cfg(feature = "gcstats")]
+                                {
+                                    (*GC_STATS).mem_copied += 9;
+                                    (*GC_STATS).indirs_not_inlined += 1;
+                                }
+
+                                worklist_next!(worklist, next_action);
+                            }
                         } else {
                             let space_reqd = 32;
                             let (dst1, dst_end1) =
                                 Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
                             let dst_after_tag = write(dst1, INDIRECTION_TAG);
                             let dst_after_indr = write(dst_after_tag, tagged_pointee);
-                            let pointee_footer_offset = tagged.get_tag();
-                            let pointee_footer_addr = pointee.add(pointee_footer_offset as usize);
                             add_old_to_old_indirection(dst_end1, pointee_footer_addr);
                             write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
+
+                            /*
+
+                            // [2023.02.14]: we haven't burned anything in the source buffer,
+                            // do we need to update any environments?
 
                             // Update the burned environment if we're evacuating a root
                             // from the remembered set of if we're evacuating an
                             // indirection pointer that points to a non-zero location.
+                            //
+                            // Also update the forwarding environment.
                             match (*frame).gc_root_prov {
                                 GibGcRootProv::RemSet => {
                                     dbgprintln!(
@@ -853,6 +911,7 @@ unsafe fn evacuate_packed(
                                     }
                                 }
                             }
+                             */
 
                             /*
                             (*(st.zct)).insert(
@@ -1457,10 +1516,6 @@ fn sort_roots(
     rem_set: &GibRememberedSet,
     // -> Box<dyn Iterator<Item = *mut GibShadowstackFrame>>
 ) -> Vec<*mut GibShadowstackFrame> {
-    // Store all the frames in a vector and sort,
-    // see Note [Granularity of the burned addresses table] and
-    // Note [Sorting roots on the shadow-stack and remembered set].
-    //
     // TODO: sort roots into oldgen and nursery seperately;
     // for oldgen we want to sort using highest depth first,
     // for nursery we want to start with leftmost root first.
