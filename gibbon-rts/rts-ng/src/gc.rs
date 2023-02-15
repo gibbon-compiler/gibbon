@@ -628,7 +628,7 @@ unsafe fn evacuate_packed(
                         let (wframe_ptr, after_wframe_ptr): (*mut i8, *mut i8) =
                             read_mut(src_after_tag);
                         let wframe = wframe_ptr as *mut GibShadowstackFrame;
-                        // Update the pointers on the shadow-stack.
+                        // Update the pointers on the write shadow-stack.
                         (*wframe).ptr = dst;
                         (*wframe).endptr = dst_end;
                         // Write a forwarding pointer after the reverse-pointer.
@@ -639,20 +639,27 @@ unsafe fn evacuate_packed(
                         );
                         forwarded = true;
                         src = after_wframe_ptr;
-
                         dbgprintln!(
                             "++Hit cauterize at {:?}, remaining worklist: {:?}",
                             src,
                             worklist
                         );
-                        break; // no change to src, dst, dst_end
+                        // no change to src, dst, dst_end
+                        break;
                     }
 
                     COPIED_TO_TAG | COPIED_TAG => {
-                        forwarded = true; // i.e. ALREADY forwarded.
+                        // i.e. ALREADY forwarded.
+                        forwarded = true;
                         let tagged_fwd_ptr = record_time!(
                             find_forwarding_pointer(tag, src, src_after_tag,),
                             (*GC_STATS).gc_find_fwdptr_time
+                        );
+                        dbgprintln!(
+                            "   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}",
+                            src,
+                            tagged_fwd_ptr,
+                            dst
                         );
                         let space_reqd = 32;
                         let (dst1, dst_end1) =
@@ -664,40 +671,11 @@ unsafe fn evacuate_packed(
                         let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                         add_old_to_old_indirection(dst_end1, fwd_footer_addr);
                         write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
-
-                        dbgprintln!(
-                            "   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}",
-                            src,
-                            tagged_fwd_ptr,
-                            dst
-                        );
-
                         #[cfg(feature = "gcstats")]
                         {
                             (*GC_STATS).mem_copied += 9;
                         }
-
-                        // Update outsets and refcounts if evacuating to the oldest
-                        // generation.
-
-                        match (*frame).gc_root_prov {
-                            GibGcRootProv::RemSet => {}
-                            GibGcRootProv::Stk => {
-                                /*
-                                let fwd_footer = fwd_footer_addr
-                                    as *const GibOldgenChunkFooter;
-                                record_time!(
-                                    (*(st.zct)).remove(
-                                        &((*fwd_footer).reg_info
-                                            as *const GibRegionInfo),
-                                    ),
-                                    (*GC_STATS).gc_zct_mgmt_time
-                                );
-                                 */
-                                ()
-                            }
-                        }
-
+                        // TODO: update ZCT.
                         dst = dst_after_indr;
                         dst_end = dst_end1;
                         let src_after_burned = st.so_env.get(&src);
@@ -723,40 +701,32 @@ unsafe fn evacuate_packed(
                     INDIRECTION_TAG => {
                         let (tagged_pointee, src_after_indr): (GibTaggedPtr, _) =
                             read(src_after_tag);
-
                         dbgprintln!(
                             "   indirection! src {:?} dest {:?}, after {:?}",
                             src_after_tag,
                             tagged_pointee as *mut i8,
                             src_after_indr
                         );
-
                         let src_after_indr1 = src_after_indr as *mut i8;
                         let tagged = TaggedPointer::from_usize(tagged_pointee);
                         let pointee = tagged.untag();
                         let pointee_footer_offset = tagged.get_tag();
                         let pointee_footer_addr = pointee.add(pointee_footer_offset as usize);
-
-                        // Add a forwarding pointer in the source buffer.
-                        debug_assert!(dst < dst_end);
-
                         if burn {
+                            // Add a forwarding pointer in the source buffer.
                             write_forwarding_pointer_at(src, dst, dst_end.offset_from(dst) as u16);
                             forwarded = true;
-
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).forwarded += 1;
                             }
                         }
-
                         // If the pointee is in the nursery, evacuate it.
                         // Otherwise, write an indirection node at dst and adjust the
                         // refcount and outset.
                         if st.evac_major || st.nursery.contains_addr(pointee) {
                             if COMPACT {
                                 dbgprintln!("   inlining indirection");
-
                                 // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
                                 if !worklist.is_empty() {
                                     worklist.push(EvacAction::RestoreSrc(
@@ -768,56 +738,52 @@ unsafe fn evacuate_packed(
                                 } else {
                                     dbgprintln!("   tail optimization!");
                                 }
-
                                 if !inlining_underway {
                                     inlining_underway = true;
                                     inlining_underway_upto = src_after_indr1;
                                 }
-
                                 src = pointee;
-
                                 #[cfg(feature = "gcstats")]
                                 {
                                     (*GC_STATS).indirs_inlined += 1;
                                 }
-
                                 // Update the burned environment if we're evacuating a root
                                 // from the remembered set or if we're evacuating an
                                 // indirection pointer that points to a non-zero location.
                                 //
                                 // Also update the forwarding environment.
-                                match (*frame).gc_root_prov {
-                                    GibGcRootProv::RemSet => {
-                                        dbgprintln!(
-                                            "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
-                                            src,
-                                        );
-                                        worklist.push(EvacAction::SkipoverEnvWrite(pointee));
-                                    }
-
-                                    GibGcRootProv::Stk => {
-                                        if !is_loc0(pointee, pointee_footer_addr, true) {
+                                if burn {
+                                    match (*frame).gc_root_prov {
+                                        GibGcRootProv::RemSet => {
                                             dbgprintln!(
-                                                "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                                "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
                                                 src,
                                             );
                                             worklist.push(EvacAction::SkipoverEnvWrite(pointee));
-                                        } else {
-                                            dbgprintln!(
-                                                "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
-                                                pointee,
-                                                src,
-                                            );
+                                        }
+                                        GibGcRootProv::Stk => {
+                                            if !is_loc0(pointee, pointee_footer_addr, true) {
+                                                dbgprintln!(
+                                                    "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                                    src,
+                                                );
+                                                worklist
+                                                    .push(EvacAction::SkipoverEnvWrite(pointee));
+                                            } else {
+                                                dbgprintln!(
+                                                    "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
+                                                    pointee,
+                                                    src,
+                                                );
+                                            }
                                         }
                                     }
                                 }
-
                                 // Same type, new location to evac from:
                                 next_action = EvacAction::ProcessTy(next_ty, mb_shortcut_addr);
                                 continue;
                             } else {
-                                dbgprintln!("   [nocompact mode] not inlining indirection");
-
+                                dbgprintln!("   [nocompact mode] retaining indirection");
                                 // Create a new region for this value, evacuate it there,
                                 // and write an indirection to it in the current region.
                                 let (new_dst, new_dst_end) =
@@ -833,38 +799,38 @@ unsafe fn evacuate_packed(
                                     gc_root_prov: GibGcRootProv::Stk,
                                     datatype: next_ty,
                                 };
-                                let (_src_after, _dst_after, _dst_after_end, _forwarded) =
+                                let (new_src_after, _new_dst_after, _new_dst_after_end, _forwarded) =
                                     evacuate_packed(st, &fake_frame, new_dst, new_dst_end);
-                                // TODO: we're going to burn pointee, create an entry for it in
-                                // the forwarding environment and skip-over environment.
+                                if burn {
+                                    // TODO: only insert if it is a non-zero location?
+                                    // TODO: also insert in forwarding environment.
+                                    st.so_env.insert(pointee, new_src_after);
+                                }
                                 let space_reqd = 32;
                                 let (dst1, dst_end1) =
                                     Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
                                 let dst_after_tag = write(dst1, INDIRECTION_TAG);
                                 let dst_after_indr = write(dst_after_tag, new_tagged);
-                                add_old_to_old_indirection(dst_end1, pointee_footer_addr);
+                                add_old_to_old_indirection(dst_end1, new_dst_end);
                                 write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
-
                                 src = src_after_indr1;
                                 dst = dst_after_indr;
                                 dst_end = dst_end1;
-
                                 dbgprintln!(
                                     "   wrote tagged indirection pointer {:?} -> ({:p},{:?})",
                                     dst_after_tag,
                                     tagged.untag() as *const i8,
                                     tagged.get_tag()
                                 );
-
                                 #[cfg(feature = "gcstats")]
                                 {
                                     (*GC_STATS).mem_copied += 9;
                                     (*GC_STATS).indirs_not_inlined += 1;
                                 }
-
                                 worklist_next!(worklist, next_action);
                             }
                         } else {
+                            dbgprintln!("   retaining oldgen indirection");
                             let space_reqd = 32;
                             let (dst1, dst_end1) =
                                 Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
@@ -872,97 +838,73 @@ unsafe fn evacuate_packed(
                             let dst_after_indr = write(dst_after_tag, tagged_pointee);
                             add_old_to_old_indirection(dst_end1, pointee_footer_addr);
                             write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
-
-                            /*
-
-                            // [2023.02.14]: we haven't burned anything in the source buffer,
-                            // do we need to update any environments?
-
-                            // Update the burned environment if we're evacuating a root
-                            // from the remembered set of if we're evacuating an
-                            // indirection pointer that points to a non-zero location.
-                            //
-                            // Also update the forwarding environment.
-                            match (*frame).gc_root_prov {
-                                GibGcRootProv::RemSet => {
-                                    dbgprintln!(
-                                        "   inserting ({:?} to {:?}) to so_env, root in remembered set",
-                                        src,
-                                        src_after_indr1,
-                                    );
-                                    st.so_env.insert(src, src_after_indr1);
-                                }
-
-                                GibGcRootProv::Stk => {
-                                    if !is_loc0(pointee, pointee_footer_addr, true) {
-                                        dbgprintln!(
-                                            "   inserting ({:?} to {:?}) to so_env, root in nursery",
-                                            src,
-                                            src_after_indr1,
-                                        );
-
-                                        st.so_env.insert(src, src_after_indr1);
-                                    } else {
-                                        dbgprintln!(
-                                            "   optimization! did not insert ({:?} to {:?}) to so_env",
-                                            pointee,
-                                            src
-                                        );
-                                    }
-                                }
-                            }
-                             */
-
-                            /*
-                            (*(st.zct)).insert(
-                                (*(pointee_footer_addr
-                                    as *mut GibOldgenChunkFooter))
-                                    .reg_info
-                                    as *const GibRegionInfo,
-                            );
-                             */
-
-                            src = src_after_indr1;
-                            dst = dst_after_indr;
-                            dst_end = dst_end1;
-
                             dbgprintln!(
                                 "   wrote tagged indirection pointer {:?} -> ({:p},{:?})",
                                 dst_after_tag,
                                 tagged.untag() as *const i8,
                                 tagged.get_tag()
                             );
-
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).mem_copied += 9;
                                 (*GC_STATS).indirs_not_inlined += 1;
                             }
+                            // Update the burned environment if we're evacuating a root
+                            // from the remembered set of if we're evacuating an
+                            // indirection pointer that points to a non-zero location.
+                            //
+                            // Also update the forwarding environment.
+                            if burn {
+                                match (*frame).gc_root_prov {
+                                    GibGcRootProv::RemSet => {
+                                        dbgprintln!(
+                                            "   inserting ({:?} to {:?}) to so_env, root in remembered set",
+                                            src,
+                                            src_after_indr1,
+                                        );
+                                        st.so_env.insert(src, src_after_indr1);
+                                    }
 
+                                    GibGcRootProv::Stk => {
+                                        if !is_loc0(pointee, pointee_footer_addr, true) {
+                                            dbgprintln!(
+                                                "   inserting ({:?} to {:?}) to so_env, root in nursery",
+                                                src,
+                                                src_after_indr1,
+                                            );
+                                            st.so_env.insert(src, src_after_indr1);
+                                        } else {
+                                            dbgprintln!(
+                                                "   optimization! did not insert ({:?} to {:?}) to so_env",
+                                                pointee,
+                                                src
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            // Next.
+                            src = src_after_indr1;
+                            dst = dst_after_indr;
+                            dst_end = dst_end1;
                             worklist_next!(worklist, next_action);
                         }
                     }
 
                     // Indicates end-of-current-chunk in the source buffer i.e.
                     // there's nothing more to copy in the current chunk.
-                    // Follow the redirection pointer to the next chunk and
-                    // continue copying there.
                     REDIRECTION_TAG => {
                         let (tagged_next_chunk, src_after_next_chunk): (GibTaggedPtr, _) =
                             read(src_after_tag);
                         let tagged = TaggedPointer::from_usize(tagged_next_chunk);
                         let next_chunk = tagged.untag();
-
                         dbgprintln!("   redirection ptr!: src {:?}, to next chunk {:?}, inlining_underway={:?}",
                                     src, next_chunk, inlining_underway);
-
                         if burn {
                             // Add a forwarding pointer in the source buffer.
-                            debug_assert!(dst < dst_end);
                             write_forwarding_pointer_at(src, dst, dst_end.offset_from(dst) as u16);
                             forwarded = true;
                         }
-
                         let next_chunk_in_nursery = st.nursery.contains_addr(next_chunk);
 
                         // Instead of copying oldgen objects when inlining is
@@ -992,7 +934,6 @@ unsafe fn evacuate_packed(
                                     }
                                     EvacAction::RestoreSrc(new_src, old_dst, old_dst_end, ty) => {
                                         saw_indirection = true;
-
                                         // (0): Copy this redirection here as is so that it
                                         //      can be copied again in the new buffer.
                                         let dst_after_tag = write(dst, REDIRECTION_TAG);
@@ -1065,6 +1006,7 @@ unsafe fn evacuate_packed(
                                 worklist.len(),
                                 &worklist[..std::cmp::min(5, worklist.len())]
                             );
+                            // Next.
                             worklist_next!(worklist, next_action);
                         } else if st.evac_major || next_chunk_in_nursery {
                             // If the next chunk is in the nursery, continue evacuation there.
@@ -1092,30 +1034,21 @@ unsafe fn evacuate_packed(
                             continue;
                         } else {
                             cold();
-
                             // A pretenured object whose next chunk is in the old_gen.
                             // We reconcile the two footers.
-                            // TODO: Document how it happens. Also, very buggy.
-                            // An alternative is to write an indirection node
-                            // which will be way easier.
-
                             dbgprintln!(
                                 "   writing redirection node {:?} -> {:?}",
                                 dst,
                                 tagged_next_chunk as *const i8
                             );
-
                             let dst_after_tag = write(dst, REDIRECTION_TAG);
                             let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
-
                             write_shortcut_ptr!(mb_shortcut_addr, dst, dst_end);
-
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).mem_copied += 9;
                                 (*GC_STATS).redirs_not_inlined += 1;
                             }
-
                             // Link footers.
                             let footer1 = dst_end as *mut GibOldgenChunkFooter;
                             let next_chunk_footer_offset = tagged.get_tag();
@@ -1141,38 +1074,21 @@ unsafe fn evacuate_packed(
                                 (*footer1),
                                 *((*footer1).reg_info),
                             );
-
-                            // Update ZCT.
-                            /*
-                            record_time!(
-                                (*(st.zct)).remove(
-                                    &(reg_info1 as *const GibRegionInfo)
-                                ),
-                                (*GC_STATS).gc_zct_mgmt_time
-                            );
-                            record_time!(
-                                (*(st.zct)).insert(reg_info2),
-                                (*GC_STATS).gc_zct_mgmt_time
-                            );
-                             */
-
+                            // TODO: update ZCT.
                             // Stop evacuating.
                             src = src_after_next_chunk as *mut i8;
                             dst = dst_after_redir;
-                            // TODO: dst_end??
                             break;
                         }
                     }
 
                     // Regular datatype, copy.
-                    _ => {
+                    _oth => {
                         let packed_info: &&[DataconInfo] =
                             INFO_TABLE.get_unchecked(next_ty as usize);
                         let DataconInfo { scalar_bytes, field_tys, num_shortcut, .. } =
                             packed_info.get_unchecked(tag as usize);
-
                         dbgprintln!("   regular datacon, field_tys {:?}", field_tys);
-
                         let scalar_bytes1 = *scalar_bytes;
                         let num_shortcut1 = *num_shortcut;
 
@@ -1180,157 +1096,134 @@ unsafe fn evacuate_packed(
                         // Reserve additional space for a redirection node or a
                         // forwarding pointer.
                         let space_reqd: usize = 32 + scalar_bytes1;
+                        let (mut dst2, dst_end2) =
+                            Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
+                        // N.B. it's important to perform this write here
+                        // before we advance dst2 past the tag.
+                        write_shortcut_ptr!(mb_shortcut_addr, dst2, dst_end2);
+                        // Copy the tag. Move cursors past the tag.
+                        dst2 = write(dst2, tag);
+                        let mut src2 = src_after_tag;
+                        // Store the address where shortcut pointers should
+                        // be written. Move cursors past shortcut pointers.
+                        let src_shortcuts_start = src2;
+                        let dst_shortcuts_start = dst2;
+                        src2 = src2.add(num_shortcut1 * 8);
+                        dst2 = dst2.add(num_shortcut1 * 8);
+                        let shortcut_addrs: Vec<Option<*mut i8>> = if num_shortcut1 > 0 {
+                            // If a datatype has shortcut pointers, there
+                            // will be a pointer corresponding to every packed
+                            // field, except the first one. The pointers
+                            // will be laid out immediately after the tag.
+                            // Thus the address of ith shortcut pointer
+                            // is dst_shortcuts_start + (i * 8).
+                            let mut addrs = Vec::new();
+                            addrs.push(None);
+                            // If a shortcut pointer points into oldgen
+                            // we should copy it as it is. Otherwise
+                            // arrange things such that evacuating the
+                            // nursery value updates the shortcut pointer.
+                            //
+                            // TODO: what should happen here if we're
+                            // evacuating oldgen?
+                            for i in 0..num_shortcut1 {
+                                let (tagged_shortcut_dst, _): (GibTaggedPtr, _) =
+                                    read(src_shortcuts_start.add(i * 8));
+                                let tagged = TaggedPointer::from_usize(tagged_shortcut_dst);
+                                let shortcut_dst = tagged.untag();
+
+                                dbgprintln!(
+                                    "   shortcut dst {:?}, in nursery {:?}",
+                                    shortcut_dst,
+                                    st.nursery.contains_addr(shortcut_dst)
+                                );
+
+                                if st.nursery.contains_addr(shortcut_dst) {
+                                    dbgprintln!("   nursery shortcut pointer ({:?} -> {:?}) will be updated",
+                                                src_shortcuts_start.add(i * 8), shortcut_dst);
+                                    addrs.push(Some(dst_shortcuts_start.add(i * 8)));
+                                } else {
+                                    dbgprintln!(
+                                        "   writing an oldgen shortcut pointer {:?} -> {:?}",
+                                        dst_shortcuts_start.add(i * 8),
+                                        tagged_shortcut_dst as *const i8
+                                    );
+                                    write(dst_shortcuts_start.add(i * 8), tagged_shortcut_dst);
+                                    addrs.push(None);
+                                }
+                            }
+                            addrs
+                        } else {
+                            vec![None; field_tys.len()]
+                        };
+                        debug_assert!(field_tys.len() == shortcut_addrs.len());
+                        dbgprintln!("   need to write shortcut pointers at: {:?}", shortcut_addrs);
+                        // Copy the scalar fields. Move cursors past scalar fields.
+                        dst2.copy_from_nonoverlapping(src2, scalar_bytes1);
+                        src2 = src2.add(scalar_bytes1);
+                        dst2 = dst2.add(scalar_bytes1);
+
+                        #[cfg(feature = "gcstats")]
                         {
-                            // Scope for mutable variables src_mut and dst_mut,
-                            // which are the read and write cursors in the source
-                            // and destination buffer respectively.
+                            (*GC_STATS).mem_copied += 1 + scalar_bytes1;
+                        }
 
-                            let (mut dst2, dst_end2) =
-                                Heap::check_bounds(st.oldgen, space_reqd, dst, dst_end);
-
-                            // N.B. it's important to perform this write here
-                            // before we advance dst2 past the tag.
-                            write_shortcut_ptr!(mb_shortcut_addr, dst2, dst_end2);
-
-                            // Copy the tag. Move cursors past the tag.
-                            dst2 = write(dst2, tag);
-                            let mut src2 = src_after_tag;
-
-                            // Store the address where shortcut pointers should
-                            // be written. Move cursors past shortcut pointers.
-                            let src_shortcuts_start = src2;
-                            let dst_shortcuts_start = dst2;
-                            src2 = src2.add(num_shortcut1 * 8);
-                            dst2 = dst2.add(num_shortcut1 * 8);
-                            let shortcut_addrs: Vec<Option<*mut i8>> = if num_shortcut1 > 0 {
-                                // If a datatype has shortcut pointers, there
-                                // will be a pointer corresponding to every packed
-                                // field, except the first one. The pointers
-                                // will be laid out immediately after the tag.
-                                // Thus the address of ith shortcut pointer
-                                // is dst_shortcuts_start + (i * 8).
-                                let mut addrs = Vec::new();
-                                addrs.push(None);
-                                // If a shortcut pointer points into oldgen
-                                // we should copy it as it is. Otherwise
-                                // arrange things such that evacuating the
-                                // nursery value updates the shortcut pointer.
-                                //
-                                // TODO: what should happen here if we're
-                                // evacuating oldgen?
-                                for i in 0..num_shortcut1 {
-                                    let (tagged_shortcut_dst, _): (GibTaggedPtr, _) =
-                                        read(src_shortcuts_start.add(i * 8));
-                                    let tagged = TaggedPointer::from_usize(tagged_shortcut_dst);
-                                    let shortcut_dst = tagged.untag();
-
-                                    dbgprintln!(
-                                        "   shortcut dst {:?}, in nursery {:?}",
-                                        shortcut_dst,
-                                        st.nursery.contains_addr(shortcut_dst)
-                                    );
-
-                                    if st.nursery.contains_addr(shortcut_dst) {
-                                        dbgprintln!("   nursery shortcut pointer ({:?} -> {:?}) will be updated",
-                                                        src_shortcuts_start.add(i * 8), shortcut_dst);
-
-                                        addrs.push(Some(dst_shortcuts_start.add(i * 8)));
-                                    } else {
-                                        dbgprintln!(
-                                            "   writing an oldgen shortcut pointer {:?} -> {:?}",
-                                            dst_shortcuts_start.add(i * 8),
-                                            tagged_shortcut_dst as *const i8
+                        if burn {
+                            // Add forwarding pointers:
+                            // if there's enough space, write a COPIED_TO tag and
+                            // dst's address at src. Otherwise just write a COPIED tag.
+                            // After the forwarding pointer, we don't burn the rest of
+                            // space previously occupied by scalars because nothing
+                            // can point to the scalars directly nor can someone
+                            // trying to find a forwarding pointer reach the scalars
+                            // as they'll reach this forwarding pointer and stop.
+                            if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
+                                dbgprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
+                                debug_assert!(dst < dst_end);
+                                record_time!(
+                                    {
+                                        write_forwarding_pointer_at(
+                                            src,
+                                            dst,
+                                            dst_end.offset_from(dst) as u16,
                                         );
-
-                                        write(dst_shortcuts_start.add(i * 8), tagged_shortcut_dst);
-                                        addrs.push(None);
-                                    }
+                                    },
+                                    (*GC_STATS).gc_burn_time
+                                );
+                                forwarded = true;
+                                #[cfg(feature = "gcstats")]
+                                {
+                                    (*GC_STATS).forwarded += 1;
                                 }
-                                addrs
                             } else {
-                                vec![None; field_tys.len()]
-                            };
-                            debug_assert!(field_tys.len() == shortcut_addrs.len());
-                            dbgprintln!(
-                                "   need to write shortcut pointers at: {:?}",
-                                shortcut_addrs
-                            );
-
-                            // Copy the scalar fields. Move cursors past scalar fields.
-                            dst2.copy_from_nonoverlapping(src2, scalar_bytes1);
-                            src2 = src2.add(scalar_bytes1);
-                            dst2 = dst2.add(scalar_bytes1);
-
-                            #[cfg(feature = "gcstats")]
-                            {
-                                (*GC_STATS).mem_copied += 1 + scalar_bytes1;
-                            }
-
-                            if burn {
-                                // Add forwarding pointers:
-                                // if there's enough space, write a COPIED_TO tag and
-                                // dst's address at src. Otherwise just write a COPIED tag.
-                                // After the forwarding pointer, we don't burn the rest of
-                                // space previously occupied by scalars because nothing
-                                // can point to the scalars directly nor can someone
-                                // trying to find a forwarding pointer reach the scalars
-                                // as they'll reach this forwarding pointer and stop.
-                                if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
-                                    dbgprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
-
-                                    debug_assert!(dst < dst_end);
-
-                                    record_time!(
-                                        {
-                                            write_forwarding_pointer_at(
-                                                src,
-                                                dst,
-                                                dst_end.offset_from(dst) as u16,
+                                dbgprintln!(
+                                    "   burning non-forwardable data at {:?}, scalar bytes {}",
+                                    src,
+                                    scalar_bytes1
+                                );
+                                record_time!(
+                                    {
+                                        let _ = write(src, COPIED_TAG);
+                                        // Also burn any scalar bytes that weren't big enough for a pointer:
+                                        if scalar_bytes1 >= 1 {
+                                            write_bytes(
+                                                src_after_tag,
+                                                COPIED_TAG,
+                                                scalar_bytes1 as usize,
                                             );
-                                        },
-                                        (*GC_STATS).gc_burn_time
-                                    );
+                                        }
+                                    },
+                                    (*GC_STATS).gc_burn_time
+                                );
 
-                                    forwarded = true;
+                                forwarded = false;
 
-                                    #[cfg(feature = "gcstats")]
-                                    {
-                                        (*GC_STATS).forwarded += 1;
-                                    }
-                                }
-                                // NOTE: Comment this case to disable burned tags:
-                                else {
-                                    dbgprintln!(
-                                        "   burning non-forwardable data at {:?}, scalar bytes {}",
-                                        src,
-                                        scalar_bytes1
-                                    );
-
-                                    record_time!(
-                                        {
-                                            let _ = write(src, COPIED_TAG);
-                                            // Also burn any scalar bytes that weren't big enough for a pointer:
-                                            if scalar_bytes1 >= 1 {
-                                                write_bytes(
-                                                    src_after_tag,
-                                                    COPIED_TAG,
-                                                    scalar_bytes1 as usize,
-                                                );
-                                            }
-                                        },
-                                        (*GC_STATS).gc_burn_time
-                                    );
-
-                                    forwarded = false;
-
-                                    #[cfg(feature = "gcstats")]
-                                    {
-                                        (*GC_STATS).not_forwarded += 1;
-                                        (*GC_STATS).mem_burned += 1 + scalar_bytes1;
-                                    }
+                                #[cfg(feature = "gcstats")]
+                                {
+                                    (*GC_STATS).not_forwarded += 1;
+                                    (*GC_STATS).mem_burned += 1 + scalar_bytes1;
                                 }
                             }
-
                             match (*frame).gc_root_prov {
                                 GibGcRootProv::RemSet => {
                                     dbgprintln!(
@@ -1342,23 +1235,21 @@ unsafe fn evacuate_packed(
 
                                 GibGcRootProv::Stk => (),
                             }
-
-                            for (ty, shct) in field_tys.iter().zip(shortcut_addrs.iter()).rev() {
-                                worklist.push(EvacAction::ProcessTy(*ty, *shct));
-                            }
-
-                            dbgprintln!(
-                                "   added to worklist, length after this {}, prefix(5): {:?}",
-                                worklist.len(),
-                                &worklist[..std::cmp::min(5, worklist.len())]
-                            );
-
-                            src = src2;
-                            dst = dst2;
-                            dst_end = dst_end2;
-
-                            worklist_next!(worklist, next_action);
                         }
+
+                        for (ty, shct) in field_tys.iter().zip(shortcut_addrs.iter()).rev() {
+                            worklist.push(EvacAction::ProcessTy(*ty, *shct));
+                        }
+                        dbgprintln!(
+                            "   added to worklist, length after this {}, prefix(5): {:?}",
+                            worklist.len(),
+                            &worklist[..std::cmp::min(5, worklist.len())]
+                        );
+                        src = src2;
+                        dst = dst2;
+                        dst_end = dst_end2;
+                        // Next.
+                        worklist_next!(worklist, next_action);
                     }
                 } // End match tag
             }
@@ -1369,12 +1260,15 @@ unsafe fn evacuate_packed(
                 worklist_next!(worklist, next_action);
             }
         }
-    } // End while
+    } // End the worklist loop
 
     dbgprintln!("+Finished evacuate_packed: recording in so_env {:?} -> {:?}", orig_src, src);
-    // Provide skip-over information for what we just cleared out.
-    // FIXME: only insert if it is a non-zero location?
-    st.so_env.insert(orig_src, src);
+
+    if burn {
+        // Provide skip-over information for what we just cleared out.
+        // TODO: only insert if it is a non-zero location?
+        st.so_env.insert(orig_src, src);
+    }
 
     (src, dst, dst_end, forwarded)
 }

@@ -948,7 +948,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  -- generated during newbuffer.
                  EndOfBuffer{} -> pure []
 
-                 FreeBuffer -> if noGC
+                 FreeBuffer -> if noGC || genGC
                                then pure []
                                else
                                  let [(VarTriv _reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds

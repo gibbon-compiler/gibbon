@@ -633,7 +633,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
              NoDest ->
                case locsInTy valTy of
                  [] -> return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
-                 _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy ++ ". This might be caused by a main expression having a packed type."
+                 _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy ++ ". This might be caused by a main expression having a packed type." ++ sdoc ex0
 
     TimeIt e t b ->
         do (e',ty',cs') <- inferExp env e dest
