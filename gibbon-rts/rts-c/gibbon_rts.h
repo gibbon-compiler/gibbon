@@ -618,6 +618,7 @@ void gib_check_rust_struct_sizes(void);
 GibChunk gib_alloc_region(size_t size);
 GibChunk gib_alloc_region_on_heap(size_t size);
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
+void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
 
 // Trigger GC.
@@ -899,6 +900,17 @@ INLINE_HEADER GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
     GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
     return frame;
 }
+
+INLINE_HEADER GibShadowstackFrame *gib_shadowstack_peek(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    size_t size = sizeof(GibShadowstackFrame);
+    char *frame_start = stack_alloc_ptr - size;
+    assert(frame_start >= stack_start);
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) frame_start;
+    return frame;
+ }
 
 INLINE_HEADER int32_t gib_shadowstack_length(GibShadowstack *stack)
 {

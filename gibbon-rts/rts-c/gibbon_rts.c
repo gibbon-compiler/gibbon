@@ -1126,6 +1126,12 @@ GibChunk gib_alloc_region_on_heap(size_t size)
  * ~~~~~~~~~~~~~~~~~~~~
  */
 
+void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr)
+{
+    gib_grow_region(writeloc_addr, footer_addr);
+    return;
+}
+
 void gib_grow_region_in_nursery_slow(
     bool collected,
     bool old_chunk_in_nursery,
@@ -1453,42 +1459,19 @@ void gib_shadowstack_push_noinline(
     uint32_t datatype
 )
 {
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_end = stack->end;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    assert((stack_alloc_ptr + size) <= stack_end);
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
-    frame->ptr = ptr;
-    frame->endptr = endptr;
-    frame->gc_root_prov = gc_root_prov;
-    frame->datatype = datatype;
-    (*stack_alloc_ptr_addr) += size;
+    gib_shadowstack_push(stack, ptr, endptr, gc_root_prov, datatype);
     return;
 }
 
 GibShadowstackFrame *gib_shadowstack_pop_noinline(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    assert((stack_alloc_ptr - size) >= stack_start);
-    (*stack_alloc_ptr_addr) -= size;
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
-    return frame;
+    return gib_shadowstack_pop(stack);
 }
 
 
 GibShadowstackFrame *gib_shadowstack_peek_noinline(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    size_t size = sizeof(GibShadowstackFrame);
-    char *frame_start = stack_alloc_ptr - size;
-    assert(frame_start >= stack_start);
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) frame_start;
-    return frame;
+    return gib_shadowstack_peek(stack);
 }
 
 
@@ -1517,64 +1500,8 @@ void gib_indirection_barrier_noinline(
     uint32_t datatype
 )
 {
-    // Write the indirection.
-    uint16_t footer_offset = to_footer - to;
-    GibTaggedPtr tagged = GIB_STORE_TAG(to, footer_offset);
-    GibCursor writeloc = from;
-    *(GibPackedTag *) writeloc = GIB_INDIRECTION_TAG;
-    writeloc += sizeof(GibPackedTag);
-    *(GibTaggedPtr *) writeloc = tagged;
-
-    // If we're using the non-generational GC, all indirections will be
-    // old-to-old indirections.
-
-#ifdef _GIBBON_NONGENGC
-    gib_add_old_to_old_indirection(from_footer, to_footer);
-#else
-
-#ifdef _GIBBON_DEBUG
-    assert(from <= from_footer);
-    assert(to <= to_footer);
-#endif
-    // Add to remembered set if it's an old to young pointer.
-    bool from_old = !gib_addr_in_nursery(from);
-    bool to_young = gib_addr_in_nursery(to);
-
-    if (from_old) {
-        if (to_young) {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            fprintf(stderr, "Writing an old-to-young indirection, %p -> %p.\n", from, to);
-#endif
-
-            // (3) oldgen -> nursery
-            GibOldgen *oldgen = DEFAULT_GENERATION;
-            // Store the address of the indirection pointer, *NOT* the address of
-            // the indirection tag, in the remembered set.
-            char *indr_addr = (char *) from + sizeof(GibPackedTag);
-            gib_remset_push(oldgen->rem_set, indr_addr, from_footer, datatype);
-            return;
-        } else {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            fprintf(stderr, "Writing an old-to-old indirection, %p -> %p.\n", from, to);
-#endif
-
-            // (4) oldgen -> oldgen
-            gib_add_old_to_old_indirection(from_footer, to_footer);
-            return;
-        }
-    } else {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Writing a young-to-%s indirection, %p -> %p.\n",
-                (to_young ? "young" : "old"), from, to);
-#endif
-
-   }
-
+    gib_indirection_barrier(from, from_footer, to, to_footer, datatype);
     return;
-#endif // _GIBBON_NONGENGC
 }
 
 

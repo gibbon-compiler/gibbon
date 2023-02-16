@@ -471,7 +471,10 @@ pub mod c {
         // Region allocation.
         pub fn gib_alloc_region(size: usize) -> GibChunk;
         pub fn gib_alloc_region_on_heap(size: usize) -> GibChunk;
-        pub fn gib_grow_region(writeloc_addr: *mut *mut c_char, footer_addr: *mut *mut c_char);
+        pub fn gib_grow_region_noinline(
+            writeloc_addr: *mut *mut c_char,
+            footer_addr: *mut *mut c_char,
+        );
         pub fn gib_free_region(footer_ptr: *mut c_char);
 
         /// Trigger GC.

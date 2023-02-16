@@ -19,13 +19,7 @@ pub fn ss_push(rw: RW, ptr: *const i8, endptr: *const i8, ty: GibDatatype) {
             RW::Read => gib_global_read_shadowstacks,
             RW::Write => gib_global_write_shadowstacks,
         };
-        gib_shadowstack_push_noinline(
-            sstk,
-            ptr,
-            endptr,
-            GibGcRootProv::Stk,
-            ty,
-        );
+        gib_shadowstack_push_noinline(sstk, ptr, endptr, GibGcRootProv::Stk, ty);
     }
 }
 
@@ -52,7 +46,7 @@ pub fn ss_peek(rw: RW) -> *const GibShadowstackFrame {
 pub fn bounds_check(ptr: &mut *mut i8, endptr: &mut *mut i8, req: isize) {
     unsafe {
         if (*endptr).offset_from(*ptr) < req {
-            gib_grow_region(ptr, endptr);
+            gib_grow_region_noinline(ptr, endptr);
         }
     }
 }

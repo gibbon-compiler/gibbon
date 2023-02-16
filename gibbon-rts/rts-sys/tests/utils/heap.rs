@@ -318,7 +318,7 @@ fn serialize(obj_0: &Object) -> (*const i8, *const i8) {
                 }
                 Object::GrowRegion(obj) => {
                     unsafe {
-                        gib_grow_region(&mut dst, &mut dst_end);
+                        gib_grow_region_noinline(&mut dst, &mut dst_end);
                     }
                     worklist.push(SerAction::ProcessObj(obj));
                 }
