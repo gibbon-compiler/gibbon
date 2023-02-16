@@ -990,6 +990,25 @@ INLINE_HEADER void gib_indirection_barrier(
     uint32_t datatype
 )
 {
+    {
+        // Optimization: don't create long chains of indirection pointers.
+        GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
+        char *after_pointed_to_tag = to + 1;
+        uintptr_t tagged_ptr;
+        char *pointee, *pointee_end;
+        uint16_t pointee_offset;
+        while (pointed_to_tag == GIB_INDIRECTION_TAG) {
+            tagged_ptr = *(uintptr_t *) after_pointed_to_tag;
+            pointee = GIB_UNTAG(tagged_ptr);
+            pointee_offset = GIB_GET_TAG(tagged_ptr);
+            pointee_end = pointee + pointee_offset;
+            // Edit to and to_footer.
+            to = pointee;
+            to_footer = pointee_end;
+            pointed_to_tag = *(GibPackedTag *) to;
+            after_pointed_to_tag = to + 1;
+        }
+    }
     // Write the indirection.
     uint16_t footer_offset = to_footer - to;
     GibTaggedPtr tagged = GIB_STORE_TAG(to, footer_offset);
