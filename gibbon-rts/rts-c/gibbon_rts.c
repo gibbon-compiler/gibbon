@@ -748,13 +748,11 @@ void *gib_list_bumpalloc(size_t n)
 // Snapshot the current heap pointer value across all threads.
 void gib_list_bumpalloc_save_state(void)
 {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("Saving(%p): pos %d", heap_ptr, gib_global_list_num_saved_heap_ptr);
-#endif
     char *heap_ptr = gib_global_list_bumpalloc_heap_ptr;
     gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr] = heap_ptr;
     gib_global_list_num_saved_heap_ptr++;
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Saved(%p): pos %d\n", heap_ptr, gib_global_list_num_saved_heap_ptr);
     printf("\n");
 #endif
 }
@@ -766,14 +764,14 @@ void gib_list_bumpalloc_restore_state(void)
         exit(1);
     }
     gib_global_list_num_saved_heap_ptr--;
+    gib_global_list_bumpalloc_heap_ptr =
+        gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr];
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("Restoring(%p): pos %d, discarding %p",
+    printf("Restored(%p): pos %d, discarding %p",
            gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr],
            gib_global_list_num_saved_heap_ptr,
            gib_global_list_bumpalloc_heap_ptr);
 #endif
-    gib_global_list_bumpalloc_heap_ptr =
-        gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr];
 }
 
 #else
@@ -972,77 +970,6 @@ static size_t nursery_region_max_size = (NURSERY_SIZE / 2);
 // Same as SHADOWSTACK_SIZE, overflows are not checked.
 #define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 4 * 1024 * 1024)
 
-
-typedef struct gib_region_info {
-    GibSym id;
-    uint16_t refcount;
-    // Pointers to a structure that is initialized and tracked on the Rust heap.
-    void *outset;
-    char *first_chunk_footer;
-} GibRegionInfo;
-
-typedef struct gib_oldgen_footer {
-    GibRegionInfo *reg_info;
-    size_t size;
-    struct gib_oldgen_footer *next;
-} GibOldgenChunkFooter;
-
-typedef uint16_t GibNurseryChunkFooter;
-
-typedef struct gib_gc_stats {
-    // Number of copying minor collections (maintained by Rust RTS).
-    uint64_t minor_collections;
-
-    // Number of copying major collections (maintained by Rust RTS).
-    uint64_t major_collections;
-
-    // Overall memory allocated (maintained by C and Rust RTS).
-    size_t mem_allocated;
-
-    // Overall memory copied (maintained by Rust RTS).
-    size_t mem_copied;
-
-    // Overall memory burned (maintained by Rust RTS).
-    size_t mem_burned;
-
-    // Total number of forwarding pointers that could be added vs not added.
-    uint64_t forwarded;
-    uint64_t not_forwarded;
-
-    // Total number of indirections inlined vs not inlined.
-    uint64_t indirs_inlined;
-    uint64_t indirs_not_inlined;
-
-    // Total number of redirections inlined vs not inlined.
-    uint64_t redirs_inlined;
-    uint64_t redirs_not_inlined;
-
-    // Number of regions in the nursery (maintained by C RTS).
-    uint64_t nursery_regions;
-
-    // Number of regions in the old generation (maintained by C and Rust RTS).
-    uint64_t oldgen_regions;
-
-    // Number of chunks created due to growing regions in the nursery (maintained by C RTS).
-    uint64_t nursery_chunks;
-
-    // Number of chunks created due to growing regions in the old generation (maintained by Rust RTS).
-    uint64_t oldgen_chunks;
-
-    // Total GC time (maintained by C RTS).
-    double gc_elapsed_time;
-    double gc_cpu_time;
-
-    // Fine grained stats to measure various different parts of the collector
-    // (maintained by Rust RTS).
-    double gc_rootset_sort_time;
-    double gc_burn_time;
-    double gc_find_fwdptr_time;
-    double gc_info_tbl_lkp_time;
-    double gc_zct_mgmt_time;
-
-} GibGcStats;
-
 // Whether storage is initialized or not.
 bool gib_storage_initialized = false;
 
@@ -1062,9 +989,6 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 // Collect GC statistics.
 GibGcStats *gib_global_gc_stats = (GibGcStats *) NULL;
 
-
-// Convenience macro.
-#define GC_STATS gib_global_gc_stats
 
 
 /*
@@ -1202,147 +1126,7 @@ GibChunk gib_alloc_region_on_heap(size_t size)
  * ~~~~~~~~~~~~~~~~~~~~
  */
 
-void gib_grow_region(char **writeloc_addr, char **footer_addr);
-STATIC_INLINE void gib_grow_region_in_nursery_fast(
-    bool collected,
-    bool old_chunk_in_nursery,
-    size_t size,
-    GibOldgenChunkFooter *old_footer,
-    char **writeloc_addr,
-    char **footer_addr
-);
-static void gib_grow_region_in_nursery_slow(
-    bool collected,
-    bool old_chunk_in_nursery,
-    size_t size,
-    GibOldgenChunkFooter *old_footer,
-    char **writeloc_addr,
-    char **footer_addr
-);
-STATIC_INLINE void gib_grow_region_on_heap(
-    bool old_chunk_in_nursery,
-    size_t size,
-    GibOldgenChunkFooter *old_footer,
-    char **writeloc_addr,
-    char **footer_addr
-);
-
-void gib_grow_region(char **writeloc_addr, char **footer_addr)
-{
-    char *footer_ptr = *footer_addr;
-    size_t newsize;
-    bool old_chunk_in_nursery;
-    GibOldgenChunkFooter *old_footer = NULL;
-
-    if (gib_addr_in_nursery(footer_ptr)) {
-        old_chunk_in_nursery = true;
-        GibNurseryChunkFooter oldsize = *(GibNurseryChunkFooter *) footer_ptr;
-        newsize = oldsize * 2;
-    } else {
-        old_chunk_in_nursery = false;
-        old_footer = (GibOldgenChunkFooter *) footer_ptr;
-        newsize = sizeof(GibOldgenChunkFooter) + (old_footer->size);
-        newsize = newsize * 2;
-        if (newsize > MAX_CHUNK_SIZE) {
-            newsize = MAX_CHUNK_SIZE;
-        }
-    }
-
-#ifdef _GIBBON_DISABLE_EAGER_PROMOTION
-    // If the old chunk is in nursery, try to grow it in the nursery.
-    // Otherwise put it on the heap since we don't have a remembered set for
-    // redirection pointers yet.
-    if (old_chunk_in_nursery) {
-        gib_grow_region_in_nursery_fast(
-            false,
-            old_chunk_in_nursery,
-            newsize,
-            old_footer,
-            writeloc_addr,
-            footer_addr
-        );
-    } else {
-        gib_grow_region_on_heap(
-            old_chunk_in_nursery,
-            newsize,
-            old_footer,
-            writeloc_addr,
-            footer_addr
-        );
-    }
-#else
-    gib_grow_region_on_heap(
-        old_chunk_in_nursery,
-        newsize,
-        old_footer,
-        writeloc_addr,
-        footer_addr
-    );
-#endif
-
-}
-
-STATIC_INLINE void gib_grow_region_in_nursery_fast(
-    bool collected,
-    bool old_chunk_in_nursery,
-    size_t size,
-    GibOldgenChunkFooter *old_footer,
-    char **writeloc_addr,
-    char **footer_addr
-) {
-    GibNursery *nursery = DEFAULT_NURSERY;
-    char *old = nursery->alloc;
-    char *bump = old - size - sizeof(GibNurseryChunkFooter);
-
-    if (bump >= nursery->heap_start) {
-
-#ifdef _GIBBON_GCSTATS
-        GC_STATS->nursery_chunks++;
-#endif
-
-        nursery->alloc = bump;
-        char *footer = old - sizeof(GibNurseryChunkFooter);
-        *(GibNurseryChunkFooter *) footer = size;
-        char *heap_start = bump;
-        char *heap_end = footer;
-
-        // Write a redirection tag at writeloc and make it point to the start of
-        // this fresh chunk, but store a tagged pointer here.
-        uint16_t new_footer_offset = heap_end - heap_start;
-        GibTaggedPtr tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
-        GibCursor writeloc = *writeloc_addr;
-        *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
-        writeloc += 1;
-        *(GibTaggedPtr *) writeloc = tagged;
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Growing a region without eager promotion old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d\n",
-                *writeloc_addr, *footer_addr, old_chunk_in_nursery, heap_start, heap_end, true);
-        fprintf(stderr, "  allocated %zu bytes in the nursery\n", size);
-        fprintf(stderr, "  wrote a redirection pointer at %p to %p\n", *writeloc_addr, heap_start);
-#endif
-
-        // Update start and end cursors.
-        *(char **) writeloc_addr = heap_start;
-        *(char **) footer_addr = heap_end;
-
-        return;
-
-    } else {
-        gib_grow_region_in_nursery_slow(
-            collected,
-            old_chunk_in_nursery,
-            size,
-            old_footer,
-            writeloc_addr,
-            footer_addr
-        );
-
-        return;
-    }
-}
-
-static void gib_grow_region_in_nursery_slow(
+void gib_grow_region_in_nursery_slow(
     bool collected,
     bool old_chunk_in_nursery,
     size_t size,
@@ -1382,69 +1166,6 @@ static void gib_grow_region_in_nursery_slow(
         writeloc_addr,
         footer_addr
     );
-}
-
-STATIC_INLINE void gib_grow_region_on_heap(
-    bool old_chunk_in_nursery,
-    size_t size,
-    GibOldgenChunkFooter *old_footer,
-    char **writeloc_addr,
-    char **footer_addr
-) {
-    char *heap_start = (char *) gib_alloc(size);
-    if (heap_start == NULL) {
-        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", size);
-        exit(1);
-    }
-    char *heap_end = heap_start + size;
-
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->oldgen_chunks++;
-    GC_STATS->mem_allocated += size;
-#endif
-
-    // Write a new footer for this chunk and link it with the old chunk's footer.
-    char *new_footer_start = NULL;
-    GibOldgenChunkFooter *new_footer = NULL;
-    if (old_chunk_in_nursery) {
-        new_footer_start = gib_init_footer_at(heap_end, size, 0);
-        new_footer = (GibOldgenChunkFooter *) new_footer_start;
-        gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
-    } else {
-        new_footer_start = heap_end - sizeof(GibOldgenChunkFooter);
-        new_footer = (GibOldgenChunkFooter *) new_footer_start;
-        new_footer->reg_info = old_footer->reg_info;
-        new_footer->size = (size_t) (new_footer_start - heap_start);
-        new_footer->next = (GibOldgenChunkFooter *) NULL;
-        // Link with the old chunk's footer.
-        old_footer->next = (GibOldgenChunkFooter *) new_footer;
-    }
-
-    // Write a redirection tag at writeloc and make it point to the start of
-    // this fresh chunk, but store a tagged pointer here.
-    uint16_t new_footer_offset = new_footer_start - heap_start;
-    GibTaggedPtr tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
-    GibCursor writeloc = *writeloc_addr;
-    *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
-    writeloc += 1;
-    *(GibTaggedPtr *) writeloc = tagged;
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d \n",
-            *writeloc_addr, *footer_addr, old_chunk_in_nursery, heap_start, new_footer_start, false);
-    fprintf(stderr,
-            "  allocated %zu bytes for region %" PRIu64 " on the heap\n",
-            size,
-            (new_footer->reg_info)->id);
-    fprintf(stderr, "  wrote a redirection pointer at %p to %p\n",
-            *writeloc_addr, heap_start);
-#endif
-
-    // Update start and end cursors.
-    *(char **) writeloc_addr = heap_start;
-    *(char **) footer_addr = new_footer_start;
-
-    return;
 }
 
 
@@ -1941,27 +1662,6 @@ static void gib_gc_stats_print(GibGcStats *stats)
  * Save and restore GC's state
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-
-typedef struct gib_gc_state_snapshot {
-    // nursery
-    char *nursery_alloc;
-    char *nursery_heap_start;
-
-    // generations
-    char *gen_rem_set_alloc;
-    void *gen_old_zct;
-    void *gen_new_zct;
-
-    // shadow-stacks
-    char *ss_read_alloc;
-    char *ss_write_alloc;
-
-    // region metadata
-    uint64_t num_regions;
-    GibRegionInfo **reg_info_addrs;
-    char **outsets;
-
-} GibGcStateSnapshot;
 
 GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
 {
