@@ -589,7 +589,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+                  -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" simplifyLocBinds l2

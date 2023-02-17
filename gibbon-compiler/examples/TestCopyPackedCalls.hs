@@ -110,20 +110,20 @@ gibbon_main = let
                 t6' = traversal6 t1
                 t7' = traversal7 t1
                 _  = printPacked t1
+                _  = printsym (quote "")
+                _  = printPacked t1'
                 _  = printsym (quote "NEWLINE")
-                _  = printPacked t1' 
-                _  = printsym (quote "NEWLINE")
-                _  = printPacked t2' 
+                _  = printPacked t2'
                 _  = printsym (quote "NEWLINE")
                 _  = printPacked t3'
                 _  = printsym (quote "NEWLINE")
-                _  = printPacked t4'
-                _  = printsym (quote "NEWLINE")
+                -- -- ERROR
+                -- _  = printPacked t4'
+                -- _  = printsym (quote "NEWLINE")
                 _  = printPacked t5'
                 _  = printsym (quote "NEWLINE")
                 _  = printPacked t6'
                 _  = printsym (quote "NEWLINE")
-                _  = printPacked t7'  
+                _  = printPacked t7'
+                _  = printsym (quote "NEWLINE")
                in ()
-
-
