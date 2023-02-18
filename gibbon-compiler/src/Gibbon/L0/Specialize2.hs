@@ -1378,14 +1378,13 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
 -- | Desugar parallel tuples to spawn's and sync's, and printPacked into function calls.
 desugarL0 :: Prog0 -> PassM Prog0
-desugarL0 prg@(Prog ddefs _fundefs _mainExp) = do
-  (Prog ddefs' fundefs' mainExp') <- addRepairFns prg
-  let ddefs'' = M.map desugar_tuples ddefs'
-  fundefs'' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs'
-  mainExp'' <- case mainExp' of
+desugarL0 prg@(Prog ddefs fundefs mainExp) = do
+  let ddefs'' = M.map desugar_tuples ddefs
+  fundefs'' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
+  mainExp'' <- case mainExp of
                 Nothing     -> pure Nothing
                 Just (e,ty) -> Just <$> (,ty) <$> go e
-  pure $ Prog ddefs'' fundefs'' mainExp''
+  addRepairFns (Prog ddefs'' fundefs'' mainExp'')
   where
     err1 msg = error $ "desugarL0: " ++ msg
 
@@ -1616,7 +1615,8 @@ genPrintFn DDef{tyName, dataCons} = do
   casebod <- forM dataCons $ \(dcon, tys) ->
              do xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
-                let bnds = foldr (\(ty,x,y) acc ->
+                let fn = (\(ty,x,y) acc0 ->
+                                     let acc = (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar " ")]) : acc0 in
                                      case ty of
                                        IntTy   -> (y, [], ProdTy [], PrimAppE PrintInt [VarE x]) : acc
                                        FloatTy -> (y, [], ProdTy [], PrimAppE PrintFloat [VarE x]) : acc
@@ -1632,8 +1632,7 @@ genPrintFn DDef{tyName, dataCons} = do
                                        SymHashTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "SymHash")]) : acc
                                        IntHashTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "IntHash")]) : acc
                                        _ -> acc)
-                          []
-                          (zip3 (map snd tys) xs ys)
+                let bnds = foldr fn [] (zip3 (map snd tys) xs ys)
                 w1 <- gensym "wildcard"
                 w2 <- gensym "wildcard"
                 let bnds' = [(w1, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon ++ " ")))])] ++

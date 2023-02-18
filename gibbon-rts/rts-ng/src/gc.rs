@@ -656,9 +656,10 @@ unsafe fn evacuate_packed(
                             (*GC_STATS).gc_find_fwdptr_time
                         );
                         dbgprintln!(
-                            "   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}",
+                            "   forwarding ptr!: src {:?}, wrote tagged ptr ({:?},{:?}) to dest {:?}",
                             src,
-                            tagged_fwd_ptr,
+                            tagged_fwd_ptr.untag(),
+                            tagged_fwd_ptr.get_tag(),
                             dst
                         );
                         let space_reqd = 32;

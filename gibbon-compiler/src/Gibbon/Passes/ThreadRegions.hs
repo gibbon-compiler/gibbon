@@ -108,8 +108,15 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
   bod' <- threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs M.empty S.empty S.empty funBody
   -- Boundschecking
   dflags <- getDynFlags
-  let (free_rlocs,free_wlocs) = (S.fromList (inLocVars funTy), S.fromList (outLocVars funTy))
-  (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env initRegEnv
+  let free_wlocs = S.fromList (outLocVars funTy)
+  let free_rlocs = S.fromList (inLocVars funTy)
+  let free_rlocs' = let tmp = concatMap (\(x,ty) -> case unTy2 ty of
+                                            PackedTy _ loc -> [(Just x,loc)]
+                                            _ -> []) $
+                              zip funArgs (arrIns funTy)
+                        tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
+                    in S.fromList $ tmp ++ tmp2
+  (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs' free_wlocs rlocs_env wlocs_env initRegEnv
   let no_eager_promote = gopt Opt_NoEagerPromote dflags
   let bod'' = -- This function is always given a BigInfinite region.
               if gopt Opt_BigInfiniteRegions dflags || isCopySansPtrsFunName funName
@@ -153,7 +160,6 @@ threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> [LREM] -> RegEnv -> Env2 Ty2
                  -> NewL2.Exp2 -> PassM NewL2.Exp2
 threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs ex =
   case ex of
-
     AppE f applocs args -> do
       let ty = gRecoverType ddefs env2 ex
           argtys = map (gRecoverType ddefs env2) args
@@ -301,11 +307,19 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
         bod3 <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' pkd_env1 region_locs3 ran_env indirs redirs bod2
+
+        -- shadowstack  ops
+        --------------------
         let -- free = S.fromList $ freeLocVars bod
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
-            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
-        (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
+            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
+            free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
+                                    filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                           (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
+                              tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
+                          in S.fromList $ tmp ++ tmp2
+        (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs' free_wlocs rlocs_env wlocs_env renv
         emit_ss <- emit_ss_instrs
         if emit_ss && funCanTriggerGC (funMeta (fundefs # f))
           then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
@@ -381,11 +395,19 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
            rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
            wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
        bod1 <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env region_locs ran_env indirs redirs bod
+
+       -- shadowstack  ops
+       --------------------
        let -- free = S.fromList $ freeLocVars bod
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
-            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
-       (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
+            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
+            free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
+                                    filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                           (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
+                              tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
+                          in S.fromList $ tmp ++ tmp2
+       (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs' free_wlocs rlocs_env wlocs_env renv
        emit_ss <- emit_ss_instrs
        if emit_ss
          then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, rhs')] ++ wpop ++ rpop
@@ -450,11 +472,18 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
 
         TagCursor a b -> return $ Ext $ TagCursor a b
         LetRegionE r sz ty bod -> do
+          -- shadowstack  ops
+          --------------------
           let -- free = S.fromList $ freeLocVars bod
               free = ss_free_locs (S.singleton (regionToVar r)) env2 bod
-              free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
-          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv
+              free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
+              free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
+                                      filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                             (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
+                                tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
+                            in S.fromList $ tmp ++ tmp2
+          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs' free_wlocs rlocs_env wlocs_env renv
           emit_ss <- emit_ss_instrs
           bod' <- go bod
           if emit_ss
@@ -569,17 +598,19 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
 hole_tycon :: String
 hole_tycon = "HOLE"
 
-ss_ops :: S.Set Var -> S.Set Var -> AllocEnv -> AllocEnv -> RegEnv ->
+ss_ops :: S.Set (Maybe Var, LocVar) -> S.Set Var -> AllocEnv -> AllocEnv -> RegEnv ->
           PassM
           ([(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)],
            [(Var, [LocArg], Ty2, Exp2)], [(Var, [LocArg], Ty2, Exp2)])
 ss_ops free_rlocs free_wlocs rlocs_env wlocs_env renv = do
-      rpush <- (foldrM (\x acc -> do
+      rpush <- (foldrM (\(mb_x,loc) acc -> do
                          push <- gensym "ss_push"
-                         let tycon = rlocs_env # x
+                         let tycon = rlocs_env # loc
                          if tycon == hole_tycon
                          then pure acc
-                         else pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Read x (toEndV (renv # x)) tycon) : acc))
+                         else case mb_x of
+                                Nothing -> pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Read loc (toEndV (renv # loc)) tycon) : acc)
+                                Just x  -> pure ((push,[],MkTy2 (ProdTy []), Ext $ SSPush Read x (toEndV (renv # loc)) tycon) : acc))
                        []
                        free_rlocs) :: PassM [(Var, [LocArg], Ty2, Exp2)]
       wpush <- (foldrM (\x acc -> do
