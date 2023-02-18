@@ -142,5 +142,5 @@ gibbon_main =
         coins6 = Cons (1,177) (Cons (5,122) (Cons (10,99) (Cons (25,88) (Cons (100,88) (Cons (250,55) Nil)))))
         amt = sizeParam
         tr = iterate (payA_seq amt coins6)
-    -- in check_coins amt tr
-    in ()
+    in check_coins amt tr
+    -- in ()
