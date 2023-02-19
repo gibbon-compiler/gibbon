@@ -80,8 +80,8 @@ typedef uint64_t GibThreadId;
 #define ATTR_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTR_HOT __attribute__((hot))
 
-#define LIKELY(x) __builtin_expect((bool) x, 1)
-#define UNLIKELY(x) __builtin_expect((bool) x, 0)
+#define LIKELY(x) __builtin_expect((bool) (x), 1)
+#define UNLIKELY(x) __builtin_expect((bool) (x), 0)
 
 /*
  * Inlining macros taken from GHC:

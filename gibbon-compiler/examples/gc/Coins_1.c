@@ -561,9 +561,9 @@ GibCursorGibCursorGibCursorGibCursorProd getCoins1(GibCursor end_r_1159,
 
         GibCursor writecur_1930 = writecur_1929 + sizeof(GibInt);
 
-        if (loc_1291 + 18 > end_r_1160) {
-            gib_grow_region(&loc_1291, &end_r_1160);
-        }
+        // if (loc_1291 + 18 > end_r_1160) {
+        //     gib_grow_region(&loc_1291, &end_r_1160);
+        // }
         gib_indirection_barrier(loc_1291, end_r_1160, coins_rst_92_507_717,
                                 end_r_1159, PList_v_280_T);
 
