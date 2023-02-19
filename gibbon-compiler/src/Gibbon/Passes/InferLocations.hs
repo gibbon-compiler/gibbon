@@ -1732,7 +1732,7 @@ copyOutOfOrderPacked :: Prog1 -> PassM Prog1
 copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
     mnExp' <- case mnExp of
                    Nothing -> pure Nothing
-                   Just (ex,ty) -> do (_, ex') <- go init_fun_env M.empty [] ex
+                   Just (ex,ty) -> do ex' <- go init_fun_env [] ex
                                       pure $ Just (ex', ty)
     fndefs' <- mapM fd fndefs
     let prg' = Prog ddfs fndefs' mnExp'
@@ -1744,156 +1744,78 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
     fd :: FunDef1 -> PassM FunDef1
     fd fn@FunDef{funArgs,funBody,funTy} = do
         let env2 = L1.extendsVEnv (M.fromList $ zip funArgs (fst funTy)) init_fun_env
-        (cpy_env, funBody') <- go env2 M.empty funArgs funBody
+        funBody' <- go env2 funArgs funBody
         pure $ fn { funBody = funBody' }
 
-    findvar :: Var -> M.Map Var (TyCon,Var,Var) -> Maybe Var
-    findvar v cpy_env = M.lookup v $
-                        M.fromList $
-                        map (\(a,b,c) -> (b,c)) $
-                        M.elems cpy_env
-
-    go :: Env2 Ty1 -> M.Map Var (TyCon,Var,Var) -> [Var] -> Exp1
-       -> PassM (M.Map Var (TyCon,Var,Var), Exp1)
-    go env2 cpy_env order ex =
+    go :: Env2 Ty1 -> [Var] -> Exp1 -> PassM Exp1
+    go env2 order ex =
       case ex of
         DataConE loc dcon args -> do
           -- assumption: program is in ANF
-          let idxs = foldr (\x acc ->
-                              case x of
-                                VarE v -> case L.findIndex (== v) order of
-                                            Nothing -> acc
-                                            Just i  -> (v, i) : acc
-                                _ -> acc)
-                           [] args
+          let idxs = [(v, fromJust $ L.findIndex (== v) order) | VarE v <- args]
           let needs_copy = case idxs of
                              []     -> M.empty
-                             (x:xs) -> (\(_,b,_) -> b) $
-                                         foldl (\((prev_w,prev_idx), ncs, new_idxs) (w,idx) ->
-                                                  -- FIXME check
-                                                  let prev_idx' = M.findWithDefault prev_idx prev_w new_idxs in
-                                                    if (idx < prev_idx')
-                                                    then ((w,idx), M.insert w prev_w ncs, M.insert w (prev_idx'+1) new_idxs)
-                                                    else ((w,idx), ncs, new_idxs))
-                                           (x, M.empty, M.empty) xs
-          let add_copies = (\(acc1,acc2) arg ->
-                               case arg of
-                                 VarE w ->
-                                   case M.lookup w needs_copy of
-                                     Nothing     -> pure (acc1, acc2 ++ [VarE w])
-                                     Just prev_w ->
-                                       case (L1.lookupVEnv w env2, L1.lookupVEnv prev_w env2) of
-                                         (PackedTy tycon _, PackedTy _ _) -> do
-                                           -- FIXME check
-                                           let prev = case findvar prev_w acc1 of
-                                                        Nothing -> prev_w
-                                                        Just y  -> y
-                                           w' <- gensym w
-                                           pure (M.insert prev (tycon,w,w') acc1, acc2 ++ [VarE w'])
-                                         _ -> pure (acc1, acc2 ++ [VarE w])
-                                 _ -> pure (acc1, acc2 ++ [arg]))
-          (cpy_env1, args1) <- F.foldlM add_copies (cpy_env,[]) args
-          pure $ (cpy_env1, DataConE loc dcon args1)
-
+                             (x:xs) -> snd $
+                                         foldl (\((prev_w,prev_idx), ncs) (w,idx) ->
+                                                if idx < prev_idx
+                                                then ((w,idx), M.insert w prev_w ncs)
+                                                else ((w,idx), ncs))
+                                           (x, M.empty) xs
+          let args' = map (\arg -> case arg of
+                                     VarE w ->
+                                       case M.lookup w needs_copy of
+                                         Nothing     -> VarE w
+                                         Just prev_w ->
+                                           case (L1.lookupVEnv w env2, L1.lookupVEnv prev_w env2) of
+                                             (PackedTy tycon _, PackedTy _ _) ->
+                                               let f = mkCopyFunName tycon
+                                               in dbgTrace 3 ("Copying " ++ fromVar w) $
+                                                  AppE f [] [VarE w]
+                                             _ -> VarE w
+                                     _ -> arg)
+                      args
+          pure $ DataConE loc dcon args'
+        ----------------------------------------
+        VarE{}    -> pure ex
+        LitE{}    -> pure ex
+        CharE{}   -> pure ex
+        FloatE{}  -> pure ex
+        LitSymE{} -> pure ex
+        AppE v locs ls -> do
+          ls' <- mapM (go env2 order) ls
+          pure $ AppE v locs ls'
+        PrimAppE pr args -> do
+          args' <- mapM (go env2 order) args
+          pure $ PrimAppE pr args'
         LetE (v,locs,ty,rhs) bod -> do
-          (cpy_env1, rhs1) <- go env2 cpy_env order rhs
-          (cpy_env2, bod1) <- go (L1.extendVEnv v ty env2) cpy_env1 (order ++ [v]) bod
-
-          -- FIXME check
-          let loop x acc = case M.lookup x cpy_env2 of
-                             Just (tycon,w,w') -> do
-                               let f = mkCopyFunName tycon
-                               acc' <- loop w' acc
-                               pure $ LetE (w',[],PackedTy tycon (),AppE f [] [VarE w]) acc'
-                             Nothing -> pure acc
-
-          case M.lookup v cpy_env2 of
-            Just (tycon,w,w') -> do
-              let f = mkCopyFunName tycon
-              copies <- loop v bod1
-              pure (cpy_env2, LetE (v,locs,ty,rhs1) copies)
-            Nothing -> pure $ (cpy_env2, LetE (v,locs,ty,rhs1) bod1)
-
+          rhs' <- go env2 order rhs
+          bod' <- go (L1.extendVEnv v ty env2) (order ++ [v]) bod
+          pure $ LetE (v,locs,ty,rhs') bod'
+        IfE a b c  -> IfE <$> (go env2 order a) <*> (go env2 order b) <*> (go env2 order c)
+        MkProdE ls -> MkProdE <$> mapM (go env2 order) ls
+        ProjE i arg -> (ProjE i) <$> go env2 order arg
         CaseE scrt ls -> do
-          (cpy_env1, scrt1) <- go env2 cpy_env order scrt
-          let doPat (dcon,vs,rhs) (acc1, acc2) = do
+          scrt' <- go env2 order scrt
+          let doPat (dcon,vs,rhs) = do
                 let vars = map fst vs
                 let tys = lookupDataCon ddfs dcon
                 let env2' = L1.extendsVEnv (M.fromList (zip vars tys)) env2
-                (acc1', rhs1) <- go env2' acc1 (order ++ vars) rhs
-                -- FIXME check
-                let rhs2 = foldr (\x acc3 -> case M.lookup x acc1' of
-                                               Nothing -> acc3
-                                               Just (tycon,w,w') ->
-                                                 let f = mkCopyFunName tycon in
-                                                   LetE (w',[],PackedTy tycon (),AppE f [] [VarE w]) acc3)
-                                 rhs1 vars
-                pure (acc1' `M.union` acc1, (dcon,vs,rhs1) : acc2)
-          (cpy_env2, ls1) <- F.foldrM doPat (cpy_env1, []) ls
-          pure $ (cpy_env2, CaseE scrt1 ls1)
-
-        ----------------------------------------
-        VarE{}    -> pure (cpy_env, ex)
-        LitE{}    -> pure (cpy_env, ex)
-        CharE{}   -> pure (cpy_env, ex)
-        FloatE{}  -> pure (cpy_env, ex)
-        LitSymE{} -> pure (cpy_env, ex)
-        AppE v locs ls -> do
-          (cpy_env1, ls1) <- F.foldrM
-                               (\e (acc1,acc2) -> do
-                                  (a,b) <- go env2 acc1 order e
-                                  pure (a `M.union` acc1, b : acc2))
-                               (cpy_env, [])
-                               ls
-          pure $ (cpy_env1, AppE v locs ls1)
-        PrimAppE pr ls -> do
-          (cpy_env1, ls1) <- F.foldrM
-                               (\e (acc1,acc2) -> do
-                                  (a,b) <- go env2 acc1 order e
-                                  pure (a `M.union` acc1, b : acc2))
-                               (cpy_env, [])
-                               ls
-          pure $ (cpy_env1, PrimAppE pr ls1)
-        IfE a b c  -> do
-          (cpy_env1, a1) <- go env2 cpy_env order a
-          (cpy_env2, b1) <- go env2 cpy_env1 order b
-          (cpy_env3, c1) <- go env2 cpy_env2 order c
-          pure $ (cpy_env3, IfE a1 b1 c1)
-        MkProdE ls -> do
-          (cpy_env1, ls1) <- F.foldrM
-                               (\e (acc1,acc2) -> do
-                                  (a,b) <- go env2 acc1 order e
-                                  pure (a `M.union` acc1, b : acc2))
-                               (cpy_env, [])
-                               ls
-          pure $ (cpy_env1, MkProdE ls1)
-        ProjE i arg -> do
-          (cpy_env1, arg1) <- go env2 cpy_env order arg
-          pure (cpy_env1, ProjE i arg1)
+                rhs' <- go env2' (order ++ vars) rhs
+                pure (dcon,vs,rhs')
+          ls' <- mapM doPat ls
+          pure $ CaseE scrt' ls'
         TimeIt arg ty b -> do
-          (cpy_env1, arg1) <- go env2 cpy_env order arg
-          pure $ (cpy_env1, TimeIt arg1 ty b)
-        WithArenaE a e -> do
-          (cpy_env1, e1) <- go env2 cpy_env order e
-          pure $ (cpy_env1, WithArenaE a e1)
-        SpawnE v locs ls -> do
-          (cpy_env1, ls1) <- F.foldrM
-                               (\e (acc1,acc2) -> do
-                                  (a,b) <- go env2 acc1 order e
-                                  pure (a `M.union` acc1, b : acc2))
-                               (cpy_env, [])
-                               ls
-          pure $ (cpy_env1, SpawnE v locs ls1)
-        SyncE -> pure (cpy_env, SyncE)
-        Ext (BenchE fn locs ls b) -> do
-          (cpy_env1, ls1) <- F.foldrM
-                               (\e (acc1,acc2) -> do
-                                  (a,b) <- go env2 acc1 order e
-                                  pure (a `M.union` acc1, b : acc2))
-                               (cpy_env, [])
-                               ls
-          pure $ (cpy_env1, Ext (BenchE fn locs ls1 b))
-        Ext (L1.AddFixed{}) -> pure (cpy_env, ex)
+          arg' <- go env2 order arg
+          pure $ TimeIt arg' ty b
+        WithArenaE a e  -> WithArenaE a <$> go env2 order e
+        SpawnE fn locs ls -> do
+          ls' <- mapM (go env2 order) ls
+          pure $ SpawnE fn locs ls'
+        SyncE -> pure SyncE
+        Ext (BenchE fn locs args b) -> do
+          args' <- mapM (go env2 order) args
+          pure $ Ext (BenchE fn locs args' b)
+        Ext (L1.AddFixed{}) -> pure ex
         MapE{}  -> error "copyOutOfOrderPacked: todo MapE"
         FoldE{} -> error "copyOutOfOrderPacked: todo FoldE"
 
