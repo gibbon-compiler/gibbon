@@ -170,7 +170,7 @@ unariserExp isTerminal ddfs stk env2 ex =
       case stk of
         -- data constructor arguments are also terminal
         [] -> discharge stk <$>
-              (DataConE loc dcon <$> mapM (go isTerminal env2) args)
+              (DataConE loc dcon <$> mapM (go False env2) args)
         _  -> error $ "Impossible. Non-empty projection stack on DataConE "++show stk
 
     TimeIt e ty b -> do
@@ -294,7 +294,7 @@ flatProjIdx n ty =
 -- ProdTy [IntTy, IntTy, IntTy, IntTy, IntTy, IntTy]
 --
 flattenTy :: Ty3 -> Ty3
-flattenTy ty =
+flattenTy ty = 
   case ty of
     ProdTy _ -> ProdTy $ go ty
     _ -> ty
