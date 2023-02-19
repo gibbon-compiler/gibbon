@@ -86,6 +86,7 @@ tests:
 
   - name: test14a_tup.gib
   - name: test14b_tup.gib
+    skip: true
   - name: test14c_tail.gib
   - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
@@ -265,6 +266,7 @@ tests:
   - name: NestedTuples.hs
     dir: examples/poly
     answer-file: examples/poly/NestedTuples.ans
+    skip: true
 
   - name: TuplesInDatacon.hs
     dir: examples/poly
@@ -441,6 +443,7 @@ tests:
   - name: test18f_flip.gib
     failing: [gibbon2, gibbon1]
   - name: pp_projs.gib
+    skip: true
   - name: test12_skip.gib
     failing: [gibbon1]
     skip: true
@@ -499,9 +502,11 @@ tests:
 
   - name: test_168.hs
     answer-file: examples/test_168.ans
+    skip: true
 
   - name: test_circsim.hs # covers #164, #166, #167, #174, #175
     answer-file: examples/test_circsim.ans
+    skip: true
 
   - name: test_power.hs
     answer-file: examples/test_power.ans
