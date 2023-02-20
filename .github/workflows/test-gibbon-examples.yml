@@ -7,10 +7,14 @@ on:
       - main
   pull_request:
     types:
-      - review_requested
+      - opened
+      - reopened
+      - synchronize
       - ready_for_review
 jobs:
   linux:
+    name: test-gibbon-examples
+    if: github.event.pull_request.draft == false
     name: test-gibbon-examples
     runs-on: ubuntu-18.04
     steps:
@@ -61,3 +65,9 @@ jobs:
           export GIBBONDIR=`pwd`
           cd gibbon-compiler/
           cabal v2-exec -w /opt/ghc/9.0.1/bin/ghc test-gibbon-examples -- -v2
+  fail_if_pull_request_is_draft:
+    if: github.event.pull_request.draft == true
+    runs-on: ubuntu-18.04
+    steps:
+    - name: Fails in order to indicate that pull request needs to be marked as ready to review and unit tests workflow needs to pass.
+      run: exit 1

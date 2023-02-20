@@ -30,6 +30,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Language.Constants
 import           Gibbon.Language.Syntax
 import           Gibbon.Common
+import GHC.Stack
 
 --------------------------------------------------------------------------------
 
@@ -755,13 +756,13 @@ tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | Ensure that an expression is trivial.
-assertTriv :: (Expression e) => e -> a -> a
+assertTriv :: (HasCallStack, Expression e) => e -> a -> a
 assertTriv e =
   if isTrivial e
   then id
   else error$ "Expected trivial argument, got: "++sdoc e
 
 -- | List version of 'assertTriv'.
-assertTrivs :: (Expression e) => [e] -> a -> a
+assertTrivs :: (HasCallStack, Expression e) => [e] -> a -> a
 assertTrivs [] = id
 assertTrivs (a:b) = assertTriv a . assertTrivs b

@@ -932,7 +932,7 @@ ensureEqual exp str a b = if a == b
 -- Includes an expression for error reporting.
 ensureEqualTy :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
-                                         ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
+                                         ++ (sdoc a) ++ " <> " ++ (sdoc b)) a b
 
 ensureEqualTyModCursor :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy

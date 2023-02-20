@@ -890,7 +890,7 @@ cursorizeProd isPackedContext ddfs fundefs denv tenv senv ex =
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
                   _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv senv e
-                  _ | hasPacked ty  -> error $ "cursorizePackedExp: nested tuples" ++ sdoc rhs
+                  _ | hasPacked ty  -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv senv e
                   _ -> cursorizeExp ddfs fundefs denv tenv senv e
       let rhs' = MkProdE es
           ty   = gRecoverType ddfs (Env2 tenv M.empty) rhs

@@ -1,13 +1,15 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Gibbon.L0.Typecheck where
 
 import           Control.Monad.State ( MonadState )
 import           Control.Monad.Except
-#if !MIN_VERSION_base(4,15,0)
-import           Control.Monad.Fail
+#if !MIN_VERSION_base(4,13,0)
+-- https://downloads.haskell.org/ghc/8.8.1/docs/html/users_guide/8.8.1-notes.html
+import           Control.Monad.Fail(MonadFail(..))
 #endif
 import           Data.Foldable ( foldlM )
 import qualified Data.List as L
@@ -847,7 +849,9 @@ newtype Subst = Subst (M.Map MetaTv Ty0)
   deriving (Ord, Eq, Read, Show, Generic, Out)
 
 instance Semigroup Subst where
-  -- s1 <> s2 == zonkTy s1 . zonkTy s2
+  -- (Subst s1) <> (Subst s2) =
+  --   let mp = M.map (zonkTy (Subst s1)) s2 `M.union` s1 in Subst mp
+  (<>) :: Subst -> Subst -> Subst
   (Subst s1) <> (Subst s2) =
     let s2' = M.map (zonkTy (Subst s1)) s2
         mp =  M.unionWith combine s2' s1
@@ -866,8 +870,8 @@ combine v1 v2 | v1 == v2 = v1
                 (ProdTy v1s, ProdTy v2s) -> ProdTy (zipWith combine v1s v2s)
                 (PackedTy a1 v1s, PackedTy a2 v2s) ->
                   if a1 == a2 then PackedTy a1 (zipWith combine v1s v2s)
-                  else error $ "PackedTy doesn't match "++ sdoc a1 ++ " with v2 = " ++ sdoc a2
-                _ -> error $ "Failed to combine v1 = " ++ sdoc v1 ++ " with v2 = " ++ sdoc v2
+                  else error $ "PackedTy doesn't match "++ sdoc v1 ++ " with " ++ sdoc v2
+                _ -> error $ "Failed to combine = " ++ sdoc v1 ++ " with " ++ sdoc v2
 
 
 emptySubst :: Subst

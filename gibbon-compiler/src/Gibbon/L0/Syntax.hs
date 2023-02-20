@@ -508,7 +508,7 @@ recoverType ddfs env2 ex =
                        in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
-    PrimAppE p exs -> dbgTrace 5 ("recovertype/primapp: " ++ show p ++ " " ++ show exs) $ primRetTy1 p
+    PrimAppE p _ -> primRetTy1 p
     LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
     IfE _ e _        -> recoverType ddfs env2 e
     MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
