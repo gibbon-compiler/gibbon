@@ -43,11 +43,9 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define MAX_CHUNK_SIZE 65500
-
 // Chunk sizes of buffers, see GitHub #79 and #110.
 static size_t gib_global_biginf_init_chunk_size = 4 * GB;
-static size_t gib_global_inf_init_chunk_size = 512;
+static size_t gib_global_inf_init_chunk_size = GIB_INIT_CHUNK_SIZE;
 
 // Runtime arguments, values updated by the flags parser.
 static GibInt gib_global_size_param = 1;
@@ -268,7 +266,7 @@ GibArena *gib_alloc_arena(void)
 {
     GibArena *ar = gib_alloc(sizeof(GibArena));
     ar->ind = 0;
-    ar->mem = (char *) gib_alloc(MAX_CHUNK_SIZE);
+    ar->mem = (char *) gib_alloc(GIB_MAX_CHUNK_SIZE);
     ar->reflist = 0;
     return ar;
 }
@@ -947,28 +945,11 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 */
 
-#if defined NURSERY_SIZE
-
-#if NURSERY_SIZE < 1024
-// The nursery size provided is too small, set it to 64 bytes.
-#define NURSERY_SIZE 1024
-#endif
-
-// NURSERY_SIZE not defined, initialize it to a default value.
-#else
-#define NURSERY_SIZE (4 * MB)
-#endif
 
 // If a region is over this size, alloc to refcounted heap directly.
-static size_t nursery_region_max_size = (NURSERY_SIZE / 2);
+static size_t gib_nursery_size = GIB_NURSERY_SIZE;
+static size_t gib_nursery_region_max_size = (GIB_NURSERY_SIZE / 2);
 
-// TODO: The shadow stack doesn't grow and we don't check for
-// overflows at the moment. But this stack probably wouldn't overflow since
-// each stack frame is only 16 bytes.
-#define SHADOWSTACK_SIZE (sizeof(GibShadowstackFrame) * 4 * 1024 * 1024)
-
-// Same as SHADOWSTACK_SIZE, overflows are not checked.
-#define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 4 * 1024 * 1024)
 
 // Whether storage is initialized or not.
 bool gib_storage_initialized = false;
@@ -1025,6 +1006,53 @@ void gib_check_rust_struct_sizes(void)
     return;
 }
 
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Print GC configuration
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+void gib_print_gc_config(void) {
+    printf("Rust config\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    fflush(stdout);
+    gib_print_rust_gc_config();
+    fflush(stdout);
+    printf("\n");
+
+
+    printf("C config\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+
+#if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
+    #warning "Generational GC is disabled."
+    printf("Generational GC is disabled.\n");
+#else
+    #warning "Generational GC is enabled."
+    printf("Generational GC is enabled.\n");
+#endif
+
+#if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
+    #warning "Eager promotion is disabled."
+    printf("Eager promotion is disabled.\n");
+#else
+    #warning "Eager promotion is enabled."
+    printf("Eager promotion is enabled.\n");
+#endif
+
+#if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 0
+    #warning "Simple write barrier is disabled."
+    printf("Simple write barrier is disabled.\n");
+#else
+    #warning "Simple write barrier is enabled."
+    printf("Simple write barrier is enabled.\n");
+#endif
+
+    printf("Nursery size=%zu\n", GIB_NURSERY_SIZE);
+    printf("Max chunk size=%zu\n", (size_t) GIB_MAX_CHUNK_SIZE);
+    printf("Initial chunk size=%zu\n", (size_t) GIB_INIT_CHUNK_SIZE);
+    printf("\n");
+}
+
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1078,7 +1106,7 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
 
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
 {
-    if (UNLIKELY((size > nursery_region_max_size))) {
+    if (UNLIKELY((size > gib_nursery_region_max_size))) {
         return gib_alloc_region_on_heap(size);
     }
     if (collected) {
@@ -1141,7 +1169,7 @@ void gib_grow_region_in_nursery_slow(
     char **footer_addr
 ) {
     // TODO: grow the nursery up to an upper bound?
-    if (size > nursery_region_max_size) {
+    if (size > gib_nursery_region_max_size) {
         gib_grow_region_on_heap(
             old_chunk_in_nursery,
             size,
@@ -1296,7 +1324,7 @@ static void gib_storage_initialize(void)
     gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
                                                     sizeof(GibNursery));
     for (n = 0; n < gib_global_num_threads; n++) {
-        gib_nursery_initialize(&(gib_global_nurseries[n]), NURSERY_SIZE);
+        gib_nursery_initialize(&(gib_global_nurseries[n]), gib_nursery_size);
     }
 
     // Initialize old generation.
@@ -1313,9 +1341,9 @@ static void gib_storage_initialize(void)
                                          sizeof(GibShadowstack));
     for (ss = 0; ss < gib_global_num_threads; ss++) {
         gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]),
-                                   SHADOWSTACK_SIZE);
+                                   GIB_SHADOWSTACK_SIZE);
         gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]),
-                                   SHADOWSTACK_SIZE);
+                                   GIB_SHADOWSTACK_SIZE);
     }
 
     return;
@@ -1363,7 +1391,8 @@ size_t gib_nursery_realloc(GibNursery *nursery, size_t size)
     size_t old_size = nursery->heap_size;
     gib_free(nursery->heap_start);
     gib_nursery_initialize(nursery, size);
-    nursery_region_max_size = size / 2;
+    gib_nursery_size = size;
+    gib_nursery_region_max_size = size / 2;
     return old_size;
 }
 
@@ -1412,7 +1441,7 @@ static void gib_oldgen_initialize(GibOldgen *oldgen)
                 sizeof(GibRememberedSet));
         exit(1);
     }
-    gib_shadowstack_initialize(oldgen->rem_set, REMEMBERED_SET_SIZE);
+    gib_shadowstack_initialize(oldgen->rem_set, GIB_REMEMBERED_SET_SIZE);
 
     return;
 }
@@ -1597,9 +1626,9 @@ GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
         fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", sizeof(GibGcStateSnapshot));
         exit(1);
     }
-    snapshot->nursery_heap_start = gib_alloc(NURSERY_SIZE);
+    snapshot->nursery_heap_start = gib_alloc(gib_nursery_size);
     if (snapshot->nursery_heap_start == NULL) {
-        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", (size_t) NURSERY_SIZE);
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", (size_t) gib_nursery_size);
         exit(1);
     }
     snapshot->reg_info_addrs = gib_alloc(num_regions * sizeof(GibRegionInfo*));
@@ -1626,7 +1655,7 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
 
     // nursery
     snapshot->nursery_alloc = nursery->alloc;
-    memcpy(snapshot->nursery_heap_start, nursery->heap_start, NURSERY_SIZE);
+    memcpy(snapshot->nursery_heap_start, nursery->heap_start, gib_nursery_size);
 
     // old generation
     snapshot->gen_rem_set_alloc = (oldgen->rem_set)->alloc;
@@ -1681,7 +1710,7 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 
     // nursery
     nursery->alloc = snapshot->nursery_alloc;
-    memcpy(nursery->heap_start, snapshot->nursery_heap_start, NURSERY_SIZE);
+    memcpy(nursery->heap_start, snapshot->nursery_heap_start, gib_nursery_size);
 
     // oldgen
     (oldgen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
@@ -1803,6 +1832,12 @@ int dbgprintf(const char *format, ...)
 // Called from gib_main_expr.
 int gib_init(int argc, char **argv)
 {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    // Print the GC configuration.
+    gib_print_gc_config();
+#endif
+
     // Ensure that C and Rust agree on sizes of structs that cross the boundary.
     gib_check_rust_struct_sizes();
 

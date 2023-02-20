@@ -903,6 +903,38 @@ pub mod rs {
     }
 
     #[no_mangle]
+    pub extern "C" fn gib_print_rust_gc_config() {
+        #[cfg(not(feature = "disable_eager_promotion"))]
+        {
+            println!("Eager promotion is enabled.")
+        }
+
+        #[cfg(feature = "disable_eager_promotion")]
+        {
+            println!("Eager promotion is disabled.")
+        }
+
+        #[cfg(not(feature = "noburn"))]
+        {
+            println!("Burning is enabled.")
+        }
+
+        #[cfg(feature = "noburn")]
+        {
+            println!("Burning is disabled.")
+        }
+
+        #[cfg(not(feature = "nocompact"))]
+        {
+            println!("Compaction is enabled.")
+        }
+        #[cfg(feature = "nocompact")]
+        {
+            println!("Compaction is disabled.")
+        }
+    }
+
+    #[no_mangle]
     pub extern "C" fn gib_print_nursery_and_oldgen(
         rstack: *const GibShadowstack,
         wstack: *const GibShadowstack,

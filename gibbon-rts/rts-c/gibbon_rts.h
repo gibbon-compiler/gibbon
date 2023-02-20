@@ -531,6 +531,33 @@ extern GibGcStats *gib_global_gc_stats;
 #define DEFAULT_GENERATION gib_global_oldgen
 
 
+#if defined GIB_NURSERY_SIZE
+
+#if GIB_NURSERY_SIZE < 1024
+// The nursery size provided is too small, set it to 64 bytes.
+#define GIB_NURSERY_SIZE 1024
+#endif
+
+// GIB_NURSERY_SIZE not defined, initialize it to a default value.
+#else
+#define GIB_NURSERY_SIZE (4 * MB)
+#endif
+
+
+#define GIB_MAX_CHUNK_SIZE 65500
+
+// TODO: The shadow stack doesn't grow and we don't check for
+// overflows at the moment. But this stack probably wouldn't overflow since
+// each stack frame is only 16 bytes.
+#define GIB_SHADOWSTACK_SIZE (sizeof(GibShadowstackFrame) * 4 * 1024 * 1024)
+
+// Same as SHADOWSTACK_SIZE, overflows are not checked.
+#define GIB_REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 4 * 1024 * 1024)
+
+
+// Size of the first chunk.
+#define GIB_INIT_CHUNK_SIZE 512
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -599,7 +626,8 @@ void gib_print_nursery_and_oldgen(
     GibNursery *nursery,
     GibOldgen *oldgen
 );
-
+// Print the Rust GC configuration.
+void gib_print_rust_gc_config(void);
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -608,6 +636,16 @@ void gib_print_nursery_and_oldgen(
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 void gib_check_rust_struct_sizes(void);
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Print GC configuration
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Print the GC configuration.
+void gib_print_gc_config(void);
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -636,7 +674,6 @@ void *gib_alloc_counted_struct(size_t size);
  * ~~~~~~~~~~~~~~~~~~~~
  */
 
-#define GIB_MAX_CHUNK_SIZE 65500
 
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
 INLINE_HEADER void gib_grow_region_in_nursery_fast(
@@ -1005,7 +1042,9 @@ INLINE_HEADER void gib_indirection_barrier(
 {
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
+    #warning "Simple write barrier is enabled."
 #else
+    #warning "Simple write barrier is diabled."
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
