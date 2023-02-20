@@ -728,17 +728,19 @@ unsafe fn evacuate_packed(
                         if st.evac_major || st.nursery.contains_addr(pointee) {
                             if COMPACT {
                                 dbgprintln!("   inlining indirection");
-                                // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
-                                if !worklist.is_empty() {
-                                    worklist.push(EvacAction::RestoreSrc(
-                                        src_after_indr1,
-                                        dst,
-                                        dst_end,
-                                        next_ty,
-                                    ));
-                                } else {
-                                    dbgprintln!("   tail optimization!");
-                                }
+
+                                // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src.
+                                //
+                                // [2022.02.20]: we can't do this optimization anymore since the code to
+                                // handle redirections occuring in data being inlined expects to see one
+                                // RestoreSrc on the worklist per indirection.
+                                worklist.push(EvacAction::RestoreSrc(
+                                    src_after_indr1,
+                                    dst,
+                                    dst_end,
+                                    next_ty,
+                                ));
+
                                 if !inlining_underway {
                                     inlining_underway = true;
                                     inlining_underway_upto = src_after_indr1;
