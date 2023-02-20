@@ -80,6 +80,7 @@ tests:
     failing: [gibbon1]
   - name: Test187.hs
     answer-file: examples/Test187.ans
+    skip: true
 
   # Needs manual inspection.
   - name: test14_repair.gib

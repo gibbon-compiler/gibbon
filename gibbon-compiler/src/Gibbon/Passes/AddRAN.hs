@@ -327,9 +327,10 @@ mkRANs ienv needRANsExp =
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
           let rhs = case arg of
-                      VarE x -> case M.lookup x ienv of
-                                  Just v  -> VarE v
-                                  Nothing -> PrimAppE RequestEndOf [arg]
+                      VarE x -> PrimAppE RequestEndOf [arg]
+                                -- case M.lookup x ienv of
+                                --   Just v  -> VarE v
+                                --   Nothing -> PrimAppE RequestEndOf [arg]
                       -- It's safe to use 'fromJust' here b/c we would only
                       -- request a RAN for a literal iff it occurs after a
                       -- packed datatype. So there has to be random access

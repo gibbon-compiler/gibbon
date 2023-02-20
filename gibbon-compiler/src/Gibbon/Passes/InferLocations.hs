@@ -10,7 +10,7 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs)
     where
 
 {-
@@ -1723,6 +1723,128 @@ emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
+
+
+--------------------------------------------------------------------------------
+
+fixRANs :: Prog2 -> PassM Prog2
+fixRANs prg@(Prog defs funs main) = do
+    main' <-
+      case main of
+        Nothing -> return Nothing
+        Just (ex,ty) -> do
+          (_,ex') <- exp defs env20 ex
+          pure $ Just (ex', ty)
+    funs' <- flattenFuns funs
+    return $ Prog defs funs' main'
+  where
+    flattenFuns = mapM flattenFun
+    flattenFun (FunDef nam narg ty bod meta) = do
+      let env2 = Env2 (M.fromList $ zip narg (arrIns ty)) (fEnv env20)
+      (_, bod') <- exp defs env2 bod
+      return $ FunDef nam narg ty bod' meta
+
+    env20 = progToEnv prg
+
+    exp :: DDefs2 -> Env2 Ty2 -> Exp2 -> PassM ([(DataCon, [Exp2])], Exp2)
+    exp ddfs env2 e0 =
+      let go :: Exp2 -> PassM ([(DataCon, [Exp2])], Exp2)
+          go = exp ddfs env2
+
+          gols f ls = do (bndss,ls') <- unzip <$> mapM go ls
+                         return (concat bndss, f ls')
+
+      in
+      case e0 of
+
+        DataConE loc k ls -> pure $ ([(k, ls)], DataConE loc k ls)
+
+        LetE (v,locs,t,PrimAppE RequestEndOf [VarE w]) bod ->
+          do (bnd2,bod') <- exp ddfs (L1.extendVEnv v t env2) bod
+             case L.find (\(dcon, ls) -> L.elem (VarE v) ls) bnd2 of
+               Nothing -> error $ show v ++ " not found in any datacon args, " ++ show bnd2
+               Just (dcon, ls) -> do
+                 let tys = lookupDataCon ddfs dcon
+                     n = length [ ty | ty <- tys, ty == CursorTy ]
+                     tys' = L.drop n tys
+                     (rans, ls') = (L.take n ls, L.drop n ls)
+                     firstPacked = fromJust $ L.findIndex isPackedTy tys'
+                     needRANsExp = L.take n $ L.drop firstPacked ls'
+                     ran_pairs = M.fromList $ fragileZip rans needRANsExp
+                     w' = ran_pairs M.! VarE v
+                 return (bnd2, LetE (v,locs,t,PrimAppE RequestEndOf [w']) bod')
+
+        LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
+                                      (bnd2,bod') <- exp ddfs (L1.extendVEnv v t env2) bod
+                                      return (bnd1++bnd2, LetE (v,locs,t,rhs') bod')
+
+        ----------------------------------------
+
+        Ext ext -> case ext of
+                     LetRegionE r sz ty bod -> do
+                       (bnds,bod') <- go bod
+                       return (bnds, Ext $ LetRegionE r sz ty bod')
+
+                     LetParRegionE r sz ty bod -> do
+                       (bnds,bod') <- go bod
+                       return (bnds, Ext $ LetParRegionE r sz ty bod')
+
+                     LetLocE l rhs bod -> do
+                       (bnds,bod') <- go bod
+                       return (bnds, Ext $ LetLocE l rhs bod')
+
+                     LetAvail vs bod -> do
+                       (bnds,bod') <- go bod
+                       return (bnds, Ext $ LetAvail vs bod')
+
+                     RetE{}        -> return ([],e0)
+                     FromEndE{}    -> return ([],e0)
+                     L2.AddFixed{} -> return ([],e0)
+                     BoundsCheck{} -> return ([],e0)
+                     IndirectionE{}-> return ([],e0)
+                     GetCilkWorkerNum-> return ([],e0)
+
+        LitE{}    -> return ([],e0)
+        CharE{}   -> return ([],e0)
+        FloatE{}  -> return ([],e0)
+        VarE{}    -> return ([],e0)
+        LitSymE{} -> return ([],e0)
+
+        AppE f lvs ls     -> gols (AppE f lvs)  ls
+        PrimAppE p ls     -> gols (PrimAppE p)  ls
+        MkProdE ls        -> gols  MkProdE      ls
+
+        IfE a b c -> do (b1,a') <- go a
+                        (b2,b') <- go b
+                        (b3,c') <- go c
+                        return (b1 ++ b2 ++ b3, IfE a' b' c')
+
+        ProjE ix e -> do (b,e') <- go e
+                         return (b, ProjE ix e')
+
+        CaseE e ls -> do (b,e') <- go e
+                         ls' <- forM ls $ \ (k,vrs,rhs) -> do
+                                  let tys = lookupDataCon ddfs k
+                                      vrs' = map fst vrs
+                                      env2' = L1.extendsVEnv (M.fromList (zip vrs' tys)) env2
+                                  (b2,rhs') <- exp ddfs env2' rhs
+                                  return (b2, (k,vrs,rhs'))
+                         let (bndss,ls'') = unzip ls'
+                         return (b ++ concat bndss, CaseE e' ls'')
+
+        TimeIt e t b -> do
+          (bnd,e') <- go e
+          return (bnd, TimeIt e' t b)
+
+        SpawnE f lvs ls -> gols (SpawnE f lvs)  ls
+        SyncE -> pure ([], SyncE)
+
+        WithArenaE v e -> do
+          (bnd, e') <- go e
+          return (bnd, WithArenaE v e')
+
+        MapE _ _      -> error "FINISHLISTS"
+        FoldE _ _ _   -> error "FINISHLISTS"
 
 
 --------------------------------------------------------------------------------

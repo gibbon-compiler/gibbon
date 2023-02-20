@@ -64,7 +64,7 @@ import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
-import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked)
+import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked, fixRANs)
 import           Gibbon.Passes.Simplifier     (simplifyLocBinds)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
 -- import           Gibbon.Passes.RegionsInwards (regionsInwards)
@@ -537,6 +537,7 @@ passes config@Config{dynflags} l0 = do
               l1 <- go "L1.typecheck"    L1.tcProg     l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
+              l2 <- go   "fixRANs"         fixRANs      l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               --l2 <- go "regionsInwards"    regionsInwards l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -592,6 +593,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" simplifyLocBinds l2
+                  l2 <- go "fixRANs"         fixRANs       l2
                   l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
