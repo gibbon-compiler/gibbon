@@ -79,20 +79,17 @@ lcss :: PList Int -> PList Int -> PList Int
 lcss xs ys = algc (length_plist xs) (length_plist ys) xs ys Nil
 
 
-check_lcss :: PList Int -> PList Int -> Bool
-check_lcss list1 list2 =
-  case list1 of
-    Nil ->
-      case list2 of
-        Nil -> True
-        Cons _ _ -> False
+check_lcss :: Int -> Int -> Int -> PList Int -> Bool
+check_lcss start step end list2 =
+  case list2 of
+    Nil -> start > end
     Cons x rst ->
-      case list2 of
-        Nil -> False
-        Cons x' rst' -> (x == x') && (check_lcss rst rst')
+      (x == start) && (check_lcss (start+step) step end rst)
 
-gibbon_main =
-  let (start1,step1,end1,start2,step2,end2) = test_opts
+bench_lcss :: (Int,Int,Int,Int,Int,Int) -> (Int,Int,Int) -> Bool
+bench_lcss opts answer =
+  let (start1,step1,end1,start2,step2,end2) = opts
+
       ls1 = mkList start1 end1 (step1-start1)
       -- _ = printPacked ls1
       -- _ = print_newline()
@@ -105,19 +102,28 @@ gibbon_main =
       -- _ = printPacked common
       -- _ = print_newline()
 
+      (ans_start,ans_step,ans_end) = answer
 
-  in check_lcss common ls2
+  in check_lcss ans_start ans_step ans_end common
 
-test_opts :: (Int,Int,Int,Int,Int,Int)
--- test_opts = (1,2,200,100,101,200)
--- test_opts = (1,2,500,250,251,500)
+gibbon_main =
+  let n = sizeParam in
+    if n < 1 || n == 1
+    then bench_lcss test_opts test_opts_answer
+    else if n == 2
+    then bench_lcss fast_opts fast_opts_answer
+    else if n == 3
+    then bench_lcss norm_opts norm_opts_answer
+    else bench_lcss slow_opts slow_opts_answer
+
+test_opts, fast_opts, norm_opts, slow_opts :: (Int,Int,Int,Int,Int,Int)
 test_opts = (1,2,2000,1050,1051,2000)
-
-fast_opts :: (Int,Int,Int,Int,Int,Int)
 fast_opts = (1,2,2000,1000,1001,2000)
-
-norm_opts :: (Int,Int,Int,Int,Int,Int)
 norm_opts = (1,2,2000,1000,1001,4000)
-
-slow_opts :: (Int,Int,Int,Int,Int,Int)
 slow_opts = (1,2,4000,1000,1001,4000)
+
+test_opts_answer, fast_opts_answer, norm_opts_answer, slow_opts_answer :: (Int,Int,Int)
+test_opts_answer = (1050,1,2000)
+fast_opts_answer = (1000,1,2000)
+norm_opts_answer = (1000,1,2000)
+slow_opts_answer = (1000,1,4000)

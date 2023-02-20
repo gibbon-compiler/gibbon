@@ -15,7 +15,6 @@ jobs:
   linux:
     name: test-gibbon-examples
     if: github.event.pull_request.draft == false
-    name: test-gibbon-examples
     runs-on: ubuntu-18.04
     steps:
       - name: dependencies
