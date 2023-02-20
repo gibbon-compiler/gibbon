@@ -13,7 +13,18 @@
 # POINTER
 # PARALLEL
 # BUMPALLOC
+#
+#
+# GC toggles:
+# ~~~~~~~~~~~~~
+#
+# BURN                      = 0 | 1
+# COMPACT                   = 0 | 1
+# EAGER_PROMOTION           = 0 | 1
+# SIMPLE_WRITE_BARRIER      = 0 | 1
+#
 # ======================================================================
+
 
 CC        := gcc
 AR        := gcc-ar
@@ -22,6 +33,11 @@ RSC       := cargo
 RSFLAGS   := -v
 VERBOSITY := 1
 MODE      := release
+
+EAGER_PROMOTION      ?= 1
+BURN                 ?= 1
+COMPACT              ?= 1
+SIMPLE_WRITE_BARRIER ?= 0
 
 CFLAGS += $(USER_CFLAGS) -D_GIBBON_VERBOSITY=$(VERBOSITY)
 
@@ -37,7 +53,7 @@ ifeq ($(shell test $(VERBOSITY) -gt 2; echo $$?),0)
 endif
 
 ifeq ($(GC), nongen)
-	CFLAGS += -D_GIBBON_NONGENGC
+	CFLAGS += -D_GIBBON_GENGC=0
 endif
 
 ifeq ($(GCSTATS), 1)
@@ -61,16 +77,20 @@ ifeq ($(BUMPALLOC), 1)
 	CFLAGS += -D_GIBBON_BUMPALLOC_LISTS -D_GIBBON_BUMPALLOC_HEAP
 endif
 
-ifeq ($(DISABLE_EAGER_PROMOTION), 1)
-	CFLAGS += -D_GIBBON_DISABLE_EAGER_PROMOTION
+ifeq ($(EAGER_PROMOTION), 0)
+	CFLAGS += -D_GIBBON_EAGER_PROMOTION=0
 	RSFLAGS += --features=disable_eager_promotion
 endif
 
-ifeq ($(NOBURN), 1)
+ifeq ($(SIMPLE_WRITE_BARRIER), 1)
+	CFLAGS += -D_GIBBON_SIMPLE_WRITE_BARRIER=1
+endif
+
+ifeq ($(BURN), 0)
 	RSFLAGS += --features=noburn
 endif
 
-ifeq ($(NOCOMPACT), 1)
+ifeq ($(COMPACT), 0)
 	RSFLAGS += --features=nocompact
 endif
 

@@ -38,6 +38,7 @@ data GeneralFlag
   | Opt_PrintGcStats       -- ^ Record and print GC statistics.
   | Opt_GenGc              -- ^ Use the new non-generational GC.
   | Opt_NoEagerPromote     -- ^ Disable eager promotion.
+  | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -112,7 +113,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_RtsDebug (long "debug-rts" <> help "Compile the RTS in debugging mode.") <|>
                    flag' Opt_PrintGcStats (long "print-gc-stats" <> short 'S' <> help "Record and print GC statistics.") <|>
                    flag' Opt_GenGc (long "gen-gc" <> help "Use the new generational GC.") <|>
-                   flag' Opt_NoEagerPromote (long "no-eager-promote" <> help "Disable eager promotion.")
+                   flag' Opt_NoEagerPromote (long "no-eager-promote" <> help "Disable eager promotion.") <|>
+                   flag' Opt_SimpleWriteBarrier (long "simple-write-barrier" <> help "Disables eliminate-indirection-chains optimization.")
 
 
     dflagsParser :: Parser DebugFlag

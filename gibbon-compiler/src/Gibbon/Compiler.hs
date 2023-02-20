@@ -505,7 +505,9 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g" else "")
                           ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                           ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
-                          ++ (if not genGC then " -D_GIBBON_NONGENGC " else "")
+                          ++ (if not genGC then " -D_GIBBON_GENGC=0 " else " -D_GIBBON_GENGC=1 ")
+                          ++ (if simpleWriteBarrier then " -D_GIBBON_SIMPLE_WRITE_BARRIER=1 " else " -D_GIBBON_SIMPLE_WRITE_BARRIER=0 ")
+                          ++ (if lazyPromote then " -D_GIBBON_EAGER_PROMOTION=0 " else " -D_GIBBON_EAGER_PROMOTION=1 ")
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
@@ -514,6 +516,8 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         rts_debug = gopt Opt_RtsDebug dflags
         print_gc_stats = gopt Opt_PrintGcStats dflags
         genGC = gopt Opt_GenGc dflags
+        simpleWriteBarrier = gopt Opt_SimpleWriteBarrier dflags
+        lazyPromote = gopt Opt_NoEagerPromote dflags
 
 -- |
 isBench :: Mode -> Bool

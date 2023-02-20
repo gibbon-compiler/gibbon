@@ -18,13 +18,14 @@
  * _GIBBON_DEBUG             enables various assertions if present
  * _GIBBON_GCSTATS           collect GC statistics if present
  * _GIBBON_PRINT_GCSTATS     print GC statistics if present
- * _GIBBON_NONGENGC          only use old reference counted GC if present
+ * _GIBBON_GENGC             only use old reference counted GC set to 0
  * _GIBBON_BOUNDSCHECK       boundscheck vector accesses
  * _GIBBON_BUMPALLOC_LISTS   bump allocated linked lists
  * _GIBBON_BUMPALLOC_HEAP    bump allocated gib_alloc
  * _GIBBON_POINTER           pointer mode gib_alloc
  * _GIBBON_PARALLEL          parallel mode
- * _GIBBON_NO_EAGER_PROMOTE  disable eager promotion
+ * _GIBBON_EAGER_PROMOTION   disable eager promotion if set to 0
+ * _GIBBON_SIMPLE_WRITE_BARRIER disable eliminate-indirection-chains optimization
  *
  */
 
@@ -685,7 +686,7 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
         }
     }
 
-#ifdef _GIBBON_DISABLE_EAGER_PROMOTION
+#if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
     // If the old chunk is in nursery, try to grow it in the nursery.
     // Otherwise put it on the heap since we don't have a remembered set for
     // redirection pointers yet.
@@ -1002,6 +1003,9 @@ INLINE_HEADER void gib_indirection_barrier(
     uint32_t datatype
 )
 {
+
+#if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
+#else
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
@@ -1021,6 +1025,8 @@ INLINE_HEADER void gib_indirection_barrier(
             after_pointed_to_tag = to + 1;
         }
     }
+#endif
+
     // Write the indirection.
     uint16_t footer_offset = to_footer - to;
     GibTaggedPtr tagged = GIB_STORE_TAG(to, footer_offset);
@@ -1032,8 +1038,9 @@ INLINE_HEADER void gib_indirection_barrier(
     // If we're using the non-generational GC, all indirections will be
     // old-to-old indirections.
 
-#ifdef _GIBBON_NONGENGC
+#if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
     gib_add_old_to_old_indirection(from_footer, to_footer);
+    return;
 #else
 
 #ifdef _GIBBON_DEBUG
@@ -1078,7 +1085,7 @@ INLINE_HEADER void gib_indirection_barrier(
    }
 
     return;
-#endif // _GIBBON_NONGENGC
+#endif // _GIBBON_GENGC == 1
 }
 
 // A copy of gib_indirection_barrier that is not inlined, for use via Rust.
