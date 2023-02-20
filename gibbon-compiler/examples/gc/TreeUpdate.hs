@@ -86,7 +86,8 @@ loop :: Vector Int -> Int -> SearchTree -> Int -> SearchTree
 loop nums idx tr n =
   if n == 0
   then tr
-  else let idx1 = if idx == (length nums - 1) then 0 else idx+1
+  else let idx1 = mod (idx+1) (length nums)
+             -- if idx == (length nums - 1) then 0 else idx+1
            j = nth nums idx1
        in if mod j 2 == 0
           then loop nums idx1 (treeInsert tr j) (n-1)
