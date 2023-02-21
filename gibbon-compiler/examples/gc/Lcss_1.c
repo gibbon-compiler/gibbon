@@ -470,9 +470,13 @@ GibBool bench_lcss(GibIntGibIntGibIntGibIntGibIntGibIntProd opts_104_1230_1546,
     struct timespec begin_pvrtmp_5850;
     struct timespec end_pvrtmp_5850;
 
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(3);
+
     for (long long iters_pvrtmp_5850 = 0; iters_pvrtmp_5850 <
          gib_get_iters_param(); iters_pvrtmp_5850++) {
+
         if (iters_pvrtmp_5850 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 3, region_5836.end, region_5828.end, region_5820.end);
             gib_list_bumpalloc_save_state();
             gib_ptr_bumpalloc_save_state();
         }
@@ -492,8 +496,10 @@ GibBool bench_lcss(GibIntGibIntGibIntGibIntGibIntGibIntProd opts_104_1230_1546,
         pvrtmp_5850 = pvrtmp_5839;
         pvrtmp_5851 = pvrtmp_5842;
         pvrtmp_5852 = pvrtmp_5843;
+
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_5850);
         if (iters_pvrtmp_5850 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
             gib_list_bumpalloc_restore_state();
             gib_ptr_bumpalloc_restore_state();
         }
