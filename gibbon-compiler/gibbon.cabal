@@ -131,6 +131,7 @@ library
   ghc-options:         -Wall -Wcompat -Wno-orphans -Wredundant-constraints
                        -Wno-partial-type-signatures -Wno-unused-top-binds
                        -Wno-typed-holes -fdefer-typed-holes
+                       -Wno-incomplete-uni-patterns
   default-extensions:  ScopedTypeVariables PatternSynonyms DeriveGeneric DeriveFunctor
                        NamedFieldPuns TupleSections TypeFamilies
                        PartialTypeSignatures OverloadedStrings

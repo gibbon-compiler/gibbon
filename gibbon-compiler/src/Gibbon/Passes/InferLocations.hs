@@ -1403,7 +1403,8 @@ fixProj renam pvar proj e =
                         in SpawnE v ls es'
       SyncE -> SyncE
       WithArenaE v e -> WithArenaE v $ fixProj renam pvar proj e
-      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      Ext (L1.AddFixed{}) -> e
+      Ext (L1.StartOfPkdCursor{}) -> e
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
