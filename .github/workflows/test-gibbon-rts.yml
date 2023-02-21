@@ -40,6 +40,6 @@ jobs:
           export GIBBONDIR=`pwd`
           cd gibbon-rts/
           make clean
-          make GCSTATS=1 DISABLE_EAGER_PROMOTION=1
+          make GCSTATS=1 EAGER_PROMOTION=0
           cargo build -v
           cargo test gc_tests2 -- --nocapture --test-threads 1
