@@ -292,10 +292,12 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd
 caseFn_836(GibCursor end_r_3155, GibCursor end_r_3156, GibCursor end_r_3157,
            GibCursor loc_3154, GibInt n_301_837_1044_1683,
            GibCursor a_302_838_1045_1684, GibCursor b_303_839_1046_1685);
+static inline
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
 caseFn_840(GibCursor end_r_3161, GibCursor end_r_3162, GibCursor end_r_3163,
            GibCursor loc_3160, GibCursor b_312_841_1049_1688,
            GibFloat f_313_842_1050_1689, GibCursor fs_314_843_1051_1690);
+static inline
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
 caseFn_844(GibCursor end_r_3168, GibCursor end_r_3169, GibCursor end_r_3170,
            GibCursor end_r_3171, GibCursor loc_3167,
@@ -409,9 +411,12 @@ unsigned char bench_psc()
     struct timespec begin_pvrtmp_9444;
     struct timespec end_pvrtmp_9444;
 
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(1);
+
     for (long long iters_pvrtmp_9444 = 0; iters_pvrtmp_9444 <
          gib_get_iters_param(); iters_pvrtmp_9444++) {
         if (iters_pvrtmp_9444 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 1, region_9434.end);
             gib_list_bumpalloc_save_state();
             gib_ptr_bumpalloc_save_state();
         }
@@ -428,6 +433,7 @@ unsigned char bench_psc()
         pvrtmp_9446 = pvrtmp_9437;
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_9444);
         if (iters_pvrtmp_9444 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
             gib_list_bumpalloc_restore_state();
             gib_ptr_bumpalloc_restore_state();
         }
@@ -493,16 +499,19 @@ unsigned char bench_psb()
     struct timespec begin_pvrtmp_9477;
     struct timespec end_pvrtmp_9477;
 
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(1);
+
     for (long long iters_pvrtmp_9477 = 0; iters_pvrtmp_9477 <
          gib_get_iters_param(); iters_pvrtmp_9477++) {
         if (iters_pvrtmp_9477 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 1, region_9467.end);
             gib_list_bumpalloc_save_state();
             gib_ptr_bumpalloc_save_state();
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_9477);
 
         GibCursorGibCursorGibCursorProd tmp_struct_8 =
-                                         psB(end_r_3195, r_3195, 50);
+                                         psB(end_r_3195, r_3195, 90);
         GibCursor pvrtmp_9468 = tmp_struct_8.field0;
         GibCursor pvrtmp_9469 = tmp_struct_8.field1;
         GibCursor pvrtmp_9470 = tmp_struct_8.field2;
@@ -512,6 +521,7 @@ unsigned char bench_psb()
         pvrtmp_9479 = pvrtmp_9470;
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_9477);
         if (iters_pvrtmp_9477 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
             gib_list_bumpalloc_restore_state();
             gib_ptr_bumpalloc_restore_state();
         }
@@ -557,7 +567,7 @@ unsigned char bench_psb()
     GibCursor pvrtmp_9497 = tmp_struct_15.field0;
     GibCursor pvrtmp_9498 = tmp_struct_15.field1;
     GibInt pvrtmp_9499 = tmp_struct_15.field2;
-    GibBool fltAppE_1066_1290 = pvrtmp_9499 == 50;
+    GibBool fltAppE_1066_1290 = pvrtmp_9499 == 90;
     unsigned char tailapp_4318 =  print_check(fltAppE_1066_1290);
 
     return tailapp_4318;
@@ -578,9 +588,12 @@ unsigned char bench_ts()
     struct timespec begin_pvrtmp_9510;
     struct timespec end_pvrtmp_9510;
 
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(1);
+
     for (long long iters_pvrtmp_9510 = 0; iters_pvrtmp_9510 <
          gib_get_iters_param(); iters_pvrtmp_9510++) {
         if (iters_pvrtmp_9510 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 1, region_9500.end);
             gib_list_bumpalloc_save_state();
             gib_ptr_bumpalloc_save_state();
         }
@@ -597,6 +610,7 @@ unsigned char bench_ts()
         pvrtmp_9512 = pvrtmp_9503;
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_9510);
         if (iters_pvrtmp_9510 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
             gib_list_bumpalloc_restore_state();
             gib_ptr_bumpalloc_restore_state();
         }
@@ -2727,9 +2741,9 @@ GibCursorGibCursorGibCursorGibCursorProd getQs(GibCursor end_r_3016,
 
         GibCursor writecur_6792 = after_tag_6788 + sizeof(GibFloat);
 
-        if (loc_3654 + 18 > end_r_3691) {
-            gib_grow_region(&loc_3654, &end_r_3691);
-        }
+        // if (loc_3654 + 18 > end_r_3691) {
+        //     gib_grow_region(&loc_3654, &end_r_3691);
+        // }
         gib_indirection_barrier(loc_3654, end_r_3691, fs_268_873_1420,
                                 end_r_3016, Ps_T);
 
@@ -4032,9 +4046,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd psMult(GibCursor end_r_3065,
                                                          GibCursor a_311_903_1490,
                                                          GibCursor b_312_904_1491)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_3064 + 18 > end_r_3067) {
         gib_grow_region(&loc_3064, &end_r_3067);
@@ -4161,9 +4175,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd psAdd(GibCursor end_r_3071,
                                                         GibCursor a_317_907_1494,
                                                         GibCursor b_318_908_1495)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_3070 + 18 > end_r_3073) {
         gib_grow_region(&loc_3070, &end_r_3073);
@@ -4179,9 +4193,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd psAdd(GibCursor end_r_3071,
 
       case 0:
         {
-            if (loc_3070 + 18 > end_r_3073) {
-                gib_grow_region(&loc_3070, &end_r_3073);
-            }
+            // if (loc_3070 + 18 > end_r_3073) {
+            //     gib_grow_region(&loc_3070, &end_r_3073);
+            // }
             gib_indirection_barrier(loc_3070, end_r_3073, b_318_908_1495,
                                     end_r_3072, Ps_T);
 
@@ -4471,9 +4485,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd dot(GibCursor end_r_3082,
                                                       GibFloat c_326_914_1505,
                                                       GibCursor b_327_915_1506)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_3081 + 18 > end_r_3083) {
         gib_grow_region(&loc_3081, &end_r_3083);
@@ -6477,9 +6491,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_821(GibCursor end_r_313
 
                 GibCursor writecur_7676 = after_tag_7672 + sizeof(GibFloat);
 
-                if (loc_4041 + 18 > end_r_4061) {
-                    gib_grow_region(&loc_4041, &end_r_4061);
-                }
+                // if (loc_4041 + 18 > end_r_4061) {
+                //     gib_grow_region(&loc_4041, &end_r_4061);
+                // }
                 gib_indirection_barrier(loc_4041, end_r_4061, tmpcur_11344,
                                         end_r_3135, Ps_T);
 
@@ -7460,6 +7474,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_836(GibCursor end_r_315
         }
     }
 }
+static inline
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_840(GibCursor end_r_3161,
                                                                       GibCursor end_r_3162,
                                                                       GibCursor end_r_3163,
@@ -7840,6 +7855,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_840(GibCursor 
         }
     }
 }
+static inline
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_844(GibCursor end_r_3168,
                                                                       GibCursor end_r_3169,
                                                                       GibCursor end_r_3170,
@@ -7850,9 +7866,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_844(GibCursor 
                                                                       GibFloat f_319_847_1056_1703,
                                                                       GibCursor fs_320_848_1057_1704)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_3167 + 18 > end_r_3171) {
         gib_grow_region(&loc_3167, &end_r_3171);
@@ -7868,9 +7884,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd caseFn_844(GibCursor 
 
       case 0:
         {
-            if (loc_3167 + 18 > end_r_3171) {
-                gib_grow_region(&loc_3167, &end_r_3171);
-            }
+            // if (loc_3167 + 18 > end_r_3171) {
+            //     gib_grow_region(&loc_3167, &end_r_3171);
+            // }
             gib_indirection_barrier(loc_3167, end_r_3171, a_317_845_1054_1701,
                                     end_r_3168, Ps_T);
 
@@ -8010,7 +8026,7 @@ int main(int argc, char **argv)
 
         printf("'#()");
         printf("\n");
-        return 0;
+        // return 0;
     } else {
         GibBool fltIf_1061_1280 = strcmp("psb", gib_read_bench_prog_param()) ==
                 0;
@@ -8020,7 +8036,7 @@ int main(int argc, char **argv)
 
             printf("'#()");
             printf("\n");
-            return 0;
+            // return 0;
         } else {
             GibBool fltIf_1062_1281 = strcmp("psc",
                                              gib_read_bench_prog_param()) == 0;
@@ -8030,14 +8046,14 @@ int main(int argc, char **argv)
 
                 printf("'#()");
                 printf("\n");
-                return 0;
+                // return 0;
             } else {
                 unsigned char wildcard__232_235_849_1282 =
                               gib_print_symbol(9420);
 
                 printf("'#()");
                 printf("\n");
-                return 0;
+                // return 0;
             }
         }
     }

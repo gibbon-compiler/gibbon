@@ -225,9 +225,9 @@ bench_ts =
 
 bench_psb :: ()
 bench_psb =
-  let ps = iterate (psB 50)
+  let ps = iterate (psB 90)
       sz = size (toList ps)
-  in print_check (sz == 50)
+  in print_check (sz == 90)
 
 bench_psc :: ()
 bench_psc =
