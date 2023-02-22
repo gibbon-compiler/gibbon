@@ -511,7 +511,7 @@ unsigned char bench_psb()
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_9477);
 
         GibCursorGibCursorGibCursorProd tmp_struct_8 =
-                                         psB(end_r_3195, r_3195, 90);
+                                         psB(end_r_3195, r_3195, 50);
         GibCursor pvrtmp_9468 = tmp_struct_8.field0;
         GibCursor pvrtmp_9469 = tmp_struct_8.field1;
         GibCursor pvrtmp_9470 = tmp_struct_8.field2;
@@ -567,7 +567,7 @@ unsigned char bench_psb()
     GibCursor pvrtmp_9497 = tmp_struct_15.field0;
     GibCursor pvrtmp_9498 = tmp_struct_15.field1;
     GibInt pvrtmp_9499 = tmp_struct_15.field2;
-    GibBool fltAppE_1066_1290 = pvrtmp_9499 == 90;
+    GibBool fltAppE_1066_1290 = pvrtmp_9499 == 50;
     unsigned char tailapp_4318 =  print_check(fltAppE_1066_1290);
 
     return tailapp_4318;

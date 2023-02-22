@@ -739,9 +739,9 @@ GibCursorGibCursorGibIntProd findk(GibCursor end_r_2438, GibInt k_132_1258_1584,
                                    GibInt m_134_1260_1586,
                                    GibCursor ls_135_1261_1587)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
     GibPackedTag tmpval_5919 = *(GibPackedTag *) ls_135_1261_1587;
     GibCursor tmpcur_5920 = ls_135_1261_1587 + 1;
 
@@ -848,9 +848,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd algc(GibCursor end_r_
                                                                 GibCursor ys_144_1271_1602,
                                                                 GibCursor zs_145_1272_1603)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2442 + 18 > end_r_2446) {
         gib_grow_region(&loc_2442, &end_r_2446);
@@ -903,9 +903,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd algb2(GibCursor end_r_2449,
                                                         GibInt k1j1_163_1275_1607,
                                                         GibCursor ls_164_1276_1608)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2448 + 26 > end_r_2450) {
         gib_grow_region(&loc_2448, &end_r_2450);
@@ -1284,9 +1284,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd zip0(GibCursor end_r_2465,
                                                        GibCursor loc_2464,
                                                        GibCursor ls_180_1290_1627)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2464 + 26 > end_r_2466) {
         gib_grow_region(&loc_2464, &end_r_2466);
@@ -1422,9 +1422,10 @@ GibInt maxInt(GibInt a_189_1293_1631, GibInt b_190_1294_1632)
 GibCursorGibCursorGibIntProd length_plist_776(GibCursor end_r_2468,
                                               GibCursor a_226_1313_1634)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
+
     GibPackedTag tmpval_6165 = *(GibPackedTag *) a_226_1313_1634;
     GibCursor tmpcur_6166 = a_226_1313_1634 + 1;
 
@@ -1676,9 +1677,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd zip_plist_783(GibCursor end_r_
                                                                 GibCursor as_213_1320_1643,
                                                                 GibCursor bs_214_1321_1644)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2477 + 26 > end_r_2480) {
         gib_grow_region(&loc_2477, &end_r_2480);
@@ -1787,9 +1788,9 @@ GibCursorGibCursorGibCursorGibCursorProd drop_plist_781(GibCursor end_r_2483,
                                                         GibInt num_208_1324_1647,
                                                         GibCursor list_209_1325_1648)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2482 + 18 > end_r_2484) {
         gib_grow_region(&loc_2482, &end_r_2484);
@@ -1835,9 +1836,9 @@ GibCursorGibCursorGibCursorGibCursorProd drop_plist_781(GibCursor end_r_2483,
 
                 GibCursor writecur_4437 = after_tag_4433 + sizeof(GibInt);
 
-                if (loc_2730 + 18 > end_r_2484) {
-                    gib_grow_region(&loc_2730, &end_r_2484);
-                }
+                // if (loc_2730 + 18 > end_r_2484) {
+                //     gib_grow_region(&loc_2730, &end_r_2484);
+                // }
                 gib_indirection_barrier(loc_2730, end_r_2484, tmpcur_6296,
                                         end_r_2483, PList_v_775_T);
 
@@ -1920,9 +1921,9 @@ GibCursorGibCursorGibCursorGibCursorProd take_plist_780(GibCursor end_r_2487,
                                                         GibInt n_203_1328_1653,
                                                         GibCursor a_204_1329_1654)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2486 + 18 > end_r_2488) {
         gib_grow_region(&loc_2486, &end_r_2488);
@@ -1957,9 +1958,9 @@ static inline
 GibCursorGibBoolProd is_empty_plist_778(GibCursor end_r_2490,
                                         GibCursor ls_191_1330_1656)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
     GibPackedTag tmpval_6354 = *(GibPackedTag *) ls_191_1330_1656;
     GibCursor tmpcur_6355 = ls_191_1330_1656 + 1;
 
@@ -2125,9 +2126,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd map_plist_784_1062(GibCursor e
                                                                      GibCursor loc_2494,
                                                                      GibCursor ls_184_1340_1669)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_2494 + 18 > end_r_2496) {
         gib_grow_region(&loc_2494, &end_r_2496);
