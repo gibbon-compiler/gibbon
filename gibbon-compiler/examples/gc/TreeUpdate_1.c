@@ -1888,7 +1888,7 @@ int main(int argc, char **argv)
 
     printf("%ld", pvrtmp_2846);
     printf("\n");
-    return 0;
+    // return 0;
 
     int exit_135 = gib_exit();
 

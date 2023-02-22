@@ -173,7 +173,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd zip0(GibCursor end_r_2465,
                                                        GibCursor end_r_2466,
                                                        GibCursor loc_2464,
                                                        GibCursor ls_180_1290_1627);
-GibInt maxInt(GibInt a_189_1293_1631, GibInt b_190_1294_1632);
+static inline GibInt maxInt(GibInt a_189_1293_1631, GibInt b_190_1294_1632);
 GibCursorGibCursorGibIntProd length_plist_776(GibCursor end_r_2468,
                                               GibCursor a_226_1313_1634);
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
@@ -194,6 +194,7 @@ GibCursorGibCursorGibCursorGibCursorProd take_plist_780(GibCursor end_r_2487,
                                                         GibCursor loc_2486,
                                                         GibInt n_203_1328_1653,
                                                         GibCursor a_204_1329_1654);
+static inline
 GibCursorGibBoolProd is_empty_plist_778(GibCursor end_r_2490,
                                         GibCursor ls_191_1330_1656);
 GibCursorGibBoolProd elem_plist_779_1060(GibCursor end_r_2492,
@@ -770,24 +771,24 @@ GibCursorGibCursorGibIntProd findk(GibCursor end_r_2438, GibInt k_132_1258_1584,
             if (fltIf_1494_1595) {
                 GibInt fltAppE_1496_1596 = k_132_1258_1584 + 1;
                 GibInt fltAppE_1497_1597 = tmpval_5921 + tmpval_5923;
-                GibCursorGibCursorGibIntProd tmp_struct_24 =
-                                              findk(end_r_2438, fltAppE_1496_1596, k_132_1258_1584, fltAppE_1497_1597, tmpcur_5924);
-                GibCursor pvrtmp_5927 = tmp_struct_24.field0;
-                GibCursor pvrtmp_5928 = tmp_struct_24.field1;
-                GibInt pvrtmp_5929 = tmp_struct_24.field2;
+                // GibCursorGibCursorGibIntProd tmp_struct_24 =
+                                              return findk(end_r_2438, fltAppE_1496_1596, k_132_1258_1584, fltAppE_1497_1597, tmpcur_5924);
+                // GibCursor pvrtmp_5927 = tmp_struct_24.field0;
+                // GibCursor pvrtmp_5928 = tmp_struct_24.field1;
+                // GibInt pvrtmp_5929 = tmp_struct_24.field2;
 
-                return (GibCursorGibCursorGibIntProd) {pvrtmp_5927, pvrtmp_5928,
-                                                       pvrtmp_5929};
+                // return (GibCursorGibCursorGibIntProd) {pvrtmp_5927, pvrtmp_5928,
+                //                                        pvrtmp_5929};
             } else {
                 GibInt fltAppE_1498_1598 = k_132_1258_1584 + 1;
-                GibCursorGibCursorGibIntProd tmp_struct_25 =
-                                              findk(end_r_2438, fltAppE_1498_1598, km_133_1259_1585, m_134_1260_1586, tmpcur_5924);
-                GibCursor pvrtmp_5930 = tmp_struct_25.field0;
-                GibCursor pvrtmp_5931 = tmp_struct_25.field1;
-                GibInt pvrtmp_5932 = tmp_struct_25.field2;
+                // GibCursorGibCursorGibIntProd tmp_struct_25 =
+                                              return findk(end_r_2438, fltAppE_1498_1598, km_133_1259_1585, m_134_1260_1586, tmpcur_5924);
+                // GibCursor pvrtmp_5930 = tmp_struct_25.field0;
+                // GibCursor pvrtmp_5931 = tmp_struct_25.field1;
+                // GibInt pvrtmp_5932 = tmp_struct_25.field2;
 
-                return (GibCursorGibCursorGibIntProd) {pvrtmp_5930, pvrtmp_5931,
-                                                       pvrtmp_5932};
+                // return (GibCursorGibCursorGibIntProd) {pvrtmp_5930, pvrtmp_5931,
+                //                                        pvrtmp_5932};
             }
             break;
         }
@@ -1404,6 +1405,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd zip0(GibCursor end_r_2465,
         }
     }
 }
+static inline
 GibInt maxInt(GibInt a_189_1293_1631, GibInt b_190_1294_1632)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
@@ -1588,22 +1590,22 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse_plist_782(Gib
                                     end_r_2473, PList_v_775_T);
 
             GibCursor end_4366 = loc_2701 + 9;
-            GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
-            tmp_struct_77 =
-             reverse_plist_782(end_r_2472, end_r_2712, end_r_2474, loc_2471, tmpcur_6192, r_2712);
-            GibCursor pvrtmp_6198 = tmp_struct_77.field0;
-            GibCursor pvrtmp_6199 = tmp_struct_77.field1;
-            GibCursor pvrtmp_6200 = tmp_struct_77.field2;
-            GibCursor pvrtmp_6201 = tmp_struct_77.field3;
-            GibCursor pvrtmp_6202 = tmp_struct_77.field4;
-            GibCursor pvrtmp_6203 = tmp_struct_77.field5;
+            // GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
+            // tmp_struct_77 =
+             return reverse_plist_782(end_r_2472, end_r_2712, end_r_2474, loc_2471, tmpcur_6192, r_2712);
+            // GibCursor pvrtmp_6198 = tmp_struct_77.field0;
+            // GibCursor pvrtmp_6199 = tmp_struct_77.field1;
+            // GibCursor pvrtmp_6200 = tmp_struct_77.field2;
+            // GibCursor pvrtmp_6201 = tmp_struct_77.field3;
+            // GibCursor pvrtmp_6202 = tmp_struct_77.field4;
+            // GibCursor pvrtmp_6203 = tmp_struct_77.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_6198,
-                                                                                 end_r_2473,
-                                                                                 pvrtmp_6200,
-                                                                                 pvrtmp_6201,
-                                                                                 pvrtmp_6202,
-                                                                                 pvrtmp_6203};
+            // return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_6198,
+            //                                                                      end_r_2473,
+            //                                                                      pvrtmp_6200,
+            //                                                                      pvrtmp_6201,
+            //                                                                      pvrtmp_6202,
+            //                                                                      pvrtmp_6203};
             break;
         }
 
@@ -1951,6 +1953,7 @@ GibCursorGibCursorGibCursorGibCursorProd take_plist_780(GibCursor end_r_2487,
                                                            pvrtmp_6347};
     }
 }
+static inline
 GibCursorGibBoolProd is_empty_plist_778(GibCursor end_r_2490,
                                         GibCursor ls_191_1330_1656)
 {
@@ -2067,12 +2070,12 @@ GibCursorGibBoolProd elem_plist_779_1060(GibCursor end_r_2492,
             if (fltIf_1512_1668) {
                 return (GibCursorGibBoolProd) {end_r_2492, true};
             } else {
-                GibCursorGibBoolProd tmp_struct_115 =
-                                      elem_plist_779_1060(end_r_2492, a_196_1336_1659, tmpcur_6372);
-                GibCursor pvrtmp_6374 = tmp_struct_115.field0;
-                GibBool pvrtmp_6375 = tmp_struct_115.field1;
+                // GibCursorGibBoolProd tmp_struct_115 =
+                                      return elem_plist_779_1060(end_r_2492, a_196_1336_1659, tmpcur_6372);
+                // GibCursor pvrtmp_6374 = tmp_struct_115.field0;
+                // GibBool pvrtmp_6375 = tmp_struct_115.field1;
 
-                return (GibCursorGibBoolProd) {pvrtmp_6374, pvrtmp_6375};
+                // return (GibCursorGibBoolProd) {pvrtmp_6374, pvrtmp_6375};
             }
             break;
         }
@@ -4839,11 +4842,11 @@ int main(int argc, char **argv)
         if (tailapp_3236) {
             printf("#t");
             printf("\n");
-            return 0;
+            // return 0;
         } else {
             printf("#f");
             printf("\n");
-            return 0;
+            // return 0;
         }
     } else {
         GibBool fltIf_1476_1538 = n_101_1229_1532 == 2;
@@ -4867,11 +4870,11 @@ int main(int argc, char **argv)
             if (tailapp_3237) {
                 printf("#t");
                 printf("\n");
-                return 0;
+                // return 0;
             } else {
                 printf("#f");
                 printf("\n");
-                return 0;
+                // return 0;
             }
         } else {
             GibBool fltIf_1479_1541 = n_101_1229_1532 == 3;
@@ -4895,11 +4898,11 @@ int main(int argc, char **argv)
                 if (tailapp_3238) {
                     printf("#t");
                     printf("\n");
-                    return 0;
+                    // return 0;
                 } else {
                     printf("#f");
                     printf("\n");
-                    return 0;
+                    // return 0;
                 }
             } else {
                 GibIntGibIntGibIntGibIntGibIntGibIntProd tmp_struct_250 =
@@ -4920,11 +4923,11 @@ int main(int argc, char **argv)
                 if (tailapp_3239) {
                     printf("#t");
                     printf("\n");
-                    return 0;
+                    // return 0;
                 } else {
                     printf("#f");
                     printf("\n");
-                    return 0;
+                    // return 0;
                 }
             }
         }
