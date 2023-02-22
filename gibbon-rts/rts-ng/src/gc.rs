@@ -446,14 +446,27 @@ unsafe fn root_first_chunk(
     let footer_in_nursery = nursery.contains_addr(src_end);
     if footer_in_nursery {
         let src_footer = src_end as *mut GibNurseryChunkFooter;
-        let chunk_size = *src_footer as isize;
-        let is_loc_0 = src_end.offset_from(src) == chunk_size;
+        let chunk_size = *src_footer;
+        let is_loc_0 = src_end.offset_from(src) == (chunk_size as isize);
         // Initialize the footer with refcount 1.
-        let (dst, dst_end) = Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, refcount)?;
+        let (dst, dst_end) = if COMPACT {
+            Heap::allocate_first_chunk(
+                oldgen,
+                (chunk_size as usize) + size_of::<GibOldgenChunkFooter>(),
+                refcount,
+            )?
+        } else {
+            Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, refcount)?
+        };
         Ok((dst, dst_end, is_loc_0))
     } else {
         let src_footer = src_end as *mut GibOldgenChunkFooter;
-        let (dst, footer_end) = Heap::allocate(oldgen, CHUNK_SIZE)?;
+        let chunk_size = (*src_footer).size;
+        let (dst, footer_end) = if COMPACT {
+            Heap::allocate(oldgen, chunk_size)?
+        } else {
+            Heap::allocate(oldgen, CHUNK_SIZE)?
+        };
         let footer_start = footer_end.sub(size_of::<GibOldgenChunkFooter>());
         let new_footer = footer_start as *mut GibOldgenChunkFooter;
         // Link footers.
@@ -1470,6 +1483,11 @@ macro_rules! write_shortcut_ptr {
             let offset = $dst_end_.offset_from($dst_);
             let tagged: u64 = TaggedPointer::new($dst_, offset as u16).as_u64();
             write(shortcut_addr, tagged);
+
+            #[cfg(feature = "gcstats")]
+            {
+                (*GC_STATS).mem_copied += 8;
+            }
 
             dbgprintln!(
                 "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",

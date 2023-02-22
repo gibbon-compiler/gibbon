@@ -1570,7 +1570,6 @@ static void gib_gc_stats_free(GibGcStats *stats)
     gib_free(stats);
 }
 
-#ifdef _GIBBON_GCSTATS
 static void gib_gc_stats_print(GibGcStats *stats)
 {
     printf("\nGC statistics\n----------------------------------------\n");
@@ -1610,7 +1609,6 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("GC ZCT mgmt time:\t\t %e\n", stats->gc_zct_mgmt_time);
 
 }
-#endif // _GIBBON_GCSTATS
 
 
 /*
