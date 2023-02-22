@@ -29,7 +29,7 @@ const TAG_MASK: u64 = u64::MAX >> TAG_BITS;
 // pub const MAX_POINTER: u64 = u64::MAX >> TAG_BITS;
 
 /// The tagged pointer, the upper bits are used to store arbitrary data.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TaggedPointer(u64);
 
 impl TaggedPointer {
