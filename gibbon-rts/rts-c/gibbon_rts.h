@@ -543,6 +543,19 @@ extern GibGcStats *gib_global_gc_stats;
 #define GIB_NURSERY_SIZE (4 * MB)
 #endif
 
+#if defined GIB_INIT_CHUNK_SIZE
+
+#if GIB_INIT_CHUNK_SIZE < 128
+// The nursery size provided is too small, set it to 64 bytes.
+#define GIB_INIT_CHUNK_SIZE 128
+#endif
+
+// GIB_INIT_CHUNK_SIZE not defined, initialize it to a default value.
+#else
+#define GIB_INIT_CHUNK_SIZE 512
+#endif
+
+
 
 #define GIB_MAX_CHUNK_SIZE 65500
 
@@ -554,9 +567,6 @@ extern GibGcStats *gib_global_gc_stats;
 // Same as SHADOWSTACK_SIZE, overflows are not checked.
 #define GIB_REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 4 * 1024 * 1024)
 
-
-// Size of the first chunk.
-#define GIB_INIT_CHUNK_SIZE 512
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS
