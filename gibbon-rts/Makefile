@@ -39,7 +39,7 @@ BURN                 ?= 1
 COMPACT              ?= 1
 SIMPLE_WRITE_BARRIER ?= 0
 
-CFLAGS += $(USER_CFLAGS) -D_GIBBON_VERBOSITY=$(VERBOSITY)
+CFLAGS += -D_GIBBON_VERBOSITY=$(VERBOSITY)
 
 ifeq ($(MODE), debug)
 	CFLAGS += -O0 -g -D_GIBBON_DEBUG
@@ -97,6 +97,9 @@ endif
 ifeq ($(COMPACT), 0)
 	RSFLAGS += --features=nocompact
 endif
+
+# Add user passed flags at the end so that they take precedence.
+CFLAGS += $(USER_CFLAGS)
 
 # Assume current directory if not set.
 GIBBONDIR         ?= ./

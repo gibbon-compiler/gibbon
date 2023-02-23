@@ -1047,7 +1047,7 @@ void gib_print_gc_config(void) {
     printf("Simple write barrier is enabled.\n");
 #endif
 
-    printf("Nursery size=%zu\n", GIB_NURSERY_SIZE);
+    printf("Nursery size=%zu\n", (size_t) gib_nursery_size);
     printf("Max chunk size=%zu\n", (size_t) GIB_MAX_CHUNK_SIZE);
     printf("Initial chunk size=%zu\n", (size_t) GIB_INIT_CHUNK_SIZE);
     printf("\n");
@@ -1409,8 +1409,8 @@ static void gib_nursery_initialize(GibNursery *nursery, size_t nsize)
     nursery->alloc = nursery->heap_end;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Nursery: start=%p, end=%p, alloc=%p\n",
-            nursery->heap_start, nursery->heap_end, nursery->alloc);
+    printf("Nursery info: start=%p, end=%p, alloc=%p, size=%zu\n\n",
+           nursery->heap_start, nursery->heap_end, nursery->alloc, nsize);
 #endif
 
     return;

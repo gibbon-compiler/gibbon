@@ -384,8 +384,7 @@ GibIntGibIntGibIntGibIntGibIntGibIntProd test_opts()
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 2000, 1050, 1051,
-                                                       2000};
+    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 2000, 1300, 1301, 2000};
 }
 GibIntGibIntGibIntGibIntGibIntGibIntProd fast_opts()
 {
@@ -393,8 +392,7 @@ GibIntGibIntGibIntGibIntGibIntGibIntProd fast_opts()
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 2000, 1000, 1001,
-                                                       2000};
+    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 2000, 1000, 1001, 3000};
 }
 GibIntGibIntGibIntGibIntGibIntGibIntProd norm_opts()
 {
@@ -402,8 +400,7 @@ GibIntGibIntGibIntGibIntGibIntGibIntProd norm_opts()
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 2000, 1000, 1001,
-                                                       4000};
+    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 3100, 1000, 1001, 4000};
 }
 GibIntGibIntGibIntGibIntGibIntGibIntProd slow_opts()
 {
@@ -411,8 +408,7 @@ GibIntGibIntGibIntGibIntGibIntGibIntProd slow_opts()
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 4000, 1000, 1001,
-                                                       4000};
+    return (GibIntGibIntGibIntGibIntGibIntGibIntProd) {1, 2, 4000, 100, 101, 3500};
 }
 GibBool bench_lcss(GibIntGibIntGibIntGibIntGibIntGibIntProd opts_104_1230_1546,
                    GibIntGibIntGibIntProd answer_105_1231_1547)
@@ -4906,6 +4902,7 @@ int main(int argc, char **argv)
                     // return 0;
                 }
             } else {
+                printf("using slow opts\n");
                 GibIntGibIntGibIntGibIntGibIntGibIntProd tmp_struct_250 =
                                                           slow_opts();
                 GibInt pvrtmp_5766 = tmp_struct_250.field0;

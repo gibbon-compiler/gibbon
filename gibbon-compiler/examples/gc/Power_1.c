@@ -590,6 +590,8 @@ unsigned char bench_ts()
 
     GibGcStateSnapshot *snapshot = gib_gc_init_state(1);
 
+    GibInt N = gib_get_size_param();
+
     for (long long iters_pvrtmp_9510 = 0; iters_pvrtmp_9510 <
          gib_get_iters_param(); iters_pvrtmp_9510++) {
         if (iters_pvrtmp_9510 != gib_get_iters_param() - 1) {
@@ -600,7 +602,7 @@ unsigned char bench_ts()
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_9510);
 
         GibCursorGibCursorGibCursorProd tmp_struct_16 =
-                                         ts(end_r_3207, r_3207, 20);
+                                         ts(end_r_3207, r_3207, N);
         GibCursor pvrtmp_9501 = tmp_struct_16.field0;
         GibCursor pvrtmp_9502 = tmp_struct_16.field1;
         GibCursor pvrtmp_9503 = tmp_struct_16.field2;
@@ -656,7 +658,7 @@ unsigned char bench_ts()
     GibCursor pvrtmp_9530 = tmp_struct_23.field0;
     GibCursor pvrtmp_9531 = tmp_struct_23.field1;
     GibInt pvrtmp_9532 = tmp_struct_23.field2;
-    GibBool fltAppE_1068_1294 = pvrtmp_9532 == 20;
+    GibBool fltAppE_1068_1294 = pvrtmp_9532 == N;
     unsigned char tailapp_4322 =  print_check(fltAppE_1068_1294);
 
     return tailapp_4322;
