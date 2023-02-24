@@ -257,8 +257,10 @@ GibCursorGibCursorGibIntProd countLeavesQtree(GibCursor end_r_10707,
                                               GibCursor tr_946_5347_8304);
 GibCursorGibCursorGibFloatProd sumQtree(GibCursor end_r_10709,
                                         GibCursor tr_959_5360_8323);
+static inline
 GibCursorGibFloatProd maybeLit(GibCursor end_r_10711,
                                GibCursor exp_1044_5429_8355);
+static inline
 GibCursorGibCursorProd trav_exp(GibCursor end_r_10713,
                                 GibCursor exp_1057_5442_8359);
 GibInt maxInt(GibInt a_1071_5456_8365, GibInt b_1072_5457_8366);
@@ -1733,9 +1735,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorProd foldConstants2(GibCursor end_r
                                                                  GibCursor loc_10671,
                                                                  GibCursor exp_286_4742_7746)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
 
     if (loc_10671 + 18 > end_r_10673) {
         gib_grow_region(&loc_10671, &end_r_10673);
@@ -4433,12 +4435,13 @@ GibCursorGibCursorGibFloatProd sumQtree(GibCursor end_r_10709,
         }
     }
 }
+static inline
 GibCursorGibFloatProd maybeLit(GibCursor end_r_10711,
                                GibCursor exp_1044_5429_8355)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
     GibPackedTag tmpval_17226 = *(GibPackedTag *) exp_1044_5429_8355;
     GibCursor tmpcur_17227 = exp_1044_5429_8355 + 1;
 
@@ -4505,12 +4508,13 @@ GibCursorGibFloatProd maybeLit(GibCursor end_r_10711,
         }
     }
 }
+static inline
 GibCursorGibCursorProd trav_exp(GibCursor end_r_10713,
                                 GibCursor exp_1057_5442_8359)
 {
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
+    // GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    // GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    // GibShadowstackFrame *frame;
     GibPackedTag tmpval_17241 = *(GibPackedTag *) exp_1057_5442_8359;
     GibCursor tmpcur_17242 = exp_1057_5442_8359 + 1;
 

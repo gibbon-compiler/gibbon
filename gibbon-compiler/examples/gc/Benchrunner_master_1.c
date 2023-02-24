@@ -40,10 +40,12 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 1 * KB;
+// static long long global_init_inf_buf_size = 1 * KB;
+static long long global_init_inf_buf_size = 512;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;
+// static long long global_inf_buf_max_chunk_size = 65500;
 
 static long long global_size_param = 1;
 static long long global_iters_param = 1;
@@ -818,12 +820,15 @@ RegionTy *alloc_counted_region(IntTy size) {
     return alloc_region(size);
 }
 
+IntTy MAX_CHUNK_LIMIT_REACHED = 0;
+
 ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     // Get size from current footer.
     RegionFooter *footer = (RegionFooter *) end_old_chunk;
     IntTy newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > global_inf_buf_max_chunk_size) {
+        MAX_CHUNK_LIMIT_REACHED++;
         newsize = global_inf_buf_max_chunk_size;
     }
     IntTy total_size = newsize + sizeof(RegionFooter);
@@ -1618,7 +1623,9 @@ FloatTy sum_mass_points(VectorTy *mpts_951_5322_8192);
 CursorInt64Prod countLeavesQtree(CursorTy end_r_10688,
                                  CursorTy tr_958_5323_8196);
 CursorFloat32Prod sumQtree(CursorTy end_r_10690, CursorTy tr_971_5336_8215);
+static inline
 CursorProd trav_exp(CursorTy end_r_10692, CursorTy exp_1043_5392_8247);
+static inline
 FloatTy maybeLit(CursorTy end_r_10694, CursorTy exp_1050_5399_8253);
 IntTy maxInt(IntTy a_1063_5412_8257, IntTy b_1064_5413_8258);
 IntTy cmpz_point3d_original(Float32Float32Float32Prod a_1340_5498_8260,
@@ -1852,6 +1859,7 @@ unsigned char bench_seqbuildkdtree()
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_2);
     printf("SELFTIMED: %e\n", selftimed_3);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
 
     CursorProd tmp_struct_6 =
                 check_buildkdtree(end_r_10755, pts_83_4568_7396, pvrtmp_14998);
@@ -1919,6 +1927,7 @@ unsigned char bench_seqfoldconstants()
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_19);
     printf("SELFTIMED: %e\n", selftimed_20);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
 
     CursorInt64Prod tmp_struct_23 =  sumExp(end_r_10766, pvrtmp_15030);
     CursorTy pvrtmp_15039 = tmp_struct_23.field0;
@@ -2117,6 +2126,7 @@ unsigned char bench_seqbuildquadtree()
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_38);
     printf("SELFTIMED: %e\n", selftimed_39);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
 
     CursorProd tmp_struct_42 =
                 check_buildquadtree(end_r_10781, vec1_745_6059_8522_9059, pvrtmp_15079);
@@ -2203,6 +2213,7 @@ unsigned char bench_seqnearest()
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_55);
     printf("SELFTIMED: %e\n", selftimed_56);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
 
     unsigned char tailapp_12079 =
                    check_nearest(pts_143_4596_7461, timed_14497);
@@ -2291,6 +2302,7 @@ unsigned char bench_seqcountcorr()
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_70);
     printf("SELFTIMED: %e\n", selftimed_71);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
 
     Float32Float32Float32Prod *tmp_75;
 
@@ -2685,6 +2697,7 @@ VectorTy *oneStep_seq(CursorTy end_r_10648, CursorTy bht_274_4698_7620,
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime_107);
     printf("SELFTIMED: %e\n", selftimed_108);
+    printf("MAX_CHUNK_LIMIT_REACHED: %lld\n", MAX_CHUNK_LIMIT_REACHED);
     return timed_14499;
 }
 CursorInt64Prod sumExp(CursorTy end_r_10650, CursorTy exp_282_4702_7632)
@@ -5240,6 +5253,7 @@ CursorFloat32Prod sumQtree(CursorTy end_r_10690, CursorTy tr_971_5336_8215)
         }
     }
 }
+static inline
 CursorProd trav_exp(CursorTy end_r_10692, CursorTy exp_1043_5392_8247)
 {
     TagTyPacked tmpval_16123 = *(TagTyPacked *) exp_1043_5392_8247;
@@ -5317,6 +5331,7 @@ CursorProd trav_exp(CursorTy end_r_10692, CursorTy exp_1043_5392_8247)
         }
     }
 }
+static inline
 FloatTy maybeLit(CursorTy end_r_10694, CursorTy exp_1050_5399_8253)
 {
     TagTyPacked tmpval_16136 = *(TagTyPacked *) exp_1050_5399_8253;
