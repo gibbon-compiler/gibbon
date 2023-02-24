@@ -1148,7 +1148,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         wrote <- gensym "wrote"
                         pure $
                            (if genGC
-                            then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |] ]
+                            then [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region_on_heap(gib_get_biginf_init_chunk_size()); |] ]
                             else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region_on_heap(gib_get_biginf_init_chunk_size()); |] ]) ++
                                [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg.start; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg.end; |]

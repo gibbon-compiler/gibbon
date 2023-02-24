@@ -1793,9 +1793,8 @@ fixRANs prg@(Prog defs funs main) = do
                  let tys = lookupDataCon ddfs dcon
                      n = length [ ty | ty <- tys, ty == CursorTy ]
                      tys' = L.drop n tys
-                     (rans, ls') = (L.take n ls, L.drop n ls)
-                     firstPacked = fromJust $ L.findIndex isPackedTy tys'
-                     needRANsExp = L.take n $ L.drop firstPacked ls'
+                     rans = L.take n ls
+                     needRANsExp = L.reverse $ L.take n (reverse ls)
                      ran_pairs = M.fromList $ fragileZip rans needRANsExp
                      VarE w' = ran_pairs M.! VarE v
                  return (bnd2, LetE (v,locs,t,Ext (L2.StartOfPkdCursor w')) bod')
