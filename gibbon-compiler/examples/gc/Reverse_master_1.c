@@ -237,7 +237,7 @@ Presently, all parallel pointer-based programs will leak memory.
 
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
+// #define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -246,7 +246,7 @@ char *ALLOC_COUNTED(size_t size) {
 #else
   #ifdef _POINTER
 #define ALLOC(n) GC_MALLOC(n)
-#define ALLOC_PACKED_SMALL(n) GC_MALLOC(n)
+// #define ALLOC_PACKED_SMALL(n) GC_MALLOC(n)
 #define ALLOC_PACKED_BIG(n) GC_MALLOC(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -254,7 +254,7 @@ char *ALLOC_COUNTED(size_t size) {
 }
   #else
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
+// #define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -772,18 +772,8 @@ RegionTy *alloc_region(IntTy size) {
     // Allocate the first chunk.
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy heap;
-    bool nursery_allocated = true;
+    bool nursery_allocated = false;
     heap = malloc(total_size);
-    // if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-    //     heap = ALLOC_PACKED_SMALL(total_size);
-    //     if (heap == NULL) {
-    //         heap = malloc(total_size);
-    //         nursery_allocated = false;
-    //     }
-    // } else {
-    //     heap = ALLOC_PACKED_BIG(total_size);
-    //     nursery_allocated = false;
-    // }
     if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
@@ -1353,8 +1343,8 @@ int main(int argc, char** argv)
       exit(1);
     }
 
-    // lim.rlim_cur = 1024LU * 1024LU * 1024LU; // 1GB stack.
-    lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
+    lim.rlim_cur = 4 * 1024LU * 1024LU * 1024LU; // 4GB stack.
+    // lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
     // lim.rlim_max = lim.rlim_cur; // Normal users may only be able to decrease this.
 
     // WARNING: Haven't yet figured out why this doesn't work on MacOS...
@@ -1667,7 +1657,7 @@ CursorCursorCursorCursorProd reverse(CursorTy end_r_304, CursorTy end_r_305,
         {
             RegionTy *region_867 = alloc_region(32);
             CursorTy r_371 = region_867->reg_heap;
-            IntTy sizeof_end_r_371_868 = global_init_inf_buf_size;
+            IntTy sizeof_end_r_371_868 = 32;
             CursorTy end_r_371 = r_371 + sizeof_end_r_371_868;
             IntTy tmpval_869 = *(IntTy *) tmpcur_862;
             CursorTy tmpcur_870 = tmpcur_862 + sizeof(IntTy);

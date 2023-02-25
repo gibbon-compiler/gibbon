@@ -40,7 +40,7 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 512;
+static long long global_init_inf_buf_size = 1 * KB;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;
@@ -774,16 +774,6 @@ RegionTy *alloc_region(IntTy size) {
     CursorTy heap;
     bool nursery_allocated = true;
     heap = malloc(total_size);
-    // if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-    //     heap = ALLOC_PACKED_SMALL(total_size);
-    //     if (heap == NULL) {
-    //         heap = malloc(total_size);
-    //         nursery_allocated = false;
-    //     }
-    // } else {
-    //     heap = ALLOC_PACKED_BIG(total_size);
-    //     nursery_allocated = false;
-    // }
     if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
@@ -895,7 +885,7 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 #ifdef _DEBUG
     printf("bump_ref_count: %lld -> %lld\n", reg_b->reg_id, reg_a->reg_id);
     printf("bump_ref_count: old-refcount=%d, old-outset-len=%d:\n", current_refcount, reg_b->reg_outset_len);
-    assert(current_refcount == reg_b->reg_outset_len+1);
+    // assert(current_refcount == reg_b->reg_outset_len+1);
 #endif
 
     // Add A to B's outset.
@@ -904,7 +894,7 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 #ifdef _DEBUG
     // printf("bump_ref_count: Added %p to %lld's outset, %p.\n", end_a, reg_b->reg_id, reg_b);
     printf("bump_ref_count: new-refcount=%d, new-outset-len=%d\n", new_refcount, reg_b->reg_outset_len);
-    assert(new_refcount == reg_b->reg_outset_len+1);
+    // assert(new_refcount == reg_b->reg_outset_len+1);
 #endif
 
     return;
@@ -1353,8 +1343,8 @@ int main(int argc, char** argv)
       exit(1);
     }
 
-    // lim.rlim_cur = 1024LU * 1024LU * 1024LU; // 1GB stack.
-    lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
+    lim.rlim_cur = 4 * 1024LU * 1024LU * 1024LU; // 4GB stack.
+    // lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
     // lim.rlim_max = lim.rlim_cur; // Normal users may only be able to decrease this.
 
     // WARNING: Haven't yet figured out why this doesn't work on MacOS...

@@ -343,7 +343,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             GibCursor end_597 = loc_345 + 9;
             // GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
             // tmp_struct_12 =
-              reverse(end_r_293, end_r_356, end_r_295, loc_292, tmpcur_938, r_356);
+                  return reverse(end_r_293, end_r_356, end_r_295, loc_292, tmpcur_938, r_356);
             // GibCursor pvrtmp_944 = tmp_struct_12.field0;
             // GibCursor pvrtmp_945 = tmp_struct_12.field1;
             // GibCursor pvrtmp_946 = tmp_struct_12.field2;
