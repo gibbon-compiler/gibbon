@@ -309,7 +309,8 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             gib_shadowstack_push(wstack, loc_292, end_r_295, Stk, PList_T);
 
             GibChunk region_939 =
-                     gib_alloc_region(32);
+                     // gib_alloc_region(32768);
+                     gib_alloc_region(gib_get_inf_init_chunk_size());
             GibCursor r_356 = region_939.start;
             GibCursor end_r_356 = region_939.end;
 

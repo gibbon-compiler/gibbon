@@ -361,7 +361,7 @@ GibCursorGibCursorGibCursorGibCursorProd payA_seq(GibCursor end_r_1155,
             gib_shadowstack_push(wstack, loc_1154, end_r_1156, Stk, AList_T);
 
             GibChunk region_2718 =
-                     gib_alloc_region(64);
+                     gib_alloc_region(gib_get_inf_init_chunk_size());
             GibCursor r_1281 = region_2718.start;
             GibCursor end_r_1281 = region_2718.end;
 
@@ -419,7 +419,7 @@ GibCursorGibCursorGibCursorGibCursorProd payA_seq(GibCursor end_r_1155,
                                      AList_T);
 
                 GibChunk region_2737 =
-                         gib_alloc_region(64);
+                         gib_alloc_region(gib_get_inf_init_chunk_size());
                 GibCursor r_1280 = region_2737.start;
                 GibCursor end_r_1280 = region_2737.end;
 
