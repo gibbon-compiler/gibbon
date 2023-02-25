@@ -18,8 +18,18 @@ gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/exampl
 
 gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_1.exe -I$GIBBONDIR/gibbon-rts/build -L$GIBBONDIR/gibbon-rts/build -Wl,-rpath=$GIBBONDIR/gibbon-rts/build $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_1.c $GIBBONDIR/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
 
-gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_master_1.c -lm
-
 gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Reverse_1_noregsizeinfer.exe -I$GIBBONDIR/gibbon-rts/build -L$GIBBONDIR/gibbon-rts/build -Wl,-rpath=$GIBBONDIR/gibbon-rts/build $GIBBONDIR/gibbon-compiler/examples/gc/Reverse_1_noregsizeinfer.c $GIBBONDIR/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
 
 gcc -std=gnu11  $OPT_LEVEL  $CFLAGS -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Coins_1_noregsizeinfer.exe -I$GIBBONDIR/gibbon-rts/build -L$GIBBONDIR/gibbon-rts/build -Wl,-rpath=$GIBBONDIR/gibbon-rts/build $GIBBONDIR/gibbon-compiler/examples/gc/Coins_1_noregsizeinfer.c $GIBBONDIR/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Benchrunner_master_1.c -lm
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Reverse_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Reverse_master_1.c -lm
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Coins_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Coins_master_1.c -lm
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/TreeUpdate_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/TreeUpdate_master_1.c -lm
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Power_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Power_master_1.c -lm
+
+gcc -std=gnu11  $OPT_LEVEL  $CFLAGS  -flto  -o $GIBBONDIR/gibbon-compiler/examples/gc/Lcss_master_1.exe $GIBBONDIR/gibbon-compiler/examples/gc/Lcss_master_1.c -lm
