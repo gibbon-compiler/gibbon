@@ -109,21 +109,25 @@ bench_lcss opts answer =
 gibbon_main =
   let n = sizeParam in
     if n < 1 || n == 1
-    then bench_lcss test_opts test_opts_answer
+    then bench_lcss very_small_opts very_small_opts_answer
     else if n == 2
-    then bench_lcss fast_opts fast_opts_answer
+    then bench_lcss small_opts small_opts_answer
     else if n == 3
+    then bench_lcss fast_opts fast_opts_answer
+    else if n == 4
     then bench_lcss norm_opts norm_opts_answer
     else bench_lcss slow_opts slow_opts_answer
 
-test_opts, fast_opts, norm_opts, slow_opts :: (Int,Int,Int,Int,Int,Int)
-test_opts = (1,2,2000,1050,1051,2000)
-fast_opts = (1,2,2000,1000,1001,2000)
-norm_opts = (1,2,2000,1000,1001,4000)
-slow_opts = (1,2,4000,1000,1001,4000)
+very_small_opts, small_opts, fast_opts, norm_opts, slow_opts :: (Int,Int,Int,Int,Int,Int)
+very_small_opts = (1, 2, 2000, 1300, 1301, 2000)
+small_opts = (1, 2, 2000, 1000, 1001, 2000)
+fast_opts = (1, 2, 2000, 1000, 1001, 3000)
+norm_opts = (1, 2, 3100, 1000, 1001, 4000)
+slow_opts = (1, 2, 4000, 100, 101, 3500)
 
-test_opts_answer, fast_opts_answer, norm_opts_answer, slow_opts_answer :: (Int,Int,Int)
-test_opts_answer = (1050,1,2000)
+very_small_opts_answer, small_opts_answer, fast_opts_answer, norm_opts_answer, slow_opts_answer :: (Int,Int,Int)
+very_small_opts_answer = (1300,1,2000)
+small_opts_answer = (1000,1,2000)
 fast_opts_answer = (1000,1,2000)
-norm_opts_answer = (1000,1,2000)
-slow_opts_answer = (1000,1,4000)
+norm_opts_answer = (1000,1,3100)
+slow_opts_answer = (100,1,3500)

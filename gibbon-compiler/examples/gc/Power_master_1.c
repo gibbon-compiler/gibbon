@@ -40,7 +40,7 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 1 * KB;
+static long long global_init_inf_buf_size = 512;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;
@@ -1853,13 +1853,15 @@ unsigned char bench_ts()
     struct timespec begin_pvrtmp_6185;
     struct timespec end_pvrtmp_6185;
 
+    long long N = global_size_param;
+
     for (long long iters_pvrtmp_6185 = 0; iters_pvrtmp_6185 <
          global_iters_param; iters_pvrtmp_6185++) {
         if (iters_pvrtmp_6185 != global_iters_param - 1)
             save_alloc_state();
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_6185);
 
-        CursorCursorCursorProd tmp_struct_19 =  ts(end_r_2645, r_2645, 20);
+        CursorCursorCursorProd tmp_struct_19 =  ts(end_r_2645, r_2645, N);
         CursorTy pvrtmp_6176 = tmp_struct_19.field0;
         CursorTy pvrtmp_6177 = tmp_struct_19.field1;
         CursorTy pvrtmp_6178 = tmp_struct_19.field2;
@@ -1897,7 +1899,7 @@ unsigned char bench_ts()
     CursorInt64Prod tmp_struct_26 =  size(pvrtmp_6195, pvrtmp_6197);
     CursorTy pvrtmp_6203 = tmp_struct_26.field0;
     IntTy pvrtmp_6204 = tmp_struct_26.field1;
-    BoolTy fltAppE_1057_1193 = pvrtmp_6204 == 20;
+    BoolTy fltAppE_1057_1193 = pvrtmp_6204 == N;
     unsigned char tailapp_3434 =  print_check(fltAppE_1057_1193);
 
     free_region(end_r_2644);

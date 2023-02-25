@@ -40,7 +40,7 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 1 * KB;
+static long long global_init_inf_buf_size = 512;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;
@@ -1664,7 +1664,7 @@ CursorCursorCursorCursorProd reverse(CursorTy end_r_304, CursorTy end_r_305,
 
       case 0:
         {
-            RegionTy *region_867 = alloc_region(global_init_inf_buf_size);
+            RegionTy *region_867 = alloc_region(32);
             CursorTy r_371 = region_867->reg_heap;
             IntTy sizeof_end_r_371_868 = global_init_inf_buf_size;
             CursorTy end_r_371 = r_371 + sizeof_end_r_371_868;

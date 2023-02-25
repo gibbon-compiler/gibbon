@@ -219,9 +219,10 @@ ansd = Cons1 1.0 (Cons1 1.0 (Cons1 2.0 (Cons1 5.0 (Cons1 14.0 (Cons1 42.0 (Cons1
 
 bench_ts :: ()
 bench_ts =
-  let ps = iterate (ts 20)
+  let n = sizeParam
+      ps = iterate (ts n)
       sz = size (toList ps)
-  in print_check (sz == 20)
+  in print_check (sz == n)
 
 bench_psb :: ()
 bench_psb =

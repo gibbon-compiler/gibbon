@@ -40,7 +40,7 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 1 * KB;
+static long long global_init_inf_buf_size = 512;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;

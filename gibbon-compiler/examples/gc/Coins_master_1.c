@@ -40,7 +40,7 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 1 * KB;
+static long long global_init_inf_buf_size = 512;
 
 // Maximum size of a chunk, see GitHub #110.
 static long long global_inf_buf_max_chunk_size = 1 * GB;
@@ -773,16 +773,17 @@ RegionTy *alloc_region(IntTy size) {
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy heap;
     bool nursery_allocated = true;
-    if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        heap = ALLOC_PACKED_SMALL(total_size);
-        if (heap == NULL) {
-            heap = malloc(total_size);
-            nursery_allocated = false;
-        }
-    } else {
-        heap = ALLOC_PACKED_BIG(total_size);
-        nursery_allocated = false;
-    }
+    heap = ALLOC_PACKED_BIG(total_size);
+    // if (size <= NURSERY_ALLOC_UPPER_BOUND) {
+    //     heap = ALLOC_PACKED_SMALL(total_size);
+    //     if (heap == NULL) {
+    //         heap = malloc(total_size);
+    //         nursery_allocated = false;
+    //     }
+    // } else {
+    //     heap = ALLOC_PACKED_BIG(total_size);
+    //     nursery_allocated = false;
+    // }
     if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
@@ -1502,10 +1503,13 @@ CursorCursorCursorProd getCoins1(CursorTy end_r_1162, CursorTy end_r_1163,
                                  IntTy q_96_519_706,
                                  CursorTy coins_rst_97_520_707);
 unsigned char print_check(BoolTy b_110_521_711);
+static inline
 Int64Int64Prod head_plist_282(CursorTy end_r_1165, CursorTy ls_106_541_714);
+static inline
 CursorCursorCursorProd tail_plist_283(CursorTy end_r_1168, CursorTy end_r_1169,
                                       CursorTy loc_1167,
                                       CursorTy ls_102_545_718);
+static inline
 BoolTy is_empty_plist_281(CursorTy end_r_1171, CursorTy ls_98_549_722);
 CursorCursorCursorCursorProd _copy_AList(CursorTy end_r_1174,
                                          CursorTy end_r_1175, CursorTy loc_1173,
@@ -1697,9 +1701,9 @@ CursorCursorCursorProd payA_seq(CursorTy end_r_1158, CursorTy end_r_1159,
             return (CursorCursorCursorProd) {end_r_1159, loc_1157,
                                              writecur_1801};
         } else {
-            RegionTy *region_2561 = alloc_region(global_init_inf_buf_size);
+            RegionTy *region_2561 = alloc_region(32);
             CursorTy r_1304 = region_2561->reg_heap;
-            IntTy sizeof_end_r_1304_2562 = global_init_inf_buf_size;
+            IntTy sizeof_end_r_1304_2562 = 32;
             CursorTy end_r_1304 = r_1304 + sizeof_end_r_1304_2562;
             Int64Int64Prod tmp_struct_5 =
                             head_plist_282(end_r_1158, coins_78_501_693);
@@ -1714,18 +1718,19 @@ CursorCursorCursorProd payA_seq(CursorTy end_r_1158, CursorTy end_r_1159,
 
             if (fltIf_661_700) {
                 CursorCursorCursorProd tmp_struct_7 =
-                                        payA_seq(pvrtmp_2565, end_r_1159, loc_1157, amt_77_500_692, pvrtmp_2566);
-                CursorTy pvrtmp_2572 = tmp_struct_7.field0;
-                CursorTy pvrtmp_2573 = tmp_struct_7.field1;
-                CursorTy pvrtmp_2574 = tmp_struct_7.field2;
+                        payA_seq(pvrtmp_2565, end_r_1159, loc_1157, amt_77_500_692, pvrtmp_2566);
+                // CursorTy pvrtmp_2572 = tmp_struct_7.field0;
+                // CursorTy pvrtmp_2573 = tmp_struct_7.field1;
+                // CursorTy pvrtmp_2574 = tmp_struct_7.field2;
 
                 free_region(end_r_1304);
-                return (CursorCursorCursorProd) {pvrtmp_2572, pvrtmp_2573,
-                                                 pvrtmp_2574};
+                return tmp_struct_7;
+                // return (CursorCursorCursorProd) {pvrtmp_2572, pvrtmp_2573,
+                //                                  pvrtmp_2574};
             } else {
-                RegionTy *region_2581 = alloc_region(global_init_inf_buf_size);
+                RegionTy *region_2581 = alloc_region(32);
                 CursorTy r_1303 = region_2581->reg_heap;
-                IntTy sizeof_end_r_1303_2582 = global_init_inf_buf_size;
+                IntTy sizeof_end_r_1303_2582 = 32;
                 CursorTy end_r_1303 = r_1303 + sizeof_end_r_1303_2582;
                 CursorCursorCursorProd tmp_struct_8 =
                                         getCoins1(pvrtmp_2565, end_r_1303, r_1303, pvrtmp_2563, pvrtmp_2564, pvrtmp_2566);
@@ -1762,19 +1767,19 @@ CursorCursorCursorProd getCoins1(CursorTy end_r_1162, CursorTy end_r_1163,
                                  IntTy q_96_519_706,
                                  CursorTy coins_rst_97_520_707)
 {
-    if (loc_1161 + 32 > end_r_1163) {
-        ChunkTy new_chunk_14 = alloc_chunk(end_r_1163);
-        CursorTy chunk_start_15 = new_chunk_14.chunk_start;
-        CursorTy chunk_end_16 = new_chunk_14.chunk_end;
+    // if (loc_1161 + 32 > end_r_1163) {
+    //     ChunkTy new_chunk_14 = alloc_chunk(end_r_1163);
+    //     CursorTy chunk_start_15 = new_chunk_14.chunk_start;
+    //     CursorTy chunk_end_16 = new_chunk_14.chunk_end;
 
-        end_r_1163 = chunk_end_16;
-        *(TagTyPacked *) loc_1161 = 255;
+    //     end_r_1163 = chunk_end_16;
+    //     *(TagTyPacked *) loc_1161 = 255;
 
-        CursorTy redir = loc_1161 + 1;
+    //     CursorTy redir = loc_1161 + 1;
 
-        *(CursorTy *) redir = chunk_start_15;
-        loc_1161 = chunk_start_15;
-    }
+    //     *(CursorTy *) redir = chunk_start_15;
+    //     loc_1161 = chunk_start_15;
+    // }
 
     BoolTy fltIf_663_708 = q_96_519_706 == 1;
 
@@ -1831,6 +1836,7 @@ unsigned char print_check(BoolTy b_110_521_711)
         return 0;
     }
 }
+static inline
 Int64Int64Prod head_plist_282(CursorTy end_r_1165, CursorTy ls_106_541_714)
 {
     TagTyPacked tmpval_2618 = *(TagTyPacked *) ls_106_541_714;
@@ -1888,23 +1894,24 @@ Int64Int64Prod head_plist_282(CursorTy end_r_1165, CursorTy ls_106_541_714)
         }
     }
 }
+static inline
 CursorCursorCursorProd tail_plist_283(CursorTy end_r_1168, CursorTy end_r_1169,
                                       CursorTy loc_1167,
                                       CursorTy ls_102_545_718)
 {
-    if (loc_1167 + 32 > end_r_1169) {
-        ChunkTy new_chunk_21 = alloc_chunk(end_r_1169);
-        CursorTy chunk_start_22 = new_chunk_21.chunk_start;
-        CursorTy chunk_end_23 = new_chunk_21.chunk_end;
+    // if (loc_1167 + 32 > end_r_1169) {
+    //     ChunkTy new_chunk_21 = alloc_chunk(end_r_1169);
+    //     CursorTy chunk_start_22 = new_chunk_21.chunk_start;
+    //     CursorTy chunk_end_23 = new_chunk_21.chunk_end;
 
-        end_r_1169 = chunk_end_23;
-        *(TagTyPacked *) loc_1167 = 255;
+    //     end_r_1169 = chunk_end_23;
+    //     *(TagTyPacked *) loc_1167 = 255;
 
-        CursorTy redir = loc_1167 + 1;
+    //     CursorTy redir = loc_1167 + 1;
 
-        *(CursorTy *) redir = chunk_start_22;
-        loc_1167 = chunk_start_22;
-    }
+    //     *(CursorTy *) redir = chunk_start_22;
+    //     loc_1167 = chunk_start_22;
+    // }
 
     TagTyPacked tmpval_2635 = *(TagTyPacked *) ls_102_545_718;
     CursorTy tmpcur_2636 = ls_102_545_718 + 1;
@@ -1975,6 +1982,7 @@ CursorCursorCursorProd tail_plist_283(CursorTy end_r_1168, CursorTy end_r_1169,
         }
     }
 }
+static inline
 BoolTy is_empty_plist_281(CursorTy end_r_1171, CursorTy ls_98_549_722)
 {
     TagTyPacked tmpval_2668 = *(TagTyPacked *) ls_98_549_722;
