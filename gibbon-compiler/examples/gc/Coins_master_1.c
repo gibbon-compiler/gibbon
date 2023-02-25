@@ -773,7 +773,7 @@ RegionTy *alloc_region(IntTy size) {
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy heap;
     bool nursery_allocated = true;
-    heap = ALLOC_PACKED_BIG(total_size);
+    heap = malloc(total_size);
     // if (size <= NURSERY_ALLOC_UPPER_BOUND) {
     //     heap = ALLOC_PACKED_SMALL(total_size);
     //     if (heap == NULL) {

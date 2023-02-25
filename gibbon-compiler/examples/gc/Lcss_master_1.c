@@ -763,7 +763,7 @@ static inline void remove_from_outset(CursorTy ptr, RegionTy *reg) {
 
 RegionTy *alloc_region(IntTy size) {
     // Allocate the region metadata.
-    RegionTy *reg = ALLOC(sizeof(RegionTy));
+    RegionTy *reg = malloc(sizeof(RegionTy));
     if (reg == NULL) {
         printf("alloc_region: allocation failed: %ld", sizeof(RegionTy));
         exit(1);
@@ -773,16 +773,18 @@ RegionTy *alloc_region(IntTy size) {
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy heap;
     bool nursery_allocated = true;
-    if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        heap = ALLOC_PACKED_SMALL(total_size);
-        if (heap == NULL) {
-            heap = malloc(total_size);
-            nursery_allocated = false;
-        }
-    } else {
-        heap = ALLOC_PACKED_BIG(total_size);
-        nursery_allocated = false;
-    }
+    // heap = ALLOC_PACKED_BIG(total_size);
+    heap = malloc(total_size);
+    // if (size <= NURSERY_ALLOC_UPPER_BOUND) {
+    //     heap = ALLOC_PACKED_SMALL(total_size);
+    //     if (heap == NULL) {
+    //         heap = malloc(total_size);
+    //         nursery_allocated = false;
+    //     }
+    // } else {
+    //     heap = ALLOC_PACKED_BIG(total_size);
+    //     nursery_allocated = false;
+    // }
     if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
