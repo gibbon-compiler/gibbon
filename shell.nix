@@ -14,6 +14,7 @@ let
   ghc = pkgs.haskell.compiler.ghc943;
   rust = (pkgs.rustChannelOf { rustToolchain = ./gibbon-rts/rust-toolchain; }).rust;
   clang = pkgs.clang_14;
+  llvm = pkgs.llvm_14;
   gibbon_dir = builtins.toString ./.;
 in
   with pkgs;
@@ -22,7 +23,7 @@ in
     buildInputs = [ # Haskell
                     ghc cabal-install stack
                     # C/C++
-                    clang gcc7 boehmgc uthash
+                    clang llvm gcc7 boehmgc uthash
                     # Rust
                     rust
                     # Racket

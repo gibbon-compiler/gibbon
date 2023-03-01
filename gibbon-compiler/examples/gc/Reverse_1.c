@@ -334,9 +334,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
 
             GibCursor writecur_604 = after_tag_600 + sizeof(GibInt);
 
-            if (loc_345 + 18 > end_r_356) {
-                gib_grow_region(&loc_345, &end_r_356);
-            }
+            // if (loc_345 + 18 > end_r_356) {
+            //     gib_grow_region(&loc_345, &end_r_356);
+            // }
             gib_indirection_barrier(loc_345, end_r_356, acc_32_99_146,
                                     end_r_294, PList_T);
 

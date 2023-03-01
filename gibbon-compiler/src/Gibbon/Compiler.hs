@@ -625,7 +625,7 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
@@ -681,7 +681,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+                  -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
