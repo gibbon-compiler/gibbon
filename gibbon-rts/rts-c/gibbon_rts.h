@@ -1054,7 +1054,7 @@ INLINE_HEADER void gib_indirection_barrier(
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
     #warning "Simple write barrier is enabled."
 #else
-    #warning "Simple write barrier is diabled."
+    #warning "Simple write barrier is disabled."
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
