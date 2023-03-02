@@ -396,11 +396,12 @@ pub mod c {
     pub struct GibGcStats {
         pub minor_collections: u64,
         pub major_collections: u64,
-        pub mem_allocated: usize,
-        pub mem_copied: usize,
-        pub mem_burned: usize,
-        pub forwarded: u64,
-        pub not_forwarded: u64,
+        pub mem_allocated_in_nursery: u64,
+        pub mem_allocated_in_oldgen: u64,
+        pub mem_copied: u64,
+        pub mem_burned: u64,
+        pub ctors_forwarded: u64,
+        pub ctors_not_forwarded: u64,
         pub indirs_inlined: u64,
         pub indirs_not_inlined: u64,
         pub redirs_inlined: u64,
@@ -416,6 +417,13 @@ pub mod c {
         pub gc_find_fwdptr_time: f64,
         pub gc_info_tbl_lkp_time: f64,
         pub gc_zct_mgmt_time: f64,
+        pub fwd_env_size: u64,
+        pub fwd_env_lookups: u64,
+        pub fwd_env_inserts: u64,
+        pub skipover_env_size: u64,
+        pub skipover_env_lookups: u64,
+        pub skipover_env_inserts: u64,
+        pub rootset_size: u64,
     }
 
     #[repr(C)]

@@ -434,17 +434,18 @@ typedef struct gib_gc_stats {
     uint64_t major_collections;
 
     // Overall memory allocated (maintained by C and Rust RTS).
-    size_t mem_allocated;
+    uint64_t mem_allocated_in_nursery;
+    uint64_t mem_allocated_in_oldgen;
 
-    // Overall memory copied (maintained by Rust RTS).
-    size_t mem_copied;
+    // Overall memory copied from nursery to oldgen (maintained by Rust RTS).
+    uint64_t mem_copied;
 
-    // Overall memory burned (maintained by Rust RTS).
-    size_t mem_burned;
+    // Overall memory burned by due to forwarding/burning (maintained by Rust RTS).
+    uint64_t mem_burned;
 
     // Total number of forwarding pointers that could be added vs not added.
-    uint64_t forwarded;
-    uint64_t not_forwarded;
+    uint64_t ctors_forwarded;
+    uint64_t ctors_not_forwarded;
 
     // Total number of indirections inlined vs not inlined.
     uint64_t indirs_inlined;
@@ -477,6 +478,15 @@ typedef struct gib_gc_stats {
     double gc_find_fwdptr_time;
     double gc_info_tbl_lkp_time;
     double gc_zct_mgmt_time;
+
+    // Other stats (maintained by Rust RTS).
+    uint64_t fwd_env_size;
+    uint64_t fwd_env_lookups;
+    uint64_t fwd_env_inserts;
+    uint64_t skipover_env_size;
+    uint64_t skipover_env_lookups;
+    uint64_t skipover_env_inserts;
+    uint64_t rootset_size;
 
 } GibGcStats;
 
@@ -782,9 +792,11 @@ INLINE_HEADER void gib_grow_region_in_nursery_fast(
     if (bump >= nursery->heap_start) {
 
 #ifdef _GIBBON_GCSTATS
-        GC_STATS->nursery_chunks++;
+        GC_STATS->nursery_chunks++;        
+        GC_STATS->mem_allocated_in_nursery += size;
 #endif
 
+        
         nursery->alloc = bump;
         char *footer = old - sizeof(GibNurseryChunkFooter);
         *(GibNurseryChunkFooter *) footer = size;
@@ -843,7 +855,7 @@ INLINE_HEADER void gib_grow_region_on_heap(
 
 #ifdef _GIBBON_GCSTATS
     GC_STATS->oldgen_chunks++;
-    GC_STATS->mem_allocated += size;
+    GC_STATS->mem_allocated_in_oldgen += size;
 #endif
 
     // Write a new footer for this chunk and link it with the old chunk's footer.

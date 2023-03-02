@@ -1088,6 +1088,7 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
 
 #ifdef _GIBBON_GCSTATS
         GC_STATS->nursery_regions++;
+        GC_STATS->mem_allocated_in_nursery += size;
 #endif
         nursery->alloc = bump;
         char *footer = old - sizeof(GibNurseryChunkFooter);
@@ -1136,7 +1137,7 @@ GibChunk gib_alloc_region_on_heap(size_t size)
 
 #ifdef _GIBBON_GCSTATS
     GC_STATS->oldgen_regions++;
-    GC_STATS->mem_allocated += size;
+    GC_STATS->mem_allocated_in_oldgen += size;
 #endif
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
@@ -1244,8 +1245,14 @@ STATIC_INLINE void gib_perform_GC_(bool force_major)
         exit(1);
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
+    double pause_time = gib_difftimespecs(&begin, &end);
+    gc_stats->gc_elapsed_time += pause_time;
     gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
+
+#ifdef _GIBBON_PRINT_PAUSE_TIMES
+    printf("pause_time: %f\n", pause_time);
+#endif
+
 #else
     int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, force_major);
     if (err < 0) {
@@ -1545,17 +1552,20 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
 {
     stats->minor_collections = 0;
     stats->major_collections = 0;
-    stats->mem_allocated = 0;
+    stats->mem_allocated_in_nursery = 0;
+    stats->mem_allocated_in_oldgen = 0;
     stats->mem_copied = 0;
     stats->mem_burned = 0;
-    stats->forwarded = 0;
-    stats->not_forwarded = 0;
+    stats->ctors_forwarded = 0;
+    stats->ctors_not_forwarded = 0;
     stats->indirs_inlined = 0;
     stats->indirs_not_inlined = 0;
     stats->redirs_inlined = 0;
     stats->redirs_not_inlined = 0;
     stats->nursery_regions = 0;
     stats->oldgen_regions = 0;
+    stats->nursery_chunks = 0;
+    stats->oldgen_chunks = 0;
     stats->gc_elapsed_time = 0;
     stats->gc_cpu_time = 0;
     stats->gc_rootset_sort_time = 0;
@@ -1563,6 +1573,13 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
     stats->gc_find_fwdptr_time = 0;
     stats->gc_info_tbl_lkp_time = 0;
     stats->gc_zct_mgmt_time = 0;
+    stats->fwd_env_size = 0;
+    stats->fwd_env_lookups = 0;
+    stats->fwd_env_inserts = 0;
+    stats->skipover_env_size = 0;
+    stats->skipover_env_lookups = 0;
+    stats->skipover_env_inserts = 0;
+    stats->rootset_size = 0;
 }
 
 static void gib_gc_stats_free(GibGcStats *stats)
@@ -1577,13 +1594,14 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("Minor collections:\t\t %" PRIu64 "\n", stats->minor_collections);
 
     printf("\n");
-    printf("Mem allocated:\t\t\t %zu\n", stats->mem_allocated);
-    printf("Mem copied:\t\t\t %zu\n", stats->mem_copied);
-    printf("Mem burned:\t\t\t %zu\n", stats->mem_burned);
+    printf("Mem allocated in nursery:\t %ld\n", stats->mem_allocated_in_nursery);
+    printf("Mem allocated in oldgen:\t %ld\n", stats->mem_allocated_in_oldgen);
+    printf("Mem copied (nursery->oldgen):\t %ld\n", stats->mem_copied);
+    printf("Mem burned:\t\t\t %ld\n", stats->mem_burned);
 
     printf("\n");
-    printf("Ctors forwarded:\t\t %" PRIu64 "\n", stats->forwarded);
-    printf("Ctors not forwarded:\t\t %" PRIu64 "\n", stats->not_forwarded);
+    printf("Ctors forwarded:\t\t %" PRIu64 "\n", stats->ctors_forwarded);
+    printf("Ctors not forwarded:\t\t %" PRIu64 "\n", stats->ctors_not_forwarded);
 
     printf("\n");
     printf("Indirs inlined:\t\t\t %" PRIu64 "\n", stats->indirs_inlined);
@@ -1594,20 +1612,33 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("Redirs not inlined:\t\t %" PRIu64 "\n", stats->redirs_not_inlined);
 
     printf("\n");
-    printf("GC nursery regions:\t\t %lu\n", stats->nursery_regions);
-    printf("GC oldgen regions:\t\t %lu\n", stats->oldgen_regions);
+    printf("Nursery regions:\t\t %lu\n", stats->nursery_regions);
+    printf("Oldgen regions:\t\t\t %lu\n", stats->oldgen_regions);
+
+    printf("\n");
+    printf("Nursery chunks:\t\t\t %lu\n", stats->nursery_chunks);
+    printf("Oldgen chunks:\t\t\t %lu\n", stats->oldgen_chunks);
 
     printf("\n");
     printf("GC elapsed time:\t\t %e\n", stats->gc_elapsed_time);
     printf("GC cpu time:\t\t\t %e\n", stats->gc_cpu_time);
 
     printf("\n");
-    printf("GC rootset sort time:\t\t %e\n", stats->gc_rootset_sort_time);
-    printf("GC burn time:\t\t\t %e\n", stats->gc_burn_time);
-    printf("GC fwd scan time:\t\t %e\n", stats->gc_find_fwdptr_time);
-    printf("GC info table lookup time:\t %e\n", stats->gc_info_tbl_lkp_time);
-    printf("GC ZCT mgmt time:\t\t %e\n", stats->gc_zct_mgmt_time);
+    printf("Rootset sort time:\t\t %e\n", stats->gc_rootset_sort_time);
+    printf("Burn time:\t\t\t %e\n", stats->gc_burn_time);
+    printf("Fwd ptr scan time:\t\t %e\n", stats->gc_find_fwdptr_time);
+    printf("Info table lookup time:\t\t %e\n", stats->gc_info_tbl_lkp_time);
+    printf("ZCT mgmt time:\t\t\t %e\n", stats->gc_zct_mgmt_time);
 
+    printf("\n");
+    // TODO: use PRIu64.
+    printf("Fwd env size:\t\t\t %ld\n", stats->fwd_env_size);
+    printf("Fwd env lookups:\t\t %ld\n", stats->fwd_env_lookups);
+    printf("Fwd env inserts:\t\t %ld\n", stats->fwd_env_inserts);
+    printf("Skipover env size:\t\t %ld\n", stats->skipover_env_size);
+    printf("Skipover env lookups:\t\t %ld\n", stats->skipover_env_lookups);
+    printf("Skipover env inserts:\t\t %ld\n", stats->skipover_env_inserts);
+    printf("Root set size:\t\t\t %ld\n", stats->rootset_size);
 }
 
 
@@ -1851,8 +1882,8 @@ int gib_init(int argc, char **argv)
         exit(1);
     }
 
-    // lim.rlim_cur = 1024LU * 1024LU * 1024LU; // 1GB stack.
-    lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
+    lim.rlim_cur = 4 * 1024LU * 1024LU * 1024LU; // 1GB stack.
+    // lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
     // lim.rlim_max = lim.rlim_cur; // Normal users may only be able to decrease this.
 
     // WARNING: Haven't yet figured out why this doesn't work on MacOS...
