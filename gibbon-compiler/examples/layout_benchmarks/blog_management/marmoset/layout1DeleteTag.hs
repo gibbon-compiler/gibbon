@@ -18,7 +18,7 @@ deleteKeywordInTagList keyword blogs = case blogs of
                                                                                                 --_ = printsym (quote "NEWLINE")
                                                                                                 --_ = printsym (quote "NEWLINE")
                                                                                                 newRst  = deleteKeywordInTagList keyword rst
-                                                                                                in Layout1 header id author date (copyPacked content) (copyPacked newTags) (copyPacked newRst) 
+                                                                                                in Layout1 header id author date content newTags newRst 
 
 
 -- main function 

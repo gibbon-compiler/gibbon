@@ -10,7 +10,7 @@ emphKeywordInContent keyword blogs =
       Layout5 rst tags content header id author date -> let --present = searchBlogContent keyword content 
                                                             newContent = emphasizeBlogContent' keyword content --present 
                                                             newRst     = emphKeywordInContent keyword rst 
-                                                         in Layout5 (newRst) (copyPacked tags) (copyPacked newContent) (header) id author date 
+                                                         in Layout5 newRst tags newContent header id author date 
 
 
 

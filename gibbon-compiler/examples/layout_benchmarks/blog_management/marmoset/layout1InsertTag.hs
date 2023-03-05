@@ -21,7 +21,7 @@ insertKeywordInTagList keyword blogs = case blogs of
 
                                                                                                  newTags = insertBlogTags keyword tags
                                                                                                  newRst  = insertKeywordInTagList keyword rst 
-                                                                                                in Layout1 header id author date (copyPacked content) (copyPacked newTags) (copyPacked newRst)
+                                                                                                in Layout1 header id author date content newTags newRst
 
 -- main function 
 gibbon_main = 

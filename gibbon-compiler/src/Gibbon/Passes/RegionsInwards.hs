@@ -179,14 +179,16 @@ placeRegionInwards env scopeSet ex  =
 
     DataConE loc dataCons args      -> do
                                        let allKeys  =  M.keys env                                                         -- List of all keys from env
-                                           keyList  = map (\variable -> F.find (S.member variable) allKeys) [loc]         -- For each var in the input set find its corresponding key
+                                           freelist = map freeVars args 
+                                           freevars = foldl (\s1 s2 -> s1 `S.union` s2) (S.empty) freelist  
+                                           keyList  = map (\variable -> F.find (S.member variable) allKeys) ((S.toList freevars) ++ [loc])       -- For each var in the input set find its corresponding key
                                            keyList' = S.catMaybes keyList                                                 -- Filter all the Nothing values from the list and let only Just values in the list
                                            newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'   -- Filter all the Nothing values from the list and let only Just values in the list
                                            newVals   = map (\key -> M.findWithDefault [] key env) newKeys
                                            tupleList = zip newKeys newVals
                                            newEnv'   = M.fromList tupleList
                                            in do args' <- mapM (placeRegionInwards newEnv' scopeSet) args
-                                                 let (_, ex') = dischargeBinds' env (S.singleton loc) (DataConE loc dataCons args')
+                                                 let (_, ex') = dischargeBinds' env (freevars `S.union` (S.singleton loc)) (DataConE loc dataCons args')
                                                   in return ex'
 
     ProjE i e              -> ProjE i <$> go e    {- Simple recursion on e -}

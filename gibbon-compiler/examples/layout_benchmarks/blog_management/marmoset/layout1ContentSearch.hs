@@ -16,7 +16,7 @@ emphKeywordInContent keyword blogs =
                                                             --_          = printPacked newContent
                                                             --_ = printsym (quote "NEWLINE") 
                                                             newRst     = emphKeywordInContent keyword rst 
-                                                         in Layout1 (header) (id) (author) (copyPacked date) (copyPacked newContent) (copyPacked tags)  (copyPacked newRst)
+                                                        in Layout1 header id author date newContent tags newRst
 
 -- main function 
 gibbon_main = 
@@ -98,14 +98,14 @@ gibbon_main =
        ft10      = readArrayFile (Just ("blog10/blog10Tag.txt", 485))
        lfc       = mkListFiles fc1 fc2 fc3 fc4 fc5 fc6 fc7 fc8 fc9 fc10 9
        ltc       = mkListFiles ft1 ft2 ft3 ft4 ft5 ft6 ft7 ft8 ft9 ft10 9
-       blogs = mkBlogs_layout1 lfc ltc 10000
-       --_ = printPacked blogs
-       --_ = printsym (quote "NEWLINE")
-       --_ = printsym (quote "NEWLINE")
+       blogs = mkBlogs_layout1 lfc ltc 2
+       _ = printPacked blogs
+       _ = printsym (quote "NEWLINE")
+       _ = printsym (quote "NEWLINE")
        keyword :: Vector Char  
        keyword = "feelings"
        newblgs = iterate (emphKeywordInContent keyword blogs)
-       --_ = printPacked newblgs
-       --_ = printsym (quote "NEWLINE")
-       --_ = printsym (quote "NEWLINE")
+       _ = printPacked newblgs
+       _ = printsym (quote "NEWLINE")
+       _ = printsym (quote "NEWLINE")
    in ()
