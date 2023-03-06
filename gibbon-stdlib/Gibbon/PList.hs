@@ -11,6 +11,22 @@ import Gibbon.Maybe
 
 data PList a = Nil | Cons a (PList a)
 
+is_empty_plist :: PList a -> Bool
+is_empty_plist ls =
+  case ls of
+    Nil -> True
+    Cons _ _ -> False
+
+head_plist :: PList a -> a
+head_plist ls =
+  case ls of
+    Cons x _ -> x
+
+tail_plist :: PList a -> PList a
+tail_plist ls =
+  case ls of
+    Cons _ xs -> xs
+
 elem_plist :: (a -> a -> Int) -> a -> PList a -> Bool
 elem_plist cmp a list =
   case list of
