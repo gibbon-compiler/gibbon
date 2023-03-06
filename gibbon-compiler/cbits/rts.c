@@ -181,54 +181,13 @@ void restore_alloc_state() {}
 
 
 // -------------------------------------
-// Bump allocated nursery for regions
-// -------------------------------------
-
-// See https://github.com/iu-parfunc/gibbon/issues/122.
-
-__thread char* nursery_heap_ptr = (char*)NULL;
-__thread char* nursery_heap_ptr_end = (char*)NULL;
-
-#define NURSERY_SIZE 0
-// #define NURSERY_SIZE global_init_biginf_buf_size
-#define NURSERY_ALLOC_UPPER_BOUND 1024
-
-static inline void init_nursery() {
-    nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
-    if (nursery_heap_ptr == NULL) {
-      printf("init_region: malloc failed: %d", NURSERY_SIZE);
-      exit(1);
-    }
-    nursery_heap_ptr_end = nursery_heap_ptr + NURSERY_SIZE;
-#ifdef _DEBUG
-    printf("init_nursery: DONE, heap_ptr = %p\n", nursery_heap_ptr);
-#endif
-}
-
-static inline void* alloc_in_nursery(long long n) {
-    if (! nursery_heap_ptr) {
-        init_nursery();
-    }
-    if (nursery_heap_ptr + n < nursery_heap_ptr_end) {
-        char* old = nursery_heap_ptr;
-        nursery_heap_ptr += n;
-#ifdef _DEBUG
-        printf("alloc_in_nursery: DONE, %lld\n", n);
-#endif
-        return old;
-    } else {
-        return NULL;
-    }
-}
-
-// -------------------------------------
 // ALLOC and ALLOC_PACKED macros
 // -------------------------------------
 
 
 /*
 
-If parallelism is enabled, we always use a nursery/malloc based allocator
+If parallelism is enabled, we always use a malloc based allocator
 since Boehm GC is not thread-safe in its default configuration. It can be
 made thread-safe by building it with appropriate flags, but we don't do that.
 Presently, all parallel pointer-based programs will leak memory.
@@ -237,7 +196,6 @@ Presently, all parallel pointer-based programs will leak memory.
 
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -246,7 +204,6 @@ char *ALLOC_COUNTED(size_t size) {
 #else
   #ifdef _POINTER
 #define ALLOC(n) GC_MALLOC(n)
-#define ALLOC_PACKED_SMALL(n) GC_MALLOC(n)
 #define ALLOC_PACKED_BIG(n) GC_MALLOC(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -254,7 +211,6 @@ char *ALLOC_COUNTED(size_t size) {
 }
   #else
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -641,7 +597,7 @@ Garbage collection
    and for garbage collection. The footer:
 
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_nursery_allocated | rf_size | rf_next | rf_prev
+   serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_size | rf_next | rf_prev
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    The metadata after the serialized data serves various purposes:
@@ -658,8 +614,6 @@ Garbage collection
        and chunks only store a pointer to them.
 
    - rf_seq_no: The index of this particular chunk in the list.
-
-   - rf_nursery_allocated: Whether this chunk was allocated in a nursery.
 
    - rf_size: Used during bounds checking to calculate the size of the next region in
      the linked list.
@@ -710,7 +664,6 @@ typedef struct RegionFooter_struct {
     RegionTy *rf_reg_metadata_ptr;
 
     IntTy rf_seq_no;
-    bool rf_nursery_allocated;
     IntTy rf_size;
     struct RegionFooter_struct *rf_next;
     struct RegionFooter_struct *rf_prev;
@@ -771,18 +724,7 @@ RegionTy *alloc_region(IntTy size) {
 
     // Allocate the first chunk.
     IntTy total_size = size + sizeof(RegionFooter);
-    CursorTy heap;
-    bool nursery_allocated = true;
-    if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        heap = ALLOC_PACKED_SMALL(total_size);
-        if (heap == NULL) {
-            heap = malloc(total_size);
-            nursery_allocated = false;
-        }
-    } else {
-        heap = ALLOC_PACKED_BIG(total_size);
-        nursery_allocated = false;
-    }
+    CursorTy heap = ALLOC_PACKED_BIG(total_size);
     if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
@@ -797,14 +739,13 @@ RegionTy *alloc_region(IntTy size) {
     reg->reg_outset_len = 0;
 
 #ifdef _DEBUG
-    printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
+    printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
 #endif
 
     // Write the footer.
     RegionFooter *footer = (RegionFooter *) heap_end;
     footer->rf_reg_metadata_ptr = reg;
     footer->rf_seq_no = 1;
-    footer->rf_nursery_allocated = nursery_allocated;
     footer->rf_size = size;
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
@@ -843,7 +784,6 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     RegionFooter* new_footer = (RegionFooter *) end;
     new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
-    new_footer->rf_nursery_allocated = false;
     new_footer->rf_size = newsize;
     new_footer->rf_next = NULL;
     new_footer->rf_prev = footer;
@@ -989,18 +929,14 @@ void free_region(CursorTy end_reg) {
         next_chunk = (char*) footer->rf_next;
 
 #ifdef _DEBUG
-        printf("free_region(%lld): first chunk in nursery: %d\n",
-               reg->reg_id,
-               first_chunk_footer->rf_nursery_allocated);
+        printf("free_region(%lld)\n", reg->reg_id);
 #endif
 
-        if (! first_chunk_footer->rf_nursery_allocated) {
-            #ifdef _DEBUG
-            num_freed_chunks++;
-            total_bytesize = total_bytesize + first_chunk_footer->rf_size;
-            #endif
-            free(first_chunk);
-        }
+#ifdef _DEBUG
+        num_freed_chunks++;
+        total_bytesize = total_bytesize + first_chunk_footer->rf_size;
+#endif
+        free(first_chunk);
 
         while (next_chunk != NULL) {
             next_chunk_footer = (RegionFooter *) next_chunk;
