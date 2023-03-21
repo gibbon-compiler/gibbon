@@ -10,7 +10,7 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls)
     where
 
 {-
@@ -1526,8 +1526,13 @@ unifyAll (_:_) [] _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] [] successA _ = successA
 
+
+isCpyCallExpr1 :: Exp1 -> Bool 
+isCpyCallExpr1 (AppE f _ _ ) = isCpyVar f
+isCpyCallExpr1 _ = False
+
 isCpyVar :: Var -> Bool
-isCpyVar v = (take 3 (fromVar v)) == "cpy"
+isCpyVar v = L.isInfixOf ("copy") (fromVar v)
 
 isCpyCall :: Exp2 -> Bool
 isCpyCall (AppE f _ _) = True -- TODO: check if it's a real copy call, to be safe
@@ -1956,7 +1961,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
                                                Nothing -> acc3
                                                Just ls ->
                                                  let binds = map (\(old,new) ->
-                                                                    let PackedTy tycon _ = L1.lookupVEnv old env2
+                                                                    let PackedTy tycon _ = L1.lookupVEnv old env2'
                                                                         f = mkCopyFunName tycon
                                                                     in (new,[],PackedTy tycon (),AppE f [] [VarE old]))
                                                              ls
@@ -1996,7 +2001,11 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
           -- TODO : Confirm 
           (cpy_env2, b1) <- go env2 cpy_env1 order b
           (cpy_env3, c1) <- go env2 cpy_env1 order c
-          pure $ (cpy_env3, IfE a1 b1 c1)
+          let list_env2 = M.toList cpy_env2
+          let list_env3 = M.toList cpy_env3
+          let new_env   = list_env2 ++ list_env3
+          let map_new_env = M.fromList $ updateCpyEnv new_env
+          pure $ (map_new_env, IfE a1 b1 c1)
         MkProdE ls -> do
           (cpy_env1, ls1) <- F.foldrM
                                (\e (acc1,acc2) -> do
@@ -2035,7 +2044,131 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
         MapE{}  -> error "copyOutOfOrderPacked: todo MapE"
         FoldE{} -> error "copyOutOfOrderPacked: todo FoldE"
 
+-- Updating environment correctly for some branches. 
+updateCpyEnv :: [(Var, [(Var, Var)])] -> [(Var, [(Var, Var)])]
+updateCpyEnv env = case env of 
+      [] -> [] 
+      x:xs -> let (key, val) = x 
+                  commonKeys = P.concat $ P.map (\(a, b) -> if (fromVar a) == (fromVar key) then [(a, b)]
+                                                            else [] ) xs
+                  commonVals = P.concat $ P.map (\(a, b) -> b) commonKeys
+                  commonValNew = commonVals ++ val
+                  removedKeys = P.concat $ P.map (\(a, b) -> if (fromVar a) == (fromVar key) then []
+                                                             else [(a, b)] ) xs
+                in [(key, commonValNew)] ++ (updateCpyEnv removedKeys)
+          
 
+-- Alias analysis for copyPacked Calls 
+-- Data type for storing variables Expressions and aliases. 
+
+type AliasEnv = M.Map Exp1 (Var, S.Set Var)
+
+removeAliasesForCopyCalls :: Prog1 -> PassM Prog1
+removeAliasesForCopyCalls prg@(Prog ddfs fndefs mnExp) = do
+    mnExp' <- case mnExp of
+                   Nothing -> pure Nothing
+                   Just (ex,ty) -> do 
+                                      ex' <- removeAliases ex (M.empty)
+                                      pure $ Just (ex', ty)
+    fndefs' <- mapM fd fndefs
+    let prg' = Prog ddfs fndefs' mnExp'
+    p0 <- flattenL1 prg'
+    inlineTriv p0
+  where
+
+      fd :: FunDef1 -> PassM FunDef1
+      fd fn@FunDef{funArgs,funBody,funTy} = do
+          funBody' <- removeAliases funBody (M.empty)  
+          pure $ fn { funBody = funBody' }
+
+      unifyEnvs :: [AliasEnv] -> AliasEnv
+      unifyEnvs envList = M.unionsWith unifyVals envList
+
+      unifyVals :: (Var, S.Set Var) -> (Var, S.Set Var) -> (Var, S.Set Var) 
+      unifyVals (v, vs) (v', vs') = if v == v' then (v, vs `S.union` vs')
+                                    else error "unifyVals: Variable should be same if key is same!"
+
+      myLookup :: Exp1 -> [((Exp1, Var), b)] -> Maybe b
+      myLookup _ [] = Nothing
+      myLookup key ((thiskey,thisval):rest) =
+        let (rhs, v) = thiskey
+         in if rhs == key
+            then Just thisval
+            else myLookup key rest
+                                      
+      removeAliases :: Exp1 -> AliasEnv -> PassM Exp1
+      removeAliases exp env = case exp of 
+        DataConE loc dcon args -> do
+                                  args' <- mapM (\expr -> removeAliases expr env) args
+                                  pure $ DataConE loc dcon args'
+        VarE v -> do
+                  let vals = M.elems env
+                  let newVar = P.map (\(a, b) -> if (S.member v b) then a
+                                                 else v ) vals
+                  case (removeDuplicates newVar) of 
+                    []   -> return $ VarE v
+                    [v'] -> return $ VarE v'
+                    _    -> error "removeAliases: Did not expect more than one variable!"
+        LitE{} -> pure exp
+        CharE{} -> pure exp
+        FloatE{} -> pure exp
+        LitSymE{} -> pure exp
+        AppE f locs args -> do
+                            args' <- mapM (\expr -> removeAliases expr env) args
+                            pure $ AppE f locs args'
+        PrimAppE f args -> do 
+                           args' <- mapM (\expr -> removeAliases expr env) args
+                           pure $ PrimAppE f args'
+        LetE (v, loc, ty, rhs) bod -> do
+                                      let isCpy = isCpyCallExpr1 rhs 
+                                      rhs'  <- removeAliases rhs env
+                                      if (isCpy) then do
+                                          let val' = M.lookup rhs env
+                                          case val' of 
+                                            Nothing -> do 
+                                                       let newEnv = (M.insert rhs (v, S.empty) env) 
+                                                       LetE (v, loc, ty, rhs') <$> removeAliases bod newEnv
+                                            Just (v', e') -> do
+                                             let e'' = S.insert v e' 
+                                             let newEnv = (M.insert rhs (v', e'') env)
+                                             if v' == v then LetE (v, loc, ty, rhs') <$> removeAliases bod newEnv
+                                             else removeAliases bod newEnv
+                                      else LetE (v, loc, ty, rhs') <$> removeAliases bod env
+        CaseE scrt mp -> do 
+          mp' <- mapM (\(a, b, c) -> do 
+                                    c' <- removeAliases c env
+                                    return (a, b, c')
+                                   ) mp
+          return $ CaseE scrt mp'                 
+        IfE a b c -> do
+          a' <- removeAliases a env
+          b' <- removeAliases b env
+          c' <- removeAliases c env
+          if b' == c' then return b'
+          else return $ IfE a' b' c' 
+        MkProdE xs -> do 
+                      xs' <- mapM (\expr -> removeAliases expr env) xs
+                      pure $ MkProdE xs'
+        ProjE i e -> do 
+                     e' <- removeAliases e env
+                     pure $ ProjE i e'
+        TimeIt e ty b -> do 
+                         e' <- removeAliases e env
+                         pure $ TimeIt e' ty b
+        WithArenaE v e -> do 
+                          e' <- removeAliases e env
+                          pure $ WithArenaE v e'
+        SpawnE f locs args -> do
+                              args' <- mapM (\expr -> removeAliases expr env) args
+                              pure $ SpawnE f locs args'
+        SyncE -> pure exp
+        Ext _ -> pure exp
+        MapE{} ->  error "removeAliasesForCopyCalls: todo MapE"
+        FoldE{} -> error "removeAliasesForCopyCalls: todo FoldE"
+
+
+
+  
 
 {--
 
