@@ -64,7 +64,7 @@ import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
-import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked, fixRANs)
+import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls)
 import           Gibbon.Passes.Simplifier     (simplifyLocBinds)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
 import           Gibbon.Passes.RegionsInwards (regionsInwards)
@@ -535,6 +535,7 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
+              l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1 
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds_a" simplifyLocBinds l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
