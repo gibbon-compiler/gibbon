@@ -532,7 +532,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
         res <- inferExp env' rhs dst
-        (rhs',ty',cs') <-   bindAfterLocs (L.map fst vars') res
+        (rhs',ty',cs') <-   bindAfterLocs (freeVarsInOrder rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
         return ((con,vars',rhs'),ty',cs')
