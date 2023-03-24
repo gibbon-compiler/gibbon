@@ -34,6 +34,7 @@ data RBT
   = Empty
   | Node B I RBT RBT
 
+
 empty :: RBT
 empty = Empty
 
@@ -102,6 +103,51 @@ mini t = case t of
     Empty -> x
     Node cl xl ll rl -> mini l
 
+--------------------------------------------------------------------------------
+
+not :: Bool -> Bool
+not b =
+  if b then False else True
+
+checkBlackHeight :: RBT -> Maybe Int
+checkBlackHeight tree =
+  case tree of
+    Empty -> Just 1
+    Node c x l r ->
+      let mb_lh = checkBlackHeight l
+          mb_rh = checkBlackHeight r in
+      case mb_lh of
+        Nothing -> Nothing
+        Just lh -> case mb_rh of
+                     Nothing -> Nothing
+                     Just rh -> if not (lh == rh)
+                                then Nothing
+                                else if isBlack tree
+                                then Just (lh + 1)
+                                else if (isBlack l) && (isBlack r)
+                                then Nothing
+                                else Just lh
+
+checkTree :: RBT -> Bool
+checkTree root =
+{-
+
+-- True if the given list is ordered
+isSorted :: Ord a => [a] -> Bool
+isSorted = undefined
+
+-- True if every red node only has black children
+checkRedParents :: RBTree a -> Bool
+checkRedParents = undefined
+
+-}
+  -- isSorted (inorder root) &&
+  -- checkRedParents root &&
+  isJust (checkBlackHeight root) &&
+  isBlack root
+
+
+
 gibbon_main =
   let
     t1 = ins 5 empty
@@ -111,4 +157,4 @@ gibbon_main =
     t5 = ins 4 t4
     t6 = ins 1 t5
     _ = printPacked t6
-  in ()
+  in checkTree t6

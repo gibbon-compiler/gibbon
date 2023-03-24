@@ -102,6 +102,45 @@ mini t = case t of
     Empty -> x
     Node cl xl ll rl -> mini l
 
+--------------------------------------------------------------------------------
+
+checkBlackHeight :: RBT -> Maybe Int
+checkBlackHeight tree =
+  case tree of
+    Empty -> Just 1
+    Node c x l r ->
+      let mb_lh = checkBlackHeight l
+          mb_rh = checkBlackHeight r in
+      case mb_lh of
+        Nothing -> Nothing
+        Just lh -> case mb_rh of
+                     Nothing -> Nothing
+                     Just rh -> if not (lh == rh)
+                                then Nothing
+                                else if isBlack tree
+                                then Just (lh + 1)
+                                else if (isBlack l) && (isBlack r)
+                                then Nothing
+                                else Just lh
+
+checkTree :: RBT -> Bool
+checkTree root =
+{-
+
+-- True if the given list is ordered
+isSorted :: Ord a => [a] -> Bool
+isSorted = undefined
+
+-- True if every red node only has black children
+checkRedParents :: RBTree a -> Bool
+checkRedParents = undefined
+
+-}
+  -- isSorted (inorder root) &&
+  -- checkRedParents root &&
+  isJust (checkBlackHeight root) &&
+  isBlack root
+
 main =
   let
     t1 = ins 5 empty
@@ -110,4 +149,6 @@ main =
     t4 = ins 9 t3
     t5 = ins 4 t4
     t6 = ins 1 t5
-  in print t6
+  in do
+    print t6
+    print (checkTree t6)
