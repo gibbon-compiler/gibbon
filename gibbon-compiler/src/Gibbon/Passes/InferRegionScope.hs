@@ -137,11 +137,14 @@ inferRegScopeExp env ex =
                                                (gopt Opt_Gibbon1 dflags)
                                             then BigInfinite
                                             else Infinite
-                           if path g retVertex regVertex
-                           then Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$> (go rhs)
-                           -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                           -- else Ext$ LetParRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                           else Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$> (go rhs)
+                           let scoped_reg = if path g retVertex regVertex
+                                            then (GlobR regV defaultMul)
+                                            -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                                            -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                                            -- else (DynR regV mul)
+                                            else (GlobR regV defaultMul)
+                           Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$>
+                                   (inferRegScopeExp (M.insert r scoped_reg env) rhs)
                    [] -> return ex
 
         -- Straightforward recursion

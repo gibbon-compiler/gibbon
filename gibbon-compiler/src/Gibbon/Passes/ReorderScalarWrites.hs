@@ -9,6 +9,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Graph as G
 import           Data.Maybe ( fromJust )
+import           Text.PrettyPrint.GenericPretty
+import           Text.PrettyPrint ( text )
 
 import           Gibbon.Common hiding ( Mode )
 import           Gibbon.Language
@@ -196,6 +198,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                 L2.LetRegionE _ _ _ bod -> (findTyCon want bod)
                 L2.LetParRegionE _ _ _ bod -> (findTyCon want bod)
                 L2.LetLocE _ _ bod -> (findTyCon want bod)
+                L2.LetAvail _ bod -> (findTyCon want bod)
                 _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
             _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
 
@@ -359,7 +362,10 @@ data Collect = Tag | Scalars
   deriving Eq
 
 data Mode = Search L3.Exp3 | SearchAndStore L3.Exp3
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance Out Mode where
+  doc = text . show
 
 collectBinds :: Collect -> Var -> L3.Exp3 -> ([(Var,[()],L3.Ty3,L3.Exp3)], L3.Exp3)
 collectBinds collect loc ex0 =
@@ -393,8 +399,8 @@ collectBinds collect loc ex0 =
         IfE a b c  ->
           let (acc1,a') = go mode acc a
               (acc2,b') = go mode acc1 b
-              (acc3,c') = go mode acc2 c
-          in (acc3, IfE a' b' c')
+              (acc3,c') = go mode acc1 c
+          in (acc2++acc3, IfE a' b' c')
         CaseE scrt brs ->
           let (acc0,brs') =
                 foldr (\(a,b,c) (acc',es) ->
@@ -409,6 +415,9 @@ collectBinds collect loc ex0 =
         TimeIt e ty b ->
           let (acc', e') = go mode acc e
           in (acc', TimeIt e' ty b)
+        Ext (L3.LetAvail vs bod) ->
+          let (acc',bod') = go mode acc bod
+          in (acc', Ext (L3.LetAvail vs bod'))
         _ -> (acc,ex)
 
 

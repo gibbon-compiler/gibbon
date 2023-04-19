@@ -886,6 +886,18 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Threads and parallelism
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Whether a thread is blocked on GC.
+bool gib_global_thread_requested_gc = false;
+
+// Number of threads a.k.a. cilk workers.
+uint64_t gib_global_num_threads;
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Memory Management; regions, chunks, GC etc.
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -1971,6 +1983,12 @@ int gib_init(int argc, char **argv)
         gib_global_bench_prog_param = (char*) gib_alloc(1*sizeof(char));
         *gib_global_bench_prog_param = '\n';
     }
+
+    // Initialize this before the storage.
+    gib_global_num_threads = __cilkrts_get_nworkers();
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    printf("Number of threads: %ld\n", gib_global_num_threads);
+#endif
 
 #ifndef _GIBBON_POINTER
     // Initialize the nursery and shadow stack.

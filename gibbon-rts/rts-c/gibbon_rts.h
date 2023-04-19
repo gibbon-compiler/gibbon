@@ -341,12 +341,14 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-// TODO(ckoparkar): only a single thread for now.
-// extern uint64_t gib_global_num_threads;
-// extern GibThreadId gib_thread_id();
+extern bool gib_global_thread_requested_gc;
 
-#define gib_global_num_threads 1
-#define gib_thread_id() 0
+extern uint64_t gib_global_num_threads;
+
+INLINE_HEADER GibThreadId gib_get_thread_id()
+{
+    return (GibThreadId) __cilkrts_get_worker_number();
+}
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -792,11 +794,11 @@ INLINE_HEADER void gib_grow_region_in_nursery_fast(
     if (bump >= nursery->heap_start) {
 
 #ifdef _GIBBON_GCSTATS
-        GC_STATS->nursery_chunks++;        
+        GC_STATS->nursery_chunks++;
         GC_STATS->mem_allocated_in_nursery += size;
 #endif
 
-        
+
         nursery->alloc = bump;
         char *footer = old - sizeof(GibNurseryChunkFooter);
         *(GibNurseryChunkFooter *) footer = size;

@@ -920,9 +920,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (_v, _, _ty, rhs@(Ext AllocateTagHere{})) _bod -> error $ "lower: " ++ sdoc rhs
     LetE (_v, _, _ty, rhs@(Ext AllocateScalarsHere{})) _bod -> error $ "lower: " ++ sdoc rhs
     LetE (_v, _, _ty, rhs@(Ext StartTagAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
-    LetE (_v, _, _ty, rhs@(Ext EndTagAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
     LetE (_v, _, _ty, rhs@(Ext StartScalarsAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
-    LetE (_v, _, _ty, rhs@(Ext EndScalarsAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
+    -- [2023.04.19]: be forgiving about an earlier pass not removing these.
+    LetE (_v, _, _ty, (Ext EndTagAllocation{})) bod -> tail free_reg sym_tbl bod
+    LetE (_v, _, _ty, (Ext EndScalarsAllocation{})) bod -> tail free_reg sym_tbl bod
 
     Ext (LetAvail vs bod) ->
       T.LetAvailT vs <$> tail free_reg sym_tbl bod
