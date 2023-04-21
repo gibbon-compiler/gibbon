@@ -1,6 +1,6 @@
 cabal-version:      >= 1.10
-name:               gibbon-ghc-plugin
-version:            0.1.0.0
+name:               plugin0
+version:            0.1
 author:             Chaitanya Koparkar
 maintainer:         ckoparkar@gmail.com
 build-type:         Simple
@@ -10,13 +10,10 @@ library
     other-modules:    Gibbon.CoreToL0
                       Gibbon.Utils
     hs-source-dirs:   src
-    build-depends:
-                  --   base >= 4.9 &&  < 4.16
-                  -- , ghc-lib == 9.0.1.20210324
-                    base == 4.15.*
-                  , ghc == 9.0.1
+    build-depends:  base == 4.17.*
+                  , ghc == 9.4.3
                   , containers
-                , gibbon
+                  , gibbon
     ghc-options: -Wall -Wcompat -fdefer-typed-holes
     default-language: Haskell2010
     default-extensions: ScopedTypeVariables

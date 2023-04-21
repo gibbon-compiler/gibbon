@@ -2,14 +2,17 @@
 
 module Gibbon.Plugin ( plugin, PackedAnn(..) ) where
 
+import qualified GHC.Types.TyThing as GHC
+import qualified GHC.Unit.External as GHC
+import qualified GHC.Utils.Trace as GHC
 import qualified GHC.Plugins as GHC
 import qualified GHC.Utils.Outputable as Ppr
-import           GHC.Types.Var.Set as GHC
+import qualified GHC.Types.Var.Set as GHC
 import           Data.Data ( Data )
 import qualified Data.Set as Set
 
-import Gibbon.CoreToL0 ( coreToL0 )
-import Gibbon.Utils
+import           Gibbon.CoreToL0 ( coreToL0 )
+import           Gibbon.Utils
 
 --------------------------------------------------------------------------------
 -- GHC Core-to-Core Plugin
@@ -33,7 +36,7 @@ gibbonCoreTodo = GHC.CoreDoPluginPass "GibbonLiftPacked" test
         -- Things defined in other modules and libraries.
         hsc_env <- GHC.getHscEnv
         external_package_state <- GHC.liftIO $ GHC.hscEPS hsc_env
-        let external_ids = GHC.nameEnvElts (GHC.eps_PTE external_package_state)
+        let external_ids = GHC.nonDetNameEnvElts (GHC.eps_PTE external_package_state)
             external_unfoldings =
                 foldr (\tyt acc ->
                             case tyt of
@@ -98,7 +101,7 @@ gibbonCoreTodo = GHC.CoreDoPluginPass "GibbonLiftPacked" test
         let (dcons,binds) = fixpoint [] [] GHC.emptyDVarSet to_lift
 
         -- GHC.putMsg (Ppr.text "\nDatacons:\n----------------------------------------" Ppr.$$ (GHC.ppr dcons))
-        -- GHC.putMsg (Ppr.text "\nTransitive closure:\n----------------------------------------" Ppr.$$ (GHC.ppr binds))
+        GHC.putMsg (Ppr.text "\nTransitive closure:\n----------------------------------------" Ppr.$$ (GHC.ppr binds))
         l0_prog <- coreToL0 dcons binds
         pure mod_guts
 

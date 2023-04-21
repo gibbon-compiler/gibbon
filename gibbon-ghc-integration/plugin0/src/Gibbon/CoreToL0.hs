@@ -115,7 +115,7 @@ convertDcons dcons =
 
 
         | tycon <- GHC.dataConTyCon dcon
-        = GHC.pprSorry ("Non-vanilla datacons not supported yet:") (GHC.ppr (dcon,tycon))
+        = GHC.sorryDoc ("Non-vanilla datacons not supported yet:") (GHC.ppr (dcon,tycon))
 
 
 ghcScaledTyToGibTy :: GHC.Scaled GHC.Type -> Gib.Ty0
@@ -125,14 +125,14 @@ ghcTyToGibTy :: GHC.Type -> Gib.Ty0
 ghcTyToGibTy ty
     | GHC.AppTy{} <- ty
     = let (arg_tys,res_ty) = GHC.splitPiTys ty
-      in GHC.pprSorry "todo(1):" (GHC.ppr (arg_tys,res_ty))
+      in GHC.sorryDoc "todo(1):" (GHC.ppr (arg_tys,res_ty))
 
     | GHC.ForAllTy{} <- ty
-    = GHC.pprSorry "todo(2):" (GHC.ppr ty)
+    = GHC.sorryDoc "todo(2):" (GHC.ppr ty)
 
     | GHC.TyConApp tycon tyargs <- ty
     = if not (length tyargs == GHC.tyConArity tycon)
-        then GHC.pprSorry "unsaturated TyConApp:" (GHC.ppr ty)
+        then GHC.sorryDoc "unsaturated TyConApp:" (GHC.ppr ty)
         else let tyname_str = nameToString (GHC.tyConName tycon) in
                  case tyname_str of
                      "Int" -> Gib.IntTy
@@ -141,10 +141,10 @@ ghcTyToGibTy ty
                      _oth  -> let tyvars = GHC.tyConTyVars tycon
                                   tyvars_var = map (Gib.TyVar . Gib.UserTv . Gib.toVar . varToString) tyvars
                               in Gib.PackedTy tyname_str tyvars_var
-                     -- GHC.pprSorry "todo(3):" (GHC.ppr ty)
+                     -- GHC.sorryDoc "todo(3):" (GHC.ppr ty)
 
     | GHC.TyVarTy v <- ty
     = Gib.TyVar (Gib.UserTv (Gib.toVar (varToString v)))
 
     | otherwise
-    = GHC.pprSorry "todo(4):" (GHC.ppr ty)
+    = GHC.sorryDoc "todo(4):" (GHC.ppr ty)

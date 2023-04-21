@@ -7,10 +7,8 @@ build-type:          Simple
 executable gibbon-examples
   main-is:             Main.hs
   other-modules:       BinTree
-  build-depends:
-                       -- base >= 4.9 &&  < 4.16
-                       base == 4.15.*
-                     , gibbon-ghc-plugin
+  build-depends:       base == 4.17.*
+                     , plugin0
   ghc-options: -Wall -Wcompat -fdefer-typed-holes
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
