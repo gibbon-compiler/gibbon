@@ -1,11 +1,14 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE DeriveGeneric          #-}
 
 module BinTree where
 
 import Gibbon.Plugin ( PackedAnn(..) )
 import Foreign
 import Foreign.C.Types
+import GHC.Generics
+import Data.Binary
 
 import qualified Language.C.Inline as C
 
@@ -13,6 +16,9 @@ import qualified Language.C.Inline as C
 
 data Tree a = Leaf Int a
             | Node Int (Tree a) (Tree a)
+  deriving (Generic)
+
+instance Binary a => Binary (Tree a)
 
 {-# ANN mkTree_seq LiftPacked #-}
 mkTree_seq :: Int -> Tree Bool

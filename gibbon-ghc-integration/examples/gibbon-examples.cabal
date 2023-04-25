@@ -11,10 +11,11 @@ library
                      , plugin0
                      , plugin1
                      , inline-c
+                     , binary
   ghc-options: -Wall -Wcompat -fdefer-typed-holes
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
-                       -- -fplugin=Gibbon.Plugin
+                       -fplugin=Gibbon.Plugin
                        -fplugin=Gibbon.Plugin1
 
                        "-optl-Wl,--allow-multiple-definition"
@@ -33,7 +34,7 @@ executable run-gibbon-examples
   hs-source-dirs:      app
   default-language:    Haskell2010
   main-is:             Main.hs
-  build-depends:       base, gibbon-examples
+  build-depends:       base, gibbon-examples, binary, bytestring
   ghc-options:
                        -- "-with-rtsopts=-T"
                        -- "-with-rtsopts=-s"
