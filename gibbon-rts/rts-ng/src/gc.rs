@@ -1739,7 +1739,7 @@ unsafe fn write_forwarding_pointer_at(addr: *mut i8, fwd: *mut i8, tag: u16) -> 
 }
 
 pub unsafe fn free_region(footer: *const GibOldgenChunkFooter, zct: *mut Zct) -> Result<()> {
-    dbgprintln!("Freeing region {:?}, {:?}", (*footer), reg_info);
+    dbgprintln!("Freeing region {:?}, {:?}", (*footer), *((*footer).reg_info));
     #[cfg(feature = "gcstats")]
     {
         // (*GC_STATS).oldgen_regions -= 1;

@@ -347,7 +347,11 @@ extern uint64_t gib_global_num_threads;
 
 INLINE_HEADER GibThreadId gib_get_thread_id()
 {
-    return (GibThreadId) __cilkrts_get_worker_number();
+#ifdef _GIBBON_PARALLEL
+    return __cilkrts_get_worker_number();
+#else
+    return (GibThreadId) 0;
+#endif
 }
 
 

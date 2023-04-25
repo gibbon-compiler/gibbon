@@ -894,7 +894,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 bool gib_global_thread_requested_gc = false;
 
 // Number of threads a.k.a. cilk workers.
-uint64_t gib_global_num_threads;
+uint64_t gib_global_num_threads = 1;
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1984,8 +1984,11 @@ int gib_init(int argc, char **argv)
         *gib_global_bench_prog_param = '\n';
     }
 
-    // Initialize this before the storage.
+    // Initialize number of threads before the storage.
+#ifdef _GIBBON_PARALLEL
     gib_global_num_threads = __cilkrts_get_nworkers();
+#endif
+
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
     printf("Number of threads: %ld\n", gib_global_num_threads);
 #endif
