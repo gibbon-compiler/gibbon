@@ -20,13 +20,13 @@ module Gibbon.Compiler
 
 import           Control.DeepSeq
 import           Control.Exception
-#if !MIN_VERSION_base(4,15,0)
-#endif
+
+
 import           Control.Monad.State.Strict
 import           Control.Monad.Reader (ask)
-#if !MIN_VERSION_base(4,11,0)
-import           Data.Monoid
-#endif
+
+
+
 import           Options.Applicative
 import           System.Directory
 import           System.Environment
@@ -60,12 +60,11 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
+import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simplifyLocBinds)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls)
-import           Gibbon.Passes.Simplifier     (simplifyLocBinds)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
 import           Gibbon.Passes.RegionsInwards (regionsInwards)
 -- import           Gibbon.Passes.RepairProgram  (repairProgram)
@@ -92,9 +91,9 @@ import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Pretty
 
 
-#ifdef LLVM_ENABLED
-import qualified Gibbon.Passes.LLVM.Codegen as LLVM
-#endif
+
+
+
 
 
 
@@ -108,30 +107,42 @@ suppress_warnings = " "
 configParser :: Parser Config
 configParser = Config <$> inputParser
                       <*> modeParser
-                      <*> ((Just <$> strOption (long "bench-input" <> metavar "FILE" <>
-                                      help ("Hard-code the input file for --bench-fun, otherwise it"++
-                                            " becomes a command-line argument of the resulting binary."++
-                                            " Also we RUN the benchmark right away if this is provided.")))
-                          <|> pure Nothing)
-                      <*> ((Just <$> strOption (long "array-input" <> metavar "FILE" <>
-                                      help ("Hard-code the input file for readArrayFile or it"++
-                                            " becomes a command-line argument of the resulting binary.")))
-                          <|> pure Nothing)
-                      <*> (option auto (short 'v' <> long "verbose" <>
-                                       help "Set the debug output level, 1-5, mirrors DEBUG env var.")
-                           <|> pure 1)
-                      <*> ((strOption $ long "cc" <> help "Set C compiler, default 'gcc'")
-                            <|> pure (cc defaultConfig))
-                      <*> ((strOption $ long "optc" <> help "Set C compiler options, default '-std=gnu11 -O3'")
+                      <*> optional (strOption $ mconcat
+                        [ long "bench-input"
+                        , metavar "FILE"
+                        , help $ mconcat
+                            [ "Hard-code the input file for --bench-fun, otherwise it"
+                            , " becomes a command-line argument of the resulting binary."
+                            , " Also we RUN the benchmark right away if this is provided."
+                            ]
+                        ])
+                      <*> optional (strOption $ mconcat
+                        [ long "array-input"
+                        , metavar "FILE"
+                        , help $ mconcat
+                          [ "Hard-code the input file for readArrayFile or it"
+                          , " becomes a command-line argument of the resulting binary."
+                          ]
+                        ])
+                      <*> (option auto (mconcat
+                        [ short 'v'
+                        , long "verbose"
+                        , help "Set the debug output level, 1-5, mirrors DEBUG env var."
+                        ]) <|> pure 1)
+                      <*> (strOption (long "cc" <> help "Set C compiler, default 'gcc'")
+                           <|> pure (cc defaultConfig))
+                      <*> (strOption (long "optc" <> help "Set C compiler options, default '-std=gnu11 -O3'")
                            <|> pure (optc defaultConfig))
-                      <*> ((fmap Just (strOption $ long "cfile" <> help "Set the destination file for generated C code"))
+                      <*> (fmap Just (strOption $ long "cfile" <> help "Set the destination file for generated C code")
                            <|> pure (cfile defaultConfig))
-                      <*> ((fmap Just (strOption $ short 'o' <> long "exefile" <>
-                                       help "Set the destination file for the executable"))
-                           <|> pure (exefile defaultConfig))
+                      <*> (fmap Just (strOption $ mconcat
+                        [ short 'o'
+                        , long "exefile"
+                        , help "Set the destination file for the executable"
+                        ]) <|> pure (exefile defaultConfig))
                       <*> backendParser
                       <*> dynflagsParser
-                      <*> (Just <$> strOption hidden <|> pure Nothing)
+                      <*> optional (strOption hidden)
  where
   inputParser :: Parser Input
                 -- I'd like to display a separator and some more info.  How?
@@ -149,8 +160,8 @@ configParser = Config <$> inputParser
                flag' Interp1 (long "interp1" <> help "run through the interpreter early, right after parsing") <|>
                flag' Interp2 (short 'i' <> long "interp2" <>
                               help "Run through the interpreter after cursor insertion") <|>
-               flag' RunExe  (short 'r' <> long "run"     <> help "Compile and then run executable") <|>
-               (Bench <$> toVar <$> strOption (short 'b' <> long "bench-fun" <> metavar "FUN" <>
+               flag' RunExe  (short 'r' <> long "run" <> help "Compile and then run executable") <|>
+               (Bench . toVar <$> strOption (short 'b' <> long "bench-fun" <> metavar "FUN" <>
                                      help ("Generate code to benchmark a 1-argument FUN against a input packed file."++
                                            "  If --bench-input is provided, then the benchmark is run as well.")))
 
@@ -162,8 +173,7 @@ configParser = Config <$> inputParser
 -- | Parse configuration as well as file arguments.
 configWithArgs :: Parser (Config,[FilePath])
 configWithArgs = (,) <$> configParser
-                     <*> some (argument str (metavar "FILES..."
-                                             <> help "Files to compile."))
+                     <*> some (argument str (metavar "FILES..." <> help "Files to compile."))
 
 --------------------------------------------------------------------------------
 
@@ -178,13 +188,14 @@ compileCmd args = withArgs args $
     do (cfg,files) <- execParser opts
        case files of
          [f] -> compile cfg f
-         _ -> do dbgPrintLn 1 $ "Compiling multiple files:  "++show files
+         _ -> do dbgPrintLn 1 $ "Compiling multiple files:  " ++ show files
                  mapM_ (compile cfg) files
   where
-    opts = info (helper <*> configWithArgs)
-      ( fullDesc
-     <> progDesc "Compile FILES according to the below options."
-     <> header "A compiler for a minature tree traversal language" )
+    opts = info (helper <*> configWithArgs) $ mconcat
+      [ fullDesc
+      , progDesc "Compile FILES according to the below options."
+      , header "A compiler for a minature tree traversal language"
+      ]
 
 
 sepline :: String
@@ -233,7 +244,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ (sdoc l0)
+            then "\n"++sepline ++ "\n" ++ sdoc l0
             else show (length (sdoc l0)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter
@@ -255,9 +266,9 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       else do
         str <- case backend of
                  C    -> codegenProg config' l4
-#ifdef LLVM_ENABLED
-                 LLVM -> LLVM.codegenProg True l4
-#endif
+
+
+
                  LLVM -> error $ "Cannot execute through the LLVM backend. To build Gibbon with LLVM: "
                          ++ "stack build --flag gibbon:llvm_enabled"
 
@@ -324,12 +335,13 @@ parseInput cfg ip fp = do
                 f2 = fp ++ "gib"
             f1' <- doesFileExist f1
             f2' <- doesFileExist f2
-            if f1' && oth == ""
-              then (,f2) <$> SExp.parseFile f1
-              else if f2' && oth == "."
-                     then (,f2) <$> SExp.parseFile f1
-                     else error$ "compile: unrecognized file extension: "++
-                          show oth++"  Please specify compile input format."
+            if (f1' && oth == "") || (f2' && oth == ".")
+            then (,f2) <$> SExp.parseFile f1
+            else error $ mconcat
+              [ "compile: unrecognized file extension: "
+              , show oth
+              , "  Please specify compile input format."
+              ]
   let l0' = do parsed <- l0
                -- dbgTraceIt (sdoc parsed) (pure ())
                HS.desugarLinearExts parsed
@@ -361,17 +373,17 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
   dbgPrintLn minChatLvl cmd
   cd <- system cmd
   case cd of
-    ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
+    ExitFailure n -> error $ show backend ++ " compiler failed!  Code: " ++ show n
     ExitSuccess -> do
       when (mode == ToExe) exitSuccess
       -- (Stage 5) Binary compiled, run if appropriate
       let runExe extra = do
-            (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
+            (_,Just hout,_, phandle) <- createProcess (shell (exepath ++ extra))
                                                  { std_out = CreatePipe }
             exitCode <- waitForProcess phandle
             case exitCode of
                 ExitSuccess   -> hGetContents hout
-                ExitFailure n -> die$ "Treelang program exited with error code  "++ show n
+                ExitFailure n -> die $ "Treelang program exited with error code  " ++ show n
 
       runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
       case benchInput of
@@ -409,18 +421,18 @@ getExeFile _ _ (Just override) = override
 getExeFile backend fp Nothing =
   let fp' = case backend of
                C -> fp
-               LLVM -> replaceFileName fp ((takeBaseName fp) ++ "_llvm")
+               LLVM -> replaceFileName fp (takeBaseName fp ++ "_llvm")
   in replaceExtension fp' ".exe"
 
 -- | Compilation command
 --
 compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
-compilationCmd C config = (cc config) ++" -std=gnu11 "
+compilationCmd C config = cc config ++" -std=gnu11 "
                           ++(if bumpAlloc then "-D_BUMPALLOC " else " ")
                           ++(if pointer then "-D_POINTER " else " ")
                           ++(if parallel then "-fcilkplus -D_PARALLEL " else " ")
-                          ++(optc config)++"  "
+                          ++optc config++"  "
                           ++(if warnc then "-Wno-unused-variable -Wall " else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
@@ -457,22 +469,21 @@ benchMainExp l1 = do
           ([arg@(L1.PackedTy tyc _)], ret) = L1.getFunTy fnname l1
           -- At L1, we assume ReadPackedFile has a single return value:
           newExp = L1.TimeIt (
-                        (L1.LetE (toVar tmp, [],
+                        L1.LetE (toVar tmp, [],
                                  arg,
                                  L1.PrimAppE
                                  (L1.ReadPackedFile benchInput tyc Nothing arg) [])
                         $ L1.LetE (toVar "benchres", [],
                                       ret,
-                                      (L1.AppE fnname [] [L1.VarE (toVar tmp)]))
-                        $
+                                      L1.AppE fnname [] [L1.VarE (toVar tmp)])
                         -- FIXME: should actually return the result,
                         -- as soon as we are able to print it.
-                        (if (gopt Opt_BenchPrint dynflags)
+                        (if gopt Opt_BenchPrint dynflags
                          then L1.VarE (toVar "benchres")
-                         else L1.PrimAppE L1.MkTrue []))
+                         else L1.PrimAppE L1.MkTrue [])
                    ) ret True
       -- Initialize the main expression with a void type. The typechecker will fix it later.
-      return $ l1{ L1.mainExp = Just $ (newExp, L1.voidTy) }
+      return $ l1{ L1.mainExp = Just (newExp, L1.voidTy) }
     _ -> return l1
 
 addRedirectionCon :: L2.Prog2 -> PassM L2.Prog2
@@ -535,7 +546,7 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
-              l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1 
+              l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds_a" simplifyLocBinds l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -730,7 +741,7 @@ passE s config@Config{mode} = wrapInterp s mode (pass config)
 -- FINISHME! For now not interpreting.
 --
 passF :: Config -> PassRunner p1 p2 v
-passF config = pass config
+passF = pass
 
 
 -- | Wrapper to enable running a pass AND interpreting the result.
@@ -748,10 +759,21 @@ wrapInterp s mode pass who fn x =
        runConf <- getRunConfig []
        let res2 = gInterpNoLogs s runConf p2
        res2' <- catch (evaluate (force res2))
-                (\exn -> error $ "Exception while running interpreter on pass result:\n"++sepline++"\n"
-                         ++ show (exn::SomeException) ++ "\n"++sepline++"\nProgram was: "++abbrv 300 p2)
+                (\exn -> error $ mconcat
+                  [ "Exception while running interpreter on pass result:\n"
+                  , sepline, "\n"
+                  , show (exn::SomeException), "\n"
+                  , sepline, "\n"
+                  , "Program was: ", abbrv 300 p2
+                  ])
        unless (show res1 == res2') $
-         error $ "After pass "++who++", evaluating the program yielded the wrong answer.\nReceived:  "
-         ++show res2'++"\nExpected:  "++show res1
-       dbgPrintLn interpDbgLevel $ " [interp] answer after " ++ who ++ " was: "++ res2'
+         error $ mconcat
+          [ "After pass " , who
+          , ", evaluating the program yielded the wrong answer.\nReceived:  " , show res2'
+          , "\nExpected:  ", show res1
+          ]
+       dbgPrintLn interpDbgLevel $ mconcat
+        [ " [interp] answer after ", who
+        , " was: ", res2'
+        ]
      return p2
