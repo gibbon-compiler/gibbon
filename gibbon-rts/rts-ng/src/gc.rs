@@ -310,25 +310,29 @@ unsafe fn evacuate_roots(
                 evacuate_remset_root(frame, fwd_env, so_env, nursery, oldgen, evac_major)?;
             }
             GibGcRootProv::Stk => {
-                let start_in_nursery = nursery.contains_addr((*frame).ptr);
-                if !start_in_nursery {
-                    dbgprintln!("+Evac packed, skipping oldgen root {:?}", (*frame));
-                    let footer = (*frame).endptr as *const GibOldgenChunkFooter;
-                    (*((*oldgen).new_zct)).insert((*footer).reg_info);
-                    dbgprintln!(
-                        "  start in oldgen, added {:?} to new zct, size after this {:?}, prefix(10) {:?}",
-                        (*footer).reg_info,
-                        (*((*oldgen).new_zct)).len(),
-                        if (*((*oldgen).new_zct)).len() < 10 {
-                            Some((*((*oldgen).new_zct)).clone())
-                        } else {
-                            None
-                        }
-                    );
-
-                    continue;
+                if evac_major {
+                    dbgprintln!("+Evac packed, oldgen root {:?}", (*frame));
+                    evacuate_oldgen_root(frame, fwd_env, so_env, nursery, oldgen, evac_major)?;
+                } else {
+                    let start_in_nursery = nursery.contains_addr((*frame).ptr);
+                    if !start_in_nursery {
+                        dbgprintln!("+Evac packed, skipping oldgen root {:?}", (*frame));
+                        let footer = (*frame).endptr as *const GibOldgenChunkFooter;
+                        (*((*oldgen).new_zct)).insert((*footer).reg_info);
+                        dbgprintln!(
+                            "  start in oldgen, added {:?} to new zct, size after this {:?}, prefix(10) {:?}",
+                            (*footer).reg_info,
+                            (*((*oldgen).new_zct)).len(),
+                            if (*((*oldgen).new_zct)).len() < 10 {
+                                Some((*((*oldgen).new_zct)).clone())
+                            } else {
+                                None
+                            }
+                        );
+                        continue;
+                    }
+                    evacuate_nursery_root(frame, fwd_env, so_env, nursery, oldgen, evac_major)?;
                 }
-                evacuate_nursery_root(frame, fwd_env, so_env, nursery, oldgen, evac_major)?;
             }
         }
     }
@@ -357,6 +361,7 @@ unsafe fn evacuate_remset_root(
     // destination region. Just update the root to point to the
     // evacuated data.
     if tag == COPIED_TAG || tag == COPIED_TO_TAG {
+        debug_assert!(BURN);
         evacuate_copied(frame, fwd_env, tag, src, src_after_tag);
     } else {
         let (dst, dst_end, is_loc_0) = root_first_chunk(nursery, oldgen, src, src_end, 1)?;
@@ -419,6 +424,7 @@ unsafe fn evacuate_nursery_root(
     // destination region. Just update the root to point to the
     // evacuated data.
     if tag == COPIED_TAG || tag == COPIED_TO_TAG {
+        debug_assert!(BURN);
         evacuate_copied(frame, fwd_env, tag, src, src_after_tag);
     } else {
         let (dst, dst_end, is_loc_0) = root_first_chunk(nursery, oldgen, src, src_end, 0)?;
@@ -454,6 +460,19 @@ unsafe fn evacuate_nursery_root(
         }
     }
     Ok(())
+}
+
+#[inline(always)]
+unsafe fn evacuate_oldgen_root(
+    frame: *mut GibShadowstackFrame,
+    fwd_env: &mut ForwardingEnv,
+    so_env: &mut SkipoverEnv,
+    nursery: &GibNursery,
+    oldgen: &mut GibOldgen,
+    evac_major: bool,
+) -> Result<()> {
+    // No difference from nursery evacuation at the moment.
+    evacuate_nursery_root(frame, fwd_env, so_env, nursery, oldgen, evac_major)
 }
 
 #[inline(always)]
@@ -698,6 +717,7 @@ unsafe fn evacuate_packed(
                     }
 
                     COPIED_TO_TAG | COPIED_TAG => {
+                        debug_assert!(BURN);
                         // i.e. ALREADY forwarded.
                         forwarded = true;
                         let tagged_fwd_ptr = record_time!(
@@ -1144,7 +1164,6 @@ unsafe fn evacuate_packed(
                             next_action = EvacAction::ProcessTy(next_ty, mb_shortcut_addr);
                             continue;
                         } else {
-                            cold();
                             // A pretenured object whose next chunk is in the old_gen.
                             // We reconcile the two footers.
                             dbgprintln!(
@@ -1645,6 +1664,7 @@ unsafe fn find_forwarding_pointer(
 ) -> TaggedPointer {
     match tag {
         COPIED_TO_TAG => {
+            debug_assert!(BURN);
             let (tagged, _): (GibTaggedPtr, _) = read_mut(addr_after_tag);
             let tagged_fwd_ptr = TaggedPointer::from_usize(tagged);
             dbgprintln!(
@@ -1655,6 +1675,7 @@ unsafe fn find_forwarding_pointer(
             return tagged_fwd_ptr;
         }
         COPIED_TAG => {
+            debug_assert!(BURN);
             let (mut scan_tag, mut scan_ptr): (GibPackedTag, *const i8) = read(addr_after_tag);
             let offset = 'scan_loop: loop {
                 match scan_tag {
