@@ -1,11 +1,9 @@
 name: Test Gibbon RTS
 
 on:
-  push:
-  pull_request:
-    types:
-      - review_requested
-      - ready_for_review
+  - push
+  - pull_request
+
 env:
   CARGO_TERM_COLOR: always
 
