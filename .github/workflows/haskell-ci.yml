@@ -13,19 +13,9 @@
 # REGENDATA ("0.12.1",["github","--config=cabal.haskell-ci","cabal.project"])
 #
 name: Haskell-CI
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    types:
-      - opened 
-      - reopened 
-      - synchronize
-      - ready_for_review
+on: [ push, pull_request ]
 jobs:
   linux:
-    if: github.event.pull_request.draft == false
     name: Haskell-CI - Linux - ${{ matrix.compiler }}
     runs-on: ubuntu-18.04
     container:
@@ -170,9 +160,3 @@ jobs:
       - name: tests
         run: |
           $CABAL v2-test $ARG_COMPILER $ARG_TESTS $ARG_BENCH all --test-show-details=direct
-  fail_if_pull_request_is_draft:
-    if: github.event.pull_request.draft == true
-    runs-on: ubuntu-18.04
-    steps:
-    - name: Fails in order to indicate that pull request needs to be marked as ready to review and unit tests workflow needs to pass.
-      run: exit 1
