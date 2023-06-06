@@ -1,14 +1,5 @@
 name: test-gibbon
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    types:
-      - opened 
-      - reopened 
-      - synchronize
-      - ready_for_review
+on: [ push, pull_request ]
 jobs:
   linux:
     if: github.event.pull_request.draft == false
