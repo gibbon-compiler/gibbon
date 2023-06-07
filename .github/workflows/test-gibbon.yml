@@ -8,14 +8,26 @@ jobs:
       - name: dependencies
         run: |
           sudo apt-get update
-          sudo apt-add-repository -y 'ppa:hvr/ghc'
-          sudo apt-get update
           sudo add-apt-repository -y 'ppa:plt/racket'
           sudo apt-get update
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt update
-          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-7 ghc-9.0.1 racket
-          sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-7 /usr/bin/gcc
+          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11 racket
+          sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
+      - name: ghc and cabal
+        env:
+          HCKIND: ghc
+          HCVER: 9.0.1
+        run: |
+            mkdir -p "$HOME/.ghcup/bin"
+            curl -sL https://downloads.haskell.org/ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 > "$HOME/.ghcup/bin/ghcup"
+            sudo chmod a+x "$HOME/.ghcup/bin/ghcup"
+            "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
+            "$HOME/.ghcup/bin/ghcup" install cabal 3.10.1.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
+            HC=$HOME/.ghcup/bin/$HCKIND-$HCVER
+            echo "HC=$HC" >> "$GITHUB_ENV"
+            echo "CABAL=$HOME/.ghcup/bin/cabal-3.10.1.0 -vnormal+nowrap" >> "$GITHUB_ENV"
+            echo "$HOME/.ghcup/bin/" >> $GITHUB_PATH
       - name: versions
         run: |
           ghc --version
@@ -25,8 +37,8 @@ jobs:
           cabal --version
       - name: checkout
         uses: actions/checkout@v2
-      - run: cabal v2-update -w /opt/ghc/9.0.1/bin/ghc
-      - run: cabal v2-freeze -w /opt/ghc/9.0.1/bin/ghc
+      - run: cabal v2-update -w $HC
+      - run: cabal v2-freeze -w $HC
       - name: cache-cabal
         uses: actions/cache@v2
         with:
@@ -40,8 +52,8 @@ jobs:
       - name: build
         run: |
           cd gibbon-compiler
-          cabal v2-update -w /opt/ghc/9.0.1/bin/ghc
-          cabal v2-build -w /opt/ghc/9.0.1/bin/ghc .
+          cabal v2-update -w $HC
+          cabal v2-build -w $HC .
       - name: cache-answers
         uses: actions/cache@v2
         with:
@@ -58,4 +70,4 @@ jobs:
         run: |
           export GIBBONDIR=`pwd`
           cd gibbon-compiler/
-          cabal v2-exec -w /opt/ghc/9.0.1/bin/ghc test-gibbon-examples -- -v2
+          cabal v2-exec -w $HC test-gibbon-examples -- -v2
