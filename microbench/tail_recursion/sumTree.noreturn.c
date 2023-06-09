@@ -1,8 +1,10 @@
-#pragma GCC optimize("O3","omit-frame-pointer","inline")
+#pragma GCC optimize("O3", "omit-frame-pointer","inline")
 
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <time.h>
+#include <stdint.h>
+
 
 clock_t start, end;
 double cpu_time_used;
@@ -37,17 +39,16 @@ Tree* mkTree(int depth){
     return root;
 }
 
-int sumTree(Tree* root){
+void _sumTree(Tree* root, int* sum){
 
    if(root == NULL){
-    return 0;
+    return;
    } 
 
-   int sum = root->value; 
-   sum += sumTree(root->left);
-   sum += sumTree(root->right);
+   *sum += root->value; 
+   _sumTree(root->left,  sum);
+   _sumTree(root->right, sum);
 
-   return sum;
 }
 
 void printTree(Tree* root){
@@ -73,9 +74,11 @@ int main(int argc, char** argv){
     //printTree(tree);
     //printf("\n");
     //printf("\n");
+    
+    int sum = 0;
 
     start = clock(); 
-    int sum = sumTree(tree);
+    _sumTree(tree, &sum);
     end = clock(); 
 
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -84,4 +87,3 @@ int main(int argc, char** argv){
     printf("The sum of the tree was %d\n", sum);
 
 }
-

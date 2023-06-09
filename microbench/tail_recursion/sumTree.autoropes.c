@@ -4,10 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define stack_size 10000000
-//uintptr_t stack[stack_size];
-//int top=-1;
 
 clock_t start, end;
 double cpu_time_used;
@@ -18,20 +17,20 @@ typedef struct Tree {
     struct Tree* left; 
 } Tree; 
 
-// void display()
-// {
-//     if(top>=0)
-//     {
-//         printf("\n The elements in STACK \n");
-//         for(int i=top; i>=0; i--)
-//             printf("\n%ld\n",stack[i]);
-//     }
-//     else
-//     {
-//         printf("\n The STACK is empty");
-//     }
+void display(int* top, uintptr_t* stack)
+{
+    if(*top>=0)
+    {
+        printf("\n The elements in STACK \n");
+        for(int i=*top; i>=0; i--)
+            printf("\n%ld\n",stack[i]);
+    }
+    else
+    {
+        printf("\n The STACK is empty");
+    }
    
-// }
+}
 
 static inline void push(uintptr_t pointer, int* top, uintptr_t* stack){
 
@@ -58,13 +57,13 @@ static inline uintptr_t pop(int* top, uintptr_t* stack){
 
 }
 
-int isEmptyStack(int* top){
+static inline bool isEmptyStack(int* top){
 
     if (*top > -1){
-        return 0;
+        return false;
     }
     
-    return -1;
+    return true;
     
 }
 
@@ -92,26 +91,13 @@ Tree* mkTree(int depth){
     return root;
 }
 
-void _sumTree(Tree* root, int* sum){
-
-   if(root == NULL){
-    return;
-   } 
-
-   *sum += root->value; 
-   _sumTree(root->left,  sum);
-   _sumTree(root->right, sum);
-
-}
-
-void _sumTreeAutoRopes(Tree* root, int* sum){
+void _sumTreeAutoRopes(Tree* root, int* sum, uintptr_t* stack){
     
-    uintptr_t* stack = (uintptr_t*) malloc(sizeof(uintptr_t*) * stack_size);
     int top = -1;
 
     push((uintptr_t) root, &top, stack);
 
-    while(isEmptyStack(&top) == 0 ){
+    while(!isEmptyStack(&top)){
 
         root = (Tree*) pop(&top, stack); 
         
@@ -140,22 +126,24 @@ void printTree(Tree* root){
 
 }
 
-int main(){
+int main(int argc, char** argv){
 
-    Tree* tree = mkTree(29);
+    Tree* tree = mkTree(atoi(argv[1]));
     //printTree(tree);
     //printf("\n");
     //printf("\n");
     
     int sum = 0;
+    
+    uintptr_t* stack = (uintptr_t*) malloc(sizeof(uintptr_t*) * stack_size);
 
     start = clock(); 
-    _sumTreeAutoRopes(tree, &sum);
+    _sumTreeAutoRopes(tree, &sum, stack);
     end = clock(); 
 
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
-    printf("Execution time:%lf seconds\n", cpu_time_used);
+    printf("Execution time: %lf\n", cpu_time_used);
     printf("The sum of the tree was %d\n", sum);
 
 }
