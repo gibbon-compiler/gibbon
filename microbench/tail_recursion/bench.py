@@ -17,14 +17,14 @@ for file in FILES:
         
         gibbon_file_name = file
 
-        gibbon_cmd = "gcc" + file + ".c" + " -o " + gibbon_file_name
+        gibbon_cmd = "gcc -O3 " + file + ".c" + " -o " + gibbon_file_name
         
         print("The gcc command was: ")
         print()
         print(gibbon_cmd)
         print()
 
-        gibbon_cmd_c = subprocess.run(["gcc", file + ".c",  "-o", gibbon_file_name])
+        gibbon_cmd_c = subprocess.run(["gcc", "-O3" , file + ".c",  "-o", gibbon_file_name])
         print()
 
         print("The exit code for the gcc compilation was %d" % gibbon_cmd_c.returncode)
@@ -34,7 +34,7 @@ for file in FILES:
 #run the files and get the timings
 iterations = 9
 
-for size in range(5, 30):
+for size in range(5, 25):
     for files in FILES:
 
             times = [] 
