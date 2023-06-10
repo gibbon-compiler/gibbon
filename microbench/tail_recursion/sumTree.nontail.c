@@ -1,4 +1,4 @@
-#pragma GCC optimize("O3","omit-frame-pointer","inline")
+#pragma GCC optimize("O3", "inline")
 
 #include <stdio.h>
 #include <stdlib.h> 

@@ -1,4 +1,4 @@
-#pragma GCC optimize("O3", "omit-frame-pointer","inline")
+#pragma GCC optimize("O3", "inline")
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +34,10 @@ void display(int* top, uintptr_t* stack)
 
 static inline void push(uintptr_t pointer, int* top, uintptr_t* stack){
 
-    if(*top < stack_size - 1){
+    if ((void*)pointer == NULL)
+        return;
+
+    if(*top < stack_size - 1 ){
         (*top)++;
         stack[*top] = pointer;
     }
@@ -53,6 +56,31 @@ static inline uintptr_t pop(int* top, uintptr_t* stack){
     else{
         printf("Stack Underflow\n");
         return -1; 
+    }
+
+}
+
+static inline uintptr_t _top(int* top, uintptr_t* stack){
+
+    if(*top > -1){
+        return stack[*top];
+    }
+    else{
+        printf("Stack Underflow\n");
+        return -1; 
+    }
+
+}
+
+static inline void _pop(int* top){
+
+    if(*top > -1){
+        (*top)--; 
+        return;
+    }
+    else{
+        printf("Stack Underflow\n");
+        return;
     }
 
 }
@@ -99,13 +127,12 @@ void _sumTreeAutoRopes(Tree* root, int* sum, uintptr_t* stack){
 
     while(!isEmptyStack(&top)){
 
-        root = (Tree*) pop(&top, stack); 
+        root = (Tree*) _top(&top, stack);
+        _pop(&top);
         
         *sum += root->value;
-        if(root->right != NULL)
-            push((uintptr_t) (root->right), &top, stack);
-        if(root->left != NULL)
-            push((uintptr_t) (root->left), &top, stack);
+        push((uintptr_t) (root->right), &top, stack);
+        push((uintptr_t) (root->left), &top, stack);
     }
 }
 
