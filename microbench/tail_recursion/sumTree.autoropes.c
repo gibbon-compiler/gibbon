@@ -124,15 +124,18 @@ void _sumTreeAutoRopes(Tree* root, int* sum, uintptr_t* stack){
     int top = -1;
 
     push((uintptr_t) root, &top, stack);
-
+    root = NULL;
+    
     while(!isEmptyStack(&top)){
-
-        root = (Tree*) _top(&top, stack);
-        _pop(&top);
+        
+        if (root == NULL){
+            root = (Tree*) _top(&top, stack);
+            _pop(&top);
+        }
         
         *sum += root->value;
         push((uintptr_t) (root->right), &top, stack);
-        push((uintptr_t) (root->left), &top, stack);
+        root = root->left;
     }
 }
 

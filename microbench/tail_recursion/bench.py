@@ -32,9 +32,9 @@ for file in FILES:
 
 
 #run the files and get the timings
-iterations = 9
+iterations = 15
 
-for size in range(5, 25):
+for size in range(5, 30):
     for files in FILES:
 
             times = [] 
@@ -73,7 +73,7 @@ for size in range(5, 25):
 
 print(Timings)
 
-f = open("experiment_timings.txt", "w")
+f = open("experiment_timings1.txt", "w")
 
 for key, value in Timings.items():
     f.write('%s:(average:%s, median:%s)\n' % (key, value[0], value[1]))
