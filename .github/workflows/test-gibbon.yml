@@ -31,7 +31,7 @@ jobs:
             echo "$HOME/.ghcup/bin/" >> $GITHUB_PATH
       - name: versions
         run: |
-          ghc --version
+          $HC --version
           racket --version
           gcc --version
           stack --version

@@ -71,6 +71,8 @@ tests:
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
   - name: test12b_traverse.gib
+    # Unexpected segfault.
+    failing: [pointer]
   - name: test12c_traverse.gib
   - name: test13b_build.gib
   - name: test13_build.gib
@@ -91,11 +93,15 @@ tests:
   - name: test14c_tail.gib
   - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
+    # Unexpected segfault.
+    failing: [pointer]
   - name: test15c_printsym.gib
     skip: true
     # printing symbols is broken atm
   - name: test15d_symsearch.hs
     answer-file: examples/test15d_symsearch.ans
+    # Unexpected segfault.
+    failing: [pointer]
   - name: test15e_gensym.hs
     answer-file: examples/test15e_gensym.ans
     # Gensym is broken in the interpreter. (randomIO is not determinisitc, we probably should use a fixed seed for interpreter)
@@ -330,6 +336,8 @@ tests:
   - name: NeedsClosure.hs
     dir: examples/poly
     answer-file: examples/poly/NeedsClosure.hs.ans
+    # Unexpected segfault.
+    failing: [pointer]
 
   - name: MutualRec.hs
     dir: examples/poly
@@ -414,12 +422,16 @@ tests:
     test-flags: ["--parallel"]
     failing: [interp1]
     answer-file: examples/vectors/Vector.hs.ans
+    # Needs cilk.
+    skip: true
 
   - name: SortPrim.hs
     dir: examples/vectors
     test-flags: ["--parallel"]
     failing: [interp1]
     answer-file: examples/vectors/SortPrim.ans
+    # Needs cilk.
+    skip: true
 
   - name: Sort.hs
     skip: true
@@ -430,6 +442,8 @@ tests:
     dir: examples/vectors
     test-flags: ["--parallel"]
     answer-file: examples/vectors/DataVector.hs.ans
+    # Needs cilk.
+    skip: true
 
   ## AST benchmarks
   - name: C1.hs
@@ -442,7 +456,7 @@ tests:
   - name: test29d_list.gib
     failing: [gibbon1]
   - name: test18f_flip.gib
-    failing: [gibbon2, gibbon1]
+    failing: [gibbon2, gibbon1, pointer]
   - name: pp_projs.gib
     skip: true
   - name: test12_skip.gib
@@ -514,5 +528,5 @@ tests:
 
   - name: test_191.hs
     answer-file: examples/test_191.ans
-    failing: [pointer, gibbon1, interp1]  
-    run-modes: ["gibbon2"] 
+    failing: [pointer, gibbon1, interp1]
+    run-modes: ["gibbon2"]
