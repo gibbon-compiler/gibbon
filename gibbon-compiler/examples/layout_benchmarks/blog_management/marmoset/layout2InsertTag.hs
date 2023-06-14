@@ -10,7 +10,7 @@ insertKeywordInTagList keyword blogs = case blogs of
                                             Layout2 content tags rst header id author date -> let 
                                                                                                 newTags = insertBlogTags keyword tags
                                                                                                 newRst  = insertKeywordInTagList keyword rst
-                                                                                                in Layout2 (copyPacked content) (copyPacked newTags) (copyPacked newRst) header id author date
+                                                                                                in Layout2 content newTags newRst header id author date
 
 
 -- main function 

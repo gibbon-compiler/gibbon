@@ -3,18 +3,31 @@ import GenerateLayout1
 
 type Text = Vector Char
 
+-- emphKeywordInTag :: Text -> Blog -> Blog 
+-- emphKeywordInTag keyword blogs = case blogs of 
+--                                     End -> End
+--                                     Layout1 header id author date content tags rst -> let present     = searchBlogTags keyword tags -- search the tags for the keyword 
+--                                                                                           --_ = printsym (quote "NEWLINE")
+--                                                                                           --_ = printPacked id
+--                                                                                           --_ = printsym (quote " ")
+--                                                                                           --_           = printbool present
+--                                                                                           --_ = printsym (quote "NEWLINE")
+--                                                                                           newContent  = emphasizeBlogContent keyword content present -- get the new content, this should be inlined 
+--                                                                                           newRst      = emphKeywordInTag keyword rst 
+--                                                                                         in Layout1 header id author (copyPacked date) (copyPacked newContent) (copyPacked tags) (copyPacked newRst)
+
+
 emphKeywordInTag :: Text -> Blog -> Blog 
 emphKeywordInTag keyword blogs = case blogs of 
                                     End -> End
-                                    Layout1 header id author date content tags rst -> let present     = searchBlogTags keyword tags -- search the tags for the keyword 
-                                                                                          --_ = printsym (quote "NEWLINE")
-                                                                                          --_ = printPacked id
-                                                                                          --_ = printsym (quote " ")
-                                                                                          --_           = printbool present
-                                                                                          --_ = printsym (quote "NEWLINE")
-                                                                                          newContent  = emphasizeBlogContent keyword content present -- get the new content, this should be inlined 
-                                                                                          newRst      = emphKeywordInTag keyword rst 
-                                                                                        in Layout1 header id author (copyPacked date) (copyPacked newContent) (copyPacked tags) (copyPacked newRst)
+                                    Layout1 header id author date content tags rst -> let present = searchBlogTags keyword tags -- search the tags for the keyword 
+                                                                                          in if (present) 
+                                                                                             then let newContent  = emphasizeBlogContent keyword content present
+                                                                                                      newRst      = emphKeywordInTag keyword rst
+                                                                                                    in Layout1 header id author date newContent tags newRst
+                                                                                             else
+                                                                                               let newRst = emphKeywordInTag keyword rst
+                                                                                                 in Layout1 header id author date content tags newRst
 
 
 

@@ -10,7 +10,7 @@ deleteKeywordInTagList keyword blogs = case blogs of
                                             Layout8 content rst id author date header tags -> let 
                                                                                                 newTags = deleteBlogTags keyword tags
                                                                                                 newRst  = deleteKeywordInTagList keyword rst
-                                                                                                in Layout8 content newRst id author date (copyPacked header) (copyPacked newTags)
+                                                                                                in Layout8 content newRst id author date header newTags
 
 
 -- main function 

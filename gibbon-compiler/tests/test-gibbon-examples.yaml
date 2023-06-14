@@ -550,3 +550,8 @@ tests:
 
   - name: test_power.hs
     answer-file: examples/test_power.ans
+
+  - name: test_191.hs
+    answer-file: examples/test_191.ans
+    failing: [pointer, gibbon1, interp1]  
+    run-modes: ["gibbon2"] 

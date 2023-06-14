@@ -1738,7 +1738,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
           args' <- mapM recur args
           pure $ PrimAppE pr args'
         LetE (v,tyapps,ty,rhs) bod ->  do
-          rhs' <- recur rhs
+          rhs' <- go True env2 rhs
           let env2'= extendVEnv v ty env2
           bod' <- go True env2' bod
           pure $ LetE (v,tyapps,ty,rhs') bod'

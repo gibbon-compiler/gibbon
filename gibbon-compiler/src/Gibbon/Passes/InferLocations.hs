@@ -10,7 +10,7 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls)
     where
 
 {-
@@ -87,6 +87,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Foldable as F
+import Prelude as P
 import Data.Maybe
 import qualified Control.Monad.Trans.State.Strict as St
 import Control.Monad
@@ -325,8 +326,8 @@ inferExp' env exp bound dest=
                            Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
 
   in do res <- inferExp env exp dest
-        (e,ty,cs) <- bindAllLocations res
-        e' <- finishExp e
+        (e,ty,cs) <-  bindAllLocations res
+        e' <-   finishExp e
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         e''' <- bindAllUnbound e'' (S.toList unbound)
@@ -458,7 +459,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                 if v == v'
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
-                        return (Ext (LetLocE lv1' (AfterVariableLE v lv2 True) e), ty, cs)
+                        let res' = (Ext (LetLocE lv1' (AfterVariableLE v lv2 True) e), ty, cs)
+                        res'' <- bindAfterLoc v res'
+                        return res''
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
             AfterCopyL lv1 v1 v' lv2 f lvs ->
@@ -471,8 +474,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                             copyRetTy = case arrOut arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
                                           _ -> error "bindAfterLoc: Not a packed type"
-                        return (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $
-                                Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
+                        let res'  = (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $ Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
+                        res'' <- bindAfterLoc v res'
+                        return res''
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
             _ -> do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -481,10 +485,11 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
       -- | Transform a result by discharging AfterVariable constraints corresponding to
       -- a list of newly bound variables.
+      -- NOTE : Reversing the order in which bindings are discharged seems to fix the location type check error. 
       bindAfterLocs :: [Var] -> Result -> TiM Result
       bindAfterLocs (v:vs) res =
-          do res' <- bindAfterLoc v res
-             bindAfterLocs vs res'
+          do res'' <- bindAfterLocs vs res
+             bindAfterLoc v res''
       bindAfterLocs [] res = return res
 
       -- | Transforms a result by binding any additional locations that are safe to be bound
@@ -528,7 +533,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
         res <- inferExp env' rhs dst
-        (rhs',ty',cs') <- bindAfterLocs (L.map fst vars') res
+        (rhs',ty',cs') <-   bindAfterLocs (freeVarsInOrder rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
         return ((con,vars',rhs'),ty',cs')
@@ -743,8 +748,17 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
        assumeEq bty BoolTy
        -- Here BOTH branches are unified into the destination, so
        -- there is no need to unify with eachother.
-       (b',tyb,csb)    <- inferExp env b dest
-       (c',tyc,csc)    <- inferExp env c dest
+       res    <- inferExp env b dest
+       -- bind variables after if branch
+       -- This ensures that the location bindings are not freely floated up to the upper level expressions
+       (b',tyb,csb) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder b)) res
+
+       -- Else branch
+       res'    <- inferExp env c dest
+       -- bind variables after else branch
+       -- This ensures that the location bindings are not freely floated up to the upper level expressions
+       (c',tyc,csc) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder c)) res'
+
        return (IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
     PrimAppE (DictInsertP dty) [(VarE var),d,k,v] ->
@@ -885,9 +899,11 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
         IfE a b c -> do
           (boda,tya,csa) <- inferExp env a NoDest
            -- just assuming tyb == tyc
-          (bodb,tyb,csb) <- inferExp env b NoDest
-          (bodc,tyc,csc) <- inferExp env c NoDest
-          (bod',ty',cs') <- inferExp (extendVEnv vr tyc env) bod dest
+          res <- inferExp env b NoDest 
+          (bodb,tyb,csb) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder b)) res
+          res' <- inferExp env c NoDest
+          (bodc,tyc,csc) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder c)) res'
+          (bod',ty',cs') <- inferExp (extendVEnv vr tyc env) bod dest 
           let cs = L.nub $ csa ++ csb ++ csc ++ cs'
           return (L2.LetE (vr,[],tyc,L2.IfE boda bodb bodc) bod', ty', cs)
 
@@ -1128,7 +1144,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 -- | Transforms an expression by updating all locations to their final mapping
 -- as a result of unification.
 finishExp :: Exp2 -> TiM (Exp2)
-finishExp e =
+finishExp e = 
     case e of
       VarE v -> return $ VarE v
       LitE i -> return $ LitE i
@@ -1537,12 +1553,17 @@ unifyAll (_:_) [] _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] [] successA _ = successA
 
+
+isCpyCallExpr1 :: Exp1 -> Bool 
+isCpyCallExpr1 (AppE f _ _ ) = isCpyVar f
+isCpyCallExpr1 _ = False
+
 isCpyVar :: Var -> Bool
-isCpyVar v = (take 3 (fromVar v)) == "cpy"
+isCpyVar v = L.isInfixOf ("copy") (fromVar v)
 
 isCpyCall :: Exp2 -> Bool
 isCpyCall (AppE f _ _) = True -- TODO: check if it's a real copy call, to be safe
-isCpyCall _ = False
+isCpyCall _ = False 
 
 freshLocVar :: String -> PassM LocVar
 freshLocVar m = gensym (toVar m)
@@ -1971,7 +1992,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
                                                Nothing -> acc3
                                                Just ls ->
                                                  let binds = map (\(old,new) ->
-                                                                    let PackedTy tycon _ = L1.lookupVEnv old env2
+                                                                    let PackedTy tycon _ = L1.lookupVEnv old env2'
                                                                         f = mkCopyFunName tycon
                                                                     in (new,[],PackedTy tycon (),AppE f [] [VarE old]))
                                                              ls
@@ -2007,9 +2028,15 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
           pure $ (cpy_env1, PrimAppE pr ls1)
         IfE a b c  -> do
           (cpy_env1, a1) <- go env2 cpy_env order a
+          -- Here each branch should be given its the same env since we are assuming that the branchches unify with the destination and not with each other. 
+          -- TODO : Confirm 
           (cpy_env2, b1) <- go env2 cpy_env1 order b
-          (cpy_env3, c1) <- go env2 cpy_env2 order c
-          pure $ (cpy_env3, IfE a1 b1 c1)
+          (cpy_env3, c1) <- go env2 cpy_env1 order c
+          let list_env2 = M.toList cpy_env2
+          let list_env3 = M.toList cpy_env3
+          let new_env   = list_env2 ++ list_env3
+          let map_new_env = M.fromList $ updateCpyEnv new_env
+          pure $ (map_new_env, IfE a1 b1 c1)
         MkProdE ls -> do
           (cpy_env1, ls1) <- F.foldrM
                                (\e (acc1,acc2) -> do
@@ -2049,7 +2076,131 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
         MapE{}  -> error "copyOutOfOrderPacked: todo MapE"
         FoldE{} -> error "copyOutOfOrderPacked: todo FoldE"
 
+-- Updating environment correctly for some branches. 
+updateCpyEnv :: [(Var, [(Var, Var)])] -> [(Var, [(Var, Var)])]
+updateCpyEnv env = case env of 
+      [] -> [] 
+      x:xs -> let (key, val) = x 
+                  commonKeys = P.concat $ P.map (\(a, b) -> if (fromVar a) == (fromVar key) then [(a, b)]
+                                                            else [] ) xs
+                  commonVals = P.concat $ P.map (\(a, b) -> b) commonKeys
+                  commonValNew = commonVals ++ val
+                  removedKeys = P.concat $ P.map (\(a, b) -> if (fromVar a) == (fromVar key) then []
+                                                             else [(a, b)] ) xs
+                in [(key, commonValNew)] ++ (updateCpyEnv removedKeys)
+          
 
+-- Alias analysis for copyPacked Calls 
+-- Data type for storing variables Expressions and aliases. 
+
+type AliasEnv = M.Map Exp1 (Var, S.Set Var)
+
+removeAliasesForCopyCalls :: Prog1 -> PassM Prog1
+removeAliasesForCopyCalls prg@(Prog ddfs fndefs mnExp) = do
+    mnExp' <- case mnExp of
+                   Nothing -> pure Nothing
+                   Just (ex,ty) -> do 
+                                      ex' <- removeAliases ex (M.empty)
+                                      pure $ Just (ex', ty)
+    fndefs' <- mapM fd fndefs
+    let prg' = Prog ddfs fndefs' mnExp'
+    p0 <- flattenL1 prg'
+    inlineTriv p0
+  where
+
+      fd :: FunDef1 -> PassM FunDef1
+      fd fn@FunDef{funArgs,funBody,funTy} = do
+          funBody' <- removeAliases funBody (M.empty)  
+          pure $ fn { funBody = funBody' }
+
+      unifyEnvs :: [AliasEnv] -> AliasEnv
+      unifyEnvs envList = M.unionsWith unifyVals envList
+
+      unifyVals :: (Var, S.Set Var) -> (Var, S.Set Var) -> (Var, S.Set Var) 
+      unifyVals (v, vs) (v', vs') = if v == v' then (v, vs `S.union` vs')
+                                    else error "unifyVals: Variable should be same if key is same!"
+
+      myLookup :: Exp1 -> [((Exp1, Var), b)] -> Maybe b
+      myLookup _ [] = Nothing
+      myLookup key ((thiskey,thisval):rest) =
+        let (rhs, v) = thiskey
+         in if rhs == key
+            then Just thisval
+            else myLookup key rest
+                                      
+      removeAliases :: Exp1 -> AliasEnv -> PassM Exp1
+      removeAliases exp env = case exp of 
+        DataConE loc dcon args -> do
+                                  args' <- mapM (\expr -> removeAliases expr env) args
+                                  pure $ DataConE loc dcon args'
+        VarE v -> do
+                  let vals = M.elems env
+                  let newVar = P.map (\(a, b) -> if (S.member v b) then a
+                                                 else v ) vals
+                  case (removeDuplicates newVar) of 
+                    []   -> return $ VarE v
+                    [v'] -> return $ VarE v'
+                    _    -> error "removeAliases: Did not expect more than one variable!"
+        LitE{} -> pure exp
+        CharE{} -> pure exp
+        FloatE{} -> pure exp
+        LitSymE{} -> pure exp
+        AppE f locs args -> do
+                            args' <- mapM (\expr -> removeAliases expr env) args
+                            pure $ AppE f locs args'
+        PrimAppE f args -> do 
+                           args' <- mapM (\expr -> removeAliases expr env) args
+                           pure $ PrimAppE f args'
+        LetE (v, loc, ty, rhs) bod -> do
+                                      let isCpy = isCpyCallExpr1 rhs 
+                                      rhs'  <- removeAliases rhs env
+                                      if (isCpy) then do
+                                          let val' = M.lookup rhs env
+                                          case val' of 
+                                            Nothing -> do 
+                                                       let newEnv = (M.insert rhs (v, S.empty) env) 
+                                                       LetE (v, loc, ty, rhs') <$> removeAliases bod newEnv
+                                            Just (v', e') -> do
+                                             let e'' = S.insert v e' 
+                                             let newEnv = (M.insert rhs (v', e'') env)
+                                             if v' == v then LetE (v, loc, ty, rhs') <$> removeAliases bod newEnv
+                                             else removeAliases bod newEnv
+                                      else LetE (v, loc, ty, rhs') <$> removeAliases bod env
+        CaseE scrt mp -> do 
+          mp' <- mapM (\(a, b, c) -> do 
+                                    c' <- removeAliases c env
+                                    return (a, b, c')
+                                   ) mp
+          return $ CaseE scrt mp'                 
+        IfE a b c -> do
+          a' <- removeAliases a env
+          b' <- removeAliases b env
+          c' <- removeAliases c env
+          if b' == c' then return b'
+          else return $ IfE a' b' c' 
+        MkProdE xs -> do 
+                      xs' <- mapM (\expr -> removeAliases expr env) xs
+                      pure $ MkProdE xs'
+        ProjE i e -> do 
+                     e' <- removeAliases e env
+                     pure $ ProjE i e'
+        TimeIt e ty b -> do 
+                         e' <- removeAliases e env
+                         pure $ TimeIt e' ty b
+        WithArenaE v e -> do 
+                          e' <- removeAliases e env
+                          pure $ WithArenaE v e'
+        SpawnE f locs args -> do
+                              args' <- mapM (\expr -> removeAliases expr env) args
+                              pure $ SpawnE f locs args'
+        SyncE -> pure exp
+        Ext _ -> pure exp
+        MapE{} ->  error "removeAliasesForCopyCalls: todo MapE"
+        FoldE{} -> error "removeAliasesForCopyCalls: todo FoldE"
+
+
+
+  
 
 {--
 
@@ -2179,3 +2330,46 @@ idFun :: L1.FunDef Ty1 (L L1.Exp1)
 idFun = L1.FunDef "id" ("tr",treeTy) treeTy (VarE "tr")
 
 --}
+
+removeDuplicates :: Eq a => [a] -> [a]
+removeDuplicates list = case list of 
+                                []   -> []
+                                a:as -> a:removeDuplicates (P.filter (/=a) as)
+
+-- https://www.reddit.com/r/haskell/comments/u841av/trying_to_remove_all_the_elements_that_occur_in/                                
+deleteOne :: Eq a => a -> [a] -> [a]
+deleteOne _ [] = [] -- Nothing to delete
+deleteOne x (y:ys) | x == y = ys -- Drop exactly one matching item
+deleteOne x (y:ys) = y : deleteOne x ys -- Drop one, but not this one (doesn't match).
+                                
+deleteMany :: Eq a => [a] -> [a] -> [a]
+deleteMany [] = id -- Nothing to delete
+deleteMany (x:xs) = deleteMany xs . deleteOne x -- Delete one, then the rest.
+
+freeVarsInOrder :: Exp1 -> [Var]
+freeVarsInOrder exp = case exp of
+  VarE v    -> [v]
+  LitE _    -> []
+  CharE _   -> []
+  FloatE{}  -> []
+  LitSymE _ -> []
+  ProjE _ e -> freeVarsInOrder e
+  IfE a b c -> (freeVarsInOrder a) ++ (freeVarsInOrder b) ++ (freeVarsInOrder c)
+  AppE v _ ls         -> [v] ++ (L.concat $ (L.map freeVarsInOrder ls))
+  PrimAppE _ ls        -> L.concat $ (L.map freeVarsInOrder ls)
+  LetE (v,_,_,rhs) bod -> (freeVarsInOrder rhs) ++ (deleteOne v (freeVarsInOrder bod))
+  CaseE e ls -> (freeVarsInOrder e) ++ (L.concat $
+                (L.map (\(_, vlocs, ee) ->
+                                       let (vars,_) = unzip vlocs
+                                       in deleteMany (freeVarsInOrder ee) vars) ls) )
+  MkProdE ls          -> L.concat $ L.map freeVarsInOrder ls
+  DataConE _ _ ls     -> L.concat $ L.map freeVarsInOrder ls
+  TimeIt e _ _        -> freeVarsInOrder e
+  MapE (v,_t,rhs) bod -> (freeVarsInOrder rhs) ++ (deleteOne v (freeVarsInOrder bod))
+  FoldE (v1,_t1,r1) (v2,_t2,r2) bod ->
+      (freeVarsInOrder r1) ++ (freeVarsInOrder r2) ++ (deleteOne v1 $ deleteOne v2 $ freeVarsInOrder bod)
+
+  WithArenaE v e -> deleteOne v $ freeVarsInOrder e
+
+  SpawnE v _ ls -> [v] ++ (L.concat $ L.map freeVarsInOrder ls)
+  SyncE -> []

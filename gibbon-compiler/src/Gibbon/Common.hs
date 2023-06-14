@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE CPP #-}
 
@@ -38,10 +37,10 @@ where
 
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
-#if !MIN_VERSION_base(4,13,0)
--- https://downloads.haskell.org/ghc/8.8.1/docs/html/users_guide/8.8.1-notes.html
-import Control.Monad.Fail(MonadFail(..))
-#endif
+
+
+
+
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Functor.Foldable
@@ -76,10 +75,10 @@ instance Out Var where
   docPrec n v = docPrec n (fromVar v)
 
 instance NFData Var where
-  rnf = (rnf . fromVar)
+  rnf = rnf . fromVar
 
 instance ToIdent Var where
-  toIdent = (toIdent . fromVar)
+  toIdent = toIdent . fromVar
 
 instance IsString Var where
   fromString = toVar
@@ -102,7 +101,7 @@ cleanFunName f =
   toVar [ if isNumber c || isAlpha c
           then c
           else '_'
-        | c <- (fromVar f) ]
+        | c <- fromVar f ]
 toEndV :: Var -> Var
 toEndV = varAppend "end_"
 
@@ -125,7 +124,7 @@ instance Out TyVar where
   doc (SkolemTv s v) = text s <+> text "sk:" PP.<> doc v
   doc (UserTv v)     = text "u:" PP.<> doc v
 
-  docPrec _ v = doc v
+  docPrec _ = doc
 
 isUserTv :: TyVar -> Bool
 isUserTv tv =
@@ -151,7 +150,7 @@ gensym :: MonadState Int m => Var -> m Var
 gensym v = state (\n -> (cleanFunName v `varAppend` "_" `varAppend` toVar (show n), n + 1))
 
 gensym_tag :: MonadState Int m => Var -> String -> m Var
-gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar ((show n)++ str) , n + 1))
+gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar (show n ++ str) , n + 1))
 
 -- | An infinite alphabet generator: 'a','b', ... ,'z','a0', ...
 genLetter :: MonadState Int m => m Var
@@ -188,7 +187,7 @@ defaultPackedRunPassM = runPassM (defaultConfig { dynflags = dflags}) 0
   where dflags = gopt_set Opt_Packed defaultDynFlags
 
 getDynFlags :: MonadReader Config m => m DynFlags
-getDynFlags = dynflags <$> ask
+getDynFlags = asks dynflags
 
 getGibbonConfig :: MonadReader Config m => m Config
 getGibbonConfig = ask
@@ -382,6 +381,7 @@ cataM alg = c where
 --------------------------------------------------------------------------------
 
 theEnv :: [(String, String)]
+{-# NOINLINE theEnv #-}
 theEnv = unsafePerformIO getEnvironment
 
 -- | Debugging flag shared by all modules.
@@ -440,7 +440,7 @@ dumpIfSet cfg flag msg =
                 n <- randomIO :: IO Int
                 let fp = "gibbon-" ++ show n ++ "." ++ suffix
                 dbgTraceIt ("dumpIfSet: Got -ddump-to-file, but 'srcFile' is not set in config. Dumping output to " ++ fp) (pure fp)
-      withFile fp WriteMode (\h -> hPutStrLn h msg)
+      writeFile fp (msg ++ "\n")
   where
     src_file     = srcFile cfg
     dflags       = dynflags cfg
