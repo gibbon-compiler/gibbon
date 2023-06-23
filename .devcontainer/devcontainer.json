@@ -3,10 +3,9 @@
 {
 	"name": "Ubuntu",
 	"build": {
-		"dockerfile": "Dockerfile",
-		// Update 'VARIANT' to pick an Ubuntu version: focal, bionic
-		"args": { "VARIANT": "bionic" }
-	},
+    "dockerfile": "Dockerfile",
+    "args": { "VARIANT": "jammy" }
+  },
 
 	// Set *default* container specific settings.json values on container create.
 	"settings": {},
@@ -23,5 +22,4 @@
 
 	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "vscode"
-
 }
