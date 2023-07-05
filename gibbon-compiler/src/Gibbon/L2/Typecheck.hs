@@ -18,8 +18,9 @@ module Gibbon.L2.Typecheck
     where
 
 import           Control.DeepSeq
+import           Control.Monad
 import           Control.Monad.Except
-import           Data.Foldable ( foldlM )
+import           Data.Foldable ( foldlM, foldrM )
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -231,8 +232,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
                      pure (BoolTy, tstate)
-                   
-                   char_cmps = do 
+
+                   char_cmps = do
                      len2
                      _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)

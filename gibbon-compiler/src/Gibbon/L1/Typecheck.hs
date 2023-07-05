@@ -13,6 +13,7 @@ module Gibbon.L1.Typecheck
 where
 
 
+import Control.Monad
 import Control.Monad.Except
 import Data.Map as M
 import Data.Set as S
@@ -125,12 +126,12 @@ tcExp ddfs env exp =
             _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
             pure BoolTy
-            
+
           char_cmps = do
             len2
             _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
-            pure BoolTy            
+            pure BoolTy
 
       case pr of
         MkTrue  -> mk_bools
