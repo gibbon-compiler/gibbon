@@ -17,6 +17,7 @@ module Gibbon.L0.Specialize2
   (bindLambdas, monomorphize, specLambdas, desugarL0, toL1, floatOutCase)
   where
 
+import           Control.Monad
 import           Control.Monad.State
 import           Data.Foldable ( foldlM, foldrM )
 import qualified Data.Map as M
@@ -1492,7 +1493,7 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
                       (bnds', args') <- unzip <$> zipWithM flattenTupleArgs args tys'
                       pure (concat bnds',concat args')
                     _ -> do
-                      -- generating alias so that repeated expression is 
+                      -- generating alias so that repeated expression is
                       -- eliminated and we are taking projection of trivial varEs
                       argalias <- gensym "alias"
                       ys <- mapM (\_ -> gensym "proj") tys'
