@@ -83,6 +83,7 @@ library
                        Gibbon.Passes.Codegen
                        Gibbon.Passes.CalculateBounds
                        Gibbon.Passes.ControlFlowGraph
+                       Gibbon.Passes.DefinitionUseChains
 
   other-extensions:    DeriveDataTypeable CPP
 
