@@ -21,6 +21,7 @@ module Gibbon.L0.Specialize2
   , floatOutCase
   ) where
 
+import           Control.Monad
 import           Control.Monad.State
 import           Data.Foldable                  (foldlM, foldrM)
 import qualified Data.Map                       as M
