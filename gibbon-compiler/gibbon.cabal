@@ -82,6 +82,7 @@ library
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
                        Gibbon.Passes.CalculateBounds
+                       Gibbon.Passes.ControlFlowGraph
 
   other-extensions:    DeriveDataTypeable CPP
 
