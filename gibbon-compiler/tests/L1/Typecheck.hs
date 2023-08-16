@@ -129,7 +129,8 @@ t1Prog = Prog {ddefs = M.fromList [],
                             funMeta = FunMeta { funInline = Inline,
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False,
-                                                funOptLayout    = NoLayoutOpt
+                                                funOptLayout    = NoLayoutOpt,
+                                                userConstraintsDataCon = Nothing  
                                               }
                            }),
                    ("add2",
@@ -142,7 +143,8 @@ t1Prog = Prog {ddefs = M.fromList [],
                             funMeta = FunMeta { funInline = Inline,
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False,
-                                                funOptLayout    = NoLayoutOpt
+                                                funOptLayout    = NoLayoutOpt,
+                                                userConstraintsDataCon = Nothing
                                               }
                            })],
         mainExp = Just
