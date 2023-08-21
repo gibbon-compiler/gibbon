@@ -463,12 +463,16 @@ tests:
     test-flags: ["--parallel"]
     failing: [interp1]
     answer-file: examples/vectors/Vector.hs.ans
+    # Cilk not supported on newer GCCs.
+    skip: true
 
   - name: SortPrim.hs
     dir: examples/vectors
     test-flags: ["--parallel"]
     failing: [interp1]
     answer-file: examples/vectors/SortPrim.ans
+    # Cilk not supported on newer GCCs.
+    skip: true
 
   - name: Sort.hs
     skip: true
@@ -479,6 +483,8 @@ tests:
     dir: examples/vectors
     test-flags: ["--parallel"]
     answer-file: examples/vectors/DataVector.hs.ans
+    # Cilk not supported on newer GCCs.
+    skip: true
 
   ## AST benchmarks
   - name: C1.hs
