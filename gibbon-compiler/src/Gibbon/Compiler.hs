@@ -642,11 +642,11 @@ passes config@Config{dynflags} l0 = do
               l1 <- go "L1.typecheck"    L1.tcProg     l1
               l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
-              l2 <- goE2 "simplifyLocBinds_a" simplifyLocBinds l2
+              l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- go "regionsInwards"    regionsInwards l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2

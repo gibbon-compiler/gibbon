@@ -733,7 +733,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  sequence_ [ ensureEqualTyNoLoc exp ty1 ty2
                            | (ty1,ty2) <- zip args tys ]
                  -- -- TODO: need to fix this check
-                 -- ensureDataCon exp l tys constrs
+                 ensureDataCon exp l tys constrs
                  tstate2 <- switchOutLoc exp tstate1 l
                  return (PackedTy dcty l, tstate2)
 

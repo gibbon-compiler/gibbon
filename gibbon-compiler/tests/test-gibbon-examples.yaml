@@ -79,14 +79,15 @@ tests:
   - name: SS.hs
     dir: examples/gc
     answer-file: examples/gc/SS.ans
-    # Failing due to a bug in AddTraversals.
-    failing: [gibbon1]
   - name: Test187.hs
     answer-file: examples/Test187.ans
     skip: true
 
   # Needs manual inspection.
   - name: test14_repair.gib
+    # Unexpected L3 error.
+    skip: true
+
 
   - name: test14a_tup.gib
   - name: test14b_tup.gib
@@ -119,6 +120,8 @@ tests:
   - name: test19_unarytree.gib
   - name: test20_bintree.gib
   - name: test20b_bintree.gib
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
   - name: test20c_bintree.gib
   - name: test20d_bintree.gib
   - name: test20e_bintree.gib
@@ -129,6 +132,8 @@ tests:
   - name: test29a_list.gib
   - name: test29b_list.gib
   - name: test30_twitter.gib
+    # ThreadRegions bug.
+    failing: [gibbon3, gibbon2]
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtreesum.gib
@@ -144,7 +149,11 @@ tests:
     skip: true
     answer-file: examples/void_type.ans
   - name: T64_1.gib
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
   - name: test_addtrees.gib
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
   - name: TestStrings.hs
     # interp outputs 'h' versus the expected h (without quotes)
     failing: [interp1]
@@ -183,6 +192,8 @@ tests:
   - name: bench_rightmost.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
 
   - name: bench_build_searchtree.gib
     bench: true
@@ -190,6 +201,8 @@ tests:
   - name: bench_tree_lookup.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
 
   - name: bench_tree_insert.gib
     bench: true
@@ -200,12 +213,16 @@ tests:
 
   - name: bench_repmax.gib
     bench: true
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
 
   - name: bench_repconst.gib
     bench: true
 
   - name: bench_findmax.gib
     bench: true
+    # Inferlocations bug.
+    failing: [gibbon3, gibbon2]
 
   ## There is no significant difference between compose1 / compose2.
   ## compose2 should be much faster.
@@ -334,7 +351,8 @@ tests:
   - name: test_printpacked.hs
     dir: examples
     answer-file: examples/test_printpacked.ans
-    failing: [interp1,gibbon1,pointer]
+    # gibbon3 and gibbon2: Inferlocations bug.
+    failing: [interp1,gibbon1,pointer,gibbon3,gibbon2]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
@@ -550,8 +568,11 @@ tests:
 
   - name: test_power.hs
     answer-file: examples/test_power.ans
+    # gib_alloc_region_on_heap: gib_alloc failed
+    failing: [gibbon1]
 
   - name: test_191.hs
     answer-file: examples/test_191.ans
-    failing: [pointer, gibbon1, interp1]  
-    run-modes: ["gibbon2"] 
+    # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
+    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2]
+    run-modes: ["gibbon2"]

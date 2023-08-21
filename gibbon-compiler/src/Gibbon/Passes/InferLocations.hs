@@ -2373,3 +2373,8 @@ freeVarsInOrder exp = case exp of
 
   SpawnE v _ ls -> [v] ++ (L.concat $ L.map freeVarsInOrder ls)
   SyncE -> []
+  Ext ext ->
+    case ext of
+      L1.AddFixed v i -> [v]
+      L1.StartOfPkdCursor v -> [v]
+      L1.BenchE _f _locs args _b -> L.concat $ (L.map freeVarsInOrder args)
