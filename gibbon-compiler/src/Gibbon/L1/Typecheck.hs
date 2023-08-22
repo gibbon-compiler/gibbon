@@ -13,6 +13,7 @@ module Gibbon.L1.Typecheck
 where
 
 
+import Control.Monad
 import Control.Monad.Except
 import Data.Map as M
 import Data.Set as S

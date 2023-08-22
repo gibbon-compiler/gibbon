@@ -1,17 +1,17 @@
 let
   moz_overlay = import (builtins.fetchGit {
-                   name = "nixpkgs-mozilla-2021-10-24";
+                   name = "nixpkgs-mozilla-2023-07-05";
                    url = "https://github.com/ckoparkar/nixpkgs-mozilla";
+                   # Commit hash for nixos as of 2023-07-05
                    ref = "refs/heads/master";
-                   # Commit hash for nixpkgs-mozilla as of 2022-12-30
-                   rev = "e365e1346c3390cf7fde486c2441abe178e384e8";
+                   rev = "26402a0a438220e418c31a2c93c15f319d19527a";
                  });
   pkgs = import (builtins.fetchGit {
                    url = "https://github.com/nixos/nixpkgs/";
                    ref = "refs/tags/22.11";
                  }) { overlays = [ moz_overlay ]; };
   stdenv = pkgs.overrideCC pkgs.stdenv pkgs.gcc7;
-  ghc = pkgs.haskell.compiler.ghc943;
+  ghc = pkgs.haskell.compiler.ghc94;
   rust = (pkgs.rustChannelOf { rustToolchain = ./gibbon-rts/rust-toolchain; }).rust;
   clang = pkgs.clang_14;
   llvm = pkgs.llvm_14;

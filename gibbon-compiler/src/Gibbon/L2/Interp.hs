@@ -14,6 +14,7 @@ where
 import           Control.DeepSeq
 import           Control.Monad.Writer
 import           Control.Monad.State
+import           Control.Monad
 import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
 import           Data.Foldable (foldlM)
 import           System.Clock

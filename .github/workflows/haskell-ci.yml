@@ -28,14 +28,19 @@ jobs:
     strategy:
       matrix:
         include:
-          - compiler: ghc-9.4.3
+          - compiler: ghc-9.4.6
             compilerKind: ghc
-            compilerVersion: 9.4.3
+            compilerVersion: 9.4.6
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-9.2.5
+          - compiler: ghc-9.4.5
             compilerKind: ghc
-            compilerVersion: 9.2.5
+            compilerVersion: 9.4.5
+            setup-method: ghcup
+            allow-failure: false
+          - compiler: ghc-9.2.8
+            compilerKind: ghc
+            compilerVersion: 9.2.8
             setup-method: ghcup
             allow-failure: false
           - compiler: ghc-9.0.2
@@ -53,16 +58,6 @@ jobs:
             compilerVersion: 8.8.4
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-8.6.5
-            compilerKind: ghc
-            compilerVersion: 8.6.5
-            setup-method: ghcup
-            allow-failure: true
-          - compiler: ghc-8.4.4
-            compilerKind: ghc
-            compilerVersion: 8.4.4
-            setup-method: ghcup
-            allow-failure: true
       fail-fast: false
     steps:
       - name: apt

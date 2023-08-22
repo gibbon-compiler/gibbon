@@ -37,10 +37,11 @@ where
 
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
-
-
-
-
+#if !MIN_VERSION_base(4,13,0)
+-- https://downloads.haskell.org/ghc/8.8.1/docs/html/users_guide/8.8.1-notes.html
+import Control.Monad.Fail(MonadFail(..))
+#endif
+import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Functor.Foldable

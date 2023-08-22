@@ -18,8 +18,9 @@ module Gibbon.L2.Typecheck
     where
 
 import           Control.DeepSeq
+import           Control.Monad
 import           Control.Monad.Except
-import           Data.Foldable ( foldlM )
+import           Data.Foldable ( foldlM, foldrM )
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Map as M
