@@ -71,10 +71,8 @@ tests:
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
   - name: test12b_traverse.gib
-    # Unexpected segfault.
-    failing: [pointer, gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3]
   - name: test12c_traverse.gib
-    # Unexpected segfault.
     failing: [gibbon1, gibbon2, gibbon3]
   - name: test13b_build.gib
   - name: test13_build.gib
@@ -101,15 +99,11 @@ tests:
   - name: test14c_tail.gib
   - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
-    # Unexpected segfault.
-    failing: [pointer]
   - name: test15c_printsym.gib
     skip: true
     # printing symbols is broken atm
   - name: test15d_symsearch.hs
     answer-file: examples/test15d_symsearch.ans
-    # Unexpected segfault.
-    failing: [pointer]
   - name: test15e_gensym.hs
     answer-file: examples/test15e_gensym.ans
     # Gensym is broken in the interpreter. (randomIO is not determinisitc, we probably should use a fixed seed for interpreter)
@@ -343,8 +337,6 @@ tests:
   - name: NeedsClosure.hs
     dir: examples/poly
     answer-file: examples/poly/NeedsClosure.hs.ans
-    # Unexpected segfault.
-    failing: [pointer]
 
   - name: MutualRec.hs
     dir: examples/poly
@@ -507,7 +499,7 @@ tests:
 
   ## Tests that only work with some backend:
   - name: test18f_flip.gib
-    failing: [gibbon1, gibbon2, gibbon3, pointer]
+    failing: [gibbon1, gibbon2, gibbon3]
   - name: pp_projs.gib
     skip: true
   - name: test12_skip.gib
