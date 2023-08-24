@@ -747,21 +747,21 @@ data Prim ty
 -- | Types include boxed/pointer-based products as well as unpacked
 -- algebraic datatypes.  This data is parameterized to allow
 -- annotation on Packed types later on.
-data UrTy a
+data UrTy loc
   = IntTy
   | CharTy
   | FloatTy
   | SymTy -- ^ Symbols used in writing compiler passes.
   | BoolTy
-  | ProdTy [UrTy a] -- ^ An N-ary tuple
+  | ProdTy [UrTy loc] -- ^ An N-ary tuple
   | SymDictTy (Maybe Var) (UrTy ()) -- ^ A map from SymTy to Ty
           -- ^ We allow built-in dictionaries from symbols to a value type.
-  | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
-  | VectorTy (UrTy a) -- ^ Vectors are decorated with the types of their elements;
+  | PackedTy TyCon loc -- ^ No type arguments to TyCons for now.  (No polymorphism.)
+  | VectorTy (UrTy loc) -- ^ Vectors are decorated with the types of their elements;
                              -- which can only include scalars or flat products of scalars.
-  | PDictTy (UrTy a) (UrTy a) -- ^ Thread safe dictionaries decorated with
+  | PDictTy (UrTy loc) (UrTy loc) -- ^ Thread safe dictionaries decorated with
                                     -- key and value type.
-  | ListTy (UrTy a) -- ^ Linked lists are decorated with the types of their elements;
+  | ListTy (UrTy loc) -- ^ Linked lists are decorated with the types of their elements;
                           -- which can only include scalars or flat products of scalars.
   | ArenaTy -- ^ Collection of allocated, non-packed values
   | SymSetTy -- ^ Set of symbols
