@@ -1,3 +1,4 @@
+#!/bin/bash
 # This file must be sourced with ". set_env.sh" or "source set_env.sh"
 
 if ! [ -d ./gibbon-compiler ]; then
