@@ -71,6 +71,23 @@ If you'd like to run the testsuite, you can do so with:
 
     $ cd $GIBBONDIR && ./run_all_tests.sh
 
+
+## Building Gibbon using Docker 
+
+To build the Dockerfile run the command below from the gibbon directory.
+
+```
+DOCKER_BUILDKIT=1 docker image build -t gibbon -f .devcontainer/Dockerfile .
+```
+Run the docker image using the following command. 
+
+```
+docker run --user=root -t -i gibbon
+``` 
+
+Follow the previous instructions to build gibbon in the docker container. 
+There should be a gibbon directory in ~/ in the docker. 
+
 ## Using Gibbon
 
 A valid Gibbon program can be written using Haskell syntax or using Racket-like s-expression syntax.
