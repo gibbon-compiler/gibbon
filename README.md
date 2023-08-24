@@ -82,10 +82,11 @@ DOCKER_BUILDKIT=1 docker image build -t gibbon -f .devcontainer/Dockerfile .
 Run the docker image using the following command. 
 
 ```
-docker run -t -i gibbon
+docker run --user=root -t -i gibbon
 ``` 
 
 Follow the previous instructions to build gibbon in the docker container. 
+There should be a gibbon directory in ~/ in the docker. 
 
 ## Using Gibbon
 

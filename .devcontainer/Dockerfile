@@ -28,7 +28,7 @@ RUN echo "export PATH=${PATH}" >> /home/${USERNAME}/.profile
 RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
 ARG GHC=9.4.6
-ARG CABAL=3.6.2
+ARG CABAL=3.8.1.0
 ARG STACK=2.9.3
 ARG HLS=recommended
 
