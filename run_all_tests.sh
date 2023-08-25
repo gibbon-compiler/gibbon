@@ -121,7 +121,7 @@ echo "  Gibbon Standard Library"
 echo "-------------------------"
 set -x
 cd $top/gibbon-stdlib
-cabal v1-install . -w ghc-9.0.1
+cabal v1-install . -w ghc
 
 set +x; echo
 echo "  Gibbon Compiler (1/2): build & unit tests"

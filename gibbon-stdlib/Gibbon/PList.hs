@@ -5,8 +5,6 @@
 module Gibbon.PList where
 
 import Gibbon.Prelude
-import Gibbon.Maybe
-
 --------------------------------------------------------------------------------
 
 data PList a = Nil | Cons a (PList a)
