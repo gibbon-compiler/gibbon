@@ -263,32 +263,37 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       let stM = passes config' l0
       l4  <- evalStateT stM (CompileState {cnt=cnt0, result=initResult})
 
-      if mode == Interp2
-      then do
-        error "TODO: Interp2"
-        -- l4res <- execProg l4
-        -- mapM_ (\(IntVal v) -> liftIO $ print v) l4res
-        -- exitSuccess
-      else do
-        str <- case backend of
-                 C    -> codegenProg config' l4
+      case mode of
+        Interp2 -> do
+          error "TODO: Interp2"
+          -- l4res <- execProg l4
+          -- mapM_ (\(IntVal v) -> liftIO $ print v) l4res
+          -- exitSuccess
+        
+        ToSML -> return ()
+        ToMPLExe -> return ()
+        RunMPL -> return ()
+
+        _ -> do
+          str <- case backend of
+                  C    -> codegenProg config' l4
 
 
 
-                 LLVM -> error $ "Cannot execute through the LLVM backend. To build Gibbon with LLVM: "
-                         ++ "stack build --flag gibbon:llvm_enabled"
+                  LLVM -> error $ "Cannot execute through the LLVM backend. To build Gibbon with LLVM: "
+                          ++ "stack build --flag gibbon:llvm_enabled"
 
-        -- The C code is long, so put this at a higher verbosity level.
-        dbgPrint passChatterLvl $ " [compiler] Final C codegen: " ++show (length str) ++" characters."
-        dbgPrintLn 4 $ sepline ++ "\n" ++ str
+          -- The C code is long, so put this at a higher verbosity level.
+          dbgPrint passChatterLvl $ " [compiler] Final C codegen: " ++show (length str) ++" characters."
+          dbgPrintLn 4 $ sepline ++ "\n" ++ str
 
-        clearFile outfile
-        writeFile outfile str
+          clearFile outfile
+          writeFile outfile str
 
-        -- (Stage 3) Code written, now compile if warranted.
-        when (mode == ToExe || mode == RunExe || isBench mode ) $ do
-          compileAndRunExe config fp >>= putStr
-          return ()
+          -- (Stage 3) Code written, now compile if warranted.
+          when (mode == ToExe || mode == RunExe || isBench mode ) $ do
+            compileAndRunExe config fp >>= putStr
+            return ()
 
 runL0 :: L0.Prog0 -> IO ()
 runL0 l0 = do
