@@ -92,7 +92,7 @@ import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
-
+import           Gibbon.L1.GenSML
 
 
 
@@ -552,6 +552,30 @@ clearFile fileName = removeFile fileName `catch` handleErr
   where
    handleErr e | isDoesNotExistError e = return ()
                | otherwise = throwIO e
+
+--------------------------------------------------------------------------------
+
+-- | SML Codegen
+
+smlExt :: FilePath -> FilePath
+smlExt fp = dropExtension fp <.> "sml"
+
+toSML :: FilePath -> L1.Prog1 -> IO ()
+toSML fp prog = writeFile (smlExt fp) $ render $ ppProgram prog
+
+compileMPL :: FilePath -> IO ()
+compileMPL fp = do
+  cd <- system $ "mpl " <> smlExt fp
+  case cd of
+    ExitFailure n -> error $ "SML compiler failed with code " <> show n
+    ExitSuccess -> pure ()
+
+runMPL :: FilePath -> IO ()
+runMPL fp = do
+  cd <- system $ "./" <> dropExtension fp
+  case cd of
+    ExitFailure n -> error $ "SML executable failed with code " <> show n
+    ExitSuccess -> pure ()
 
 --------------------------------------------------------------------------------
 
