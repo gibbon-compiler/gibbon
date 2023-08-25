@@ -47,6 +47,7 @@ library
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Interp
                        Gibbon.L1.Examples
+                       Gibbon.L1.GenSML
                        Gibbon.L2.Syntax
                        Gibbon.L2.Typecheck
                        Gibbon.L2.Interp

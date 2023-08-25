@@ -18,6 +18,7 @@ module Gibbon.Compiler
     )
   where
 
+import           Data.Functor
 import           Control.DeepSeq
 import           Control.Exception
 #if !MIN_VERSION_base(4,15,0)
@@ -557,6 +558,9 @@ clearFile fileName = removeFile fileName `catch` handleErr
 
 -- | SML Codegen
 
+goIO :: Functor m => a1 -> m a2 -> StateT b m a1
+goIO prog io = StateT $ \x -> io $> (prog, x)
+
 smlExt :: FilePath -> FilePath
 smlExt fp = dropExtension fp <.> "sml"
 
@@ -576,6 +580,11 @@ runMPL fp = do
   case cd of
     ExitFailure n -> error $ "SML executable failed with code " <> show n
     ExitSuccess -> pure ()
+
+goSML :: Config -> L1.Prog1 -> (FilePath -> IO a2) -> StateT b IO L1.Prog1
+goSML config prog acts = 
+  goIO prog (toSML fp prog *> acts fp)
+  where Just fp = srcFile config
 
 --------------------------------------------------------------------------------
 
@@ -658,6 +667,12 @@ passes config@Config{dynflags} l0 = do
 
       -- Minimal haskell "backend".
       lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintHsWithEnv l1)
+
+      l1 <- case mode config of
+        ToSML -> goSML config l1 (const $ pure ())
+        ToMPLExe -> goSML config l1 compileMPL
+        RunMPL -> goSML config l1 (\fp -> compileMPL fp *> runMPL fp)
+        _ -> return l1
 
       -- -- TODO: Write interpreters for L2 and L3
       l3 <- if isPacked
