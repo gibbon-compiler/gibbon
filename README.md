@@ -110,9 +110,9 @@ docker run -t -i gibbon
 This image does not pre-populate the gibbon folder. Use git clone to clone gibbon into a folder. 
 Use instructions from before to build gibbon.
 
-## Building a Artifact version of Gibbon with the gibbon source code pre-populated 
+## Building an Artifact version of Gibbon with the gibbon source code pre-populated 
 
-To build a image with the gibbon source code already in the image run 
+To build an image with the gibbon source code already in the image run 
 
 ```
 DOCKER_BUILDKIT=1 docker image build -t gibbon -f .artifact/Dockerfile .
