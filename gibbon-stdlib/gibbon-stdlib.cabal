@@ -4,7 +4,7 @@ version:             0.1
 author:              Chaitanya Koparkar
 maintainer:          ckoparkar@gmail.com
 build-type:          Simple
-tested-with:           GHC==9.4.6
+tested-with:           GHC==9.2.5
                      -- -- We need to put linear types in gibbon-stdlib
                      -- -- behind CPP to make it build with GHC < 9.
                      -- , GHC==8.10.4
