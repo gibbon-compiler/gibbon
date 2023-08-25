@@ -165,9 +165,9 @@ configParser = Config <$> inputParser
                flag' Interp2 (short 'i' <> long "interp2" <>
                               help "Run through the interpreter after cursor insertion") <|>
                flag' RunExe  (short 'r' <> long "run" <> help "Compile and then run executable") <|>
-               flag' ToSML (long "mlton" <> help "Emit MLton sources") <|>
-               flag' ToMPLExe (long "mlton-exe" <> help "Emit SML and compile with MLton") <|>
-               flag' RunMPL (long "mlton-run" <> help "Emit SML, compile with MLton, and run") <|>
+               flag' ToMPL (long "mpl" <> help "Emit MPL sources") <|>
+               flag' ToMPLExe (long "mpl-exe" <> help "Emit SML and compile with MPL") <|>
+               flag' RunMPL (long "mpl-run" <> help "Emit SML, compile with MPL, and run") <|>
                (Bench . toVar <$> strOption (short 'b' <> long "bench-fun" <> metavar "FUN" <>
                                      help ("Generate code to benchmark a 1-argument FUN against a input packed file."++
                                            "  If --bench-input is provided, then the benchmark is run as well.")))
@@ -270,7 +270,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
           -- mapM_ (\(IntVal v) -> liftIO $ print v) l4res
           -- exitSuccess
         
-        ToSML -> return ()
+        ToMPL -> return ()
         ToMPLExe -> return ()
         RunMPL -> return ()
 
@@ -674,7 +674,7 @@ passes config@Config{dynflags} l0 = do
       lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintHsWithEnv l1)
 
       l1 <- case mode config of
-        ToSML -> goSML config l1 (const $ pure ())
+        ToMPL -> goSML config l1 (const $ pure ())
         ToMPLExe -> goSML config l1 compileMPL
         RunMPL -> goSML config l1 (\fp -> compileMPL fp *> runMPL fp)
         _ -> return l1
