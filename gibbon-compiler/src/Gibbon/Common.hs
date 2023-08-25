@@ -227,6 +227,9 @@ data Mode = ToParse  -- ^ Parse and then stop
           | RunExe   -- ^ Compile to executable then run.
           | Interp2  -- ^ Interp late in the compiler pipeline.
           | Interp1  -- ^ Interp early.
+          | ToSML    -- ^ Compile to SML (mlton dialect)
+          | ToMPLExe -- ^ Compile to SML & compile with MPL
+          | RunMPL   -- ^ Compile to SML & compile with MPL & run
           | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
           | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
   deriving (Show, Read, Eq, Ord)

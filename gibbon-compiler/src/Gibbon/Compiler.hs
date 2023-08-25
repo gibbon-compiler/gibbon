@@ -164,6 +164,9 @@ configParser = Config <$> inputParser
                flag' Interp2 (short 'i' <> long "interp2" <>
                               help "Run through the interpreter after cursor insertion") <|>
                flag' RunExe  (short 'r' <> long "run" <> help "Compile and then run executable") <|>
+               flag' ToSML (long "mlton" <> help "Emit MLton sources") <|>
+               flag' ToMPLExe (long "mlton-exe" <> help "Emit SML and compile with MLton") <|>
+               flag' RunMPL (long "mlton-run" <> help "Emit SML, compile with MLton, and run") <|>
                (Bench . toVar <$> strOption (short 'b' <> long "bench-fun" <> metavar "FUN" <>
                                      help ("Generate code to benchmark a 1-argument FUN against a input packed file."++
                                            "  If --bench-input is provided, then the benchmark is run as well.")))
