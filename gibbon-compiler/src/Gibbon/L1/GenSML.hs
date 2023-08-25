@@ -4,11 +4,16 @@ import Gibbon.L1.Syntax
 import Gibbon.Common
 
 import Text.PrettyPrint hiding ((<>))
+import Data.Maybe
+import Control.Monad
 import Data.Map hiding (foldr, fold, null, empty)
--- import qualified Data.Set as Set
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Symbol
 
 import Data.Foldable hiding ( toList )
+import Data.Graph
+
 
 ppExt :: E1Ext () Ty1 -> Doc
 ppExt ext0 = case ext0 of
@@ -37,7 +42,7 @@ ppE e0 = case e0 of
       , "then", ppE pe2
       , "\n   else", ppE pe3
       ]
-  MkProdE pes -> parens $ interleave ", " $ ppE <$> pes
+  MkProdE pes -> parens $ interleave comma $ ppE <$> pes
   ProjE 0 pe' -> parens $ hsep
     [ "case", ppE pe', "of"
     , "(t0, _) => t0"
@@ -255,7 +260,7 @@ ppProgram prog = hcat
 
 ppFunDefs :: Map Var (FunDef Exp1) -> Doc
 ppFunDefs funDefs =
-  foldMap (either ppValDef ppFunRec) (separateDefs $ elems funDefs)
+  foldMap (either ppValDef ppFunRec) (separateDefs $ sortDefs $ elems funDefs)
 
 separateDefs :: [FunDef Exp1] -> [Either (FunDef Exp1) [FunDef Exp1]]
 separateDefs funDefs = case funDefs of
@@ -293,7 +298,7 @@ reduceFunDefs keyword funDef doc =
     fargs -> hsep
       [ keyword
       , ppVar name
-      , hsep $ ppVar <$> fargs
+      , parens $ interleave comma $ ppVar <$> fargs
       , "="
       , case name of
         "print_check" -> parens mempty
@@ -400,3 +405,66 @@ qsort = parens $ text
   \  in\n\
   \    arr\
   \  end\n"
+
+varsEs :: Set.Set String -> [Exp1] -> Set.Set String
+varsEs = foldMap . varsE
+
+varsE :: Set.Set String -> Exp1 -> Set.Set String
+varsE vs pe0 = case pe0 of
+  -- VarE var -> collect var
+  VarE _ -> mempty
+  AppE var _ pes -> vpes pes <> collect var
+  PrimAppE _ pes -> vpes pes
+  LetE (_, _, _, pe') pe -> vpe pe <> vpe pe'
+  IfE pe pe' pe3 -> vpes [pe, pe', pe3]
+  MkProdE pes -> vpes pes
+  ProjE _ pe -> vpe pe
+  CaseE pe x0 -> vpe pe <> foldMap (\(_, _, pe') -> vpe pe') x0
+  DataConE _ _ pes -> vpes pes
+  TimeIt pe _ _ -> vpe pe
+  WithArenaE _ pe -> vpe pe
+  SpawnE _ _ pes -> vpes pes
+  SyncE -> _
+  MapE _ _ -> _
+  FoldE {} -> _
+  _ -> mempty
+  where
+    vpe = varsE vs
+    vpes = varsEs vs
+    collect var
+      | Set.member s vs = Set.singleton s
+      | otherwise = mempty
+      where s = getVar var
+
+addFunBinding :: FunDef ex -> Map String (FunDef ex) -> Map String (FunDef ex)
+addFunBinding funDef = Map.insert (getVar $ funName funDef) funDef
+
+allFunEntries :: [FunDef ex] -> Map String (FunDef ex)
+allFunEntries = foldr addFunBinding Map.empty
+
+allFunNames :: [FunDef ex] -> Set.Set String
+allFunNames = Set.fromList . fmap (getVar . funName)
+
+getDependencies :: [FunDef Exp1] -> Map String [FunDef Exp1]
+getDependencies funDefs =
+  foldr reduceDeps Map.empty funDefs
+  where
+    funMap = allFunEntries funDefs
+    funSet = allFunNames funDefs
+    toNode = fromMaybe _ . flip Map.lookup funMap
+    toDep = fmap toNode . Set.toList . varsE funSet . funBody
+    reduceDeps = insert . getVar . funName <*> toDep
+
+definitionSort :: (Ord a1, Ord a2) => Map a1 a2 -> Map a1 [a2] -> [a2]
+definitionSort m1 m2 =
+  reverse $ (\(_, n, _) -> n) . back <$> topSort gr
+  where
+    (gr, back, _) = graphFromEdges $ mkNode <$> toList m2
+    mkNode (s, lst) = (s, fromMaybe _ (Map.lookup s m1), lst)
+
+sortDefs :: [FunDef Exp1] -> [FunDef Exp1]
+sortDefs defs =
+  definitionSort nameMap depMap
+  where
+    depMap = getDependencies defs
+    nameMap = fromList $ join ((,) . getVar . funName) <$> defs
