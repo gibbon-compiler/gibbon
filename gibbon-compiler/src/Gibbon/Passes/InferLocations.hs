@@ -533,7 +533,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
         res <- inferExp env' rhs dst
-        (rhs',ty',cs') <-   bindAfterLocs (freeVarsInOrder rhs) res
+        (rhs',ty',cs') <-   bindAfterLocs (orderOfVarsOutputDataConE rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
         return ((con,vars',rhs'),ty',cs')
@@ -751,15 +751,15 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
        res    <- inferExp env b dest
        -- bind variables after if branch
        -- This ensures that the location bindings are not freely floated up to the upper level expressions
-       (b',tyb,csb) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder b)) res
+       (b',tyb,csb) <-   bindAfterLocs (removeDuplicates (orderOfVarsOutputDataConE b)) res
 
        -- Else branch
        res'    <- inferExp env c dest
        -- bind variables after else branch
        -- This ensures that the location bindings are not freely floated up to the upper level expressions
-       (c',tyc,csc) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder c)) res'
+       (c',tyc,csc) <-   bindAfterLocs (removeDuplicates (orderOfVarsOutputDataConE c)) res'
 
-       return (IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
+       dbgTraceIt (sdoc (orderOfVarsOutputDataConE b, b)) return (IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
     PrimAppE (DictInsertP dty) [(VarE var),d,k,v] ->
       case dest of
@@ -900,9 +900,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (boda,tya,csa) <- inferExp env a NoDest
            -- just assuming tyb == tyc
           res <- inferExp env b NoDest 
-          (bodb,tyb,csb) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder b)) res
+          (bodb,tyb,csb) <-   bindAfterLocs (removeDuplicates (orderOfVarsOutputDataConE b)) res
           res' <- inferExp env c NoDest
-          (bodc,tyc,csc) <-   bindAfterLocs (removeDuplicates (freeVarsInOrder c)) res'
+          (bodc,tyc,csc) <-   bindAfterLocs (removeDuplicates (orderOfVarsOutputDataConE c)) res'
           (bod',ty',cs') <- inferExp (extendVEnv vr tyc env) bod dest 
           let cs = L.nub $ csa ++ csb ++ csc ++ cs'
           return (L2.LetE (vr,[],tyc,L2.IfE boda bodb bodc) bod', ty', cs)
@@ -1814,8 +1814,9 @@ fixRANs prg@(Prog defs funs main) = do
                  let tys = lookupDataCon ddfs dcon
                      n = length [ ty | ty <- tys, ty == CursorTy ]
                      tys' = L.drop n tys
-                     rans = L.take n ls
-                     needRANsExp = L.reverse $ L.take n (reverse ls)
+                     (rans, ls') = (L.take n ls, L.drop n ls)
+                     firstPacked = fromJust $ L.findIndex isPackedTy tys'
+                     needRANsExp = L.take n $ L.drop firstPacked ls'
                      ran_pairs = M.fromList $ fragileZip rans needRANsExp
                      VarE w' = ran_pairs M.! VarE v
                  return (bnd2, LetE (v,locs,t,Ext (L2.StartOfPkdCursor w')) bod')
@@ -2346,35 +2347,38 @@ deleteMany :: Eq a => [a] -> [a] -> [a]
 deleteMany [] = id -- Nothing to delete
 deleteMany (x:xs) = deleteMany xs . deleteOne x -- Delete one, then the rest.
 
-freeVarsInOrder :: Exp1 -> [Var]
-freeVarsInOrder exp = case exp of
-  VarE v    -> [v]
+orderOfVarsOutputDataConE :: Exp1 -> [Var]
+orderOfVarsOutputDataConE exp = case exp of
+  VarE v    -> []
   LitE _    -> []
   CharE _   -> []
   FloatE{}  -> []
   LitSymE _ -> []
-  ProjE _ e -> freeVarsInOrder e
-  IfE a b c -> (freeVarsInOrder a) ++ (freeVarsInOrder b) ++ (freeVarsInOrder c)
-  AppE v _ ls         -> [v] ++ (L.concat $ (L.map freeVarsInOrder ls))
-  PrimAppE _ ls        -> L.concat $ (L.map freeVarsInOrder ls)
-  LetE (v,_,_,rhs) bod -> (freeVarsInOrder rhs) ++ (deleteOne v (freeVarsInOrder bod))
-  CaseE e ls -> (freeVarsInOrder e) ++ (L.concat $
+  ProjE _ e -> orderOfVarsOutputDataConE e
+  IfE a b c -> (orderOfVarsOutputDataConE a) ++ (orderOfVarsOutputDataConE b) ++ (orderOfVarsOutputDataConE c)
+  AppE v _ ls         -> (L.concat $ (L.map orderOfVarsOutputDataConE ls))
+  PrimAppE _ ls        -> L.concat $ (L.map orderOfVarsOutputDataConE ls)
+  LetE (v,_,_,rhs) bod -> (orderOfVarsOutputDataConE rhs) ++ (deleteOne v (orderOfVarsOutputDataConE bod))
+  CaseE e ls -> (orderOfVarsOutputDataConE e) ++ (L.concat $
                 (L.map (\(_, vlocs, ee) ->
                                        let (vars,_) = unzip vlocs
-                                       in deleteMany (freeVarsInOrder ee) vars) ls) )
-  MkProdE ls          -> L.concat $ L.map freeVarsInOrder ls
-  DataConE _ _ ls     -> L.concat $ L.map freeVarsInOrder ls
-  TimeIt e _ _        -> freeVarsInOrder e
-  MapE (v,_t,rhs) bod -> (freeVarsInOrder rhs) ++ (deleteOne v (freeVarsInOrder bod))
+                                       in deleteMany (orderOfVarsOutputDataConE ee) vars) ls) )
+  MkProdE ls          -> L.concat $ L.map orderOfVarsOutputDataConE ls
+  DataConE _ _ ls     -> L.concatMap (\exp -> case exp of 
+                                               VarE v -> [v]
+                                               LitSymE v ->  [v]
+                                               _ -> []          ) ls
+  TimeIt e _ _        -> orderOfVarsOutputDataConE e 
+  MapE (v,_t,rhs) bod -> (orderOfVarsOutputDataConE rhs) ++ (deleteOne v (orderOfVarsOutputDataConE bod))
   FoldE (v1,_t1,r1) (v2,_t2,r2) bod ->
-      (freeVarsInOrder r1) ++ (freeVarsInOrder r2) ++ (deleteOne v1 $ deleteOne v2 $ freeVarsInOrder bod)
+      (orderOfVarsOutputDataConE r1) ++ (orderOfVarsOutputDataConE r2) ++ (deleteOne v1 $ deleteOne v2 $ orderOfVarsOutputDataConE bod)
 
-  WithArenaE v e -> deleteOne v $ freeVarsInOrder e
+  WithArenaE v e -> deleteOne v $ orderOfVarsOutputDataConE e
 
-  SpawnE v _ ls -> [v] ++ (L.concat $ L.map freeVarsInOrder ls)
+  SpawnE v _ ls -> (L.concat $ L.map orderOfVarsOutputDataConE ls)
   SyncE -> []
   Ext ext ->
     case ext of
-      L1.AddFixed v i -> [v]
-      L1.StartOfPkdCursor v -> [v]
-      L1.BenchE _f _locs args _b -> L.concat $ (L.map freeVarsInOrder args)
+      L1.AddFixed v i -> []
+      L1.StartOfPkdCursor v -> []
+      L1.BenchE _f _locs args _b -> (L.concat $ (L.map orderOfVarsOutputDataConE args))
