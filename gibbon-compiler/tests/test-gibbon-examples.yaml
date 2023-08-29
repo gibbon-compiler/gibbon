@@ -811,4 +811,60 @@ tests:
     failing: [gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
+  - name: layout1FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout2FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout2FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout3FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout3FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout4FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout4FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout5FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout5FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout6FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout6FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout7FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout7FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout8FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout8FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
     
