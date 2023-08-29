@@ -754,3 +754,61 @@ tests:
     answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCat.ans
     failing: [Gibbon1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout1TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout2TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout2TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout3TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout3TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout4TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout4TagSearch.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout5TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout5TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout6TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout6TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout7TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout7TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout8TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout8TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+    
