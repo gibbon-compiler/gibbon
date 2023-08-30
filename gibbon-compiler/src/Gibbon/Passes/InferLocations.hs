@@ -1343,9 +1343,9 @@ cleanExp e =
                                          in (Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
-      Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
-      Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.singleton cur)
-      Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.fromList [a,b])
+      Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.empty)
+      Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.empty)
+      Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.empty)
       Ext (RetE{})                -> err $ "todo: " ++ sdoc e
       Ext (FromEndE{})            -> err $ "todo: " ++ sdoc e
       Ext (BoundsCheck{})         -> err $ "todo: " ++ sdoc e
