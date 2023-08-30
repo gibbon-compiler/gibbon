@@ -44,17 +44,20 @@ module Gibbon.Prim
     , spawn, sync, lsync, par, getNumProcessors, is_big
 
       -- * Tuples
-    , fst, snd, Maybe(..)
+    , fst, snd
 
       -- * Error reporting
     , error
 
       -- * Linear types
     , Ur(..), (&), lseq, unsafeToLinear, unsafeAlias
-    
+     
+      --maybe 
+    , Maybe(..), isJust, isNothing, fromJust, fromMaybe
+
     ) where
 
-import Prelude hiding ( tan, iterate, sqrt )
+import Prelude hiding (tan, iterate, sqrt)
 
 --------------------------------------------------------------------------------
 -- Packed (serialized) values
@@ -345,3 +348,27 @@ unsafeAlias = undefined
 -}
 unsafeToLinear :: (a %p-> b) %1-> (a %1-> b)
 unsafeToLinear = undefined
+
+------ Maybe functions -------
+
+isJust :: Maybe a -> Bool 
+isJust val = case val of 
+		Nothing -> False 
+		Just a  -> True
+
+
+isNothing :: Maybe a -> Bool 
+isNothing val = case val of 
+		  Nothing -> True 
+		  Just a  -> False 
+
+
+fromJust :: Maybe Int -> Int 
+fromJust val = case val of 
+		Nothing -> (error "Maybe fromJust Nothing" :: Int) 
+  		Just x  -> x
+
+fromMaybe :: a -> Maybe a -> a 
+fromMaybe d x = case x of 
+		   Nothing -> d 
+		   Just v  -> v
