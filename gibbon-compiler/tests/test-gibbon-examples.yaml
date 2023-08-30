@@ -880,3 +880,17 @@ tests:
     answer-file: examples/maybe/test_maybe.ans
     failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: eval_l.hs
+    test-flags: []
+    dir: examples/layout_bench/syntheticBench
+    answer-file: examples/layout_bench/syntheticBench/eval_l.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: eval_r.hs
+    test-flags: []
+    dir: examples/layout_bench/syntheticBench
+    answer-file: examples/layout_bench/syntheticBench/eval_r.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
