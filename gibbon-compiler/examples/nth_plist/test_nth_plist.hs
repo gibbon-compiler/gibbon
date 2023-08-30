@@ -1,7 +1,4 @@
-module TextNthPlist where 
-
 import Gibbon.PList 
-import Gibbon.Maybe
 import Gibbon.Prelude
 
 
@@ -13,7 +10,7 @@ make_plist len start = if len <= 0 then Nil
 gibbon_main =
 	let list :: PList Int 
             list = make_plist 100 0 
-            value = nth_plist list Nothing 10 
-            _     = printPacked value
+            value = nth_plist list 0 10 0 
+            _     = printint value
             _     = printsym (quote "NEWLINE")
            in ()
