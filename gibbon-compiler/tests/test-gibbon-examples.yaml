@@ -579,7 +579,7 @@ tests:
   - name: test_power.hs
     answer-file: examples/test_power.ans
     # gib_alloc_region_on_heap: gib_alloc failed
-    failing: [gibbon1, gibbon3]
+    failing: [gibbon1]
 
   - name: test_191.hs
     answer-file: examples/test_191.ans
