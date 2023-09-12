@@ -13,6 +13,7 @@ import Data.Symbol
 
 import Data.Foldable hiding ( toList )
 import Data.Graph
+import Data.Tree ( flatten )
 
 
 ppExt :: E1Ext () Ty1 -> Doc
@@ -30,13 +31,13 @@ ppE e0 = case e0 of
   LitSymE var -> doubleQuotes $ ppVar var
   AppE var _ pes -> ppAp (ppVar var) pes
   PrimAppE pr pes -> ppPrim pr pes
-  LetE (v, _, _, e) pe' -> 
+  LetE (v, _, _, e) pe' ->
     hsep
       [ "\n  let val", ppVar v, "="
       , ppE e, "in"
       , ppE pe', "end"
       ]
-  IfE pe' pe2 pe3 -> 
+  IfE pe' pe2 pe3 ->
     ("\n  " <>) $ parens $ hsep
       [ "if", ppE pe'
       , "then", ppE pe2
@@ -52,7 +53,7 @@ ppE e0 = case e0 of
     , "(_, t1) => t1"
     ]
   ProjE n pe' -> parens $ hsep [hcat ["#", int $ succ n], ppE pe']
-  CaseE pe' x0 -> 
+  CaseE pe' x0 ->
     parens $ hsep
       [ hsep ["case", ppE pe', "of"]
       , interleave "\n  |" ((\(dc, vs, e) -> hsep
@@ -69,7 +70,7 @@ ppE e0 = case e0 of
       [ text s
       , parens $ interleave comma $ ppE <$> pes
       ]
-  
+
   TimeIt _pe' _ty0 _b -> _
   WithArenaE _var _pe' -> error "WithArenaE"
   SpawnE _var _ty0s _pes -> error "SpawnE"
@@ -83,8 +84,9 @@ ppCurried :: Doc -> [Exp1] -> Doc
 ppCurried var pes = parens $ hsep $ var : (ppE <$> pes)
 
 ppAp :: Doc -> [Exp1] -> Doc
-ppAp var pes = 
+ppAp var pes =
   parens $ var <> case pes of
+    [] -> empty               -- don't confuse with application to unit (1 arg)
     [x] -> space <> ppE x
     _ -> parens (interleave "," $ ppE <$> pes)
 
@@ -99,6 +101,7 @@ getVar (Var s) = case unintern s of
   "rec" -> "rec_"
   "fun" -> "fun_"
   "end" -> "end_"
+  '_' : z -> "internal_" ++ z
   z -> z
 
 interleave :: Doc -> [Doc] -> Doc
@@ -260,7 +263,10 @@ ppProgram prog = hcat
 
 ppFunDefs :: Map Var (FunDef Exp1) -> Doc
 ppFunDefs funDefs =
-  foldMap (either ppValDef ppFunRec) (separateDefs $ sortDefs $ elems funDefs)
+  foldMap ppBlock organize
+  where
+    ppBlock = either ppValDef ppFunRec
+    organize = sortDefs (elems funDefs) >>= separateDefs
 
 separateDefs :: [FunDef Exp1] -> [Either (FunDef Exp1) [FunDef Exp1]]
 separateDefs funDefs = case funDefs of
@@ -455,16 +461,11 @@ getDependencies funDefs =
     toDep = fmap toNode . Set.toList . varsE funSet . funBody
     reduceDeps = insert . getVar . funName <*> toDep
 
-definitionSort :: (Ord a1, Ord a2) => Map a1 a2 -> Map a1 [a2] -> [a2]
-definitionSort m1 m2 =
-  reverse $ (\(_, n, _) -> n) . back <$> topSort gr
-  where
-    (gr, back, _) = graphFromEdges $ mkNode <$> toList m2
-    mkNode (s, lst) = (s, fromMaybe _ (Map.lookup s m1), lst)
-
-sortDefs :: [FunDef Exp1] -> [FunDef Exp1]
+sortDefs :: [FunDef Exp1] -> [[FunDef Exp1]]
 sortDefs defs =
-  definitionSort nameMap depMap
+  fmap ((\(_, n, _) -> n) . back) . flatten <$> scc gr
   where
+    (gr, back, _) = graphFromEdges $ mkNode <$> toList depMap
+    mkNode (s, lst) = (s, fromMaybe _ (Map.lookup s nameMap), lst)
     depMap = getDependencies defs
     nameMap = fromList $ join ((,) . getVar . funName) <$> defs
