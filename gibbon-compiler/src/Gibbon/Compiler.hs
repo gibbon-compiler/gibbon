@@ -686,9 +686,10 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              l1 <- goE1 "simplify_2"      simplifyL1             l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
-              l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
+              --l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -745,10 +746,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  -- NOTE: Calling copyOutOfOrderPacked here seems redundant since all the copy calls seem be exists in the correct place.
-                  -- In addititon, calling it here gives a compile time error.
-                  -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
-                  -- l1 <- go "L1.typecheck"    L1.tcProg     l1
+                  l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+                  l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2

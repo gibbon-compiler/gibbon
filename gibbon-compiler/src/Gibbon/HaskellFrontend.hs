@@ -396,7 +396,6 @@ stdlibModules =
   , "Gibbon.List"
   , "Gibbon.PList"
   , "Gibbon.ByteString"
-  , "Gibbon.Maybe"
   ]
 
 processImport ::
@@ -473,7 +472,6 @@ stdlibImportPath mod_name = do
     modNameToFilename "Gibbon.List" = "Gibbon" </> "List.hs"
     modNameToFilename "Gibbon.PList" = "Gibbon" </> "PList.hs"
     modNameToFilename "Gibbon.ByteString" = "Gibbon" </> "ByteString.hs"
-    modNameToFilename "Gibbon.Maybe" = "Gibbon" </> "Maybe.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath

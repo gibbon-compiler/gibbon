@@ -47,6 +47,4 @@ ARG RUST=1.71.0
 # install rustup, rustc, and cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=${RUST} -y
 
-ADD . /home/${USERNAME}/gibbon
-
 CMD ["bash"]

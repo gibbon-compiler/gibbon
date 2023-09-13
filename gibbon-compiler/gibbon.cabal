@@ -125,7 +125,7 @@ library
                      , GenericPretty            >= 1.2.1     &&  < 2
                      , language-c-quote         >= 0.12.1    &&  < 1
                      , mainland-pretty          >= 0.6.1     &&  < 1
-                     , language-python          >= 0.5.0     &&  <= 0.5.8
+                     , language-python          ==0.5.8 
                      , timeit                   >= 0.9       &&  <= 2.0
                      , time                     >= 1         &&  <= 1.12.2
 -- Brings in lots of ekmett dependencies:
