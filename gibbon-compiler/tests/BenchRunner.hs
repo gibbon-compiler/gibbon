@@ -76,7 +76,7 @@ bench_main :: TestConfig -> Tests -> IO ()
 bench_main tc (Tests tests) = do
     putStrLn "Executing BenchRunner...\n"
     let benchmarks = filter (not . skip) $ filter isBenchmark tests
-        modesToBench = [Gibbon1, Gibbon2, Pointer]
+        modesToBench = [Gibbon1, Gibbon2, Pointer, MPL]
     results <- mapM (go modesToBench) benchmarks
     mc <- getHostname
     let csvs = map (\arg -> intercalate "," (mc:arg)) (concat results)

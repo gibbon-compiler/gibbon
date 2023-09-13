@@ -160,7 +160,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1
+data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -178,6 +178,7 @@ readMode s =
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
+        "mpl" -> MPL
         _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
@@ -187,6 +188,7 @@ modeRunFlags Gibbon2  = ["--run", "--packed"]
 modeRunFlags Pointer = ["--run", "--pointer"]
 modeRunFlags Interp1 = ["--interp1"]
 modeRunFlags Gibbon1 = ["--run", "--packed", "--gibbon1"]
+modeRunFlags MPL = ["--mpl-run"]
 
 -- Must match the flag expected by Gibbon.
 modeExeFlags :: Mode -> [String]
@@ -195,6 +197,7 @@ modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
 modeExeFlags Interp1 = error "Cannot compile in Interp1 mode."
 modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
+modeExeFlags MPL = ["--mpl-exe"]
 
 modeFileSuffix :: Mode -> String
 modeFileSuffix Gibbon3  = "_gibbon3"
@@ -202,6 +205,7 @@ modeFileSuffix Gibbon2  = "_gibbon2"
 modeFileSuffix Pointer = "_ptr"
 modeFileSuffix Interp1 = "_interp1"
 modeFileSuffix Gibbon1 = "_gibbon1"
+modeFileSuffix MPL = "_mpl"
 
 -- Couldn't figure out how to write a parser which accepts multiple arguments.
 -- The 'many' thing cannot be used with an option. I suppose that just
