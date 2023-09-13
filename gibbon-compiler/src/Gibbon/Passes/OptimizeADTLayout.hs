@@ -2,6 +2,7 @@
 {-# HLINT ignore "Use lambda-case" #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# HLINT ignore "Redundant lambda" #-}
+{-# HLINT ignore "Use tuple-section" #-}
 module Gibbon.Passes.OptimizeADTLayout
   ( shuffleDataCon,
   )
@@ -11,6 +12,11 @@ where
 
 import Control.Exception (evaluate)
 import Data.List as L
+
+import           Data.Graph                     as G
+import           Control.Monad
+
+import Data.Set as S
 -- Haskell imports
 import Data.Map as M
 import Data.Maybe as Maybe
@@ -21,7 +27,7 @@ import Data.Time.Clock
 import Gibbon.Common
 import Gibbon.Language
 import Gibbon.Language.Syntax
-import Gibbon.L1.Syntax
+import Gibbon.L1.Syntax as L1
 import Gibbon.Passes.AccessPatternsAnalysis
   ( DataConAccessMap,
     FieldMap,
@@ -47,6 +53,7 @@ import System.TimeIt
 import Text.PrettyPrint.GenericPretty
 import Prelude as P
 import Data.Data (Data)
+import qualified Gibbon.L2.Syntax as L1
 
 -- | Data structure to store output from ILP solver.
 -- | Maps DataCon to bijection of new indices -> fields of datacon
@@ -109,8 +116,160 @@ shuffleDataCon prg@Prog{ddefs, fundefs, mainExp} =
                     venv
                     pmap
                     p
-            return prg'
+            generateCopyFunctionsForFunctionsThatUseOptimizedVariable (toVar funcName) (dcon ++ "tmp") fieldorder prg'
       _ -> error "OptimizeFieldOrder: handle use constraints"
+
+
+generateCopyFunctionsForFunctionsThatUseOptimizedVariable :: Var -> DataCon -> FieldOrder -> Prog1 -> PassM Prog1
+generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName fieldOrder prg@Prog{ddefs, fundefs, mainExp} = case mainExp of
+                                                                                                                                      Nothing -> error "no main exp in generateCopyFunctionsForFunctionsThatUseOptimizedVariable."
+                                                                                                                                      Just (expr, ty) -> let generatedVars = S.toList $ S.fromList $ getGeneratedVariable expr
+                                                                                                                                                          in case generatedVars of
+                                                                                                                                                                    [v] -> do  let funcsUsingVar = findFunctionsUsingVar v expr
+                                                                                                                                                                               fundefs' <- makeFunctionCopies funcsUsingVar ddefs fundefs
+                                                                                                                                                                               let exp' = P.foldr (\func ex -> replaceFunctionName func (toVar (fromVar func ++ "_new")) ex ) expr funcsUsingVar
+                                                                                                                                                                               pure prg {ddefs = ddefs, fundefs = fundefs', mainExp = Just (exp', ty)}
+                                                                                                                                                                    [] -> error "generateCopyFunctionsForFunctionsThatUseOptimizedVariable: no variables found"
+                                                                                                                                                                    _ -> error "generateCopyFunctionsForFunctionsThatUseOptimizedVariable: handle multiple produced variables"
+  where
+    getGeneratedVariable exp = case exp of
+          DataConE loc dcon args -> P.concatMap getGeneratedVariable args
+          VarE {} -> []
+          LitE {} -> []
+          CharE {} -> []
+          FloatE {} -> []
+          LitSymE {} -> []
+          AppE f locs args -> P.concatMap getGeneratedVariable args
+          PrimAppE f args -> P.concatMap getGeneratedVariable args
+          LetE (v, loc, ty, rhs) bod -> case rhs of
+                                              AppE f' _ _ -> if f' == funcName then [v] ++ getGeneratedVariable rhs ++ getGeneratedVariable bod
+                                                             else getGeneratedVariable rhs ++ getGeneratedVariable bod
+                                              _ -> getGeneratedVariable rhs ++ getGeneratedVariable bod
+          CaseE scrt mp -> P.concatMap (\(_, _, c) -> getGeneratedVariable c ) mp
+          IfE a b c -> getGeneratedVariable a ++ getGeneratedVariable b ++ getGeneratedVariable c
+          MkProdE xs -> P.concatMap getGeneratedVariable xs
+          ProjE i e -> error "getGeneratedVariable: TODO ProjE"
+          TimeIt e ty b -> error "getGeneratedVariable: TODO TimeIt"
+          WithArenaE v e -> error "getGeneratedVariable: TODO WithArenaE"
+          SpawnE f locs args -> error "getGeneratedVariable: TODO SpawnE"
+          SyncE -> error "getGeneratedVariable: TODO SyncE"
+          Ext _ -> error "getGeneratedVariable: TODO Ext"
+          MapE {} -> error "getGeneratedVariable: TODO MapE"
+          FoldE {} -> error "getGeneratedVariable: TODO FoldE"
+
+    replaceFunctionName oldName newName expr = case expr of
+          DataConE loc dcon args -> DataConE loc dcon $ P.map (replaceFunctionName oldName newName) args
+          VarE {} -> expr
+          LitE {} -> expr
+          CharE {} -> expr
+          FloatE {} -> expr
+          LitSymE {} -> expr
+          AppE f locs args -> if f == oldName then AppE newName locs $ P.map (replaceFunctionName oldName newName) args
+                              else AppE f locs $ P.map (replaceFunctionName oldName newName) args
+          PrimAppE f args -> PrimAppE f $ P.map (replaceFunctionName oldName newName) args
+          LetE (v, loc, ty, rhs) bod -> LetE (v, loc, ty, replaceFunctionName oldName newName rhs) (replaceFunctionName oldName newName bod)
+          CaseE scrt mp -> let mp' = P.map (\(a, b, c) -> (a, b, replaceFunctionName oldName newName c)) mp
+                             in CaseE scrt mp'
+          IfE a b c -> IfE (replaceFunctionName oldName newName a) (replaceFunctionName oldName newName b) (replaceFunctionName oldName newName c)
+          MkProdE xs -> MkProdE $ P.map (replaceFunctionName oldName newName) xs
+          ProjE i e -> error "replaceFunctionName: TODO ProjE"
+          TimeIt e ty b -> error "replaceFunctionName: TODO TimeIt"
+          WithArenaE v e -> error "replaceFunctionName: TODO WithArenaE"
+          SpawnE f locs args -> error "replaceFunctionName: TODO SpawnE"
+          SyncE -> error "replaceFunctionName: TODO SyncE"
+          Ext _ -> error "replaceFunctionName: TODO Ext"
+          MapE {} -> error "replaceFunctionName: TODO MapE"
+          FoldE {} -> error "replaceFunctionName: TODO FoldE"
+
+    findFunctionsUsingVar var expr = case expr of
+          DataConE loc dcon args -> P.concatMap (findFunctionsUsingVar var) args
+          VarE {} -> []
+          LitE {} -> []
+          CharE {} -> []
+          FloatE {} -> []
+          LitSymE {} -> []
+          AppE f locs args -> let freeVars = S.unions $ P.map gFreeVars args
+                               in if S.member var freeVars
+                                  then f : P.concatMap (findFunctionsUsingVar var) args
+                                  else P.concatMap (findFunctionsUsingVar var) args
+          PrimAppE f args -> P.concatMap (findFunctionsUsingVar var) args
+          LetE (v, loc, ty, rhs) bod -> findFunctionsUsingVar var rhs ++ findFunctionsUsingVar var bod
+          CaseE scrt mp -> P.concatMap (\(_, _, c) -> findFunctionsUsingVar var c) mp
+          IfE a b c -> findFunctionsUsingVar var a ++  findFunctionsUsingVar var b ++ findFunctionsUsingVar var c
+          MkProdE xs -> P.concatMap (findFunctionsUsingVar var) xs
+          ProjE i e -> error "findFunctionsUsingVar: TODO ProjE"
+          TimeIt e ty b -> error "findFunctionsUsingVar: TODO TimeIt"
+          WithArenaE v e -> error "findFunctionsUsingVar: TODO WithArenaE"
+          SpawnE f locs args -> error "findFunctionsUsingVar: TODO SpawnE"
+          SyncE -> error "findFunctionsUsingVar: TODO SyncE"
+          Ext _ -> error "findFunctionsUsingVar: TODO Ext"
+          MapE {} -> error "findFunctionsUsingVar: TODO MapE"
+          FoldE {} -> error "findFunctionsUsingVar: TODO FoldE"
+
+    makeFunctionCopies funcList ddefs' fdefs = case funcList of
+                                                  [] -> pure fdefs
+                                                  x:xs -> if not $ isInfixOf "_print" (fromVar x)
+                                                          then
+                                                            let newFunctionName = toVar (fromVar x ++ "_new")
+                                                                oldFunctionBody = M.lookup x fdefs
+                                                              in case oldFunctionBody of
+                                                                        Just body -> let newFunctionBody = shuffleDataConFunBody fieldOrder body newDconName
+                                                                                         newFunctionBody' = changeCallNameInRecFunction newFunctionName newFunctionBody
+                                                                                         var_order = getVarsBoundByDconInOrder' newDconName newFunctionBody' -- Get Variables bound by DataCon so that we release let bings in the right order. 
+                                                                                         --TODO: fix this is not right
+                                                                                         -- I would say better to remove all let binds
+                                                                                         -- use gFreeVars to release binds. 
+                                                                                         var_order' = P.map Just var_order
+                                                                                         var_order'' = P.zip var_order' var_order
+                                                                                         newFunctionBody''@FunDef{funName} = P.foldl (\fundef (insertPosition, var') -> reOrderLetExp insertPosition var' fundef) newFunctionBody' var_order''
+                                                                                         fdefs' = M.insert funName newFunctionBody'' fdefs
+                                                                                       in makeFunctionCopies xs ddefs' fdefs'
+                                                                        Nothing -> error ""
+                                                          else
+                                                            do 
+                                                              let flds = snd $ lkp ddefs' newDconName  
+                                                              newPrintCase <- genPrintFnCase flds
+                                                              let fn = M.lookup x fdefs 
+                                                              case fn of 
+                                                                  Just ff@FunDef{funName, funBody, funTy, funArgs, funMeta} -> let exp' = addCaseForNewDataConInPrintFn [newPrintCase] funBody
+                                                                                                                                   fn'  = FunDef{funName=funName, funBody=exp', funTy=funTy, funArgs=funArgs, funMeta=funMeta} 
+                                                                                                                                   newFunctionName = toVar (fromVar x ++ "_new")
+                                                                                                                                   newFunctionBody' = changeCallNameInRecFunction newFunctionName fn'
+                                                                                                                                   fdefs' = M.insert newFunctionName newFunctionBody' fdefs 
+                                                                                                                                  in makeFunctionCopies xs ddefs' fdefs'
+
+                                                                                                                           
+                                                                  Nothing -> error ""  
+                                                              
+                                                              
+
+    addCaseForNewDataConInPrintFn newCase expr = case expr of 
+          DataConE loc dcon args -> DataConE loc dcon $ P.map (addCaseForNewDataConInPrintFn newCase) args  
+          VarE {} -> expr 
+          LitE {} -> expr 
+          CharE {} -> expr
+          FloatE {} -> expr
+          LitSymE {} -> expr
+          AppE f locs args -> AppE f locs $ P.map (addCaseForNewDataConInPrintFn newCase) args
+          PrimAppE f args -> PrimAppE f $ P.map (addCaseForNewDataConInPrintFn newCase) args
+          LetE (v, loc, ty, rhs) bod -> let rhs' = addCaseForNewDataConInPrintFn newCase rhs 
+                                            bod' = addCaseForNewDataConInPrintFn newCase bod 
+                                          in LetE (v, loc, ty, rhs') bod'
+          CaseE scrt mp -> let mp' = mp ++ newCase
+                            in CaseE scrt mp'
+          IfE a b c -> IfE (addCaseForNewDataConInPrintFn newCase a) (addCaseForNewDataConInPrintFn newCase b) (addCaseForNewDataConInPrintFn newCase c)  
+          MkProdE xs -> MkProdE $ P.map (addCaseForNewDataConInPrintFn newCase) xs
+          ProjE i e -> error "findFunctionsUsingVar: TODO ProjE"
+          TimeIt e ty b -> error "findFunctionsUsingVar: TODO TimeIt"
+          WithArenaE v e -> error "findFunctionsUsingVar: TODO WithArenaE"
+          SpawnE f locs args -> error "findFunctionsUsingVar: TODO SpawnE"
+          SyncE -> error "findFunctionsUsingVar: TODO SyncE"
+          Ext _ -> error "findFunctionsUsingVar: TODO Ext"
+          MapE {} -> error "findFunctionsUsingVar: TODO MapE"
+          FoldE {} -> error "findFunctionsUsingVar: TODO FoldE"
+
+
+
 
 
 optimizeFunctionWRTDataCon ::
@@ -250,10 +409,10 @@ genNewProducersAndRewriteProgram
                               changeCallNameInRecFunction
                                 newProducerName
                                 newProducerBody
-                            var_order = getVarsBoundByDconInOrder' newDataConName newProducerBody'
-                            var_order' = Nothing : P.map Just (init var_order)
+                            var_order = getVarsBoundByDconInOrder' newDataConName newProducerBody' -- Get Variables bound by DataCon so that we release let bings in the right order. 
+                            var_order' = P.map Just var_order
                             var_order'' = P.zip var_order' var_order
-                            newProducerBody'' = P.foldr (\(insertPosition, var') fundef -> reOrderLetExp insertPosition var' fundef) newProducerBody' var_order''
+                            newProducerBody'' = P.foldl (\fundef (insertPosition, var') -> reOrderLetExp insertPosition var' fundef) newProducerBody' var_order''
                             fundefs' =
                               M.insert newProducerName newProducerBody'' fundefs
                             newMainExp =
@@ -325,13 +484,9 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                           then error "getVariableAndProducer: no variables of Ty to optimize found!"
                           else
                             if P.length justVariables > 1
-                              then
-                                dbgTraceIt
-                                  (sdoc justVariables)
-                                  Just
-                                  (justVariables !! 1) -- error "getVariableAndProducer: Not implemented!"
+                              then error "getVariableAndProducer: More than one variable of the type being optimized is passed to function call. Not implemented yet!"
                               else Just (P.head justVariables)
-                  else dbgTraceIt (sdoc f) Nothing
+                  else Nothing
               _ -> Nothing
           producers =
             getVariableAndProducer funName pMap venv ddefs dconName rhs
@@ -347,7 +502,7 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                             _ ->
                               error
                                 "getVariableAndProducer: producer other than a function call not expected."
-                    Nothing -> dbgTraceIt (sdoc (M.elems vEnv)) []
+                    Nothing -> []
             Nothing -> producers
     -- a == DataCon
     -- b == [(Var, loc)]
@@ -588,7 +743,7 @@ timeSolver f f' = do
   a <- evaluate (f f')
   t2 <- getCurrentTime
   let delt = fromRational (toRational (diffUTCTime t2 t1))
-  putStrLn ("iter time: " ++ show delt)
+  --putStrLn ("iter time: " ++ show delt)
   return (a, delt)
 
 optimizeDataConOrderFunc ::
@@ -709,15 +864,7 @@ generateLocallyOptimalOrderings
                                 field_len
                                 fieldorder
                                 mode
-                         in dbgTraceIt
-                              (sdoc dconEdges)
-                              dbgTraceIt
-                              "\n"
-                              dbgTraceIt
-                              (sdoc fieldorder')
-                              dbgTraceIt
-                              "\n"
-                              fieldorder'
+                         in fieldorder'
       else orderIn
 
 makeneg :: Int -> [Int]
@@ -939,19 +1086,21 @@ reOrderLetExp after curr f@FunDef{funName, funBody, funTy, funArgs, funMeta} = l
                                                                                   Just (graph, getNode, getVertex) -> let lambda = (\var -> let vertex = getVertex var
                                                                                                                                         in case vertex of
                                                                                                                                                 Just v -> let ((vv, ex, ty), key, successors::[Var]) = getNode v
-                                                                                                                                                            in (successors, ex)
-                                                                                                                                                Nothing -> error "reOrderLetExp: could not find vertex."
-                                                                                                                                       )
+                                                                                                                                                            in (successors, Just ex)
+                                                                                                                                                Nothing -> ([], Nothing)                                                                                                                                       )
                                                                                                                           lambda' = (\varList -> case varList of
                                                                                                                                                 [] -> []
                                                                                                                                                 x:xs -> let (successors, ex) = lambda x
                                                                                                                                                             recurseSucc = lambda' successors
                                                                                                                                                             recurseRst  = lambda' xs
-                                                                                                                                                         in recurseSucc ++ recurseRst ++ [ex]
+                                                                                                                                                         in case ex of
+                                                                                                                                                                Just ex' -> recurseSucc ++ recurseRst ++ [ex']
+                                                                                                                                                                Nothing  -> recurseSucc ++ recurseRst
                                                                                                                                         )
                                                                                                                           letExpOrder = lambda' [curr]
-                                                                                                                          funBody' = P.foldr delLetBinding funBody letExpOrder
-                                                                                                                        in FunDef{funName=funName, funBody=reOrderLetExpHelper after letExpOrder funBody', funTy=funTy, funArgs=funArgs, funMeta=funMeta}
+                                                                                                                          funBody' =  P.foldr delLetBinding funBody letExpOrder
+                                                                                                                          funBody'' = reOrderLetExpHelper after letExpOrder funBody'
+                                                                                                                        in FunDef{funName=funName, funBody=funBody'', funTy=funTy, funArgs=funArgs, funMeta=funMeta}
                                                                                   Nothing -> error "reOrderLetExp: could not find data flow relation for let expressions."
 
 
@@ -959,31 +1108,160 @@ reOrderLetExpHelper :: Maybe Var -> [Exp1] -> Exp1 -> Exp1
 reOrderLetExpHelper Nothing letExpOrder expr = case letExpOrder of
   [] -> expr
   x:xs -> case x of
-            LetE (v, loc, ty, rhs) _ -> let exp' = LetE (v, loc, ty, rhs) expr
-                                          in reOrderLetExpHelper Nothing xs exp'
+            LetE (v, loc, ty, rhs) _ -> let exp' = LetE (v, loc, ty, rhs) $ reOrderLetExpHelper Nothing xs expr
+                                          in exp'
             _ -> error "reOrderLetExpHelper: did not expect expressions other than LetE."
 
-reOrderLetExpHelper insertAfter@(Just var) letExpOrder expr = case expr of
-          DataConE loc dcon args -> DataConE loc dcon $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
-          VarE {} -> expr
-          LitE {} -> expr
-          CharE {} -> expr
-          FloatE {} -> expr
-          LitSymE {} -> expr
-          AppE f locs args -> AppE f locs $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
-          PrimAppE f args -> PrimAppE f $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
-          LetE (v, loc, ty, rhs) bod -> if v == var
-                                        then
-                                          let lambda = (\l ex -> case l of
-                                                                          LetE (v', loc', ty', rhs') _ -> LetE (v', loc', ty', rhs') ex
-                                                                          _ -> error "reOrderLetExpHelper: did not expect expressions other than LetE.")
-                                              exp' = P.foldr lambda bod letExpOrder
-                                            in exp'
-                                        else
-                                          LetE (v, loc, ty, reOrderLetExpHelper insertAfter letExpOrder rhs) (reOrderLetExpHelper insertAfter letExpOrder bod)
-          CaseE scrt mp -> CaseE scrt $ P.map (\(a, b, c) -> (a, b, reOrderLetExpHelper insertAfter letExpOrder c)) mp
-          IfE a b c -> IfE (reOrderLetExpHelper insertAfter letExpOrder a) (reOrderLetExpHelper insertAfter letExpOrder b) (reOrderLetExpHelper insertAfter letExpOrder c)
-          MkProdE xs -> MkProdE $ P.map (reOrderLetExpHelper insertAfter letExpOrder) xs
+-- reOrderLetExpHelper Nothing letExpOrder expr = let 
+
+--   case expr of
+--           DataConE loc dcon args -> 
+--           VarE {} -> 
+--           LitE {} -> 
+--           CharE {} -> 
+--           FloatE {} -> 
+--           LitSymE {} -> 
+--           AppE f locs args -> 
+--           PrimAppE f args -> 
+--           LetE (v, loc, ty, rhs) bod -> 
+--           CaseE scrt mp -> 
+--           IfE a b c -> 
+--           MkProdE xs -> 
+--           ProjE {} -> error "reOrderLetExpHelper: TODO ProjE"
+--           TimeIt {} -> error "reOrderLetExpHelper: TODO TimeIt"
+--           WithArenaE {} -> error "reOrderLetExpHelper: TODO WithArenaE"
+--           SpawnE {} -> error "reOrderLetExpHelper: TODO SpawnE"
+--           SyncE -> error "reOrderLetExpHelper: TODO SyncE"
+--           Ext {} -> error "reOrderLetExpHelper: TODO Ext"
+--           MapE {} -> error "reOrderLetExpHelper: TODO MapE"
+--           FoldE {} -> error "reOrderLetExpHelper: TODO FoldE"
+
+-- reOrderLetExpHelper insertAfter@(Just var) letExpOrder expr = case expr of
+--           DataConE loc dcon args -> DataConE loc dcon $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           VarE {} -> expr
+--           LitE {} -> expr
+--           CharE {} -> expr
+--           FloatE {} -> expr
+--           LitSymE {} -> expr
+--           AppE f locs args -> AppE f locs $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           PrimAppE f args -> PrimAppE f $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           LetE (v, loc, ty, rhs) bod -> if v == var
+--                                         then
+--                                           let lambda = (\l ex -> case l of
+--                                                                           LetE (v', loc', ty', rhs') _ -> LetE (v', loc', ty', rhs') ex
+--                                                                           _ -> error "reOrderLetExpHelper: did not expect expressions other than LetE.")
+--                                               exp' = P.foldr lambda bod letExpOrder
+--                                             in LetE (v, loc, ty, rhs) exp'
+--                                         else
+--                                           LetE (v, loc, ty, reOrderLetExpHelper insertAfter letExpOrder rhs) (reOrderLetExpHelper insertAfter letExpOrder bod)
+--           CaseE scrt mp -> CaseE scrt $ P.map (\(a, b, c) -> (a, b, reOrderLetExpHelper insertAfter letExpOrder c)) mp
+--           IfE a b c -> IfE (reOrderLetExpHelper insertAfter letExpOrder a) (reOrderLetExpHelper insertAfter letExpOrder b) (reOrderLetExpHelper insertAfter letExpOrder c)
+--           MkProdE xs -> MkProdE $ P.map (reOrderLetExpHelper insertAfter letExpOrder) xs
+--           ProjE {} -> error "reOrderLetExpHelper: TODO ProjE"
+--           TimeIt {} -> error "reOrderLetExpHelper: TODO TimeIt"
+--           WithArenaE {} -> error "reOrderLetExpHelper: TODO WithArenaE"
+--           SpawnE {} -> error "reOrderLetExpHelper: TODO SpawnE"
+--           SyncE -> error "reOrderLetExpHelper: TODO SyncE"
+--           Ext {} -> error "reOrderLetExpHelper: TODO Ext"
+--           MapE {} -> error "reOrderLetExpHelper: TODO MapE"
+--           FoldE {} -> error "reOrderLetExpHelper: TODO FoldE"
+
+-- TODO: This will release bindings multiple times for variables use everywhere, whreas we want to just prioritize for first use. 
+-- Simple solution is to refactor this into a new function and return a bool when the binds have been released.  
+-- check if binds have been released, if pass [] as let binds. 
+-- reOrderLetExpHelper insertAfter@(Just var) letExpOrder expr = case expr of
+--           DataConE loc dcon args -> DataConE loc dcon $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           VarE vv -> if vv == var
+--                      then
+--                       let lambda = (\l ex -> case l of
+--                                                 LetE (v', loc', ty', rhs') _ -> LetE (v', loc', ty', rhs') ex
+--                                                 _ -> error "reOrderLetExpHelper: did not expect expressions other than LetE.")
+--                           exp' = P.foldr lambda expr letExpOrder
+--                         in exp'
+--                      else
+--                       expr
+--           LitE {} -> expr
+--           CharE {} -> expr
+--           FloatE {} -> expr
+--           LitSymE {} -> expr
+--           AppE f locs args -> AppE f locs $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           PrimAppE f args -> PrimAppE f $ P.map (reOrderLetExpHelper insertAfter letExpOrder) args
+--           LetE (v, loc, ty, rhs) bod -> LetE (v, loc, ty, reOrderLetExpHelper insertAfter letExpOrder rhs) (reOrderLetExpHelper insertAfter letExpOrder bod)
+--           CaseE scrt mp -> CaseE scrt $ P.map (\(a, b, c) -> (a, b, reOrderLetExpHelper insertAfter letExpOrder c)) mp
+--           IfE a b c -> IfE (reOrderLetExpHelper insertAfter letExpOrder a) (reOrderLetExpHelper insertAfter letExpOrder b) (reOrderLetExpHelper insertAfter letExpOrder c)
+--           MkProdE xs -> MkProdE $ P.map (reOrderLetExpHelper insertAfter letExpOrder) xs
+--           ProjE {} -> error "reOrderLetExpHelper: TODO ProjE"
+--           TimeIt {} -> error "reOrderLetExpHelper: TODO TimeIt"
+--           WithArenaE {} -> error "reOrderLetExpHelper: TODO WithArenaE"
+--           SpawnE {} -> error "reOrderLetExpHelper: TODO SpawnE"
+--           SyncE -> error "reOrderLetExpHelper: TODO SyncE"
+--           Ext {} -> error "reOrderLetExpHelper: TODO Ext"
+--           MapE {} -> error "reOrderLetExpHelper: TODO MapE"
+--           FoldE {} -> error "reOrderLetExpHelper: TODO FoldE"
+
+reOrderLetExpHelper bindsForVar@(Just var) letExpOrder expr = fst $ run letExpOrder expr
+  where
+  lambdaHandleExpList expList letExpOrder' = case expList of
+                                        [] -> ([], False)
+                                        x:xs -> let (exp', releasedBinds) = run letExpOrder' x
+                                                  in if releasedBinds
+                                                     then (exp' : xs, releasedBinds)
+                                                     else
+                                                       let (exp'', val) = lambdaHandleExpList xs letExpOrder'
+                                                         in (exp' : exp'', releasedBinds || val)
+
+  lambdaAppendLets = \l ex -> case l of
+                                LetE (v', loc', ty', rhs') _ -> LetE (v', loc', ty', rhs') ex
+                                _ -> error "reOrderLetExpHelper(run): did not expect expressions other than LetE."
+
+  run letExpOrder' expr' = case expr' of
+          DataConE loc dcon args -> let (newArgs :: [PreExp E1Ext () Ty1], releasedBinds) = lambdaHandleExpList args letExpOrder'
+                                      in (DataConE loc dcon newArgs, releasedBinds)
+          VarE vv -> if vv == var
+                     then
+                        let exp' = P.foldr lambdaAppendLets expr' letExpOrder'
+                          in (exp', True)
+                     else
+                      (expr', False)
+          LitE {} -> (expr', False)
+          CharE {} -> (expr', False)
+          FloatE {} -> (expr', False)
+          LitSymE {} -> (expr', False)
+          AppE f locs args -> let (newArgs, releasedBinds) = lambdaHandleExpList args letExpOrder'
+                               in (AppE f locs newArgs, releasedBinds)
+          PrimAppE f args -> let (newArgs, releasedBinds) = lambdaHandleExpList args letExpOrder'
+                               in (PrimAppE f newArgs, releasedBinds)
+          LetE (v, loc, ty, rhs) bod -> let (rhs', relRhs) = run letExpOrder' rhs
+                                            (bod', relBod) = if relRhs then (bod, relRhs) else run letExpOrder' bod
+                                          in
+                                            (LetE (v, loc, ty, rhs') bod' , relRhs || relBod)
+          --TODO: if it exits in more than one case then lift releasing bindings on top of case.                                  
+          CaseE scrt mp -> let lambdaCase = (\(a, b, c) -> let (c' , released') = run letExpOrder' c
+                                                             in ((a, b, c'), released')
+                                            )
+                               newExps = P.map lambdaCase mp
+                               mp' = P.map fst newExps
+                               released = any snd newExps
+                             in (CaseE scrt mp', released)
+          -- IfE a b c -> let (a', rela) = run letExpOrder' a
+          --                  (b', relb) = if rela then (b, rela) else run letExpOrder' b 
+          --                  (c', relc) = if rela || relb then (c, rela || relb) else run letExpOrder' c 
+          --                in (IfE a' b' c', rela || relb || relc)
+          IfE a b c -> let freeVarsA = gFreeVars a
+                           freeVarsB = gFreeVars b
+                           freeVarsC = gFreeVars c
+                          in if S.member var freeVarsA || S.member var freeVarsC && S.member var freeVarsB
+                             then (P.foldr lambdaAppendLets expr' letExpOrder', True)
+                             else if S.member var freeVarsB && S.notMember var freeVarsC
+                             then let b' = fst $ run letExpOrder' b
+                                   in (IfE a b' c, True)
+                             else if S.member var freeVarsC && S.notMember var freeVarsB
+                             then let c' = fst $ run letExpOrder' c
+                                    in (IfE a b c', True)
+                             else
+                                (expr', False)
+          MkProdE xs -> let (xs', releasedBinds) = lambdaHandleExpList xs letExpOrder'
+                          in (MkProdE xs', releasedBinds)
           ProjE {} -> error "reOrderLetExpHelper: TODO ProjE"
           TimeIt {} -> error "reOrderLetExpHelper: TODO TimeIt"
           WithArenaE {} -> error "reOrderLetExpHelper: TODO WithArenaE"
@@ -1071,3 +1349,108 @@ delLetBinding letBind expr = case expr of
 --           Ext _ -> error "getExpTyEnv: TODO Ext"
 --           MapE {} -> error "getExpTyEnv: TODO MapE"
 --           FoldE {} -> error "getExpTyEnv: TODO FoldE"
+
+
+genPrintFnCase ::  (DataCon, [(IsBoxed, Ty1)]) -> PassM (DataCon, [(Var, ())], PreExp E1Ext () Ty1)
+genPrintFnCase (dcon, tys) = do
+      xs <- mapM (\_ -> gensym "x") tys
+      ys <- mapM (\_ -> gensym "y") tys
+      let bnds =
+            P.foldr
+              (\(ty, x, y) acc ->
+                 case ty of
+                   IntTy -> (y, [], ProdTy [], PrimAppE PrintInt [VarE x]) : acc
+                   FloatTy ->
+                     (y, [], ProdTy [], PrimAppE PrintFloat [VarE x]) : acc
+                   SymTy ->
+                     (y, [], ProdTy [], PrimAppE PrintSym [VarE x]) : acc
+                   BoolTy ->
+                     (y, [], ProdTy [], PrimAppE PrintBool [VarE x]) : acc
+                   PackedTy tycon _ ->
+                     (y, [], ProdTy [], AppE (mkPrinterName tycon) [] [VarE x]) :
+                     acc
+                   SymDictTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "SymDict")]) :
+                     acc
+                   VectorTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "Vector")]) :
+                     acc
+                   PDictTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "PDict")]) :
+                     acc
+                   ListTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "List")]) :
+                     acc
+                   ArenaTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "Arena")]) :
+                     acc
+                   SymSetTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "SymSet")]) :
+                     acc
+                   SymHashTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "SymHash")]) :
+                     acc
+                   IntHashTy {} ->
+                     ( y
+                     , []
+                     , ProdTy []
+                     , PrimAppE PrintSym [LitSymE (toVar "IntHash")]) :
+                     acc
+                   _ -> acc)
+              []
+              (zip3 (P.map snd tys) xs ys)
+      w1 <- gensym "wildcard"
+      w2 <- gensym "wildcard"
+      let add_spaces ::
+               [(Var, [()], Ty1, PreExp E1Ext () Ty1)]
+            -> PassM [(Var, [()], Ty1, PreExp E1Ext () Ty1)]
+          add_spaces [] = pure []
+          add_spaces [z] = pure [z]
+          add_spaces (z:zs) = do
+            zs' <- add_spaces zs
+            wi <- gensym "wildcard"
+            pure $
+              z :
+              (wi, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar " "))]) :
+              zs'
+      bnds'' <-
+        add_spaces $
+        [ ( w1
+          , []
+          , ProdTy []
+          , PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon)))])
+        ] ++
+        bnds
+      let bnds' =
+            bnds'' ++
+            [(w2, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ")"))])]
+          bod = mkLets' bnds' (MkProdE [])
+      return (dcon, P.map (\x -> (x, ())) xs, bod)
+
+mkLets' ::
+     [(Var, [()], Ty1, PreExp E1Ext () Ty1)]
+  -> Exp1
+  -> Exp1
+mkLets' [] bod     = bod
+mkLets' (b:bs) bod = LetE b (mkLets' bs bod)
