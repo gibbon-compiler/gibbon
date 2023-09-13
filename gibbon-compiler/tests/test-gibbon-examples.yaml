@@ -901,5 +901,5 @@ tests:
     test-flags: ["--no-gc"]
     dir: examples/layout_bench
     answer-file: examples/layout_bench/layout1ContentSearchRunPipeline.ans
-    failing: [interp1,pointer,gibbon1, gibbon3, gibbon2]
+    failing: [interp1,pointer,gibbon1, gibbon3]
     run-modes: ["gibbon2"]
