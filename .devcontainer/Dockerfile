@@ -47,4 +47,14 @@ ARG RUST=1.71.0
 # install rustup, rustc, and cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=${RUST} -y
 
+ARG MPL=v0.4
+
+# install mpl
+RUN git clone https://github.com/MPLLang/mpl-switch.git
+RUN python3 mpl-switch/mpl-switch init
+ENV PATH="/home/${USERNAME}/.mpl/bin:$PATH"
+RUN echo "export PATH=${PATH}" >> /home/${USERNAME}/.profile
+RUN python3 mpl-switch/mpl-switch install v0.4
+RUN rm -rf mpl-switch
+
 CMD ["bash"]
