@@ -4,8 +4,7 @@ import GenerateLayout3
 type Text = Vector Char
 
 
-emphKeywordInTag :: Text -> Blog -> Blog 
-{-# ANN emphKeywordInTag Layout3 #-} 
+emphKeywordInTag :: Text -> Blog -> Blog  
 emphKeywordInTag keyword blogs = case blogs of 
                                     End -> End
                                     Layout3 tags rst content header id author date -> let present     = searchBlogTags keyword tags
