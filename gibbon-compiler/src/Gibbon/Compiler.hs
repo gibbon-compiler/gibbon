@@ -92,7 +92,7 @@ import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
-import Gibbon.Passes.OptimizeADTLayout (shuffleDataCon)
+import Gibbon.Passes.OptimizeADTLayout (optimizeADTLayout)
 
 
 
@@ -599,6 +599,7 @@ passes config@Config{dynflags} l0 = do
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           parallel   = gopt Opt_Parallel dynflags
           should_fuse = gopt Opt_Fusion dynflags
+          opt_layout = gopt Opt_Layout dynflags 
           tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
@@ -640,7 +641,9 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              l1 <- goE1 "optimizeADTLayout" shuffleDataCon l1
+              l1 <- if opt_layout 
+                    then goE1 "optimizeADTLayout" optimizeADTLayout l1
+                    else return l1 
               l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
               l1 <- goE1 "simplify_2"      simplifyL1             l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
