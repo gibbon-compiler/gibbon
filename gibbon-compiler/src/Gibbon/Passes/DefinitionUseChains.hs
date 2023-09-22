@@ -89,7 +89,7 @@ progToVEnv p@Prog {ddefs, fundefs, mainExp} =
            in unionEnv2s $ [expEnva, expEnvb, expEnvc]
         MkProdE xs -> unionEnv2s (L.map (getExpTyEnv env) xs)
         ProjE i e -> error "getExpTyEnv: TODO ProjE"
-        TimeIt e ty b -> error "getExpTyEnv: TODO TimeIt"
+        TimeIt e ty b -> getExpTyEnv env e
         WithArenaE v e -> error "getExpTyEnv: TODO WithArenaE"
         SpawnE f locs args -> error "getExpTyEnv: TODO SpawnE"
         SyncE -> error "getExpTyEnv: TODO SyncE"

@@ -896,15 +896,22 @@ tests:
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
   - name: layout1ContentSearchRunPipeline.hs 
-    test-flags: ["--no-gc", "--opt-layout"]
+    test-flags: ["--no-gc", "--opt-layout-local"]
     dir: examples/layout_bench
     answer-file: examples/layout_bench/layout1ContentSearchRunPipeline.ans
     failing: [interp1,pointer,gibbon1, gibbon3]
     run-modes: ["gibbon2"]
     
-  - name: layout1ManyFuncsProducerConsumerOpt.hs 
-    test-flags: ["--no-gc", "--opt-layout"]
+  - name: manyFuncs.hs 
+    test-flags: ["--no-gc", "--opt-layout-local"]
     dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout1ManyFuncsProducerConsumerOpt.ans
+    answer-file: examples/layout_bench/manyFuncsLocal.ans
+    failing: [interp1,pointer,gibbon1, gibbon3]
+    run-modes: ["gibbon2"]
+    
+  - name: manyFuncs.hs 
+    test-flags: ["--no-gc", "--opt-layout-global"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/manyFuncsGlobal.ans
     failing: [interp1,pointer,gibbon1, gibbon3]
     run-modes: ["gibbon2"]
