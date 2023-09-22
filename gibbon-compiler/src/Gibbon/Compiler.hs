@@ -642,7 +642,10 @@ passes config@Config{dynflags} l0 = do
 
               -- Note: L1 -> L2
               l1 <- if opt_layout 
-                    then goE1 "optimizeADTLayout" optimizeADTLayout l1
+                    then do 
+                         after_layout_out <- goE1 "optimizeADTLayout" optimizeADTLayout l1
+                         flatten_after_opt <- goE1 "L1.flatten2" flattenL1 after_layout_out
+                         pure flatten_after_opt                        
                     else return l1 
               l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
               l1 <- goE1 "simplify_2"      simplifyL1             l1

@@ -901,3 +901,10 @@ tests:
     answer-file: examples/layout_bench/layout1ContentSearchRunPipeline.ans
     failing: [interp1,pointer,gibbon1, gibbon3]
     run-modes: ["gibbon2"]
+    
+  - name: layout1ManyFuncsProducerConsumerOpt.hs 
+    test-flags: ["--no-gc", "--opt-layout"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1ManyFuncsProducerConsumerOpt.ans
+    failing: [interp1,pointer,gibbon1, gibbon3]
+    run-modes: ["gibbon2"]
