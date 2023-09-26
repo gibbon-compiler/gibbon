@@ -589,3 +589,10 @@ tests:
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
     failing: [pointer, gibbon1, interp1, gibbon3, gibbon2, colobus]
     run-modes: ["gibbon2"]
+
+  - name: searchMovie.hs
+    test-flags: ["--no-gc"]
+    dir: examples/movie
+    answer-file: examples/movie/searchMovie.ans
+    failing: []
+    runmodes: ["gibbon2", "pointer"]
