@@ -592,7 +592,7 @@ tests:
 
   - name: searchMovie.hs
     test-flags: ["--no-gc"]
-    dir: examples/movie
-    answer-file: examples/movie/searchMovie.ans
+    dir: examples/movie-micro-service
+    answer-file: examples/movie-micro-service/searchMovie.ans
     failing: []
     runmodes: ["gibbon2", "pointer"]
