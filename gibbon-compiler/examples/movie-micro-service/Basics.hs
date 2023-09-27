@@ -4,7 +4,7 @@ module Basics where
 import Gibbon.Prelude
 import Gibbon.PList
 import Gibbon.Vector
-import Gibbon.Maybe
+import Gibbon.Prim
 
 type Text   = Vector Char
 

@@ -306,6 +306,7 @@ stdlibImportPath mod_name = do
     modNameToFilename "Gibbon.List" = "Gibbon" </> "List.hs"
     modNameToFilename "Gibbon.PList" = "Gibbon" </> "PList.hs"
     modNameToFilename "Gibbon.ByteString" = "Gibbon" </> "ByteString.hs"
+    modNameToFilename "Gibbon.Prim" = "Gibbon" </> "Prim.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath

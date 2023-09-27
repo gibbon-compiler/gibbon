@@ -3,7 +3,7 @@ module Movies where
 import Gibbon.Prelude
 import Gibbon.PList
 import Gibbon.Vector
-import Gibbon.Maybe
+import Gibbon.Prim
 import Basics
 -- ​
 type Text = Vector Char 
