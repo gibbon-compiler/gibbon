@@ -564,6 +564,9 @@ clearFile fileName = removeFile fileName `catch` handleErr
 
 -- | SML Codegen
 
+mplCompiler :: String
+mplCompiler = "mlton"  -- temporary until mpl is installed
+
 goIO :: Functor m => a1 -> m a2 -> StateT b m a1
 goIO prog io = StateT $ \x -> io $> (prog, x)
 
@@ -575,7 +578,7 @@ toSML fp prog = writeFile (smlExt fp) $ render $ ppProgram prog
 
 compileMPL :: FilePath -> IO ()
 compileMPL fp = do
-  cd <- system $ "mpl " <> smlExt fp
+  cd <- system $ mplCompiler <> " " <> smlExt fp
   case cd of
     ExitFailure n -> error $ "SML compiler failed with code " <> show n
     ExitSuccess -> pure ()
