@@ -364,7 +364,7 @@ ppTy1 ty1 = case ty1 of
   SymHashTy -> _
   IntHashTy -> _
   PackedTy s () -> " dat_" <> text s
-  VectorTy _ty1' -> _
+  VectorTy ty1' -> ppTy1 ty1' <+> "ArraySlice.slice"
   ListTy ty1' -> ppTy1 ty1' <+> "list"
   ArenaTy -> _
 
