@@ -585,10 +585,14 @@ compileMPL fp = do
 
 runMPL :: FilePath -> IO ()
 runMPL fp = do
-  cd <- system $ "./" <> dropExtension fp
+  cd <- system $ prefix <> dropExtension fp
   case cd of
     ExitFailure n -> error $ "SML executable failed with code " <> show n
     ExitSuccess -> pure ()
+  where
+    prefix = case takeDirectory fp of
+      "" -> "./"
+      _ -> ""
 
 goSML :: Config -> L1.Prog1 -> (FilePath -> IO a2) -> StateT b IO L1.Prog1
 goSML config prog acts = 
