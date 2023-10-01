@@ -4,7 +4,7 @@
 {-# HLINT ignore "Redundant lambda" #-}
 {-# HLINT ignore "Use tuple-section" #-}
 module Gibbon.Passes.OptimizeADTLayout
-  ( optimizeADTLayout,
+  ( 
     globallyOptimizeDataConLayout,
     locallyOptimizeDataConLayout
   )
@@ -34,6 +34,7 @@ import Gibbon.Passes.AccessPatternsAnalysis
   ( DataConAccessMap,
     FieldMap,
     generateAccessGraphs,
+    getGreedyOrder
   )
 import Gibbon.Passes.CallGraph
   ( ProducersMap (..),
@@ -66,11 +67,11 @@ import Gibbon.Passes.Flatten (flattenL1)
 type FieldOrder = M.Map DataCon [Integer]
 
 -- TODO: Make FieldOrder an argument passed to shuffleDataCon function.
-optimizeADTLayout ::
-  Prog1 ->
-  PassM Prog1
-optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
-  do
+--optimizeADTLayout ::
+--  Prog1 ->
+--  PassM Prog1
+--optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
+  --do
     -- let list_pair_func_dcon =
     --       concatMap ( \fn@(FunDef {funName, funMeta = FunMeta {funOptLayout = layout}}) ->
     --               case layout of
@@ -124,25 +125,25 @@ optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
     --                 p
     --         pure prg'
       --prg' <- runUntilFixPoint prg
-      globallyOptimizeDataConLayout prg
+      --globallyOptimizeDataConLayout prg
       --pure prg'
             --generateCopyFunctionsForFunctionsThatUseOptimizedVariable (toVar funcName) (dcon ++ "Optimized") fieldorder prg'
       --_ -> error "OptimizeFieldOrder: handle user constraints"
 
 
-locallyOptimizeDataConLayout :: Prog1 -> PassM Prog1 
-locallyOptimizeDataConLayout prg1 = do 
-  runUntilFixPoint prg1
+locallyOptimizeDataConLayout :: Bool -> Prog1 -> PassM Prog1 
+locallyOptimizeDataConLayout useGreedy prg1 = do 
+  runUntilFixPoint useGreedy prg1 
 
 
 
-runUntilFixPoint :: Prog1 -> PassM Prog1
-runUntilFixPoint prog1 = do
-  prog1' <- producerConsumerLayoutOptimization prog1
+runUntilFixPoint :: Bool -> Prog1 -> PassM Prog1
+runUntilFixPoint useGreedy prog1 = do
+  prog1' <- producerConsumerLayoutOptimization prog1 useGreedy
   prog1'' <- flattenL1 prog1'
   if prog1 == prog1''
   then return prog1
-  else runUntilFixPoint prog1''
+  else runUntilFixPoint useGreedy prog1'' 
 
 
 dataConsInFunBody :: Exp1 -> S.Set DataCon
@@ -172,8 +173,8 @@ dataConsInFunBody funBody = case funBody of
             MapE {} -> error "getGeneratedVariable: TODO MapE"
             FoldE {} -> error "getGeneratedVariable: TODO FoldE"
 
-producerConsumerLayoutOptimization :: Prog1 -> PassM Prog1
-producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
+producerConsumerLayoutOptimization :: Prog1 -> Bool -> PassM Prog1
+producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} useGreedy = do
   -- TODO: make a custom function name printer that guarantees that functions starting with _ are auto-generated. 
   let funsToOptimize = P.concatMap (\FunDef{funName} -> ([funName | not $ isInfixOf "_" (fromVar funName)])
                                    ) $ M.elems fundefs
@@ -193,7 +194,7 @@ producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
                                                   Just x -> x
                                                   Nothing -> error "producerConsumerLayoutOptimization: expected a function definition!!"
                                    let fieldOrder = getAccessGraph f dcon
-                                   let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder
+                                   let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder useGreedy
                                    case result of
                                      Nothing ->  pure pr --dbgTraceIt (sdoc (result, fname, fieldOrder)) 
                                      Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds
@@ -207,8 +208,8 @@ producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
   P.foldrM lambda prg linearizeDcons --dbgTraceIt (sdoc linearizeDcons)
 
 
-globallyOptimizeDataConLayout :: Prog1 -> PassM Prog1
-globallyOptimizeDataConLayout prg@Prog{ddefs, fundefs, mainExp} = do
+globallyOptimizeDataConLayout :: Bool -> Prog1 -> PassM Prog1
+globallyOptimizeDataConLayout useGreedy prg@Prog{ddefs, fundefs, mainExp} = do
   -- TODO: make a custom function name printer that guarantees that functions starting with _ are auto-generated. 
   let funsToOptimize = P.concatMap (\FunDef{funName} -> ([funName | not $ isInfixOf "_" (fromVar funName)])
                                    ) $ M.elems fundefs
@@ -261,7 +262,7 @@ globallyOptimizeDataConLayout prg@Prog{ddefs, fundefs, mainExp} = do
                       let fd = case maybeFd of
                                                   Just x -> x
                                                   Nothing -> error "globallyOptimizeDataConLayout: expected a function definition!!" 
-                      let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder
+                      let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder useGreedy
                       case result of
                                      Nothing ->  pure pr 
                                      Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds
@@ -491,12 +492,16 @@ getAccessGraph
 
 
 
+
+-- getGreedyFieldOrder :: Int -> DataCon -> FieldMap 
+
 optimizeFunctionWRTDataCon ::
   DDefs1 ->
   FunDef1 ->
   DataCon ->
   DataCon ->
   FieldMap ->
+  Bool ->
   Maybe (DDefs1, FunDef1, FieldOrder)
 optimizeFunctionWRTDataCon
   ddefs
@@ -508,7 +513,9 @@ optimizeFunctionWRTDataCon
     }
   datacon
   newDcon
-  fieldMap =
+  fieldMap
+  useGreedy = case useGreedy of 
+   False -> 
     let field_len = P.length $ snd . snd $ lkp' ddefs datacon
         fieldorder =
           optimizeDataConOrderFunc
@@ -531,7 +538,24 @@ optimizeFunctionWRTDataCon
                                                    fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
                                                  in Just (newDDefs, fundef', fieldorder) --dbgTraceIt (sdoc order) -- dbgTraceIt (sdoc fieldorder)
                   _ -> error "more than one"
-
+   True ->
+    let field_len = P.length $ snd . snd $ lkp' ddefs datacon
+        edges' = case (M.lookup funName fieldMap) of 
+                       Just d  -> case (M.lookup datacon d) of 
+                                      Nothing -> error ""
+                                      Just e -> e 
+                       Nothing -> error ""
+        greedy_order = getGreedyOrder edges' field_len
+        fieldorder = M.insert datacon greedy_order M.empty 
+      in case M.toList fieldorder of
+                  [] -> Nothing --dbgTraceIt (sdoc fieldorder) dbgTraceIt (sdoc greedy_order) 
+                  [(dcon, order)] -> let orignal_order = [0..(P.length order - 1)]
+                                       in if orignal_order == P.map P.fromInteger order
+                                          then Nothing
+                                          else let newDDefs = optimizeDataCon (dcon, order) ddefs newDcon
+                                                   fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
+                                                 in Just (newDDefs, fundef', fieldorder) --dbgTraceIt (sdoc order) -- dbgTraceIt (sdoc fieldorder) dbgTraceIt (sdoc greedy_order) 
+                  _ -> error "more than one"
 
 changeCallNameInRecFunction ::
   Var -> FunDef1 -> FunDef1
