@@ -88,7 +88,7 @@ ppAp var pes =
   parens $ var <> case pes of
     [] -> empty               -- don't confuse with application to unit (1 arg)
     [x] -> space <> ppE x
-    _ -> parens (interleave "," $ ppE <$> pes)
+    _ -> parens $ interleave "," $ ppE <$> pes
 
 ppVar :: Var -> Doc
 ppVar = text . getVar
