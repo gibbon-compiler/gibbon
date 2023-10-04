@@ -156,13 +156,12 @@ ppPrim pr pes = case pr of
   FMulP -> binary "*" pes
   FDivP -> binary "/" pes
   FExpP ->
-    let
-      (l, r) = extractBinary "pow" pes
-    in
     parens $ hsep
       [ "Math.pow"
       , parens $ hcat [l, comma, r]
       ]
+    where
+      (l, r) = extractBinary "pow" pes
   FRandP -> ppCurried "Random.randFloat" pes
   EqFloatP -> binary "=" pes
   EqCharP -> binary "=" pes
