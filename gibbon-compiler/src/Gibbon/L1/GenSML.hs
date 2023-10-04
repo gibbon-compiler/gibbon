@@ -391,7 +391,7 @@ printerTy1 ty1 d = case ty1 of
   PackedTy s () -> "internal_print_" <> text s <> parens d
   VectorTy ut -> 
     parens $ hsep
-      [ quotePrint "#("
+      [ quotePrint "#["
       , toss $ hsep 
         [ "case length", d, "of"
         , "0 -> ()"
@@ -399,10 +399,10 @@ printerTy1 ty1 d = case ty1 of
         , "_ ->"
         , toss $ printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
         , "ArraySlice.app", parens $ 
-          "fn y__ => " <> quotePrint ", " <> printerTy1 ut "y__"
+          "fn y__ => " <> printerTy1 ut "y__"
         , "xs__"
         ]
-      , "print \")\""
+      , "print \"]\""
       ]
   PDictTy _ut _ut' -> _
   ListTy ut -> 
