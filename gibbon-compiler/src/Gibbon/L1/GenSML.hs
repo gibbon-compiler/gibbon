@@ -184,11 +184,10 @@ ppPrim pr pes = case pr of
   SizeParam -> int 1  -- ?
   IsBig -> error "IsBig"
   GetNumProcessors -> error "GetNumProcessors"
-  PrintInt -> "print(Int.toString(" <> ppE (head pes) <> "))"
-  PrintChar -> ppAp "print" pes
-  PrintFloat -> ppAp "print" pes
-  PrintBool ->
-    ppAp "(fn true => \"True\" | false => \"False\")" pes
+  PrintInt -> printer "Int" $ ppE $ head pes
+  PrintChar -> printer "Char" $ ppE $ head pes
+  PrintFloat -> printer "Float" $ ppE $ head pes
+  PrintBool -> printer "Bool" $ ppE $ head pes
   PrintSym -> ppAp "print" pes
   ReadInt -> error "ReadInt"  -- Have every program read from stdin?
   DictInsertP _ -> error "DictInsertP"
@@ -314,7 +313,7 @@ reduceFunDefs keyword funDef doc =
       ] <> doc
       where name = funName funDef
 
-ppMainExpr :: Maybe (Exp1, b) -> Doc
+ppMainExpr :: Maybe (Exp1, Ty1) -> Doc
 ppMainExpr opt = case opt of
   Nothing -> mempty
   Just (exp0, _) -> 
@@ -371,6 +370,72 @@ ppTy1 ty1 = case ty1 of
   SymTy -> _
   PtrTy -> _
   CursorTy -> _
+
+printerTy1 :: Ty1 -> Doc -> Doc
+printerTy1 ty1 d = case ty1 of
+  IntTy -> printer "Int" d
+  CharTy -> printer "Char" d
+  FloatTy -> printer "Float" d
+  SymTy -> _
+  BoolTy -> printer "Bool" d
+  ProdTy uts -> 
+    parens $ hsep
+      [ "case", d, "of"
+      , parens $ interleave comma $ ("x__" <>) . int . fst <$> zip [1..] uts
+      , "-> let"
+      , foldMap ppSub $ zip [1..] uts
+      , "in ()"
+      ]
+    where
+      ppSub (i, x) = "val _ = " <> printerTy1 x ("x__" <> int i)
+  SymDictTy _m_var _ut -> _
+  PackedTy s () -> "internal_print_" <> text s <> parens d
+  VectorTy ut -> 
+    parens $ hsep
+      [ quotePrint "#("
+      , toss $ hsep 
+        [ "case length", d, "of"
+        , "0 -> ()"
+        , "1 ->", printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
+        , "_ ->"
+        , toss $ printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
+        , "ArraySlice.app", parens $ 
+          "fn y__ => " <> quotePrint ", " <> printerTy1 ut "y__"
+        , "xs__"
+        ]
+      , "print \")\""
+      ]
+  PDictTy _ut _ut' -> _
+  ListTy ut -> 
+    parens $ hsep
+      [ quotePrint "["
+      , toss $ hsep [ "case", d, "of"
+        , "[] -> ()"
+        , "| [x__] ->", printerTy1 ut "x__"
+        , "| [x__ :: xs__] ->"
+        , toss $ printerTy1 ut "x__"
+        , "list.app", parens $ 
+          "fn y__ => " <> quotePrint ", " <> printerTy1 ut "y__"
+        , "xs__"
+        ]
+      , "print \"]\""
+      ]
+  ArenaTy -> _
+  SymSetTy -> _
+  SymHashTy -> _
+  IntHashTy -> _
+  PtrTy -> _
+  CursorTy -> _
+
+printer :: Doc -> Doc -> Doc
+printer p d = parens $ "print" <> parens (p <> ".toString" <> parens d)
+
+toss :: Doc -> Doc
+toss s = "let val _ = " <> s <> " in "
+justPrint :: Doc -> Doc
+justPrint s = toss $ "print " <> s
+quotePrint :: Doc -> Doc
+quotePrint = justPrint . quotes
 
 qsort :: Doc
 qsort = parens $ text
