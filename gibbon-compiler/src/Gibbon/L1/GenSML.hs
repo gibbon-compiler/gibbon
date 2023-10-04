@@ -187,7 +187,7 @@ ppPrim pr pes = case pr of
   PrintInt -> printer "Int" $ ppE $ head pes
   PrintChar -> printer "Char" $ ppE $ head pes
   PrintFloat -> printer "Float" $ ppE $ head pes
-  PrintBool -> printer "Bool" $ ppE $ head pes
+  PrintBool -> ppAp "(fn true => \"True\" | false => \"False\")" pes
   PrintSym -> ppAp "print" pes
   ReadInt -> error "ReadInt"  -- Have every program read from stdin?
   DictInsertP _ -> error "DictInsertP"
@@ -377,7 +377,7 @@ printerTy1 ty1 d = case ty1 of
   CharTy -> printer "Char" d
   FloatTy -> printer "Float" d
   SymTy -> _
-  BoolTy -> printer "Bool" d
+  BoolTy -> parens $ "(fn true => print \"True\" | false => print \"False\") " <> d
   ProdTy uts -> 
     parens $ hsep
       [ "case", d, "of"
