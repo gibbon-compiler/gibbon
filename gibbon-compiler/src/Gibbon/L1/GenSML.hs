@@ -316,8 +316,8 @@ reduceFunDefs keyword funDef doc =
 ppMainExpr :: Maybe (Exp1, Ty1) -> Doc
 ppMainExpr opt = case opt of
   Nothing -> mempty
-  Just (exp0, _) -> 
-    "val _ = " <> ppE exp0 <> semi
+  Just (exp1, ty1) -> 
+    "val _ = " <> printerTy1 ty1 (ppE exp1) <> semi
     <> "\nval _ = print \"\\n\""
 
 ppDDefs :: DDefs1 -> Doc
