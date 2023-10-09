@@ -13,6 +13,7 @@
 # POINTER
 # PARALLEL
 # BUMPALLOC
+# PAPI
 #
 #
 # GC toggles:
@@ -65,6 +66,10 @@ ifeq ($(POINTER), 1)
 	CFLAGS += -D_GIBBON_POINTER
 endif
 
+ifeq ($(PAPI), 1)
+	CFLAGS += -D_GIBBON_ENABLE_PAPI
+endif
+
 ifeq ($(PARALLEL), 1)
 	CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
 endif
@@ -106,7 +111,6 @@ NAME              := gibbon_rts
 RUST_RTS_SO       := libgibbon_rts_ng.so
 RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
 RUST_SOURCES      := $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
-
 
 all: rts
 
@@ -150,7 +154,7 @@ $(C_RTS_DIR)/$(NAME).o: FORCE
 
 $(BUILD_DIR)/%.h: $(C_RTS_DIR)/%.h
 	mkdir -p $(BUILD_DIR) && \
-	ln -s $^ $@
+	ln -s -f $^ $@
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)

@@ -31,6 +31,7 @@
  * _GIBBON_PARALLEL          parallel mode
  * _GIBBON_EAGER_PROMOTION   disable eager promotion if set to 0
  * _GIBBON_SIMPLE_WRITE_BARRIER disable eliminate-indirection-chains optimization
+ * _GIBBON_ENABLE_PAPI           enable instrumentation via papi
  *
  */
 
@@ -129,6 +130,8 @@ char *gib_read_bench_prog_param(void);
 char *gib_read_benchfile_param(void);
 char *gib_read_arrayfile_param(void);
 uint64_t gib_read_arrayfile_length_param(void);
+uint64_t get_papi_region_id(void);
+void increment_papi_region_id(void);
 
 // Number of regions allocated.
 int64_t gib_read_region_count(void);

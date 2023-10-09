@@ -42,6 +42,7 @@ data GeneralFlag
   | Opt_Packed_SoA         -- ^ Use packed representation but use a structure of arrays representation for the datatype
   | Opt_No_RAN             -- ^ Don't use shortcut pointers instead use extra traversals to reach get endwitness
   | Opt_UseMutableCursors  -- ^ Use Mutable Cursors instead of Immutable Cursors, this allows inplace updates to the Packed Cursor values.
+  | Opt_PapiInstrumentation -- ^ Enable PAPI instrumentation while compiling the gibbon binary.
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
   deriving (Show,Read,Eq,Ord)
 
@@ -124,8 +125,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_No_RAN (long "no-ran" <>
                                          help "Don't use RAN pointers, instead, use extra traversals.") <|>
                    flag' Opt_UseMutableCursors (long "use-mutable-cursors" <> help "Use Mutable Cursors Instead of Immutable Cursors.") <|>
-                   flag' Opt_TailCallOptimize (long "tail-call-optimize" <> help "Run the oprimization pass to optimize functions that are tail recursive.")
-                                         
+                   flag' Opt_TailCallOptimize (long "tail-call-optimize" <> help "Run the oprimization pass to optimize functions that are tail recursive.") <|>
+                   flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
                                             help "Dump some information while running RepairProgram") <|>

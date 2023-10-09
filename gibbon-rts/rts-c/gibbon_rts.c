@@ -35,8 +35,9 @@
 #include <cilk/cilk_api.h>
 #endif
 
-
-
+#ifdef _GIBBON_ENABLE_PAPI
+#include <papi.h>
+#endif
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Globals and their accessors
@@ -61,6 +62,8 @@ static int64_t gib_global_region_count = 0;
 // Invariant: should always be equal to max(sym_table_keys).
 static GibSym gib_global_gensym_counter = 0;
 
+//PAPI: specify the region to instrument
+static uint64_t papi_region_id = 0;
 
 
 size_t gib_get_biginf_init_chunk_size(void)
@@ -138,6 +141,16 @@ static inline size_t gib_align_up_sz_rt(size_t n, size_t a) {
 
 static inline uintptr_t gib_align_up_ptr_rt(uintptr_t p, uintptr_t a) {
     return (p + (a - 1)) & ~(a - 1);
+}
+
+uint64_t get_papi_region_id(void)
+{
+    return papi_region_id;
+}
+
+void increment_papi_region_id(void)
+{
+    papi_region_id++;
 }
 
 
