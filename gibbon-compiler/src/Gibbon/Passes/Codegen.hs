@@ -329,6 +329,9 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <cilk/cilk.h>\n\
         \#include <cilk/cilk_api.h>\n\
         \#endif\n\n\
+        \#ifdef _GIBBON_ENABLE_PAPI\n\
+        \#include <papi.h>\n\
+        \#endif\n\n\
         \/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
         \ * Program starts here\n\
         \ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
@@ -669,6 +672,8 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
        times <- gensym "times"
        tmp <- gensym "tmp"
        empty <- gensym "e" 
+       papi_retval <- gensym "papi_retval"
+       papi_region <- gensym "papi_region"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> empty
@@ -699,13 +704,36 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                        , C.BlockStm [cstm| printf("itertime: %lf\n", $id:itertime); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
-                            in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body } |]
-                               , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
-                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
-                               , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
-                               , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]
-                               , C.BlockStm [cstm| gib_print_timing_array($id:times); |]
-                               , C.BlockStm [cstm| gib_vector_free($id:times); |]
+                                -- TODO: Find a better way to get a name for the region id.                                
+                                ifdef = "#ifdef _GIBBON_ENABLE_PAPI"
+                                endif = "#endif"
+                                body' = [   C.BlockStm [cstm| $escstm:ifdef |]
+                                          , C.BlockStm [cstm| sprintf($id:papi_region, "%d", get_papi_region_id());|]
+                                          , C.BlockDecl [cdecl| int $id:papi_retval = PAPI_hl_region_begin($id:papi_region);|]
+                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                                exit(1);
+                                                                } |]
+                                          , C.BlockStm [cstm| $escstm:endif |]
+                                        ] ++ 
+                                        body ++ 
+                                        [   C.BlockStm [cstm| $escstm:ifdef |]
+                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_hl_region_end($id:papi_region);|]
+                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                                exit(1);
+                                                                } |]
+                                          , C.BlockStm [cstm| increment_papi_region_id(); |]
+                                          , C.BlockStm [cstm| $escstm:endif |]
+                                        ]                                        
+                            in [  C.BlockStm [cstm| $escstm:ifdef |]
+                                , C.BlockDecl [cdecl| char $id:papi_region[128];|]
+                                , C.BlockStm [cstm| $escstm:endif |]
+                                , C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                                , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
+                                , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
+                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
+                                , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]
+                                , C.BlockStm [cstm| gib_print_timing_array($id:times); |]
+                                , C.BlockStm [cstm| gib_vector_free($id:times); |]
                                ])
 
                          -- else

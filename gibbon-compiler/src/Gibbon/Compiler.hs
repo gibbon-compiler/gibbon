@@ -381,6 +381,7 @@ compileRTS Config{verbosity,optc,dynflags} = do
                  ++ (if pointer then " POINTER=1 " else "")
                  ++ (if parallel then " PARALLEL=1 " else "")
                  ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
+                 ++ (if papi then " PAPI=1 " else "")
                  ++ (" USER_CFLAGS=\"" ++ optc ++ "\"")
                  ++ (" VERBOSITY=" ++ show verbosity)
   execCmd
@@ -396,6 +397,7 @@ compileRTS Config{verbosity,optc,dynflags} = do
     rts_debug = gopt Opt_RtsDebug dynflags
     print_gc_stats = gopt Opt_PrintGcStats dynflags
     genGC = gopt Opt_GenGc dynflags
+    papi = gopt Opt_PapiInstrumentation dynflags
 
 
 -- | Compile and run the generated code if appropriate
@@ -430,6 +432,10 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         links = if pointer
                 then " -lgc -lm "
                 else " -lm "
+        papi = gopt Opt_PapiInstrumentation (dynflags cfg)
+        links' = if papi 
+                 then links ++ "-l:libpapi.a "
+                 else links
         compile_program = do
             compileRTS cfg
             lib_dir <- getRTSBuildDir
@@ -440,7 +446,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                                    ++" -L" ++ lib_dir
                                    ++ " -Wl,-rpath=" ++ lib_dir ++ " "
                                    ++ outfile ++ " " ++ rts_o_path
-                                   ++ links ++ " -lgibbon_rts_ng"
+                                   ++ links' ++ " -lgibbon_rts_ng"
 
             execCmd
               Nothing
@@ -528,6 +534,7 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++ (if not genGC then " -D_GIBBON_GENGC=0 " else " -D_GIBBON_GENGC=1 ")
                           ++ (if simpleWriteBarrier then " -D_GIBBON_SIMPLE_WRITE_BARRIER=1 " else " -D_GIBBON_SIMPLE_WRITE_BARRIER=0 ")
                           ++ (if lazyPromote then " -D_GIBBON_EAGER_PROMOTION=0 " else " -D_GIBBON_EAGER_PROMOTION=1 ")
+                          ++ (if papi then " -D_GIBBON_ENABLE_PAPI " else "")
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
@@ -538,6 +545,7 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         genGC = gopt Opt_GenGc dflags
         simpleWriteBarrier = gopt Opt_SimpleWriteBarrier dflags
         lazyPromote = gopt Opt_NoEagerPromote dflags
+        papi = gopt Opt_PapiInstrumentation dflags
 
 -- |
 isBench :: Mode -> Bool
