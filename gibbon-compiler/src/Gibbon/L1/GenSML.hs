@@ -383,13 +383,13 @@ printerTy1 ty1 d = case ty1 of
       [ "case", d, "of"
       , parens $ interleave comma $ ("x__" <>) . int . fst <$> zip [1..] uts
       , "-> let"
-      , "val _ = print \"(\""
+      , "val _ = print \"#(\""
       , foldMap ppSub $ zip [1..] uts
       , "val _ = print \")\""
       , "in ()"
       ]
     where
-      ppSub (i, x) = "val _ = " <> printerTy1 x ("x__" <> int i)
+      ppSub (i, x) = "val _ = " <> printerTy1 x ("x__" <> int i) <> "val _ = print \" \""
   SymDictTy _m_var _ut -> _
   PackedTy s () -> "internal_print_" <> text s <> parens d
   VectorTy ut -> 
