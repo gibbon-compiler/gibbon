@@ -377,12 +377,15 @@ printerTy1 ty1 d = case ty1 of
   FloatTy -> printer "Float" d
   SymTy -> _
   BoolTy -> parens $ "(fn true => print \"True\" | false => print \"False\") " <> d
+  ProdTy [] -> "let val () = " <> d <> " in (print \"#()\") end"
   ProdTy uts -> 
     parens $ hsep
       [ "case", d, "of"
       , parens $ interleave comma $ ("x__" <>) . int . fst <$> zip [1..] uts
       , "-> let"
+      , "val _ = print \"(\""
       , foldMap ppSub $ zip [1..] uts
+      , "val _ = print \")\""
       , "in ()"
       ]
     where
