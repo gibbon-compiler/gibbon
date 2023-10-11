@@ -389,7 +389,11 @@ printerTy1 ty1 d = case ty1 of
       , "in ()"
       ]
     where
-      ppSub (i, x) = "val _ = " <> printerTy1 x ("x__" <> int i) <> "val _ = print \" \""
+      ppSub (i, x) = hsep
+        [ "val _ ="
+        , printerTy1 x $ "x__" <> int i
+        , "val _ = print \" \""
+        ]
   SymDictTy _m_var _ut -> _
   PackedTy s () -> "internal_print_" <> text s <> parens d
   VectorTy ut -> 
