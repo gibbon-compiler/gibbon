@@ -642,7 +642,7 @@ genNewProducersAndRewriteProgram
       Nothing ->
         error "genNewProducersAndRewriteProgram : Program has no main expression."
       Just (mexp, ty) ->
-        let variablesAndProducers = getVariableAndProducer funName pmap venv ddefs newDataConName mexp
+        let variablesAndProducers = removeDuplicates $ getVariableAndProducer funName pmap venv ddefs newDataConName mexp
          in case variablesAndProducers of
               [] -> prg --error "no variable and producers found to modify"
               [(var, producer)] ->
@@ -692,10 +692,10 @@ genNewProducersAndRewriteProgram
                                 mainExp = Just (newMainExp, ty)
                               }
                       _ -> error ""
-              x : xs -> error "more than one variable and producer not handled yet."
+              x : xs -> error ("more than one variable and producer not handled yet." ++ show variablesAndProducers)
 
 -- Function to find the the variable/s that have the type that's being optimized for the given function f
--- Also return the producer of those variable/s
+-- Also return the producer of) those variable/s
 -- Arguments
 -- Var -> Name of the function being optimized
 -- pmap -> variable to producer map
@@ -1192,6 +1192,11 @@ deleteOne x (y : ys) = y : deleteOne x ys -- Drop one, but not this one (doesn't
 deleteMany :: (Eq a) => [a] -> [a] -> [a]
 deleteMany [] = id -- Nothing to delete
 deleteMany (x : xs) = deleteMany xs . deleteOne x -- Delete one, then the rest.
+
+removeDuplicates :: Eq a => [a] -> [a]
+removeDuplicates list = case list of 
+                                []   -> []
+                                a:as -> a:removeDuplicates (P.filter (/=a) as)
 
 fillminus1 :: [Int] -> [Int] -> [Int]
 fillminus1 lst indices =
