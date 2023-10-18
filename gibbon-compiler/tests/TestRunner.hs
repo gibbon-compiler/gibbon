@@ -168,7 +168,7 @@ instance FromJSON Mode where
     parseJSON oth = error $ "Cannot parse Mode: " ++ show oth
 
 allModes :: [Mode]
-allModes = [minBound ..]
+allModes = filter (/= MPL) [minBound ..]  -- all modes does not include MPL
 
 readMode :: T.Text -> Mode
 readMode s =
