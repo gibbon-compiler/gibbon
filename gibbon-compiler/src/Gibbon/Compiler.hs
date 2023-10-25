@@ -649,6 +649,7 @@ passes config@Config{dynflags} l0 = do
           should_fuse = gopt Opt_Fusion dynflags
           opt_layout_local = gopt Opt_Layout_Local dynflags
           opt_layout_global = gopt Opt_Layout_Global dynflags
+          use_solver = gopt Opt_Layout_Use_Solver dynflags
           tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
@@ -698,12 +699,12 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l1 <- if opt_layout_local 
                     then do 
-                         after_layout_out <- goE1 "optimizeADTLayoutLocal" locallyOptimizeDataConLayout l1
+                         after_layout_out <- goE1 "optimizeADTLayoutLocal" (locallyOptimizeDataConLayout (not use_solver)) l1
                          flatten_after_opt <- goE1 "L1.flatten2" flattenL1 after_layout_out
                          pure flatten_after_opt
                     else if opt_layout_global
                     then do 
-                         after_layout_out <- goE1 "optimizeADTLayoutGlobal" globallyOptimizeDataConLayout l1
+                         after_layout_out <- goE1 "optimizeADTLayoutGlobal" (globallyOptimizeDataConLayout (not use_solver)) l1 
                          flatten_after_opt <- goE1 "L1.flatten2" flattenL1 after_layout_out
                          pure flatten_after_opt
                     else return l1 
