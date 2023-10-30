@@ -84,7 +84,7 @@ getGreedyOrder edges fieldLength =
                   completeOrder = P.foldl (\lst val -> if S.member val (S.fromList lst) then lst
                                                  else lst ++ [val]
                                     ) partial_order [0 .. (fieldLength - 1)]
-                in dbgTraceIt (sdoc (edges, completeOrder)) P.map P.toInteger completeOrder
+                in P.map P.toInteger completeOrder --dbgTraceIt (sdoc (edges, completeOrder)) P.map P.toInteger completeOrder
 
 greedyOrderOfVertices :: [((Integer, Integer), Integer)] -> [Int]
 greedyOrderOfVertices ee = let     edges' = P.map (\((a, b), c) -> ((P.fromIntegral a, P.fromIntegral b), P.fromIntegral c)) ee
@@ -244,7 +244,7 @@ freeVarsInOrder exp =
           var_list = L.concat var_list_list
        in var_list
     ProjE i e -> error "freeVarsInOrder: TODO ProjE"
-    TimeIt e ty b -> error "freeVarsInOrder: TODO TimeIt"
+    TimeIt e ty b -> freeVarsInOrder e
     WithArenaE v e -> error "freeVarsInOrder: TODO WithArenaE"
     SpawnE f locs args -> error "freeVarsInOrder: TODO SpawnE"
     SyncE -> error "freeVarsInOrder: TODO SyncE"
