@@ -18,7 +18,7 @@ import           Data.Set               as S
 
 -- Haskell Imports
 import           Prelude                as P
-
+import           Text.PrettyPrint.GenericPretty
 
 -- | CFGfunctionMap ex, a map storing a function, represented by Var (function name) to its control flow graph
 -- | Edge == (ex, Integer) the IR expression and its corresponding probability
@@ -58,11 +58,11 @@ type CFGfunctionMap ex
 
 -- | Generate a CFG out of a Function definition.
 -- | Returns a map mapping a function to its corresponding CFG
-getFunctionCFG :: FunDef (PreExp e l d) -> CFGfunctionMap (PreExp e l d)
+getFunctionCFG :: (Out l, Out d, Out (e l d)) => FunDef (PreExp e l d) -> CFGfunctionMap (PreExp e l d)
 getFunctionCFG f@FunDef {funName, funBody, funTy, funArgs} =
   let (edgeList, _, _) = generateCFGExp 0 100 funBody
       (graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-   in M.insert funName (graph, nodeFromVertex, vertexFromKey) (M.empty)
+   in  M.insert funName (graph, nodeFromVertex, vertexFromKey) (M.empty) --dbgTraceIt (sdoc edgeList)
 
 
 -- | generate the Edges from the IR expression.

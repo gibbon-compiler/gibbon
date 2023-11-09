@@ -746,7 +746,7 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                         justVariables = Maybe.catMaybes potentialVarsOfTy
                      in if P.null justVariables
                           -- dbgTraceIt (sdoc (funName, dconName, args, venv))
-                          then error "getVariableAndProducer: no variables of Ty to optimize found!"
+                          then Nothing-- dbgTraceIt (sdoc (funName, dconName, args, venv)) error "getVariableAndProducer: no variables of Ty to optimize found!"
                           else
                             if P.length justVariables > 1
                               then error "getVariableAndProducer: More than one variable of the type being optimized is passed to function call. Not implemented yet!"
