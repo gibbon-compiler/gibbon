@@ -1,14 +1,14 @@
 let
   moz_overlay = import (builtins.fetchGit {
-                   name = "nixpkgs-mozilla-2023-07-05";
-                   url = "https://github.com/ckoparkar/nixpkgs-mozilla";
-                   # Commit hash for nixos as of 2023-07-05
+                   name = "nixpkgs-mozilla-2023-11-13";
+                   url = "https://github.com/mozilla/nixpkgs-mozilla";
                    ref = "refs/heads/master";
-                   rev = "26402a0a438220e418c31a2c93c15f319d19527a";
+                   # Most recent commit hash as of 2023-11-13
+                   rev = "6eabade97bc28d707a8b9d82ad13ef143836736e";
                  });
   pkgs = import (builtins.fetchGit {
                    url = "https://github.com/nixos/nixpkgs/";
-                   ref = "refs/tags/22.11";
+                   ref = "refs/tags/23.05";
                  }) { overlays = [ moz_overlay ]; };
   stdenv = pkgs.overrideCC pkgs.stdenv pkgs.gcc7;
   ghc = pkgs.haskell.compiler.ghc94;
