@@ -97,7 +97,7 @@ greedyOrderOfVertices ee = let     edges' = P.map (\((a, b), c) -> ((P.fromInteg
                                    graph = buildG bounds edgesWithoutWeight
                                    weightMap = P.foldr (\(e, w) mm -> M.insert e w mm) M.empty edges'
                                    v'' = greedyOrderOfVerticesHelper graph (topSort graph) weightMap S.empty
-                                in v'' -- dbgTraceIt (sdoc ((topSort graph), (M.elems weightMap))) dbgTraceIt (sdoc (v'', (M.elems weightMap)))
+                                in v'' -- dbgTraceIt (sdoc (v'', (M.elems weightMap)))
 
 
 greedyOrderOfVerticesHelper :: Graph -> [Int] -> M.Map (Int, Int) Int -> S.Set Int -> [Int]
@@ -105,26 +105,14 @@ greedyOrderOfVerticesHelper graph vertices' weightMap visited = case vertices' o
   [] -> []
   x:xs -> if S.member x visited
           then greedyOrderOfVerticesHelper graph xs weightMap visited
-          else let successors = succGraph x (G.edges graph) visited
+          else let successors = reachable graph x
                    removeCurr = S.toList $ S.delete x (S.fromList successors)
                    orderedSucc = orderedSuccsByWeight removeCurr x weightMap visited
-                   visited' = P.foldr S.insert visited orderedSucc
+                   visited' = P.foldr S.insert S.empty orderedSucc
                    v'' = greedyOrderOfVerticesHelper graph xs weightMap visited'
-                in  [x] ++ orderedSucc ++ v'' 
-                   -- dbgTraceIt (sdoc (x, successors, removeCurr, orderedSucc, v'', S.toList visited' , S.toList visited ))
-                   --then dbgTraceIt (sdoc (x, successors, removeCurr, orderedSucc, v'', S.toList visited')) orderedSucc ++ v'' --dbgTraceIt (sdoc (v'', orderedSucc))
-                   --else dbgTraceIt (sdoc (x, successors, removeCurr, orderedSucc, v'', S.toList visited')) [x] ++ orderedSucc ++ v''
-
-
-succGraph :: Int -> [(Int, Int)] -> S.Set Int -> [Int]
-succGraph node edges visited = case edges of 
-  [] -> [] 
-  (a, b):xs -> if S.member b visited || S.member a visited
-               then succGraph node xs visited
-               else 
-                if node == a then [b] ++ succGraph node xs visited
-                else succGraph node xs visited
-               
+                in if successors == [x] 
+                   then orderedSucc ++ v'' --dbgTraceIt (sdoc (v'', orderedSucc))
+                   else [x] ++ orderedSucc ++ v''
 
 orderedSuccsByWeight :: [Int] -> Int -> M.Map (Int, Int) Int -> S.Set Int -> [Int]
 orderedSuccsByWeight s i weightMap visited = case s of
@@ -283,7 +271,7 @@ removeDuplicates list =
 -- | a.) Multiple datacon fields read in the same expression.
 -- | Since this will be run after flatten, it is safe to assume that only possibly a maximum of two variables can be read in one let binding.
 -- | Except function calls! where more than two fields can be passed as arguments.
-evaluateExpressionFieldGraph :: (Out l, Out d, Out (e l d)) =>
+evaluateExpressionFieldGraph ::
   Maybe (DataCon, Integer) ->
   (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer])) ->
   (Integer -> Maybe G.Vertex) ->
@@ -428,10 +416,7 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                       {- list of tuples, where each tuple == ([(dcon, id), ... ], likelihood)    -}
                       succDataCon' =
                         P.zipWith (\x y -> (x, y)) succDataCon succprob
-                      -- FIXME: TODO: This might be needed for the other cases in this function as well. 
-                      -- This is to make sure we recurse on all possible successors. 
-                      newEdges' = constructFieldGraph (Just (dcon, pred)) nodeFromVertex vertexFromNode graph succVertices map datacon 
-                      newEdges = newEdges' ++ ( 
+                      newEdges =
                         P.concat $
                           P.map
                             ( \x ->
@@ -439,11 +424,11 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                                   (varsl, prob) ->
                                     P.map (\y -> ((pred, snd y), prob)) varsl
                             )
-                            succDataCon' )
+                            succDataCon'
                    in case newEdges of
                         [] ->
                           case successors of
-                            [] -> --dbgTraceIt (sdoc (currField, succVertices, newEdges, newEdges'))
+                            [] ->
                               []
                                 ++ constructFieldGraph
                                   Nothing
@@ -453,7 +438,7 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                                   xs
                                   map
                                   datacon
-                            _ -> --dbgTraceIt (sdoc (currField, succVertices, newEdges, newEdges'))
+                            _ ->
                               newEdges
                                 ++ constructFieldGraph
                                   (Just (dcon, pred))
@@ -463,7 +448,7 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                                   xs
                                   map
                                   datacon
-                        _ -> --dbgTraceIt (sdoc (currField, succVertices, newEdges, newEdges'))
+                        _ ->
                           newEdges
                             ++ constructFieldGraph
                               Nothing
@@ -526,7 +511,7 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
               error
                 "evaluateExpressionFieldGraph: More than one variable from DataCon in a let binding not modelled into Field dependence graph yet!"
 
-constructFieldGraph :: (Out l, Out d, Out (e l d)) =>
+constructFieldGraph ::
   Maybe (DataCon, Integer) ->
   (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer])) ->
   (Integer -> Maybe G.Vertex) ->
@@ -709,7 +694,7 @@ constructFieldGraph currField nodeFromVertex vertexFromNode graph progress map d
             _ -> error "not expected"
 
 -- | From an expression provided, Recursively find all the variables that come from a DataCon expression, that is, are fields in a DataConE.
-findFieldInDataConFromVariableInExpression :: (Out l, Out d, Out (e l d)) =>
+findFieldInDataConFromVariableInExpression ::
   (PreExp e l d) ->
   [(((PreExp e l d), Integer), Integer, [Integer])] ->
   VariableMap ->
@@ -737,7 +722,7 @@ findFieldInDataConFromVariableInExpression exp graph map datacon =
       let freeVars = freeVarsInOrder rhs
           fromDataCon = P.map (\v -> M.findWithDefault Nothing v map) freeVars
           removeMaybe = Mb.catMaybes fromDataCon
-          newDatacons = --dbgTraceIt (sdoc (v, freeVars))
+          newDatacons =
             [ if dcon == datacon
                 then Just (dcon, id')
                 else Nothing
