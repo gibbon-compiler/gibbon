@@ -25,10 +25,12 @@ similar to Typed Racket, and a small subset of Haskell.
 
 ## Building Gibbon
 
-Gibbon is implemented in Haskell, and is set up to be built with
-[Cabal](https://cabal.readthedocs.io/en/3.4/).
+### Getting Dependencies
 
-Follow the instructions below to have all dependencies. 
+Gibbon is implemented in Haskell, and is set up to be built with
+[Cabal](https://cabal.readthedocs.io/en/latest/), but it has a number of native dependencies.
+Follow the instructions below to get all dependencies or enter the Nix shell
+with `nix-shell` to get them via [Nix](https://nix.dev/).
 
 - Ubuntu 22.04:
 (Parallelism support temporarily not available with ubuntu 22.04 as Cilk support is not avaiable with newer gcc)
@@ -77,24 +79,25 @@ Others require a few extra steps:
 
 2. [uthash](https://github.com/troydhanson/uthash): Clone the [repository](https://github.com/troydhanson/uthash) and copy all the `.h` files in `src` to `/usr/local/include`
 
+### Actually Building Gibbon
 
 After you have both Cabal and all the dependencies installed, you can build
 Gibbon from source:
 
     $ git clone https://github.com/iu-parfunc/gibbon
     $ cd gibbon && source set_env.sh
-    $ cd gibbon-compiler && cabal v2-build . -w ghc-9.4.6
+    $ cd gibbon-compiler && cabal v2-build
 
 At this point you can run the Gibbon executable:
 
-    $ cabal v2-exec -w ghc-9.4.6 gibbon -- -h
+    $ cabal v2-run gibbon -- -h
 
 If you'd like to run the testsuite, you can do so with:
 
-    $ cd $GIBBONDIR && ./run_all_tests.sh
+    $ ./run_all_tests.sh
 
 
-## Building a Developement docker container for Gibbon 
+### Building a Developement docker container for Gibbon 
 
 To build the Dockerfile for dev purposes run the command below from the gibbon directory.
 
