@@ -4,6 +4,7 @@ import GenerateLayout1
 type Text   = Vector Char
 
 emphKeywordInContent :: Text -> Blog -> Blog
+{-# ANN emphKeywordInContent Layout1 #-}
 emphKeywordInContent keyword blogs = 
    case blogs of 
       End -> End 
