@@ -104,7 +104,11 @@ generateDefUseChainsFunction ::
 generateDefUseChainsFunction env f@FunDef {funName, funBody, funTy, funArgs} =
   let edgeList = generateDefUseChainsFunBody env funBody
       (graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-   in   M.insert
+   in dbgTraceIt
+        (sdoc edgeList)
+        dbgTraceIt
+        ("\n")
+        M.insert
         funName
         (graph, nodeFromVertex, vertexFromKey)
         M.empty
@@ -115,7 +119,7 @@ getDefinitionsReachingLetExp :: (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Ou
 getDefinitionsReachingLetExp f@FunDef {funName, funBody, funTy, funArgs} =
   let edgeList = generateUseDefChainsFunBody M.empty funBody
       (graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-    in M.insert funName (graph, nodeFromVertex, vertexFromKey) M.empty
+    in dbgTraceIt (sdoc edgeList) dbgTraceIt ("\n") M.insert funName (graph, nodeFromVertex, vertexFromKey) M.empty
 
 
 
@@ -128,7 +132,11 @@ generateDefUseChainsExp ::
 generateDefUseChainsExp env key expr =
   let edgeList = generateDefUseChainsFunBody env expr
       (graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-   in M.insert
+   in dbgTraceIt
+        (sdoc edgeList)
+        dbgTraceIt
+        ("\n")
+        M.insert
         key
         (graph, nodeFromVertex, vertexFromKey)
         M.empty
@@ -342,11 +350,3 @@ getDefUseChainsVar var exp isReDefined =
     MapE {} -> error "getDefUseChainsVar: TODO MapE"
     FoldE {} -> error "getDefUseChainsVar: TODO FoldE"
     Ext _ -> error "getDefUseChainsVar: TODO Ext"
-
-
-
--- TODO: 
--- For UseDefChains, add variables introduced in case expressions.
--- successors are expressions that use those expressions, make this recursive.
--- remove all let binds 
--- then release let binds using gFreeVars
