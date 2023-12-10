@@ -5,8 +5,6 @@
 {-# HLINT ignore "Use tuple-section" #-}
 module Gibbon.Passes.OptimizeADTLayout
   ( optimizeADTLayout,
-    globallyOptimizeDataConLayout,
-    locallyOptimizeDataConLayout
   )
 where
 
@@ -123,54 +121,19 @@ optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
     --                 pmap
     --                 p
     --         pure prg'
-      --prg' <- runUntilFixPoint prg
-      globallyOptimizeDataConLayout prg
-      --pure prg'
+      prg' <- runUntilFixPoint prg 
+      pure prg'
             --generateCopyFunctionsForFunctionsThatUseOptimizedVariable (toVar funcName) (dcon ++ "Optimized") fieldorder prg'
       --_ -> error "OptimizeFieldOrder: handle user constraints"
 
 
-locallyOptimizeDataConLayout :: Prog1 -> PassM Prog1 
-locallyOptimizeDataConLayout prg1 = do 
-  runUntilFixPoint prg1
-
-
-
-runUntilFixPoint :: Prog1 -> PassM Prog1
-runUntilFixPoint prog1 = do
-  prog1' <- producerConsumerLayoutOptimization prog1
+runUntilFixPoint :: Prog1 -> PassM Prog1 
+runUntilFixPoint prog1 = do 
+  prog1' <- producerConsumerLayoutOptimization prog1 
   prog1'' <- flattenL1 prog1'
-  if prog1 == prog1''
-  then return prog1
-  else runUntilFixPoint prog1''
-
-
-dataConsInFunBody :: Exp1 -> S.Set DataCon
-dataConsInFunBody funBody = case funBody of
-            DataConE _ dcon args -> let dcons = S.unions $ P.map dataConsInFunBody args
-                                      in S.union (S.singleton dcon) dcons
-            VarE {} -> S.empty
-            LitE {} -> S.empty
-            CharE {} -> S.empty
-            FloatE {} -> S.empty
-            LitSymE {} -> S.empty
-            AppE f locs args -> S.unions $ P.map dataConsInFunBody args
-            PrimAppE f args -> S.unions $ P.map dataConsInFunBody args
-            LetE (v, loc, ty, rhs) bod -> S.union (dataConsInFunBody rhs) (dataConsInFunBody bod)
-            -- a == DataCon
-            -- b == [(Var, loc)]
-            -- c == Case Body
-            CaseE scrt mp -> S.unions $ P.map (\(a, b, c) -> S.union (S.singleton a) (dataConsInFunBody c)) mp
-            IfE a b c -> S.unions $ [dataConsInFunBody a] ++ [dataConsInFunBody b] ++ [dataConsInFunBody c]
-            MkProdE xs -> S.unions $ P.map dataConsInFunBody xs
-            ProjE i e -> error "getGeneratedVariable: TODO ProjE"
-            TimeIt e ty b -> error "getGeneratedVariable: TODO TimeIt"
-            WithArenaE v e -> error "getGeneratedVariable: TODO WithArenaE"
-            SpawnE f locs args -> error "getGeneratedVariable: TODO SpawnE"
-            SyncE -> error "getGeneratedVariable: TODO SyncE"
-            Ext _ -> error "getGeneratedVariable: TODO Ext"
-            MapE {} -> error "getGeneratedVariable: TODO MapE"
-            FoldE {} -> error "getGeneratedVariable: TODO FoldE"
+  if prog1 == prog1'' 
+  then return prog1 
+  else runUntilFixPoint prog1'' 
 
 producerConsumerLayoutOptimization :: Prog1 -> PassM Prog1
 producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
@@ -184,103 +147,55 @@ producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
   let linearizeDcons = P.concatMap (\(f, dcons) -> let l = S.toList dcons
                                                in P.map (\d -> (f, d)) l
                              ) pairDataConFuns
-  let lambda = (\(f@FunDef{funName=fname}, dcon) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> do
+  let lambda = (\(f@FunDef{funName=fname}, dcon) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> do   
                                    --let newDcon = dcon ++ "Optimized"
                                    newSymDcon  <- gensym (toVar dcon)
                                    -- dbgTraceIt (sdoc mexp) 
-                                   let maybeFd = M.lookup fname fds
-                                   let fd = case maybeFd of
-                                                  Just x -> x
+                                   let maybeFd = M.lookup fname fds 
+                                   let fd = case maybeFd of 
+                                                  Just x -> x 
                                                   Nothing -> error "producerConsumerLayoutOptimization: expected a function definition!!"
                                    let fieldOrder = getAccessGraph f dcon
                                    let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder
-                                   case result of
+                                   case result of 
                                      Nothing ->  pure pr --dbgTraceIt (sdoc (result, fname, fieldOrder)) 
-                                     Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds
+                                     Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds 
                                                                                fundefs'' = M.insert fname fundef' fundefs'
                                                                                p = Prog{ddefs = ddefs', fundefs = fundefs'', mainExp = mexp}
                                                                                venv = progToVEnv p
                                                                                pmap = generateProducerGraph p
-                                                                               prg' = genNewProducersAndRewriteProgram fname (fromVar newSymDcon) fieldorder venv pmap p
+                                                                               prg' = genNewProducersAndRewriteProgram fname (fromVar newSymDcon) fieldorder venv pmap p  
                                                                              in  pure prg' --dbgTraceIt (sdoc (result, fname, fundef', fieldOrder))
                 )
-  P.foldrM lambda prg linearizeDcons --dbgTraceIt (sdoc linearizeDcons)
+  P.foldrM lambda prg linearizeDcons --dbgTraceIt (sdoc linearizeDcons) 
+  where
+    dataConsInFunBody funBody = case funBody of
+            DataConE _ dcon args -> let dcons = S.unions $ P.map dataConsInFunBody args
+                                      in S.union (S.singleton dcon) dcons
+            VarE {} -> S.empty 
+            LitE {} -> S.empty 
+            CharE {} -> S.empty 
+            FloatE {} -> S.empty 
+            LitSymE {} -> S.empty 
+            AppE f locs args -> S.unions $ P.map dataConsInFunBody args  
+            PrimAppE f args -> S.unions $ P.map dataConsInFunBody args 
+            LetE (v, loc, ty, rhs) bod -> S.union (dataConsInFunBody rhs) (dataConsInFunBody bod) 
+            -- a == DataCon
+            -- b == [(Var, loc)]
+            -- c == Case Body
+            CaseE scrt mp -> S.unions $ P.map (\(a, b, c) -> S.union (S.singleton a) (dataConsInFunBody c)) mp
+            IfE a b c -> S.unions $ [dataConsInFunBody a] ++ [dataConsInFunBody b] ++ [dataConsInFunBody c]
+            MkProdE xs -> S.unions $ P.map dataConsInFunBody xs 
+            ProjE i e -> error "getGeneratedVariable: TODO ProjE"
+            TimeIt e ty b -> error "getGeneratedVariable: TODO TimeIt"
+            WithArenaE v e -> error "getGeneratedVariable: TODO WithArenaE"
+            SpawnE f locs args -> error "getGeneratedVariable: TODO SpawnE"
+            SyncE -> error "getGeneratedVariable: TODO SyncE"
+            Ext _ -> error "getGeneratedVariable: TODO Ext"
+            MapE {} -> error "getGeneratedVariable: TODO MapE"
+            FoldE {} -> error "getGeneratedVariable: TODO FoldE"
+            
 
-
-globallyOptimizeDataConLayout :: Prog1 -> PassM Prog1
-globallyOptimizeDataConLayout prg@Prog{ddefs, fundefs, mainExp} = do
-  -- TODO: make a custom function name printer that guarantees that functions starting with _ are auto-generated. 
-  let funsToOptimize = P.concatMap (\FunDef{funName} -> ([funName | not $ isInfixOf "_" (fromVar funName)])
-                                   ) $ M.elems fundefs
-  let pairDataConFuns = P.concatMap (\name -> case M.lookup name fundefs
-                                                       of Just f@FunDef{funName, funBody} -> [(f, dataConsInFunBody funBody)]
-                                                          Nothing -> []
-                                    ) funsToOptimize
-  let linearizeDcons = P.concatMap (\(f, dcons) -> let l = S.toList dcons
-                                               in P.map (\d -> (f, d)) l
-                                   ) pairDataConFuns
-  let clubSameDcons = P.foldr (\(f, dcon) map -> case M.lookup dcon map of
-                                                            Nothing -> M.insert dcon [f] map
-                                                            Just funList -> M.insert dcon (funList ++ [f]) map
-                              ) M.empty linearizeDcons
-
-  let lstElements = M.toList clubSameDcons
-
-  let dconToFieldOrder = P.map (\(dcon, funList) -> let allEdges = P.concatMap (\f@FunDef{funName} -> let dconmap  = getAccessGraph f dcon
-                                                                                                          maybeElem = M.lookup funName dconmap
-                                                                                                              in case maybeElem of
-                                                                                                                Nothing -> []
-                                                                                                                Just edgeLst -> fromMaybe [] (M.lookup dcon edgeLst)
-                                                                               ) funList
-                                                     in (dcon, allEdges)
-                               ) lstElements
-  -- Does not account for function weight as of the moment. 
-  let mergedEdges = P.foldr (\(dcon, edgeList) m'' -> let m' = P.foldr (\(a, b) m -> case M.lookup a m of
-                                                                             Nothing -> M.insert a b m
-                                                                             Just weight -> M.insert a (weight + b) m 
-                                                                                 
-                                                                 ) M.empty edgeList
-                                                                 
-                                                          e' = M.toList m'
-                                                        in M.insert dcon e' m''
-                          ) M.empty dconToFieldOrder
-
-
-  let funsToOptimizeTriple = P.concatMap (\(dcon, funList) -> let edges' = M.lookup dcon mergedEdges 
-                                                   in case edges' of 
-                                                           Nothing -> []
-                                                           Just x -> let m = M.insert dcon x M.empty
-                                                                         --lst = P.map (\f@FunDef{funName} -> (f, dcon, M.insert funName m M.empty)) funList
-                                                                        --in lst 
-                                                                        in [(funList, dcon, m)] 
-                             ) lstElements
-
-  let lambda' = (\(f@FunDef{funName=fname}, (dcon, newSymDcon), edgeOrder) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> do 
-                      let maybeFd = M.lookup fname fds
-                      let fieldOrder = M.insert fname edgeOrder M.empty
-                      let fd = case maybeFd of
-                                                  Just x -> x
-                                                  Nothing -> error "globallyOptimizeDataConLayout: expected a function definition!!" 
-                      let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder
-                      case result of
-                                     Nothing ->  pure pr 
-                                     Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds
-                                                                               fundefs'' = M.insert fname fundef' fundefs'
-                                                                               p = Prog{ddefs = ddefs', fundefs = fundefs'', mainExp = mexp}
-                                                                               venv = progToVEnv p
-                                                                               pmap = generateProducerGraph p
-                                                                               prg' = genNewProducersAndRewriteProgram fname (fromVar newSymDcon) fieldorder venv pmap p
-                                                                             in  pure prg'
-                ) 
-
-  let lambda = (\(fList, dcon, fieldOrder) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> do
-                                   newSymDcon  <- gensym (toVar dcon)
-                                   let vals = P.map (\f -> (f, (dcon, newSymDcon), fieldOrder)) fList 
-                                   P.foldrM lambda' pr vals  
-               )
-  
-
-  P.foldrM lambda prg funsToOptimizeTriple
 
 
 
@@ -438,56 +353,14 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
           FoldE {} -> error "findFunctionsUsingVar: TODO FoldE"
 
 getAccessGraph ::
-  FunDef1 ->
-  DataCon ->
-  FieldMap
-getAccessGraph
-  fundef
-  datacon =
+  FunDef1 -> 
+  DataCon -> 
+  FieldMap 
+getAccessGraph 
+  fundef 
+  datacon = 
     let cfg = getFunctionCFG fundef
       in generateAccessGraphs cfg M.empty fundef datacon
-
-
--- optimizeFunctionWRTDataConGlobal ::
---   DDefs1 ->
---   FunDef1 ->
---   DataCon ->
---   DataCon ->
---   FieldMap ->
---   Maybe (DDefs1, FunDef1, FieldOrder)
--- optimizeFunctionWRTDataConGlobal
---   ddefs
---   fundef@FunDef
---     { funName,
---       funBody,
---       funTy,
---       funArgs
---     }
---   datacon
---   newDcon
---   fieldMap =
---     let field_len = P.length $ snd . snd $ lkp' ddefs datacon
---         fieldorder =
---           optimizeDataConOrderFunc
---             fieldMap
---             M.empty
---             fundef
---             [(datacon, field_len)]
---             M.empty
---         -- make a function to generate a new data con as a value instead of changing the order of fields in the original one.
---         --[(dcon, order)] = M.toList fieldorder
---         --(newDDefs, newDcon) = optimizeDataCon (dcon, order) ddefs
---         --fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
---         --(newDDefs, fundef', fieldorder)
---       in case M.toList fieldorder of
---                   [] ->  Nothing --dbgTraceIt (sdoc fieldorder)
---                   [(dcon, order)] -> let orignal_order = [0..(P.length order - 1)]
---                                        in if orignal_order == P.map P.fromInteger order
---                                           then Nothing
---                                           else let newDDefs = optimizeDataCon (dcon, order) ddefs newDcon
---                                                    fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
---                                                  in Just (newDDefs, fundef', fieldorder) --dbgTraceIt (sdoc order) -- dbgTraceIt (sdoc fieldorder)
---                   _ -> error "more than one"
 
 
 
@@ -495,8 +368,8 @@ optimizeFunctionWRTDataCon ::
   DDefs1 ->
   FunDef1 ->
   DataCon ->
-  DataCon ->
-  FieldMap ->
+  DataCon -> 
+  FieldMap -> 
   Maybe (DDefs1, FunDef1, FieldOrder)
 optimizeFunctionWRTDataCon
   ddefs
@@ -522,16 +395,16 @@ optimizeFunctionWRTDataCon
         --(newDDefs, newDcon) = optimizeDataCon (dcon, order) ddefs
         --fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
         --(newDDefs, fundef', fieldorder)
-      in case M.toList fieldorder of
+      in case M.toList fieldorder of 
                   [] ->  Nothing --dbgTraceIt (sdoc fieldorder)
-                  [(dcon, order)] -> let orignal_order = [0..(P.length order - 1)]
-                                       in if orignal_order == P.map P.fromInteger order
-                                          then Nothing
+                  [(dcon, order)] -> let orignal_order = [0..(P.length order - 1)] 
+                                       in if orignal_order == P.map P.fromInteger order 
+                                          then Nothing 
                                           else let newDDefs = optimizeDataCon (dcon, order) ddefs newDcon
                                                    fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
                                                  in Just (newDDefs, fundef', fieldorder) --dbgTraceIt (sdoc order) -- dbgTraceIt (sdoc fieldorder)
-                  _ -> error "more than one"
-
+                  _ -> error "more than one"   
+                  
 
 changeCallNameInRecFunction ::
   Var -> FunDef1 -> FunDef1
@@ -651,7 +524,7 @@ genNewProducersAndRewriteProgram
                             var_order'' = P.zip var_order' depLets
                             newProducerBody'' = P.foldl (\fundef (insertPosition, dl) -> reOrderLetExp insertPosition dl fundef
                                                         ) funRemoveAllLets var_order''
-
+                            
                             fundefs' = M.delete newProducerName fundefs --dbgTraceIt (sdoc (newProducerName, newProducerBody''))
                             fundefs'' =
                               M.insert newProducerName newProducerBody'' fundefs'
@@ -728,31 +601,6 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                               then error "getVariableAndProducer: More than one variable of the type being optimized is passed to function call. Not implemented yet!"
                               else Just (P.head justVariables)
                   else Nothing
-              TimeIt e _ _ -> case e of 
-                                AppE f locs args -> if f == funName
-                                                    then
-                                                      let potentialVarsOfTy =
-                                                            P.map
-                                                              ( \exp ->
-                                                                        case exp of
-                                                                              VarE v -> case lookupVEnv' v venv of
-                                                                                            Just e -> let tyCon = getTyOfDataCon ddefs dconName
-                                                                                                          urtyTyCon = PackedTy tyCon ()
-                                                                                                        in if e == urtyTyCon then Just v
-                                                                                                           else Nothing
-                                                                                            Nothing -> Nothing
-                                                                              _ -> Nothing
-                                                              ) args
-                                                          justVariables = Maybe.catMaybes potentialVarsOfTy
-                                                       in if P.null justVariables
-                                                        -- dbgTraceIt (sdoc (funName, dconName, args, venv))
-                                                        then error "getVariableAndProducer: no variables of Ty to optimize found!"
-                                                        else
-                                                          if P.length justVariables > 1
-                                                          then error "getVariableAndProducer: More than one variable of the type being optimized is passed to function call. Not implemented yet!"
-                                                          else Just (P.head justVariables)
-                                                    else Nothing
-                                _ -> Nothing  
               _ -> Nothing
           producers =
             getVariableAndProducer funName pMap venv ddefs dconName rhs
@@ -765,13 +613,9 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                       let producerExp = M.lookup (var, ty) pMap
                        in case producerExp of
                             Just (AppE f locs args) -> (var, f) : producers
-                            Just (TimeIt e _ _) -> case e of
-                                AppE f locs args -> (var, f) : producers
-                                _ -> error "getVariableAndProducer1: producer other than a function call not expected." 
-
                             _ ->
                               error
-                                "getVariableAndProducer2: producer other than a function call not expected."
+                                "getVariableAndProducer: producer other than a function call not expected."
                     Nothing -> []
             Nothing -> producers
     -- a == DataCon
@@ -786,7 +630,7 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
        in producersA ++ producersB ++ producersC
     MkProdE xs -> P.concatMap (getVariableAndProducer funName pMap venv ddefs dconName) xs
     ProjE i e -> error "getExpTyEnv: TODO ProjE"
-    TimeIt e ty b -> getVariableAndProducer funName pMap venv ddefs dconName e
+    TimeIt e ty b -> error "getExpTyEnv: TODO TimeIt"
     WithArenaE v e -> error "getExpTyEnv: TODO WithArenaE"
     SpawnE f locs args -> error "getExpTyEnv: TODO SpawnE"
     SyncE -> error "getExpTyEnv: TODO SyncE"
@@ -910,7 +754,7 @@ callNewProducerForVarInMain var boolModify oldProducer newProducer mainExp =
               xs
        in MkProdE xs'
     ProjE i e -> error "getExpTyEnv: TODO ProjE"
-    TimeIt e ty b -> TimeIt (callNewProducerForVarInMain var boolModify oldProducer newProducer e) ty b 
+    TimeIt e ty b -> error "getExpTyEnv: TODO TimeIt"
     WithArenaE v e -> error "getExpTyEnv: TODO WithArenaE"
     SpawnE f locs args -> error "getExpTyEnv: TODO SpawnE"
     SyncE -> error "getExpTyEnv: TODO SyncE"
@@ -1266,22 +1110,19 @@ optimizeDataCon ::
   DDefs1 -> DataCon ->
   DDefs1
 optimizeDataCon (dcon, newindices) ddefs newDcon =
-  case lkp'' ddefs newDcon of 
-    Nothing -> 
-      let (tycon, (_, fields)) = lkp' ddefs dcon
-          newFields = permute newindices fields
-          --newDcon = dcon ++ "Optimized" -- TODO: Change this to use gensym
-          DDef {tyName, tyArgs, dataCons} = lookupDDef' ddefs (fromVar tycon)
-          newDDef =
-            DDef
-              { tyName = tyName,
-                tyArgs = tyArgs,
-                dataCons = dataCons ++ [(newDcon, newFields)]
-              }
-          ddefs' = M.delete tycon ddefs
-          ddefs'' = insertDD newDDef ddefs'
-        in ddefs''
-    Just _ -> ddefs 
+  let (tycon, (_, fields)) = lkp' ddefs dcon
+      newFields = permute newindices fields
+      --newDcon = dcon ++ "Optimized" -- TODO: Change this to use gensym
+      DDef {tyName, tyArgs, dataCons} = lookupDDef' ddefs (fromVar tycon)
+      newDDef =
+        DDef
+          { tyName = tyName,
+            tyArgs = tyArgs,
+            dataCons = dataCons ++ [(newDcon, newFields)]
+          }
+      ddefs' = M.delete tycon ddefs
+      ddefs'' = insertDD newDDef ddefs'
+   in ddefs''
 
 -- | Lookup a Datacon.  Return (TyCon, (DataCon, [flds]))
 lkp' ::
@@ -1299,24 +1140,6 @@ lkp' dds con =
     [hit] -> hit
     _ ->
       error "OptimizeFieldOrder -> lookupDataCon: found multiple occurences of constructor!"
-
-
--- | Lookup a Datacon.  Return (TyCon, (DataCon, [flds]))
-lkp'' ::
-  DDefs1 ->
-  DataCon ->
-  Maybe (Var, (DataCon, [(IsBoxed, UrTy())]))
-lkp'' dds con =
-  -- Here we try to lookup in ALL datatypes, assuming unique datacons:
-  case [ (tycon, variant)
-         | (tycon, DDef {dataCons}) <- M.toList dds,
-           variant <- L.filter ((== con) . fst) dataCons
-       ] of
-    [] -> Nothing
-    [hit] -> Just hit
-    _ ->
-      error "OptimizeFieldOrder -> lookupDataCon: found multiple occurences of constructor!"
-  
 
 -- | Lookup a ddef in its entirety
 lookupDDef' ::

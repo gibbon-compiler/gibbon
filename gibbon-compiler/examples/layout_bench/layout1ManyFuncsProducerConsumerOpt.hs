@@ -21,7 +21,7 @@ filterByKeywordInTagList keyword blogs = case blogs of
                                             Layout1 header id author date content tags rst -> let present = searchBlogTags keyword tags
                                                                                                 in if present then 
                                                                                                      let newRst  = filterByKeywordInTagList keyword rst
-                                                                                                      in Layout4 tags content newRst header id author date
+                                                                                                      in Layout1 header id author date content tags newRst
                                                                                                    else filterByKeywordInTagList keyword rst 
                                                                                                    
 

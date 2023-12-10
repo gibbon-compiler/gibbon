@@ -39,8 +39,7 @@ data GeneralFlag
   | Opt_GenGc              -- ^ Use the new non-generational GC.
   | Opt_NoEagerPromote     -- ^ Disable eager promotion.
   | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
-  | Opt_Layout_Local       -- ^ Optimize the layout of Algebraic data types locally 
-  | Opt_Layout_Global      -- ^ Optimize the layout of Algebraic data types globally
+  | Opt_Layout             -- ^ Optimize the layout of Algebraic data types
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -117,8 +116,7 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_GenGc (long "gen-gc" <> help "Use the new generational GC.") <|>
                    flag' Opt_NoEagerPromote (long "no-eager-promote" <> help "Disable eager promotion.") <|>
                    flag' Opt_SimpleWriteBarrier (long "simple-write-barrier" <> help "Disables eliminate-indirection-chains optimization.") <|>
-                   flag' Opt_Layout_Local (long "opt-layout-local" <> help "Optimizes the Layout of Algebraic data types locally") <|>
-                   flag' Opt_Layout_Global (long "opt-layout-global" <> help "Optimizes the Layout of Algebraic data types globally")
+                   flag' Opt_Layout (long "opt-layout" <> help "Optimizes the Layout of Algebraic data types")
 
 
     dflagsParser :: Parser DebugFlag
