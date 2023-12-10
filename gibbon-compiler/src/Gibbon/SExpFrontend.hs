@@ -246,8 +246,6 @@ if a thing is a type variable or a data constructor.
                             , funMeta = FunMeta { funRec = NotRec
                                                 , funInline = NoInline
                                                 , funCanTriggerGC = False
-                                                , funOptLayout = NoLayoutOpt
-                                                , userConstraintsDataCon = Nothing
                                                 }
                             } : fds)
             cds mn

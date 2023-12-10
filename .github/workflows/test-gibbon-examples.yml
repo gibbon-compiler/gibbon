@@ -14,15 +14,10 @@ jobs:
           sudo apt update
           sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11 racket
           sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
-      - name: cplex and docplex
-        run: | 
-          sudo apt-get install python3
-          pip3 install cplex
-          pip3 install docplex
       - name: ghc and cabal
         env:
           HCKIND: ghc
-          HCVER: 9.4.6
+          HCVER: 9.6.2
         run: |
             mkdir -p "$HOME/.ghcup/bin"
             curl -sL https://downloads.haskell.org/ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 > "$HOME/.ghcup/bin/ghcup"
