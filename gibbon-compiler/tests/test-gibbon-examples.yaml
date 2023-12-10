@@ -589,168 +589,56 @@ tests:
     
   - name: layout1ContentSearch.hs
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout1ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout1ContentSearch.ans
     failing: []
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout2ContentSearch.hs 
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout2ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout2ContentSearch.ans
     failing: []
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout3ContentSearch.hs
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout3ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout3ContentSearch.ans
     failing: [gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
   - name: layout4ContentSearch.hs
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout4ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout4ContentSearch.ans
     failing: []
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout5ContentSearch.hs
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout5ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout5ContentSearch.ans
     failing: [gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
   - name: layout6ContentSearch.hs 
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout6ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout6ContentSearch.ans
     failing: []
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
 
   - name: layout7ContentSearch.hs 
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout7ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout7ContentSearch.ans
     failing: [gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
 
   - name: layout8ContentSearch.hs 
     test-flags: ["--no-gc"]
-    dir: examples/layout_bench
-    answer-file: examples/layout_bench/layout8ContentSearch.ans
+    dir: examples/marmoset_bench
+    answer-file: examples/marmoset_bench/layout8ContentSearch.ans
     failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: calcAdtLengthAc.hs 
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/calcAdtLengthAc.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: calcAdtLengthCa.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/calcAdtLengthCa.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtContentAC.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtContentAC.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtContentCA.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtContentCA.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsAct2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAct2.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsAct.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAct.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsAtc2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAtc2.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsAtc.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAtc.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsCat2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCat2.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsCta2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCta2.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsCta.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCta.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsTac2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTac2.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsTac.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTac.ans
-    failing: []
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsTca2.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTca2.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsTca.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTca.ans
-    failing: [Gibbon1]
-    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
-    
-  - name: processAdtTagsCat.hs
-    test-flags: ["--no-gc"]
-    dir: examples/layout_bench/ResearchBench-Summer2022
-    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCat.ans
-    failing: [Gibbon1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
