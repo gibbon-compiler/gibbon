@@ -14,9 +14,6 @@ jobs:
           sudo apt update
           sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11 racket
           sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
-          sudo apt-get install python3
-          pip3 install cplex 
-          pip3 install docplex
       - name: ghc and cabal
         env:
           HCKIND: ghc
