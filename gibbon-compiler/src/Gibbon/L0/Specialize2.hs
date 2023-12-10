@@ -1428,9 +1428,8 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
         FloatE {} -> pure ex
         LitSymE {} -> pure ex
         AppE f tyapps args -> AppE f tyapps <$> mapM go args
-        PrimAppE pr args
-
--- This is always going to have a function reference which
+        PrimAppE pr args -> do
+          -- This is always going to have a function reference which
           -- we cannot eliminate.
           let args' =
                 case pr of

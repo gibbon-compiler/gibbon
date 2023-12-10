@@ -12,7 +12,6 @@
 -- | An intermediate language with an effect system that captures traversals.
 
 module Gibbon.L2.Syntax
-    (
     -- * Extended language L2 with location types.
   ( E2Ext(..)
   , Prog2
@@ -307,38 +306,6 @@ instance (Typeable (E2Ext l d),
           AllocateScalarsHere{} -> return ([],ex)
           SSPush{} -> return ([],ex)
           SSPop{} -> return ([],ex)
-
-    where go = gFlattenGatherBinds ddfs env
-
-  gFlattenExp ddfs env ex = do (_b,e') <- gFlattenGatherBinds ddfs env ex
-                               return e'
-
-instance (Typeable (E2Ext l (UrTy l)),
-          Expression (E2Ext l (UrTy l)),
-          Flattenable (E2 l (UrTy l)))
-      => Flattenable (E2Ext l (UrTy l)) where
-
-  gFlattenGatherBinds ddfs env ex =
-      case ex of
-          LetRegionE r sz ty bod -> do
-                                (bnds,bod') <- go bod
-                                return ([], LetRegionE r sz ty (flatLets bnds bod'))
-
-          LetParRegionE r sz ty bod -> do
-                                (bnds,bod') <- go bod
-                                return ([], LetParRegionE r sz ty (flatLets bnds bod'))
-
-          LetLocE l rhs bod -> do (bnds,bod') <- go bod
-                                  return ([], LetLocE l rhs $ flatLets bnds bod')
-
-          RetE{}        -> return ([],ex)
-          FromEndE{}    -> return ([],ex)
-          AddFixed{}    -> return ([],ex)
-          BoundsCheck{} -> return ([],ex)
-          IndirectionE{}-> return ([],ex)
-          GetCilkWorkerNum-> return ([],ex)
-          LetAvail vs bod -> do (bnds,bod') <- go bod
-                                return ([], LetAvail vs $ flatLets bnds bod')
 
     where go = gFlattenGatherBinds ddfs env
 

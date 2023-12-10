@@ -13,14 +13,6 @@ module Gibbon.L1.Syntax
     (
       -- * Core types specific to L1
       Prog1, FunDef1, FunDefs1, DDef1, DDefs1, Exp1, Ty1, E1Ext(..)
-
-import           Control.DeepSeq                (NFData)
-import           Data.Graph                     as G
-import qualified Data.Map                       as M
-import qualified Data.Set                       as S
-import           GHC.Generics
-import           Prelude                        as P
-import           Text.PrettyPrint.GenericPretty
     , module Gibbon.Language
     ) where
 
@@ -31,6 +23,10 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Language
 import Gibbon.Common
+
+import           Data.Graph                     as G
+import qualified Data.Map                       as M
+import           Prelude                        as P
 
 --------------------------------------------------------------------------------
 

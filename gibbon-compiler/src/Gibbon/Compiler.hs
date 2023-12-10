@@ -93,15 +93,7 @@ import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
-import Gibbon.Passes.OptimizeADTLayout (locallyOptimizeDataConLayout, globallyOptimizeDataConLayout)
 import           Gibbon.L1.GenSML
-
-
-
-
-
-
-
 -- Configuring and launching the compiler.
 --------------------------------------------------------------------------------
 

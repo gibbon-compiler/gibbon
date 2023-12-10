@@ -14,15 +14,8 @@ copyright:             Copyright 2016-2022 Ryan Newton and contributors
 category:              Compilers/Interpreters
 extra-source-files:    README.md
 build-type:            Simple
-<<<<<<< HEAD
 extra-source-files:    README.md
 tested-with:           GHC==9.4.6
-=======
-extra-source-files:    README.md, cbits/rts.c
-cabal-version:         >=1.10
-tested-with:           GHC==9.6.2
-                     , GHC==9.4.5
->>>>>>> parent of fab882ae (Passes: Access patterns, update GHC version to 9.4.6 in CI)
                      , GHC==9.2.8
                      , GHC==9.0.2
                      , GHC==8.10.7

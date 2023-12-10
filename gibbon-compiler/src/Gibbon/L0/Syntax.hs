@@ -57,7 +57,7 @@ data E0Ext loc dec =
 -- | Linear types primitives.
 data LinearExt loc dec =
     -- (&) :: a %1 -> (a %1 -> b) %1 -> b
-  = ReverseAppE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
+  ReverseAppE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
 
 -- lseq :: a %1-> b %1-> b
   | LseqE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
@@ -67,17 +67,6 @@ data LinearExt loc dec =
 
 -- unsafeToLinear :: (a %p-> b) %1-> (a %1-> b)
   | ToLinearE (PreExp E0Ext loc dec)
-  deriving (Show, Ord, Eq, Read, Generic, NFData)
-
-    -- lseq :: a %1-> b %1-> b
-  | LseqE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
-
-    -- unsafeAlias :: a %1-> (a,a)
-  | AliasE (PreExp E0Ext loc dec)
-
-    -- unsafeToLinear :: (a %p-> b) %1-> (a %1-> b)
-  | ToLinearE (PreExp E0Ext loc dec)
-
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 --------------------------------------------------------------------------------
