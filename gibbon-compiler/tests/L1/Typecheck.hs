@@ -130,8 +130,7 @@ t1Prog = Prog {ddefs = M.fromList [],
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False
 
-                                              },
-                            funOptLayout    = NoLayoutOpt 
+                                              }
                            }),
                    ("add2",
                     FunDef {funName = "add2",
@@ -143,8 +142,7 @@ t1Prog = Prog {ddefs = M.fromList [],
                             funMeta = FunMeta { funInline = Inline,
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False
-                                              },
-                            funOptLayout    = NoLayoutOpt
+                                              }
                            })],
         mainExp = Just
                   (  AppE "mul2" [] [LitE 10, AppE "add2" [] [LitE 40, LitE 2]]
