@@ -8,7 +8,9 @@ rightmost :: Tree -> Int
 rightmost tr =
     case tr of
         Leaf i -> i
-        Node l r -> rightmost r
+        Node l r ->
+            -- let _ = travPacked l
+            rightmost r
 
 mkTree :: Int -> Tree
 mkTree i =
