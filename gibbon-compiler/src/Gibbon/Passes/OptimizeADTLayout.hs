@@ -165,7 +165,7 @@ dataConsInFunBody funBody = case funBody of
             IfE a b c -> S.unions $ [dataConsInFunBody a] ++ [dataConsInFunBody b] ++ [dataConsInFunBody c]
             MkProdE xs -> S.unions $ P.map dataConsInFunBody xs
             ProjE i e -> error "getGeneratedVariable: TODO ProjE"
-            TimeIt e ty b -> dataConsInFunBody e
+            TimeIt e ty b -> error "getGeneratedVariable: TODO TimeIt"
             WithArenaE v e -> error "getGeneratedVariable: TODO WithArenaE"
             SpawnE f locs args -> error "getGeneratedVariable: TODO SpawnE"
             SyncE -> error "getGeneratedVariable: TODO SyncE"
@@ -611,7 +611,7 @@ changeCallNameInRecFunction
           IfE a b c -> IfE (fixExp a) (fixExp b) (fixExp c)
           MkProdE xs -> MkProdE (P.map fixExp xs)
           ProjE i e -> error "getExpTyEnv: TODO ProjE"
-          TimeIt e ty b -> TimeIt (fixExp e) ty b
+          TimeIt e ty b -> error "getExpTyEnv: TODO TimeIt"
           WithArenaE v e -> error "getExpTyEnv: TODO WithArenaE"
           SpawnE f locs args -> error "getExpTyEnv: TODO SpawnE"
           SyncE -> error "getExpTyEnv: TODO SyncE"
@@ -1497,8 +1497,7 @@ reOrderLetExpHelper (Just var) letExpOrder expr = fst $ run letExpOrder expr
           MkProdE xs -> let (xs', releasedBinds) = lambdaHandleExpList xs letExpOrder'
                           in (MkProdE xs', releasedBinds)
           ProjE {} -> error "reOrderLetExpHelper: TODO ProjE"
-          TimeIt e ty b -> let (e', releasedBinds) = run letExpOrder' e  
-                         in (TimeIt e' ty b, releasedBinds)
+          TimeIt {} -> error "reOrderLetExpHelper: TODO TimeIt"
           WithArenaE {} -> error "reOrderLetExpHelper: TODO WithArenaE"
           SpawnE {} -> error "reOrderLetExpHelper: TODO SpawnE"
           SyncE -> error "reOrderLetExpHelper: TODO SyncE"
