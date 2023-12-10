@@ -1,6 +1,5 @@
 module Gibbon.Passes.AccessPatternsAnalysis
   ( generateAccessGraphs,
-    getGreedyOrder,
     FieldMap,
     DataConAccessMap,
   )
@@ -58,7 +57,7 @@ generateAccessGraphs
             topologicallySortedNodes =
               P.map nodeFromVertex topologicallySortedVertices
             map = backtrackVariablesToDataConFields topologicallySortedNodes dcons
-            edges = S.toList $ S.fromList $
+            edges =
                 ( constructFieldGraph
                     Nothing
                     nodeFromVertex
@@ -70,70 +69,8 @@ generateAccessGraphs
                 dcons
             accessMapsList = zipWith (\x y -> (x, y)) [dcons] [edges]
             accessMaps = M.fromList accessMapsList
-         in M.insert funName accessMaps fieldMap  --dbgTraceIt (sdoc topologicallySortedVertices) dbgTraceIt ("\n") dbgTraceIt (sdoc (topologicallySortedVertices, edges)) dbgTraceIt ("\n") 
+         in M.insert funName accessMaps fieldMap --dbgTraceIt (sdoc (edges, map))
       Nothing -> error "generateAccessGraphs: no CFG for function found!"
-
-
-
-getGreedyOrder :: [((Integer, Integer), Integer)] -> Int -> [Integer]
-getGreedyOrder edges fieldLength = 
-          if edges == []
-            then P.map P.toInteger [0 .. (fieldLength - 1)] 
-            else 
-              let partial_order = greedyOrderOfVertices edges
-                  completeOrder = P.foldl (\lst val -> if S.member val (S.fromList lst) then lst
-                                                 else lst ++ [val]
-                                    ) partial_order [0 .. (fieldLength - 1)]
-                in dbgTraceIt (sdoc (edges, completeOrder)) P.map P.toInteger completeOrder
-
-greedyOrderOfVertices :: [((Integer, Integer), Integer)] -> [Int]
-greedyOrderOfVertices ee = let     edges' = P.map (\((a, b), c) -> ((P.fromIntegral a, P.fromIntegral b), P.fromIntegral c)) ee
-                                   bounds = (\e -> let v = P.foldr (\((i, j), _) s -> S.insert j (S.insert i s)) S.empty e
-                                                       mini  = minimum v
-                                                       maxi  = maximum v
-                                                    in (mini, maxi)
-                                            ) edges'
-                                   edgesWithoutWeight = P.map fst edges'
-                                   graph = buildG bounds edgesWithoutWeight
-                                   weightMap = P.foldr (\(e, w) mm -> M.insert e w mm) M.empty edges'
-                                   v'' = greedyOrderOfVerticesHelper graph (topSort graph) weightMap S.empty
-                                in v'' -- dbgTraceIt (sdoc (v'', (M.elems weightMap)))
-
-
-greedyOrderOfVerticesHelper :: Graph -> [Int] -> M.Map (Int, Int) Int -> S.Set Int -> [Int]
-greedyOrderOfVerticesHelper graph vertices' weightMap visited = case vertices' of
-  [] -> []
-  x:xs -> if S.member x visited
-          then greedyOrderOfVerticesHelper graph xs weightMap visited
-          else let successors = reachable graph x
-                   removeCurr = S.toList $ S.delete x (S.fromList successors)
-                   orderedSucc = orderedSuccsByWeight removeCurr x weightMap visited
-                   visited' = P.foldr S.insert S.empty orderedSucc
-                   v'' = greedyOrderOfVerticesHelper graph xs weightMap visited'
-                in if successors == [x] 
-                   then orderedSucc ++ v'' --dbgTraceIt (sdoc (v'', orderedSucc))
-                   else [x] ++ orderedSucc ++ v''
-
-orderedSuccsByWeight :: [Int] -> Int -> M.Map (Int, Int) Int -> S.Set Int -> [Int]
-orderedSuccsByWeight s i weightMap visited = case s of
-                                        [] -> []
-                                        _  -> let vertexWithMaxWeight = P.foldr (\v (v', maxx) -> let w = M.lookup (i, v) weightMap
-                                                                                                        in case w of
-                                                                                                               Nothing -> (-1, -1)
-                                                                                                               Just w' -> if w' > maxx
-                                                                                                                          then (v, w')
-                                                                                                                          else (v', maxx)
-                                                                     ) (-1, -1) s
-                                                in if fst vertexWithMaxWeight == -1
-                                                   then []
-                                                   else
-                                                    let removeVertexWithMaxWeight = S.toList $ S.delete (fst vertexWithMaxWeight) (S.fromList s)
-                                                     in if S.member (fst vertexWithMaxWeight) visited
-                                                        then orderedSuccsByWeight removeVertexWithMaxWeight i weightMap visited 
-                                                        else fst vertexWithMaxWeight : orderedSuccsByWeight removeVertexWithMaxWeight i weightMap visited --dbgTraceIt (sdoc (s, removeVertexWithMaxWeight, vertexWithMaxWeight))
-
-
-
 
 backtrackVariablesToDataConFields ::
   (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
@@ -144,9 +81,9 @@ backtrackVariablesToDataConFields graph dcon =
   case graph of
     [] -> M.empty
     x : xs ->
-      let newMap = processVertex graph x M.empty dcon
+      let newMap = processVertex graph x M.empty dcon 
           mlist = M.toList (newMap)
-          m = backtrackVariablesToDataConFields xs dcon
+          m = backtrackVariablesToDataConFields xs dcon 
           mlist' = M.toList m
           newMap' = M.fromList (mlist ++ mlist')
        in newMap'
@@ -156,7 +93,7 @@ processVertex ::
   [(((PreExp e l d), Integer), Integer, [Integer])] ->
   (((PreExp e l d), Integer), Integer, [Integer]) ->
   VariableMap ->
-  DataCon ->
+  DataCon -> 
   VariableMap
 processVertex graph node map dataCon  =
   case node of
@@ -164,13 +101,13 @@ processVertex graph node map dataCon  =
       case expression of
         DataConE loc dcon args ->
           if dcon == dataCon
-          then
+          then 
             let freeVariables = L.concat (P.map (\x -> S.toList (gFreeVars x)) args)
                 maybeIndexes = P.map (getDataConIndexFromVariable graph) freeVariables
                 mapList = M.toList map
                 newMapList = P.zipWith (\x y -> (x, y)) freeVariables maybeIndexes
              in M.fromList (mapList ++ newMapList)
-          else map
+          else map 
         _ -> map
 
 getDataConIndexFromVariable ::
