@@ -17,7 +17,7 @@ jobs:
       - name: ghc and cabal
         env:
           HCKIND: ghc
-          HCVER: 9.4.6
+          HCVER: 9.6.2
         run: |
             mkdir -p "$HOME/.ghcup/bin"
             curl -sL https://downloads.haskell.org/ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 > "$HOME/.ghcup/bin/ghcup"

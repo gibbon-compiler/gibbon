@@ -14,8 +14,15 @@ copyright:             Copyright 2016-2022 Ryan Newton and contributors
 category:              Compilers/Interpreters
 extra-source-files:    README.md
 build-type:            Simple
+<<<<<<< HEAD
 extra-source-files:    README.md
 tested-with:           GHC==9.4.6
+=======
+extra-source-files:    README.md, cbits/rts.c
+cabal-version:         >=1.10
+tested-with:           GHC==9.6.2
+                     , GHC==9.4.5
+>>>>>>> parent of fab882ae (Passes: Access patterns, update GHC version to 9.4.6 in CI)
                      , GHC==9.2.8
                      , GHC==9.0.2
                      , GHC==8.10.7
@@ -90,8 +97,6 @@ library
                        Gibbon.Passes.ControlFlowGraph
                        Gibbon.Passes.DefinitionUseChains
                        Gibbon.Passes.CallGraph
-                       Gibbon.Passes.AccessPatternsAnalysis
-                       Gibbon.Passes.SolveLayoutConstrs
 
   other-extensions:    DeriveDataTypeable CPP
 
@@ -123,9 +128,6 @@ library
                      , GenericPretty            >= 1.2.1     &&  < 2
                      , language-c-quote         >= 0.12.1    &&  < 1
                      , mainland-pretty          >= 0.6.1     &&  < 1
-                     , language-python          ==0.5.8 
-                     , timeit                   >= 0.9       &&  <= 2.0
-                     , time                     >= 1         &&  <= 1.12.2
 -- Brings in lots of ekmett dependencies:
 --                     , either
 
