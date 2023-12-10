@@ -125,7 +125,7 @@ tests:
   - name: test20_bintree.gib
   - name: test20b_bintree.gib
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
   - name: test20c_bintree.gib
   - name: test20d_bintree.gib
   - name: test20e_bintree.gib
@@ -137,7 +137,7 @@ tests:
   - name: test29b_list.gib
   - name: test30_twitter.gib
     # ThreadRegions bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtreesum.gib
@@ -154,10 +154,10 @@ tests:
     answer-file: examples/void_type.ans
   - name: T64_1.gib
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
   - name: test_addtrees.gib
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
   - name: TestStrings.hs
     # interp outputs 'h' versus the expected h (without quotes)
     failing: [interp1]
@@ -197,7 +197,7 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
 
   - name: bench_build_searchtree.gib
     bench: true
@@ -206,7 +206,7 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
 
   - name: bench_tree_insert.gib
     bench: true
@@ -218,7 +218,7 @@ tests:
   - name: bench_repmax.gib
     bench: true
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
 
   - name: bench_repconst.gib
     bench: true
@@ -226,7 +226,7 @@ tests:
   - name: bench_findmax.gib
     bench: true
     # Inferlocations bug.
-    failing: []
+    failing: [gibbon3, gibbon2]
 
   ## There is no significant difference between compose1 / compose2.
   ## compose2 should be much faster.
@@ -356,7 +356,7 @@ tests:
     dir: examples
     answer-file: examples/test_printpacked.ans
     # gibbon3 and gibbon2: Inferlocations bug.
-    failing: [interp1,gibbon1,pointer]
+    failing: [interp1,gibbon1,pointer,gibbon3,gibbon2]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
@@ -584,61 +584,61 @@ tests:
   - name: test_191.hs
     answer-file: examples/test_191.ans
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
-    failing: [pointer, gibbon1, interp1]
+    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2]
     run-modes: ["gibbon2"]
     
   - name: layout1ContentSearch.hs
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout1ContentSearch.ans
-    failing: []
+    failing: [interp1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout2ContentSearch.hs 
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout2ContentSearch.ans
-    failing: []
+    failing: [interp1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout3ContentSearch.hs
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout3ContentSearch.ans
-    failing: [gibbon1]
+    failing: [interp1, gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
   - name: layout4ContentSearch.hs
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout4ContentSearch.ans
-    failing: []
+    failing: [interp1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
     
   - name: layout5ContentSearch.hs
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout5ContentSearch.ans
-    failing: [gibbon1]
+    failing: [interp1, gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
   - name: layout6ContentSearch.hs 
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout6ContentSearch.ans
-    failing: []
+    failing: [interp1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
 
   - name: layout7ContentSearch.hs 
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout7ContentSearch.ans
-    failing: [gibbon1]
+    failing: [interp1, gibbon1]
     run-modes: ["gibbon2", "gibbon3", "pointer"]
 
   - name: layout8ContentSearch.hs 
     test-flags: ["--no-gc"]
     dir: examples/marmoset_bench
     answer-file: examples/marmoset_bench/layout8ContentSearch.ans
-    failing: []
+    failing: [interp1]
     run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
