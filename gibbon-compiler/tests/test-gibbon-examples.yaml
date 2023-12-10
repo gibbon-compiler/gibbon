@@ -125,7 +125,7 @@ tests:
   - name: test20_bintree.gib
   - name: test20b_bintree.gib
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
   - name: test20c_bintree.gib
   - name: test20d_bintree.gib
   - name: test20e_bintree.gib
@@ -137,7 +137,7 @@ tests:
   - name: test29b_list.gib
   - name: test30_twitter.gib
     # ThreadRegions bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtreesum.gib
@@ -154,10 +154,10 @@ tests:
     answer-file: examples/void_type.ans
   - name: T64_1.gib
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
   - name: test_addtrees.gib
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
   - name: TestStrings.hs
     # interp outputs 'h' versus the expected h (without quotes)
     failing: [interp1]
@@ -197,7 +197,7 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
 
   - name: bench_build_searchtree.gib
     bench: true
@@ -206,7 +206,7 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
 
   - name: bench_tree_insert.gib
     bench: true
@@ -218,7 +218,7 @@ tests:
   - name: bench_repmax.gib
     bench: true
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
 
   - name: bench_repconst.gib
     bench: true
@@ -226,7 +226,7 @@ tests:
   - name: bench_findmax.gib
     bench: true
     # Inferlocations bug.
-    failing: [gibbon3, gibbon2]
+    failing: []
 
   ## There is no significant difference between compose1 / compose2.
   ## compose2 should be much faster.
@@ -356,7 +356,7 @@ tests:
     dir: examples
     answer-file: examples/test_printpacked.ans
     # gibbon3 and gibbon2: Inferlocations bug.
-    failing: [interp1,gibbon1,pointer,gibbon3,gibbon2]
+    failing: [interp1,gibbon1,pointer]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
@@ -584,5 +584,334 @@ tests:
   - name: test_191.hs
     answer-file: examples/test_191.ans
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
-    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2]
+    failing: [pointer, gibbon1, interp1]
+    run-modes: ["gibbon2"]
+    
+  - name: layout1ContentSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1ContentSearch.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout2ContentSearch.hs 
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout2ContentSearch.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout3ContentSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout3ContentSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout4ContentSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout4ContentSearch.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout5ContentSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout5ContentSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout6ContentSearch.hs 
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout6ContentSearch.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+
+  - name: layout7ContentSearch.hs 
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout7ContentSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+
+  - name: layout8ContentSearch.hs 
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout8ContentSearch.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: calcAdtLengthAc.hs 
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/calcAdtLengthAc.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: calcAdtLengthCa.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/calcAdtLengthCa.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtContentAC.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtContentAC.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtContentCA.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtContentCA.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsAct2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAct2.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsAct.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAct.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsAtc2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAtc2.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsAtc.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsAtc.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsCat2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCat2.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsCta2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCta2.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsCta.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCta.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsTac2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTac2.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsTac.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTac.ans
+    failing: []
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsTca2.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTca2.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsTca.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsTca.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: processAdtTagsCat.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench/ResearchBench-Summer2022
+    answer-file: examples/layout_bench/ResearchBench-Summer2022/processAdtTagsCat.ans
+    failing: [Gibbon1]
+    run-modes: ["gibbon1", "gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout1TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout2TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout2TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout3TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout3TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout4TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout4TagSearch.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout5TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout5TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout6TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout6TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout7TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout7TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout8TagSearch.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout8TagSearch.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout1FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout2FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout2FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout3FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout3FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout4FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout4FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout5FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout5FilterBlogs.ans
+    failing: [gibbon1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout6FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout6FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout7FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout7FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout8FilterBlogs.hs
+    test-flags: ["--no-gc"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout8FilterBlogs.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: test_nth_plist.hs
+    test-flags: []
+    dir: examples/nth_plist
+    answer-file: examples/nth_plist/test_nth_plist.ans
+    failing: [Interp1]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: test_maybe.hs
+    test-flags: []
+    dir: examples/maybe
+    answer-file: examples/maybe/test_maybe.ans
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: eval_l.hs
+    test-flags: []
+    dir: examples/layout_bench/syntheticBench
+    answer-file: examples/layout_bench/syntheticBench/eval_l.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: eval_r.hs
+    test-flags: []
+    dir: examples/layout_bench/syntheticBench
+    answer-file: examples/layout_bench/syntheticBench/eval_r.ans
+    failing: []
+    run-modes: ["gibbon2", "gibbon3", "pointer"]
+    
+  - name: layout1ContentSearchRunPipeline.hs 
+    test-flags: ["--no-gc", "--opt-layout-local", "--opt-layout-use-solver"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/layout1ContentSearchRunPipeline.ans
+    failing: [interp1,pointer,gibbon1, gibbon3]
+    run-modes: ["gibbon2"]
+    
+  - name: manyFuncs.hs 
+    test-flags: ["--no-gc", "--opt-layout-local", "--opt-layout-use-solver"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/manyFuncsLocal.ans
+    failing: [interp1,pointer,gibbon1, gibbon3]
+    run-modes: ["gibbon2"]
+    
+  - name: manyFuncs.hs 
+    test-flags: ["--no-gc", "--opt-layout-global", "--opt-layout-use-solver"]
+    dir: examples/layout_bench
+    answer-file: examples/layout_bench/manyFuncsGlobal.ans
+    failing: [interp1,pointer,gibbon1, gibbon3]
     run-modes: ["gibbon2"]

@@ -93,7 +93,8 @@ import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
-
+import Gibbon.Passes.OptimizeADTLayout (locallyOptimizeDataConLayout, globallyOptimizeDataConLayout)
+import           Gibbon.L1.GenSML
 
 
 
@@ -646,6 +647,9 @@ passes config@Config{dynflags} l0 = do
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           parallel   = gopt Opt_Parallel dynflags
           should_fuse = gopt Opt_Fusion dynflags
+          opt_layout_local = gopt Opt_Layout_Local dynflags
+          opt_layout_global = gopt Opt_Layout_Global dynflags
+          use_solver = gopt Opt_Layout_Use_Solver dynflags
           tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
@@ -693,9 +697,21 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              l1 <- if opt_layout_local 
+                    then do 
+                         after_layout_out <- goE1 "optimizeADTLayoutLocal" (locallyOptimizeDataConLayout (not use_solver)) l1
+                         flatten_after_opt <- goE1 "L1.flatten2" flattenL1 after_layout_out
+                         pure flatten_after_opt
+                    else if opt_layout_global
+                    then do 
+                         after_layout_out <- goE1 "optimizeADTLayoutGlobal" (globallyOptimizeDataConLayout (not use_solver)) l1 
+                         flatten_after_opt <- goE1 "L1.flatten2" flattenL1 after_layout_out
+                         pure flatten_after_opt
+                    else return l1 
+              l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+              l1 <- goE1 "simplify_2"      simplifyL1             l1
               l1 <- go "L1.typecheck"    L1.tcProg     l1
-              l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
+              --l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -752,10 +768,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  -- NOTE: Calling copyOutOfOrderPacked here seems redundant since all the copy calls seem be exists in the correct place.
-                  -- In addititon, calling it here gives a compile time error.
-                  -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
-                  -- l1 <- go "L1.typecheck"    L1.tcProg     l1
+                  l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
+                  l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2
