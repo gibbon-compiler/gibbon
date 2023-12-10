@@ -54,10 +54,6 @@ import Text.PrettyPrint.GenericPretty
 import Prelude as P
 import Data.Data (Data)
 import qualified Gibbon.L2.Syntax as L1
-import qualified Data.Foldable as P
-import qualified Data.Tree as L1
-import qualified Gibbon.Passes.Flatten as L1
-import Gibbon.Passes.Flatten (flattenL1)
 
 -- | Data structure to store output from ILP solver.
 -- | Maps DataCon to bijection of new indices -> fields of datacon
@@ -121,19 +117,11 @@ optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
     --                 pmap
     --                 p
     --         pure prg'
-      prg' <- runUntilFixPoint prg 
+      prg' <- producerConsumerLayoutOptimization prg
       pure prg'
             --generateCopyFunctionsForFunctionsThatUseOptimizedVariable (toVar funcName) (dcon ++ "Optimized") fieldorder prg'
       --_ -> error "OptimizeFieldOrder: handle user constraints"
 
-
-runUntilFixPoint :: Prog1 -> PassM Prog1 
-runUntilFixPoint prog1 = do 
-  prog1' <- producerConsumerLayoutOptimization prog1 
-  prog1'' <- flattenL1 prog1'
-  if prog1 == prog1'' 
-  then return prog1 
-  else runUntilFixPoint prog1'' 
 
 producerConsumerLayoutOptimization :: Prog1 -> PassM Prog1
 producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
@@ -141,33 +129,26 @@ producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
   let funsToOptimize = P.concatMap (\FunDef{funName} -> ([funName | not $ isInfixOf "_" (fromVar funName)])
                                    ) $ M.elems fundefs
   let pairDataConFuns = P.concatMap (\name -> case M.lookup name fundefs
-                                                       of Just f@FunDef{funName, funBody} -> [(f, dataConsInFunBody funBody)]
+                                                       of Just f@FunDef{funBody} -> [(f, dataConsInFunBody funBody)]
                                                           Nothing -> []
                                     ) funsToOptimize
   let linearizeDcons = P.concatMap (\(f, dcons) -> let l = S.toList dcons
                                                in P.map (\d -> (f, d)) l
                              ) pairDataConFuns
-  let lambda = (\(f@FunDef{funName=fname}, dcon) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> do   
-                                   --let newDcon = dcon ++ "Optimized"
-                                   newSymDcon  <- gensym (toVar dcon)
-                                   -- dbgTraceIt (sdoc mexp) 
-                                   let maybeFd = M.lookup fname fds 
-                                   let fd = case maybeFd of 
-                                                  Just x -> x 
-                                                  Nothing -> error "producerConsumerLayoutOptimization: expected a function definition!!"
-                                   let fieldOrder = getAccessGraph f dcon
-                                   let result = optimizeFunctionWRTDataCon dd fd dcon (fromVar newSymDcon) fieldOrder
-                                   case result of 
-                                     Nothing ->  pure pr --dbgTraceIt (sdoc (result, fname, fieldOrder)) 
+  let lambda = (\(fd@FunDef{funName=fname}, dcon) pr@Prog{ddefs=dd, fundefs=fds, mainExp=mexp} -> 
+                               let result = optimizeFunctionWRTDataCon dd fd dcon
+                                in case result of 
+                                     Nothing -> pr 
                                      Just (ddefs', fundef', fieldorder) -> let fundefs' = M.delete fname fds 
                                                                                fundefs'' = M.insert fname fundef' fundefs'
-                                                                               p = Prog{ddefs = ddefs', fundefs = fundefs'', mainExp = mexp}
-                                                                               venv = progToVEnv p
-                                                                               pmap = generateProducerGraph p
-                                                                               prg' = genNewProducersAndRewriteProgram fname (fromVar newSymDcon) fieldorder venv pmap p  
-                                                                             in  pure prg' --dbgTraceIt (sdoc (result, fname, fundef', fieldOrder))
+                                                                               venv = progToVEnv pr
+                                                                               pmap = generateProducerGraph pr
+                                                                               p = pr {ddefs = ddefs', fundefs = fundefs'', mainExp = mexp}
+                                                                               prg' = genNewProducersAndRewriteProgram fname (dcon ++ "Optimized") fieldorder venv pmap p  
+                                                                             in prg'
                 )
-  P.foldrM lambda prg linearizeDcons --dbgTraceIt (sdoc linearizeDcons) 
+  let prg'' = P.foldr lambda prg linearizeDcons
+  pure prg''
   where
     dataConsInFunBody funBody = case funBody of
             DataConE _ dcon args -> let dcons = S.unions $ P.map dataConsInFunBody args
@@ -206,8 +187,7 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
                                                                                                                                                           in case generatedVars of
                                                                                                                                                                     [v] -> do  let funcsUsingVar = findFunctionsUsingVar v expr
                                                                                                                                                                                fundefs' <- makeFunctionCopies funcsUsingVar ddefs fundefs
-                                                                                                                                                                               --(toVar (fromVar func ++ "_new"))
-                                                                                                                                                                               let exp' = P.foldr (\func ex -> replaceFunctionName func func ex ) expr funcsUsingVar
+                                                                                                                                                                               let exp' = P.foldr (\func ex -> replaceFunctionName func (toVar (fromVar func ++ "_new")) ex ) expr funcsUsingVar
                                                                                                                                                                                pure prg {ddefs = ddefs, fundefs = fundefs', mainExp = Just (exp', ty)}
                                                                                                                                                                     [] -> error "generateCopyFunctionsForFunctionsThatUseOptimizedVariable: no variables found"
                                                                                                                                                                     _ -> error "generateCopyFunctionsForFunctionsThatUseOptimizedVariable: handle multiple produced variables"
@@ -290,7 +270,7 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
                                                   [] -> pure fdefs
                                                   x:xs -> if not $ isInfixOf "_print" (fromVar x)
                                                           then
-                                                            let newFunctionName = x -- toVar (fromVar x ++ "_new")
+                                                            let newFunctionName = toVar (fromVar x ++ "_new")
                                                                 oldFunctionBody = M.lookup x fdefs
                                                               in case oldFunctionBody of
                                                                         Just body -> let newFunctionBody = shuffleDataConFunBody True fieldOrder body newDconName
@@ -304,8 +284,6 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
                                                                                          depLets = P.map (\vv -> getDependentLetBindings vv newFunctionName m) var_order
                                                                                          var_order'' = P.zip var_order' depLets
                                                                                          newFunctionBody''@FunDef{funName} = P.foldl (\fundef (insertPosition, dl) -> reOrderLetExp insertPosition dl fundef) funRemoveAllLets var_order''
-                                                                                         --newFunctionBody''' = L1.flattenL1 newFunctionBody''
-                                                                                         --fundefs' = M.delete funName fdefs 
                                                                                          fdefs' = M.insert funName newFunctionBody'' fdefs
                                                                                        in makeFunctionCopies xs ddefs' fdefs'
                                                                         Nothing -> error ""
@@ -317,7 +295,7 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
                                                               case fn of
                                                                   Just ff@FunDef{funName, funBody, funTy, funArgs, funMeta} -> let exp' = addCaseForNewDataConInPrintFn [newPrintCase] funBody
                                                                                                                                    fn'  = FunDef{funName=funName, funBody=exp', funTy=funTy, funArgs=funArgs, funMeta=funMeta}
-                                                                                                                                   newFunctionName = x --toVar (fromVar x ++ "_new")
+                                                                                                                                   newFunctionName = toVar (fromVar x ++ "_new")
                                                                                                                                    newFunctionBody' = changeCallNameInRecFunction newFunctionName fn'
                                                                                                                                    fdefs' = M.insert newFunctionName newFunctionBody' fdefs
                                                                                                                                   in makeFunctionCopies xs ddefs' fdefs'
@@ -352,15 +330,7 @@ generateCopyFunctionsForFunctionsThatUseOptimizedVariable funcName newDconName f
           MapE {} -> error "findFunctionsUsingVar: TODO MapE"
           FoldE {} -> error "findFunctionsUsingVar: TODO FoldE"
 
-getAccessGraph ::
-  FunDef1 -> 
-  DataCon -> 
-  FieldMap 
-getAccessGraph 
-  fundef 
-  datacon = 
-    let cfg = getFunctionCFG fundef
-      in generateAccessGraphs cfg M.empty fundef datacon
+
 
 
 
@@ -368,8 +338,6 @@ optimizeFunctionWRTDataCon ::
   DDefs1 ->
   FunDef1 ->
   DataCon ->
-  DataCon -> 
-  FieldMap -> 
   Maybe (DDefs1, FunDef1, FieldOrder)
 optimizeFunctionWRTDataCon
   ddefs
@@ -379,10 +347,10 @@ optimizeFunctionWRTDataCon
       funTy,
       funArgs
     }
-  datacon
-  newDcon
-  fieldMap =
-    let field_len = P.length $ snd . snd $ lkp' ddefs datacon
+  datacon =
+    let cfg = getFunctionCFG fundef
+        fieldMap = generateAccessGraphs cfg M.empty fundef [datacon]
+        field_len = P.length $ snd . snd $ lkp' ddefs datacon
         fieldorder =
           optimizeDataConOrderFunc
             fieldMap
@@ -396,13 +364,13 @@ optimizeFunctionWRTDataCon
         --fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
         --(newDDefs, fundef', fieldorder)
       in case M.toList fieldorder of 
-                  [] ->  Nothing --dbgTraceIt (sdoc fieldorder)
+                  [] -> Nothing
                   [(dcon, order)] -> let orignal_order = [0..(P.length order - 1)] 
                                        in if orignal_order == P.map P.fromInteger order 
                                           then Nothing 
-                                          else let newDDefs = optimizeDataCon (dcon, order) ddefs newDcon
+                                          else let (newDDefs, newDcon) = optimizeDataCon (dcon, order) ddefs
                                                    fundef' = shuffleDataConFunBody True fieldorder fundef newDcon
-                                                 in Just (newDDefs, fundef', fieldorder) --dbgTraceIt (sdoc order) -- dbgTraceIt (sdoc fieldorder)
+                                                 in dbgTraceIt (sdoc order) Just (newDDefs, fundef', fieldorder)
                   _ -> error "more than one"   
                   
 
@@ -495,7 +463,7 @@ genNewProducersAndRewriteProgram
          in case variablesAndProducers of
               [] -> prg --error "no variable and producers found to modify"
               [(var, producer)] ->
-                let newProducerName = producer -- toVar (fromVar producer ++ "_new")
+                let newProducerName = toVar (fromVar producer ++ "_new")
                     oldProducerBody = M.lookup producer fundefs
                  in case oldProducerBody of
                       Just body ->
@@ -524,10 +492,8 @@ genNewProducersAndRewriteProgram
                             var_order'' = P.zip var_order' depLets
                             newProducerBody'' = P.foldl (\fundef (insertPosition, dl) -> reOrderLetExp insertPosition dl fundef
                                                         ) funRemoveAllLets var_order''
-                            
-                            fundefs' = M.delete newProducerName fundefs --dbgTraceIt (sdoc (newProducerName, newProducerBody''))
-                            fundefs'' =
-                              M.insert newProducerName newProducerBody'' fundefs'
+                            fundefs' =
+                              M.insert newProducerName newProducerBody'' fundefs
                             newMainExp =
                               callNewProducerForVarInMain
                                 var
@@ -537,7 +503,7 @@ genNewProducersAndRewriteProgram
                                 mexp
                          in prg
                               { ddefs = ddefs,
-                                fundefs = fundefs'',
+                                fundefs = fundefs',
                                 mainExp = Just (newMainExp, ty)
                               }
                       _ -> error ""
@@ -594,7 +560,6 @@ getVariableAndProducer funName pMap venv@Env2{vEnv, fEnv} ddefs dconName exp =
                             args
                         justVariables = Maybe.catMaybes potentialVarsOfTy
                      in if P.null justVariables
-                          -- dbgTraceIt (sdoc (funName, dconName, args, venv))
                           then error "getVariableAndProducer: no variables of Ty to optimize found!"
                           else
                             if P.length justVariables > 1
@@ -1107,12 +1072,12 @@ shuffleDataConCase fieldorder dcon vs =
 
 optimizeDataCon ::
   (DataCon, [Integer]) ->
-  DDefs1 -> DataCon ->
-  DDefs1
-optimizeDataCon (dcon, newindices) ddefs newDcon =
+  DDefs1 ->
+  (DDefs1, DataCon)
+optimizeDataCon (dcon, newindices) ddefs =
   let (tycon, (_, fields)) = lkp' ddefs dcon
       newFields = permute newindices fields
-      --newDcon = dcon ++ "Optimized" -- TODO: Change this to use gensym
+      newDcon = dcon ++ "Optimized" -- TODO: Change this to use gensym
       DDef {tyName, tyArgs, dataCons} = lookupDDef' ddefs (fromVar tycon)
       newDDef =
         DDef
@@ -1122,7 +1087,7 @@ optimizeDataCon (dcon, newindices) ddefs newDcon =
           }
       ddefs' = M.delete tycon ddefs
       ddefs'' = insertDD newDDef ddefs'
-   in ddefs''
+   in (ddefs'', newDcon)
 
 -- | Lookup a Datacon.  Return (TyCon, (DataCon, [flds]))
 lkp' ::

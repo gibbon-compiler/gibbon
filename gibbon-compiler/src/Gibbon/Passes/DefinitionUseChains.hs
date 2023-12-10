@@ -50,9 +50,8 @@ progToVEnv ::
   -> Env2 (TyOf (PreExp e l d))
 progToVEnv p@Prog {ddefs, fundefs, mainExp} =
   case mainExp of
-    Just (expr, ty) -> let envMainExp = getExpTyEnv emptyEnv2 expr
-                           extentEnv  = unionEnv2 initialEnv extendedVEnv
-                         in unionEnv2 envMainExp extentEnv
+    Just (exp, ty) ->
+      unionEnv2 (unionEnv2 initialEnv extendedVEnv) (getExpTyEnv emptyEnv2 exp)
     Nothing -> error "progToVEnv : No main expression found!"
   where
     initialEnv   = progToEnv p
@@ -69,7 +68,7 @@ progToVEnv p@Prog {ddefs, fundefs, mainExp} =
         LitSymE {} -> emptyEnv2
         AppE f locs args -> unionEnv2s (L.map (getExpTyEnv env) args)
         PrimAppE f args -> unionEnv2s (L.map (getExpTyEnv env) args)
-        LetE (v, loc, ty, rhs) bod -> unionEnv2s $ [extendVEnv v ty env] ++ [getExpTyEnv env rhs] ++ [getExpTyEnv env bod]
+        LetE (v, loc, ty, rhs) bod -> extendVEnv v ty env
                                         -- a == DataCon
                                         -- b == [(Var, loc)]
                                         -- c == Case Body

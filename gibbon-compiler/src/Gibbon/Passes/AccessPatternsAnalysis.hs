@@ -1,134 +1,129 @@
 module Gibbon.Passes.AccessPatternsAnalysis
-  ( generateAccessGraphs,
-    FieldMap,
-    DataConAccessMap,
-  )
-where
+  ( generateAccessGraphs
+  , FieldMap
+  , DataConAccessMap
+  ) where
+
 
 -- Gibbon imports
+import           Gibbon.Common
+import           Gibbon.Language
+import           Gibbon.Language.Syntax
+import           Gibbon.Passes.ControlFlowGraph (CFGfunctionMap)
 
-import Control.Monad as Mo
-import Data.Graph as G
-import Data.List as L
-import Data.Map as M
-import Data.Maybe as Mb
-import Data.Set as S
-import Gibbon.Common
-import Gibbon.Language
-import Gibbon.Language.Syntax
-import Gibbon.Passes.ControlFlowGraph (CFGfunctionMap)
+import           Control.Monad                  as Mo
+import           Data.Graph                     as G
+import           Data.List                      as L
+import           Data.Map                       as M
+import           Data.Maybe                     as Mb
+import           Data.Set                       as S
+
 -- Haskell imports
+import           Prelude                        as P
+import           Text.PrettyPrint.GenericPretty
 
-import Text.PrettyPrint.GenericPretty
-import Prelude as P
 
 -- | Type VariableMap: Stores mapping from Variable to wheather it comes from a particular datacon
 -- | index position in data con.
 type VariableMap = M.Map Var (Maybe (DataCon, Integer))
 
+
 -- | Map a function to its Access map for a particular data constructor.
 -- | Function stored as variable name
 type FieldMap = M.Map Var DataConAccessMap
+
 
 -- | Store the access edges for fields in a data con.
 -- | Fields are represented as index positions in the DataCon.
 type DataConAccessMap = M.Map DataCon [((Integer, Integer), Integer)]
 
 generateAccessGraphs ::
-  (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-  CFGfunctionMap (PreExp e l d) ->
-  FieldMap ->
-  FunDef (PreExp e l d) ->
-  DataCon ->
-  FieldMap
-generateAccessGraphs
-  cfgMap
-  fieldMap
-  funDef@FunDef
-    { funName,
-      funBody,
-      funTy,
-      funArgs
-    }
-  dcons =
-    case (M.lookup funName cfgMap) of
-      Just (graph, nodeFromVertex, vertexFromKey) ->
-        let topologicallySortedVertices = topSort graph
-            topologicallySortedNodes =
-              P.map nodeFromVertex topologicallySortedVertices
-            map = backtrackVariablesToDataConFields topologicallySortedNodes dcons
-            edges =
-                ( constructFieldGraph
-                    Nothing
-                    nodeFromVertex
-                    vertexFromKey
-                    topologicallySortedNodes
-                    topologicallySortedNodes
-                    map
-                )
-                dcons
-            accessMapsList = zipWith (\x y -> (x, y)) [dcons] [edges]
-            accessMaps = M.fromList accessMapsList
-         in M.insert funName accessMaps fieldMap --dbgTraceIt (sdoc (edges, map))
-      Nothing -> error "generateAccessGraphs: no CFG for function found!"
+     (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
+  => CFGfunctionMap (PreExp e l d)
+  -> FieldMap
+  -> FunDef (PreExp e l d)
+  -> [DataCon]
+  -> FieldMap
+generateAccessGraphs cfgMap fieldMap funDef@FunDef { funName
+                                                   , funBody
+                                                   , funTy
+                                                   , funArgs
+                                                   } dcons =
+  case (M.lookup funName cfgMap) of
+    Just (graph, nodeFromVertex, vertexFromKey) ->
+      let topologicallySortedVertices = topSort graph
+          topologicallySortedNodes =
+            P.map nodeFromVertex topologicallySortedVertices
+          map = backtrackVariablesToDataConFields topologicallySortedNodes
+          edges =
+            P.map
+              (constructFieldGraph
+                 Nothing
+                 nodeFromVertex
+                 vertexFromKey
+                 topologicallySortedNodes
+                 topologicallySortedNodes
+                 map)
+              dcons
+          accessMapsList = zipWith (\x y -> (x, y)) dcons edges
+          accessMaps = M.fromList accessMapsList
+       in M.insert funName accessMaps fieldMap
+    Nothing -> error "generateAccessGraphs: no CFG for function found!"
 
 backtrackVariablesToDataConFields ::
-  (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  DataCon ->
-  VariableMap
-backtrackVariablesToDataConFields graph dcon =
+     (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
+  => [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> VariableMap
+backtrackVariablesToDataConFields graph =
   case graph of
     [] -> M.empty
-    x : xs ->
-      let newMap = processVertex graph x M.empty dcon 
+    x:xs ->
+      let newMap = processVertex graph x M.empty
           mlist = M.toList (newMap)
-          m = backtrackVariablesToDataConFields xs dcon 
+          m = backtrackVariablesToDataConFields xs
           mlist' = M.toList m
           newMap' = M.fromList (mlist ++ mlist')
        in newMap'
 
 processVertex ::
-  (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  (((PreExp e l d), Integer), Integer, [Integer]) ->
-  VariableMap ->
-  DataCon -> 
-  VariableMap
-processVertex graph node map dataCon  =
+     (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
+  => [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> (((PreExp e l d), Integer), Integer, [Integer])
+  -> VariableMap
+  -> VariableMap
+processVertex graph node map =
   case node of
     ((expression, likelihood), id, succ) ->
       case expression of
         DataConE loc dcon args ->
-          if dcon == dataCon
-          then 
-            let freeVariables = L.concat (P.map (\x -> S.toList (gFreeVars x)) args)
-                maybeIndexes = P.map (getDataConIndexFromVariable graph) freeVariables
-                mapList = M.toList map
-                newMapList = P.zipWith (\x y -> (x, y)) freeVariables maybeIndexes
-             in M.fromList (mapList ++ newMapList)
-          else map 
+          let freeVariables =
+                L.concat (P.map (\x -> S.toList (gFreeVars x)) args)
+              maybeIndexes =
+                P.map (getDataConIndexFromVariable graph) freeVariables
+              mapList = M.toList map
+              newMapList = P.zipWith (\x y -> (x, y)) freeVariables maybeIndexes
+           in M.fromList (mapList ++ newMapList)
         _ -> map
 
 getDataConIndexFromVariable ::
-  (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  Var ->
-  Maybe (DataCon, Integer)
+     (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
+  => [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> Var
+  -> Maybe (DataCon, Integer)
 getDataConIndexFromVariable graph variable =
   case graph of
     [] -> Nothing
-    x : xs ->
+    x:xs ->
       let status = compareVariableWithDataConFields x variable
        in case status of
-            Nothing -> getDataConIndexFromVariable xs variable
+            Nothing  -> getDataConIndexFromVariable xs variable
             Just val -> Just val
 
 compareVariableWithDataConFields ::
-  (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-  (((PreExp e l d), Integer), Integer, [Integer]) ->
-  Var ->
-  Maybe (DataCon, Integer)
+     (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
+  => (((PreExp e l d), Integer), Integer, [Integer])
+  -> Var
+  -> Maybe (DataCon, Integer)
 compareVariableWithDataConFields node variable =
   case node of
     ((exp, likelihood), id, _) ->
@@ -138,9 +133,10 @@ compareVariableWithDataConFields node variable =
               results = P.map (variable ==) variables
               maybeIndex = L.elemIndex True results
            in case maybeIndex of
-                Nothing -> Nothing
+                Nothing  -> Nothing
                 Just val -> Just (dcon, P.toInteger val)
         _ -> Nothing
+
 
 -- | Return the freeVariables bound by an expression in Order
 freeVarsInOrder :: (PreExp e l d) -> [Var]
@@ -162,18 +158,15 @@ freeVarsInOrder exp =
        in var_list
     LetE (v, loc, ty, rhs) bod -> freeVarsInOrder rhs
     CaseE scrt mp ->
-      (freeVarsInOrder scrt)
-        ++ ( L.concat
-               ( L.map
-                   ( \(_, vlocs, expr) ->
-                       let (vars, _) = P.unzip vlocs
-                           freeVarsExp = freeVarsInOrder expr
-                           newVars = freeVarsExp ++ vars
-                        in newVars
-                   )
-                   mp
-               )
-           )
+      (freeVarsInOrder scrt) ++
+      (L.concat
+         (L.map
+            (\(_, vlocs, expr) ->
+               let (vars, _) = P.unzip vlocs
+                   freeVarsExp = freeVarsInOrder expr
+                   newVars = freeVarsExp ++ vars
+                in newVars)
+            mp))
     IfE a b c ->
       (freeVarsInOrder a) ++ (freeVarsInOrder b) ++ (freeVarsInOrder c)
     MkProdE xs ->
@@ -189,11 +182,12 @@ freeVarsInOrder exp =
     MapE {} -> error "freeVarsInOrder: TODO MapE"
     FoldE {} -> error "freeVarsInOrder: TODO FoldE"
 
-removeDuplicates :: (Eq a) => [a] -> [a]
+removeDuplicates :: Eq a => [a] -> [a]
 removeDuplicates list =
   case list of
-    [] -> []
-    a : as -> a : removeDuplicates (P.filter (/= a) as)
+    []   -> []
+    a:as -> a : removeDuplicates (P.filter (/= a) as)
+
 
 -- | From a given graph generate the Field ordering subgraph.
 -- | A subgraph that only contains Fields from the dataCons as Vertices.
@@ -209,17 +203,17 @@ removeDuplicates list =
 -- | Since this will be run after flatten, it is safe to assume that only possibly a maximum of two variables can be read in one let binding.
 -- | Except function calls! where more than two fields can be passed as arguments.
 evaluateExpressionFieldGraph ::
-  Maybe (DataCon, Integer) ->
-  (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer])) ->
-  (Integer -> Maybe G.Vertex) ->
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  VariableMap ->
-  DataCon ->
-  [Var] ->
-  [Integer] ->
-  Integer ->
-  [((Integer, Integer), Integer)]
+     Maybe (DataCon, Integer)
+  -> (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer]))
+  -> (Integer -> Maybe G.Vertex)
+  -> [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> VariableMap
+  -> DataCon
+  -> [Var]
+  -> [Integer]
+  -> Integer
+  -> [((Integer, Integer), Integer)]
 evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs map datacon freeVars successors likelihood =
   case currField of
     Nothing ->
@@ -236,15 +230,15 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
             [a] ->
               case a of
                 Nothing ->
-                  []
-                    ++ constructFieldGraph
-                      Nothing
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                  [] ++
+                  constructFieldGraph
+                    Nothing
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
                 Just (dcon, id) ->
                   case (dcon == datacon) of
                     True ->
@@ -252,72 +246,70 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                           succVertices = P.map nodeFromVertex succ'
                           succExp = P.map (\x -> (fst . fst3) x) succVertices
                           succprob = P.map (\x -> (snd . fst3) x) succVertices
-                          {- list of list, where each list stores variables -}
+                                                                                        {- list of list, where each list stores variables -}
                           succDataCon =
                             P.map
-                              ( \x ->
-                                  findFieldInDataConFromVariableInExpression
-                                    x
-                                    graph
-                                    map
-                                    datacon
-                              )
+                              (\x ->
+                                 findFieldInDataConFromVariableInExpression
+                                   x
+                                   graph
+                                   map
+                                   datacon)
                               succExp
-                          {- list of tuples, where each tuple == ([(dcon, id), ... ], likelihood)    -}
+                                                                                        {- list of tuples, where each tuple == ([(dcon, id), ... ], likelihood)    -}
                           succDataCon' =
                             P.zipWith (\x y -> (x, y)) succDataCon succprob
                           newEdges =
                             P.concat $
-                              P.map
-                                ( \x ->
-                                    case x of
-                                      (varsl, prob) ->
-                                        P.map (\y -> ((id, snd y), prob)) varsl
-                                )
-                                succDataCon'
+                            P.map
+                              (\x ->
+                                 case x of
+                                   (varsl, prob) ->
+                                     P.map (\y -> ((id, snd y), prob)) varsl)
+                              succDataCon'
                        in case newEdges of
                             [] ->
                               case successors of
                                 [] ->
-                                  []
-                                    ++ constructFieldGraph
-                                      Nothing
-                                      nodeFromVertex
-                                      vertexFromNode
-                                      graph
-                                      xs
-                                      map
-                                      datacon
+                                  [] ++
+                                  constructFieldGraph
+                                    Nothing
+                                    nodeFromVertex
+                                    vertexFromNode
+                                    graph
+                                    xs
+                                    map
+                                    datacon
                                 _ ->
-                                  newEdges
-                                    ++ constructFieldGraph
-                                      (Just (dcon, id))
-                                      nodeFromVertex
-                                      vertexFromNode
-                                      graph
-                                      xs
-                                      map
-                                      datacon
+                                  newEdges ++
+                                  constructFieldGraph
+                                    (Just (dcon, id))
+                                    nodeFromVertex
+                                    vertexFromNode
+                                    graph
+                                    xs
+                                    map
+                                    datacon
                             _ ->
-                              newEdges
-                                ++ constructFieldGraph
-                                  Nothing
-                                  nodeFromVertex
-                                  vertexFromNode
-                                  graph
-                                  xs
-                                  map
-                                  datacon
+                              newEdges ++
+                              constructFieldGraph
+                                Nothing
+                                nodeFromVertex
+                                vertexFromNode
+                                graph
+                                xs
+                                map
+                                datacon
                     _ ->
-                      []
-                        ++ constructFieldGraph
-                          currField
-                          nodeFromVertex
-                          vertexFromNode
-                          graph
-                          xs
-                          map
-                          datacon
+                      [] ++
+                      constructFieldGraph
+                        currField
+                        nodeFromVertex
+                        vertexFromNode
+                        graph
+                        xs
+                        map
+                        datacon
             _ ->
               error
                 "evaluateExpressionFieldGraph: More than one variable from DataCon in a let binding not modelled into Field dependence graph yet!"
@@ -339,62 +331,60 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                       succVertices = P.map nodeFromVertex succ'
                       succExp = P.map (\x -> (fst . fst3) x) succVertices
                       succprob = P.map (\x -> (snd . fst3) x) succVertices
-                      {- list of list, where each list stores variables -}
+                                                                 {- list of list, where each list stores variables -}
                       succDataCon =
                         P.map
-                          ( \x ->
-                              findFieldInDataConFromVariableInExpression
-                                x
-                                graph
-                                map
-                                datacon
-                          )
+                          (\x ->
+                             findFieldInDataConFromVariableInExpression
+                               x
+                               graph
+                               map
+                               datacon)
                           succExp
-                      {- list of tuples, where each tuple == ([(dcon, id), ... ], likelihood)    -}
+                                                                 {- list of tuples, where each tuple == ([(dcon, id), ... ], likelihood)    -}
                       succDataCon' =
                         P.zipWith (\x y -> (x, y)) succDataCon succprob
                       newEdges =
                         P.concat $
-                          P.map
-                            ( \x ->
-                                case x of
-                                  (varsl, prob) ->
-                                    P.map (\y -> ((pred, snd y), prob)) varsl
-                            )
-                            succDataCon'
+                        P.map
+                          (\x ->
+                             case x of
+                               (varsl, prob) ->
+                                 P.map (\y -> ((pred, snd y), prob)) varsl)
+                          succDataCon'
                    in case newEdges of
                         [] ->
                           case successors of
                             [] ->
-                              []
-                                ++ constructFieldGraph
-                                  Nothing
-                                  nodeFromVertex
-                                  vertexFromNode
-                                  graph
-                                  xs
-                                  map
-                                  datacon
+                              [] ++
+                              constructFieldGraph
+                                Nothing
+                                nodeFromVertex
+                                vertexFromNode
+                                graph
+                                xs
+                                map
+                                datacon
                             _ ->
-                              newEdges
-                                ++ constructFieldGraph
-                                  (Just (dcon, pred))
-                                  nodeFromVertex
-                                  vertexFromNode
-                                  graph
-                                  xs
-                                  map
-                                  datacon
+                              newEdges ++
+                              constructFieldGraph
+                                (Just (dcon, pred))
+                                nodeFromVertex
+                                vertexFromNode
+                                graph
+                                xs
+                                map
+                                datacon
                         _ ->
-                          newEdges
-                            ++ constructFieldGraph
-                              Nothing
-                              nodeFromVertex
-                              vertexFromNode
-                              graph
-                              xs
-                              map
-                              datacon
+                          newEdges ++
+                          constructFieldGraph
+                            Nothing
+                            nodeFromVertex
+                            vertexFromNode
+                            graph
+                            xs
+                            map
+                            datacon
                 Just (dcon', id') ->
                   case (dcon' == datacon) of
                     True ->
@@ -405,149 +395,150 @@ evaluateExpressionFieldGraph currField nodeFromVertex vertexFromNode graph xs ma
                           succprob = P.map (\x -> (snd . fst3) x) succVertices
                           succDataCon =
                             P.map
-                              ( \x ->
-                                  findFieldInDataConFromVariableInExpression
-                                    x
-                                    graph
-                                    map
-                                    datacon
-                              )
+                              (\x ->
+                                 findFieldInDataConFromVariableInExpression
+                                   x
+                                   graph
+                                   map
+                                   datacon)
                               succExp
                           succDataCon' =
                             P.zipWith (\x y -> (x, y)) succDataCon succprob
                           newEdges =
                             P.concat $
-                              P.map
-                                ( \x ->
-                                    case x of
-                                      (varsl, prob) ->
-                                        P.map (\y -> ((pred, snd y), prob)) varsl
-                                )
-                                succDataCon'
-                       in newEdges
-                            ++ edges
-                            ++ constructFieldGraph
-                              Nothing
-                              nodeFromVertex
-                              vertexFromNode
-                              graph
-                              xs
-                              map
-                              datacon
+                            P.map
+                              (\x ->
+                                 case x of
+                                   (varsl, prob) ->
+                                     P.map (\y -> ((pred, snd y), prob)) varsl)
+                              succDataCon'
+                       in newEdges ++
+                          edges ++
+                          constructFieldGraph
+                            Nothing
+                            nodeFromVertex
+                            vertexFromNode
+                            graph
+                            xs
+                            map
+                            datacon
                     _ ->
-                      []
-                        ++ constructFieldGraph
-                          currField
-                          nodeFromVertex
-                          vertexFromNode
-                          graph
-                          xs
-                          map
-                          datacon
+                      [] ++
+                      constructFieldGraph
+                        currField
+                        nodeFromVertex
+                        vertexFromNode
+                        graph
+                        xs
+                        map
+                        datacon
             _ ->
               error
                 "evaluateExpressionFieldGraph: More than one variable from DataCon in a let binding not modelled into Field dependence graph yet!"
 
 constructFieldGraph ::
-  Maybe (DataCon, Integer) ->
-  (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer])) ->
-  (Integer -> Maybe G.Vertex) ->
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  VariableMap ->
-  DataCon ->
-  [((Integer, Integer), Integer)]
+     Maybe (DataCon, Integer)
+  -> (G.Vertex -> (((PreExp e l d), Integer), Integer, [Integer]))
+  -> (Integer -> Maybe G.Vertex)
+  -> [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> VariableMap
+  -> DataCon
+  -> [((Integer, Integer), Integer)]
 constructFieldGraph currField nodeFromVertex vertexFromNode graph progress map datacon =
   case progress of
     [] -> []
-    x : xs ->
+    x:xs ->
       let ((exp, likelihood), id'', successors) = x
        in case exp of
             LitE val ->
               case successors of
                 [] ->
+                  [] ++
                   constructFieldGraph
-                      Nothing
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                    Nothing
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
                 _ ->
+                  [] ++
                   constructFieldGraph
-                      currField
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                    currField
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
             CharE char ->
               case successors of
                 [] ->
-                  []
-                    ++ constructFieldGraph
-                      Nothing
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                  [] ++
+                  constructFieldGraph
+                    Nothing
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
                 _ ->
-                  []
-                    ++ constructFieldGraph
-                      currField
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                  [] ++
+                  constructFieldGraph
+                    currField
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
             FloatE val ->
               case successors of
                 [] ->
-                  []
-                    ++ constructFieldGraph
-                      Nothing
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                  [] ++
+                  constructFieldGraph
+                    Nothing
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
                 _ ->
-                  []
-                    ++ constructFieldGraph
-                      currField
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                  [] ++
+                  constructFieldGraph
+                    currField
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
             DataConE loc dcon args ->
               case successors of
                 [] ->
-                  []
-                    ++ constructFieldGraph
-                      Nothing
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
-                _ ->
+                  [] ++
                   constructFieldGraph
-                      currField
-                      nodeFromVertex
-                      vertexFromNode
-                      graph
-                      xs
-                      map
-                      datacon
+                    Nothing
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
+                _ ->
+                  [] ++
+                  constructFieldGraph
+                    currField
+                    nodeFromVertex
+                    vertexFromNode
+                    graph
+                    xs
+                    map
+                    datacon
             VarE var ->
               evaluateExpressionFieldGraph
                 currField
@@ -628,15 +619,15 @@ constructFieldGraph currField nodeFromVertex vertexFromNode graph progress map d
             Ext _ -> error "constructFieldGraph: TODO Ext"
             MapE {} -> error "constructFieldGraph: TODO MapE"
             FoldE {} -> error "constructFieldGraph: TODO FoldE"
-            _ -> error "not expected"
+
 
 -- | From an expression provided, Recursively find all the variables that come from a DataCon expression, that is, are fields in a DataConE.
 findFieldInDataConFromVariableInExpression ::
-  (PreExp e l d) ->
-  [(((PreExp e l d), Integer), Integer, [Integer])] ->
-  VariableMap ->
-  DataCon ->
-  [(DataCon, Integer)]
+     (PreExp e l d)
+  -> [(((PreExp e l d), Integer), Integer, [Integer])]
+  -> VariableMap
+  -> DataCon
+  -> [(DataCon, Integer)]
 findFieldInDataConFromVariableInExpression exp graph map datacon =
   case exp of
     VarE var ->
@@ -661,9 +652,9 @@ findFieldInDataConFromVariableInExpression exp graph map datacon =
           removeMaybe = Mb.catMaybes fromDataCon
           newDatacons =
             [ if dcon == datacon
-                then Just (dcon, id')
-                else Nothing
-              | (dcon, id') <- removeMaybe
+              then Just (dcon, id')
+              else Nothing
+            | (dcon, id') <- removeMaybe
             ]
           newDatacons' = Mb.catMaybes newDatacons
        in newDatacons'
@@ -673,9 +664,9 @@ findFieldInDataConFromVariableInExpression exp graph map datacon =
           removeMaybe = Mb.catMaybes fromDataCon
           newDatacons =
             [ if dcon == datacon
-                then Just (dcon, id')
-                else Nothing
-              | (dcon, id') <- removeMaybe
+              then Just (dcon, id')
+              else Nothing
+            | (dcon, id') <- removeMaybe
             ]
           newDatacons' = Mb.catMaybes newDatacons
        in newDatacons'
@@ -685,9 +676,9 @@ findFieldInDataConFromVariableInExpression exp graph map datacon =
           removeMaybe = Mb.catMaybes fromDataCon
           newDatacons =
             [ if dcon == datacon
-                then Just (dcon, id')
-                else Nothing
-              | (dcon, id') <- removeMaybe
+              then Just (dcon, id')
+              else Nothing
+            | (dcon, id') <- removeMaybe
             ]
           newDatacons' = Mb.catMaybes newDatacons
        in newDatacons'
@@ -701,9 +692,9 @@ findFieldInDataConFromVariableInExpression exp graph map datacon =
           removeMaybe = Mb.catMaybes fromDataCon
           newDatacons =
             [ if dcon == datacon
-                then Just (dcon, id')
-                else Nothing
-              | (dcon, id') <- removeMaybe
+              then Just (dcon, id')
+              else Nothing
+            | (dcon, id') <- removeMaybe
             ]
           newDatacons' = Mb.catMaybes newDatacons
        in newDatacons'
