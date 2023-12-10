@@ -92,7 +92,6 @@ library
                        Gibbon.Passes.CallGraph
                        Gibbon.Passes.AccessPatternsAnalysis
                        Gibbon.Passes.SolveLayoutConstrs
-                       Gibbon.Passes.OptimizeADTLayout
 
   other-extensions:    DeriveDataTypeable CPP
 

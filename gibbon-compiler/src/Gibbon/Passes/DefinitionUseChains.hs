@@ -1,9 +1,7 @@
 module Gibbon.Passes.DefinitionUseChains
   ( progToVEnv
   , generateDefUseChainsFunction
-  , getDefinitionsReachingLetExp
   , DefUseChainsFunctionMap(..)
-  , UseDefChainsFunctionMap(..)
   ) where
 
 
@@ -36,13 +34,6 @@ type DefUseChainsFunctionMap ex
    = M.Map Var ( G.Graph
                , G.Vertex -> ((Var, ex, (TyOf ex)), ex, [ex])
                , ex -> Maybe G.Vertex)
-
-
--- | Node == (Var, ex, (TyOf ex)) which represents a use, a variable Var and the expression that defines it.  
--- | Key == Var 
--- | (Var, ex, (TyOf ex)), Var, [Var]) stores Node, key and list of defintions that reach the Use specified by Node. 
-
-type UseDefChainsFunctionMap ex = M.Map Var (G.Graph, G.Vertex -> ((Var, ex, (TyOf ex)), Var, [Var]), Var -> Maybe G.Vertex)
 
 progToVEnv ::
      (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
@@ -113,16 +104,6 @@ generateDefUseChainsFunction env f@FunDef {funName, funBody, funTy, funArgs} =
         (graph, nodeFromVertex, vertexFromKey)
         M.empty
 
-getDefinitionsReachingLetExp :: (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l) =>
-                             FunDef (PreExp e l d)
-                             -> UseDefChainsFunctionMap (PreExp e l d)
-getDefinitionsReachingLetExp f@FunDef {funName, funBody, funTy, funArgs} =
-  let edgeList = generateUseDefChainsFunBody M.empty funBody
-      (graph, nodeFromVertex, vertexFromKey) = G.graphFromEdges edgeList
-    in dbgTraceIt (sdoc edgeList) dbgTraceIt ("\n") M.insert funName (graph, nodeFromVertex, vertexFromKey) M.empty
-
-
-
 generateDefUseChainsExp ::
      (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
   => Env2 (TyOf (PreExp e l d))
@@ -140,37 +121,6 @@ generateDefUseChainsExp env key expr =
         key
         (graph, nodeFromVertex, vertexFromKey)
         M.empty
-
-
-generateUseDefChainsFunBody :: (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
-                            => M.Map Var (PreExp e l d)
-                            -> (PreExp e l d)
-                            -> [((Var, (PreExp e l d), (TyOf (PreExp e l d))), Var, [Var])]
-generateUseDefChainsFunBody liveExprs exp = case exp of
-    DataConE loc dcon args -> P.concatMap (generateUseDefChainsFunBody liveExprs) args
-    VarE {} -> []
-    LitE {} -> []
-    CharE {} -> []
-    FloatE {} -> []
-    LitSymE {} -> []
-    AppE f locs args -> P.concatMap (generateUseDefChainsFunBody liveExprs) args
-    PrimAppE f args -> P.concatMap (generateUseDefChainsFunBody liveExprs) args
-    LetE (v, loc, ty, rhs) bod -> let freeVars = gFreeVars rhs
-                                      currentLiveExpression = LetE (v, loc, ty, rhs) $ VarE v
-                                      newLiveExpressions    = M.insert v currentLiveExpression liveExprs
-                                      defineEdge = [((v, currentLiveExpression, ty), v, S.toList freeVars)]
-                                    in defineEdge ++ generateUseDefChainsFunBody newLiveExpressions bod
-    -- a == DataCon
-    -- b == [(Var, loc)]
-    -- c == Case Body
-    -- TODO: Add variables bound by case expressions. 
-    CaseE scrt mp -> P.concatMap (\(a, b, c) -> generateUseDefChainsFunBody liveExprs c) mp
-    IfE a b c -> (generateUseDefChainsFunBody liveExprs a) ++ (generateUseDefChainsFunBody liveExprs b) ++ (generateUseDefChainsFunBody liveExprs c)
-    MkProdE xs -> P.concatMap (generateUseDefChainsFunBody liveExprs) xs
-    _ -> error "generateUseDefChainsFunBody: Encountered expression which is not implemented yet!"
-
-
-
 
 generateDefUseChainsFunBody ::
      (FreeVars (e l d), Ord l, Ord d, Ord (e l d), Out d, Out l)
