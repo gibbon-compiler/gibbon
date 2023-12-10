@@ -96,7 +96,6 @@ library
                        Gibbon.Passes.CalculateBounds
                        Gibbon.Passes.ControlFlowGraph
                        Gibbon.Passes.DefinitionUseChains
-                       Gibbon.Passes.CallGraph
 
   other-extensions:    DeriveDataTypeable CPP
 
