@@ -895,6 +895,8 @@ tests:
     failing: []
     run-modes: ["gibbon2", "gibbon3", "pointer"]
     
+    #Runs the layout pipeline, prints optimized type and compares. 
+    #Failing because do not have cplex solver, need academic license. 
   - name: layout1ContentSearchRunPipeline.hs 
     test-flags: ["--no-gc", "--opt-layout"]
     dir: examples/layout_bench

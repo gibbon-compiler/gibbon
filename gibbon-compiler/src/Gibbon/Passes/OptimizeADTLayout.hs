@@ -125,7 +125,6 @@ optimizeADTLayout prg@Prog{ddefs, fundefs, mainExp} =
 
 producerConsumerLayoutOptimization :: Prog1 -> PassM Prog1
 producerConsumerLayoutOptimization prg@Prog{ddefs, fundefs, mainExp} = do
-  -- TODO: make a custom function name printer that guarantees that functions starting with _ are auto-generated. 
   let funsToOptimize = P.concatMap (\FunDef{funName} -> ([funName | not $ isInfixOf "_" (fromVar funName)])
                                    ) $ M.elems fundefs
   let pairDataConFuns = P.concatMap (\name -> case M.lookup name fundefs
