@@ -1,1 +1,4 @@
 packages: gibbon-compiler
+
+program-options
+    ghc-options: -Werror=tabs
