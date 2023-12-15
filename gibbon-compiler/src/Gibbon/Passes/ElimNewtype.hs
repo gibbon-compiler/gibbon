@@ -9,6 +9,7 @@ passProgram :: Prog1 -> Prog1
 passProgram prog = 
   _
   where
+    _ = M.filter (\x -> length (dataCons x) == 1)
     _ = ddefs prog  -- filter out cases of size 1
   
   
