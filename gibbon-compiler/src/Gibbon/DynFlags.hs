@@ -36,7 +36,7 @@ data GeneralFlag
   | Opt_CountAllRegions    -- ^ Count and print the number of all the regions allocated.
   | Opt_RtsDebug           -- ^ Compile the RTS in debugging mode.
   | Opt_PrintGcStats       -- ^ Record and print GC statistics.
-  | Opt_GenGc              -- ^ Use the new non-generational GC.
+  | Opt_GenGc              -- ^ Use the new generational GC.
   | Opt_NoEagerPromote     -- ^ Disable eager promotion.
   | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
   deriving (Show,Read,Eq,Ord)
