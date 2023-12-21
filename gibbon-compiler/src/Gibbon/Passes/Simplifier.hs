@@ -246,6 +246,7 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                 L4.IntAlts ls -> L4.IntAlts $ map (\(t,tl) -> (t,go env tl)) ls
         go env tl =
               case tl of
+                   L4.EndOfMain -> L4.EndOfMain
                    L4.RetValsT trvs ->
                        L4.RetValsT (map (gotriv env) trvs)
                    L4.AssnValsT upd mb_bod ->

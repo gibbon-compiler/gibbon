@@ -324,7 +324,7 @@ addPrintToTail ty tl0 = do
         -- Always print a trailing newline at the end of execution:
         T.LetPrimCallT [] (T.PrintString "\n") [] $
           -- T.LetPrimCallT [] T.FreeSymTable [] $
-          T.RetValsT []  -- Void return after printing.
+          T.EndOfMain  -- marker of the end of main expression
 
 -- | Look up the numeric tag for a dataCon
 getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag

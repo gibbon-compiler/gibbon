@@ -26,6 +26,7 @@ rearrangeFreeFn f@FunDecl{funBody} = do
 rearrangeFreeExp :: Bool -> Maybe (Tail -> Tail) -> Tail -> PassM Tail
 rearrangeFreeExp is_main frees tail =
   case tail of
+    EndOfMain -> return tail
     LetPrimCallT binds prim rands bod ->
       case prim of
         FreeBuffer -> do

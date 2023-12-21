@@ -78,6 +78,7 @@ harvestStructTys (Prog _ _ funs mtal) =
    where
     go tl =
      case tl of
+       EndOfMain -> []
        (RetValsT _)  -> []
        (AssnValsT ls bod_maybe) ->
          case bod_maybe of
@@ -146,6 +147,7 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
 
     go acc tl =
       case tl of
+        EndOfMain -> acc
         RetValsT{} -> acc
         AssnValsT _ mb_bod -> case mb_bod of
                                 Just bod -> go acc bod
@@ -421,6 +423,7 @@ rewriteReturns :: Tail -> [(Var,Ty)] -> Tail
 rewriteReturns tl bnds =
  let go x = rewriteReturns x bnds in
  case tl of
+   EndOfMain -> tl
    (RetValsT ls) -> AssnValsT [ (v,t,e) | (v,t) <- bnds | e <- ls ] Nothing
    (Goto _) -> tl
 
@@ -504,6 +507,7 @@ ssDecls =
 -- | The central codegen function.
 codegenTail :: VEnv -> FEnv -> S.Set Var -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
 
+codegenTail _ _ _ EndOfMain _ty _   = return []
 -- Void type:
 codegenTail _ _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return 0; |] ]
 -- Single return:

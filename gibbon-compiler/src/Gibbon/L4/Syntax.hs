@@ -117,6 +117,9 @@ data DataConInfo = DataConInfo
 
 data Tail
     = RetValsT [Triv] -- ^ Only in tail position, for returning from a function.
+
+    | EndOfMain -- ^ A marker for an end of the main expression.
+
     | AssnValsT { upd       :: [(Var,Ty,Triv)]
                 , bod_maybe :: Maybe Tail
                 }
@@ -397,6 +400,7 @@ withTail (tl0,retty) fn =
   let go x = withTail (x,retty) fn in -- Warning: assumes same type.
   case tl0 of
     Goto{} -> return tl0
+    EndOfMain{} -> return tl0
     RetValsT ls -> return $ fn ls
     (ErrT x)    -> return $ ErrT x
     (AssnValsT _ _) -> error $ "withTail: expected tail expression returning values, not: "++show tl0
@@ -455,6 +459,7 @@ inlineTrivL4 (Prog info_tbl sym_tbl fundefs mb_main) =
     inline_tail :: M.Map Var Triv -> Tail -> Tail
     inline_tail env tl =
       case tl of
+        EndOfMain                -> tl
         RetValsT trvs            -> RetValsT (map (inline env) trvs)
         AssnValsT assns mb_bod   -> AssnValsT
                                       (map (\(v,ty,trv) -> (v,ty,inline env trv)) assns)
