@@ -11,8 +11,8 @@ import Data.Symbol (unintern)
 passProgram :: Prog1 -> Prog1
 passProgram prog = 
   Prog 
-    { mainExp= (elimE connames tynames *** elimTy tynames) <$> mainExp prog
-    , fundefs= fdefs
+    { mainExp = (elimE connames tynames (ddefs prog) *** elimTy tynames) <$> mainExp prog
+    , fundefs = fdefs
     , ddefs = tys
     }
   where
@@ -24,8 +24,8 @@ passProgram prog =
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
     fdefs = M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
 
-elimE :: S.Set String -> S.Set String -> Exp1 -> Exp1
-elimE cns tns e0 = case e0 of
+elimE :: S.Set String -> S.Set String -> DDefs Ty1 -> Exp1 -> Exp1
+elimE cns tns dds e0 = case e0 of
   DataConE _ty0 s [e]
     | S.member s cns -> f e
   DataConE _ty0 s es -> DataConE _ty0 s (f <$> es)
@@ -40,18 +40,15 @@ elimE cns tns e0 = case e0 of
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
-  -- replacing with a let  would be ideal, 
-  -- but lets require types that are not kept
-  -- CaseE e1 [(s, [(var, _)], e2)]
-    -- | S.member s cns -> _
-  -- CaseE e x -> CaseE (f e) _
-
+  CaseE e1 [(s, [(var, _)], e2)]      -- hopefully gRecoverType works
+    | S.member s cns -> LetE (var, [()], gRecoverType dds emptyEnv2 e1, f e1) (f e2)
+  CaseE e x -> CaseE (f e) ((\(c, v, e1) -> (c, v, f e1)) <$> x)
   TimeIt e t b -> TimeIt (f e) (g t) b
   WithArenaE var e -> WithArenaE var (f e)
   SpawnE var ts es -> SpawnE var ts (f <$> es)
   _ -> e0
   where
-    f = elimE cns tns
+    f = elimE cns tns dds
     g = elimTy tns
 
 elimPrim :: S.Set String -> Prim Ty1 -> Prim Ty1
