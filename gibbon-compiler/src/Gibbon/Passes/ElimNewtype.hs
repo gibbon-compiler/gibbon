@@ -12,9 +12,7 @@ passProgram :: Prog1 -> Prog1
 passProgram prog = 
   Prog 
     { mainExp= (elimE connames *** elimTy tynames) <$> mainExp prog
-    , fundefs= _
-      -- M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
-      -- issue: Ty1 is too degenerate
+    , fundefs= fdefs
     , ddefs=tys
     }
   where
@@ -24,6 +22,7 @@ passProgram prog =
       ) (ddefs prog)
     tynames = S.fromList $ (\(Var x) -> unintern x) <$> M.keys newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
+    fdefs = M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
 
 elimE :: S.Set String -> Exp1 -> Exp1
 elimE cns e0 = case e0 of
