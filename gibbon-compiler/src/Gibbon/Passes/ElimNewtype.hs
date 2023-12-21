@@ -23,8 +23,6 @@ passProgram prog =
     tynames = S.fromList $ (\(Var x) -> unintern x) <$> M.keys newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
     fdefs = M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
-    
-    -- todo: differentiate type constructor and data constructor
 
 elimE :: S.Set String -> S.Set String -> Exp1 -> Exp1
 elimE cns tns e0 = case e0 of
@@ -42,7 +40,10 @@ elimE cns tns e0 = case e0 of
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
-  -- CaseE e1 [s, _, e2] | 
+  -- replacing with a let  would be ideal, 
+  -- but lets require types that are not kept
+  -- CaseE e1 [(s, [(var, _)], e2)]
+    -- | S.member s cns -> _
   -- CaseE e x -> CaseE (f e) _
   _ -> _
   where
@@ -91,4 +92,4 @@ elimTyArrow :: S.Set String -> ([Ty1], Ty1) -> ([Ty1], Ty1)
 elimTyArrow tns = fmap (elimTy tns) *** elimTy tns
 
 elimTy :: S.Set String -> Ty1 -> Ty1
-elimTy tns _ = _
+elimTy _tns _ = _
