@@ -6,11 +6,12 @@ import Gibbon.Common
 import Control.Arrow
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Symbol (unintern)
+import Data.Maybe ( fromMaybe )
+import Data.Symbol ( unintern )
 
 passProgram :: Prog1 -> Prog1
-passProgram prog = 
-  Prog 
+passProgram prog =
+  Prog
     { mainExp = (elimE connames tynames (ddefs prog) *** elimTy tynames) <$> mainExp prog
     , fundefs = fdefs
     , ddefs = tys
@@ -20,11 +21,13 @@ passProgram prog =
         [(_, [_])] -> True
         _ -> False
       ) (ddefs prog)
-    tynames = S.fromList $ (\(Var x) -> unintern x) <$> M.keys newtys
+    tynames =  -- maps to underlying type
+      M.mapKeys (\(Var x) -> unintern x)
+      $ M.map (snd . head . snd . head . dataCons) newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
     fdefs = M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
 
-elimE :: S.Set String -> S.Set String -> DDefs Ty1 -> Exp1 -> Exp1
+elimE :: S.Set String -> M.Map String Ty1 -> DDefs Ty1 -> Exp1 -> Exp1
 elimE cns tns dds e0 = case e0 of
   DataConE _ty0 s [e]
     | S.member s cns -> f e
@@ -51,7 +54,7 @@ elimE cns tns dds e0 = case e0 of
     f = elimE cns tns dds
     g = elimTy tns
 
-elimPrim :: S.Set String -> Prim Ty1 -> Prim Ty1
+elimPrim :: M.Map String Ty1 -> Prim Ty1 -> Prim Ty1
 elimPrim tns p0 = case p0 of
   ErrorP s t -> ErrorP s (f t)
   DictInsertP t -> DictInsertP (f t)
@@ -89,8 +92,17 @@ elimPrim tns p0 = case p0 of
   where
     f = elimTy tns
 
-elimTyArrow :: S.Set String -> ([Ty1], Ty1) -> ([Ty1], Ty1)
+elimTyArrow :: M.Map String Ty1 -> ([Ty1], Ty1) -> ([Ty1], Ty1)
 elimTyArrow tns = fmap (elimTy tns) *** elimTy tns
 
-elimTy :: S.Set String -> Ty1 -> Ty1
-elimTy _tns _ = _
+elimTy :: M.Map String Ty1 -> Ty1 -> Ty1
+elimTy tns t0 = case t0 of
+  PackedTy s _ -> fromMaybe t0 (M.lookup s tns)
+  ProdTy ts -> ProdTy (f <$> ts)
+  SymDictTy varMaybe t -> SymDictTy varMaybe (f t)
+  VectorTy t -> VectorTy (f t)
+  PDictTy tK tV -> PDictTy (f tK) (f tV)
+  ListTy t -> ListTy (f t)
+  _ -> t0
+  where
+    f = elimTy tns
