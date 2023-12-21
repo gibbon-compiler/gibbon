@@ -45,7 +45,11 @@ elimE cns tns e0 = case e0 of
   -- CaseE e1 [(s, [(var, _)], e2)]
     -- | S.member s cns -> _
   -- CaseE e x -> CaseE (f e) _
-  _ -> _
+
+  TimeIt e t b -> TimeIt (f e) (g t) b
+  WithArenaE var e -> WithArenaE var (f e)
+  SpawnE var ts es -> SpawnE var ts (f <$> es)
+  _ -> e0
   where
     f = elimE cns tns
     g = elimTy tns
