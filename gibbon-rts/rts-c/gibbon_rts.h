@@ -16,8 +16,7 @@
  *
  * _GIBBON_VERBOSITY=int     verbosity level for debug output
  * _GIBBON_DEBUG             enables various assertions if present
- * _GIBBON_GCSTATS           collect GC statistics if present
- * _GIBBON_PRINT_GCSTATS     print GC statistics if present
+ * _GIBBON_GCSTATS           collect and print GC statistics if present
  * _GIBBON_GENGC             only use old reference counted GC set to 0
  * _GIBBON_BOUNDSCHECK       boundscheck vector accesses
  * _GIBBON_BUMPALLOC_LISTS   bump allocated linked lists

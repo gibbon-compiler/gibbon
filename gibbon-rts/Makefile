@@ -61,10 +61,6 @@ ifeq ($(GCSTATS), 1)
 	RSFLAGS += --features=gcstats
 endif
 
-ifeq ($(PRINT_GCSTATS), 1)
-	CFLAGS += -D_GIBBON_PRINT_GCSTATS
-endif
-
 ifeq ($(POINTER), 1)
 	CFLAGS += -D_GIBBON_POINTER
 endif

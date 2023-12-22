@@ -2027,7 +2027,7 @@ int gib_exit(void)
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibOldgen *oldgen = DEFAULT_GENERATION;
 
-#ifdef _GIBBON_PRINT_GCSTATS
+#ifdef _GIBBON_GCSTATS
     // Print GC statistics.
     gib_gc_stats_print(GC_STATS);
 #endif
