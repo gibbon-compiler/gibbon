@@ -126,7 +126,12 @@ $(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
 	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
 
-$(RUST_RTS_PATH): $(RUST_SOURCES)
+# The Rust sources are not specified as prerequisites and a FORCE
+# prerequisite is used to force unconditional recompilation.
+# The reason is that otherwise we're missing recompilations
+# due to changes in the Make variables.
+# See https://github.com/iu-parfunc/gibbon/issues/244.
+$(RUST_RTS_PATH): FORCE
 	cd  $(RUST_RTS_DIR) && \
 	$(RSC) build -p gibbon-rts-ng $(RSFLAGS)
 
@@ -137,8 +142,11 @@ $(BUILD_DIR)/%.o: $(C_RTS_DIR)/%.o
 	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
 
-$(C_RTS_DIR)/%.o: $(C_RTS_DIR)/%.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+# Same as with the Rust part (see above),
+# the C sources are not specified as prerequisites and a FORCE
+# prerequisite is used to force unconditional recompilation.
+$(C_RTS_DIR)/$(NAME).o: FORCE
+	$(CC) $(CFLAGS) -c -o $@ $(C_RTS_DIR)/$(NAME).c
 
 $(BUILD_DIR)/%.h: $(C_RTS_DIR)/%.h
 	mkdir -p $(BUILD_DIR) && \
@@ -149,5 +157,8 @@ $(BUILD_DIR):
 
 clean:
 	rm -rf $(BUILD_DIR) $(RUST_RTS_DIR)/target
+
+# See https://www.gnu.org/software/make/manual/make.html#Force-Targets
+FORCE:
 
 .PHONY: clean
