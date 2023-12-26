@@ -24,7 +24,6 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.Language
 import Gibbon.Common
 
-import           Data.Graph                     as G
 import qualified Data.Map                       as M
 import           Prelude                        as P
 

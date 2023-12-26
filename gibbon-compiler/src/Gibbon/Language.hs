@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -109,7 +110,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
 
 -- | A Typeable instance for L1 and L3 (L2 defines it's own)
-instance (Show (), Out (), Expression (e () (UrTy ())),
+instance (Show (), Out (),
           TyOf (e () (UrTy ())) ~ TyOf (PreExp e () (UrTy ())),
           FunctionTy (UrTy ()), Typeable (e () (UrTy ())))
        => Typeable (PreExp e () (UrTy ())) where

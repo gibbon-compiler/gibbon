@@ -81,6 +81,7 @@ eval _   (TagTriv t) = TagVal t
 eval _   (SymTriv _) = error "eval: SymTriv not handled"
 eval _   (ProdTriv{}) = error "eval: ProdTriv not handled"
 eval _   (ProjTriv{}) = error "eval: ProjTriv not handled"
+eval _   (BoolTriv{}) = error "eval: BoolTriv not handled"
 
 
 exec :: Env -> Tail -> IO [Val]

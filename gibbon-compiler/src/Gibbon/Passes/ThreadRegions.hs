@@ -315,7 +315,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
-                                    filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                    filter (\(_x,_y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
                                            (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
                               tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
                           in S.fromList $ tmp ++ tmp2
@@ -403,7 +403,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
-                                    filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                    filter (\(_x,_y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
                                            (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
                               tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
                           in S.fromList $ tmp ++ tmp2
@@ -479,7 +479,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_rlocs' = let tmp = map (\(x,(MkTy2 (PackedTy _ loc))) -> (Just x,loc)) $
-                                      filter (\(_x,y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
+                                      filter (\(_x,_y@(MkTy2 (PackedTy tycon loc))) -> loc `S.member` free_rlocs && tycon /= hole_tycon)
                                              (M.toList $ M.filter (isPackedTy . unTy2) (vEnv env2))
                                 tmp2 = map (\x -> (Nothing, x)) $ (S.toList free_rlocs) L.\\ (map snd tmp)
                             in S.fromList $ tmp ++ tmp2

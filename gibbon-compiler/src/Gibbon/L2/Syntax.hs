@@ -5,6 +5,7 @@
 
 {-# LANGUAGE DeriveAnyClass #-}
 
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fdefer-typed-holes #-}

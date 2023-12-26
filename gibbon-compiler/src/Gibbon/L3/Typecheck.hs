@@ -748,6 +748,7 @@ tcExp isPacked ddfs env exp =
 
         Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
 
+        RequestEndOf{} -> throwError $ GenericTC "RequestEndOf not handled yet" exp
 
 
     LetE (v,[],SymDictTy _ _pty, rhs) e -> do

@@ -1421,6 +1421,7 @@ fixProj renam pvar proj e =
       WithArenaE v e -> WithArenaE v $ fixProj renam pvar proj e
       Ext (L1.AddFixed{}) -> e
       Ext (L1.StartOfPkdCursor{}) -> e
+      Ext (BenchE{}) -> err$ "BenchE not supported"
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -1765,6 +1766,7 @@ prim p = case p of
            IntHashInsert{} -> return IntHashInsert
            IntHashLookup{} -> return IntHashLookup
            Write3dPpmFile{} -> err $ "Write3dPpmFile not handled yet."
+           RequestEndOf{} -> err $ "RequestEndOf not handled yet."
 
 emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = emptyDD
@@ -1813,7 +1815,6 @@ fixRANs prg@(Prog defs funs main) = do
                Just (dcon, ls) -> do
                  let tys = lookupDataCon ddfs dcon
                      n = length [ ty | ty <- tys, ty == CursorTy ]
-                     tys' = L.drop n tys
                      rans = L.take n ls
                      needRANsExp = L.reverse $ L.take n (reverse ls)
                      ran_pairs = M.fromList $ fragileZip rans needRANsExp
@@ -1951,6 +1952,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
               (args1, cpy_env1) <- F.foldrM
                        (\groups (acc1, acc2) ->
                            case groups of
+                             [] -> error "copyOutOfOrderPacked: empty groups"
                              [(_,one)] -> pure (one:acc1, acc2)
                              ((_,x):xs) -> do
                                let vars = map snd xs
@@ -2113,20 +2115,20 @@ removeAliasesForCopyCalls prg@(Prog ddfs fndefs mnExp) = do
           funBody' <- removeAliases funBody (M.empty)  
           pure $ fn { funBody = funBody' }
 
-      unifyEnvs :: [AliasEnv] -> AliasEnv
-      unifyEnvs envList = M.unionsWith unifyVals envList
+      _unifyEnvs :: [AliasEnv] -> AliasEnv
+      _unifyEnvs envList = M.unionsWith _unifyVals envList
 
-      unifyVals :: (Var, S.Set Var) -> (Var, S.Set Var) -> (Var, S.Set Var) 
-      unifyVals (v, vs) (v', vs') = if v == v' then (v, vs `S.union` vs')
-                                    else error "unifyVals: Variable should be same if key is same!"
+      _unifyVals :: (Var, S.Set Var) -> (Var, S.Set Var) -> (Var, S.Set Var)
+      _unifyVals (v, vs) (v', vs') = if v == v' then (v, vs `S.union` vs')
+                                     else error "unifyVals: Variable should be same if key is same!"
 
-      myLookup :: Exp1 -> [((Exp1, Var), b)] -> Maybe b
-      myLookup _ [] = Nothing
-      myLookup key ((thiskey,thisval):rest) =
-        let (rhs, v) = thiskey
+      _myLookup :: Exp1 -> [((Exp1, Var), b)] -> Maybe b
+      _myLookup _ [] = Nothing
+      _myLookup key ((thiskey,thisval):rest) =
+        let (rhs, _v) = thiskey
          in if rhs == key
             then Just thisval
-            else myLookup key rest
+            else _myLookup key rest
                                       
       removeAliases :: Exp1 -> AliasEnv -> PassM Exp1
       removeAliases exp env = case exp of 

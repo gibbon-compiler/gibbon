@@ -25,13 +25,6 @@ import qualified Data.Set as S
 import qualified Data.List as L
 import Text.PrettyPrint.GenericPretty
 
--- * Functions
-import           Control.DeepSeq
-import qualified Data.List                      as L
-import qualified Data.Map                       as M
-import qualified Data.Set                       as S
-import           Text.PrettyPrint.GenericPretty
-
 import           Gibbon.Common
 -- import qualified Gibbon.L2.Syntax               as L2
 import           Gibbon.Language                hiding (mapMExprs)

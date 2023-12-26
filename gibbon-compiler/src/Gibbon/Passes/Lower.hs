@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 -------------------------------------------------------------------------------
@@ -982,9 +983,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail free_reg sym_tbl bod')
 
     LetE (v, _,ty, L3.SpawnE fn locs args) bod -> do
-      tl <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
-      -- This is going to be a LetCallT.
-      pure $ tl { T.async = True }
+      T.LetCallT{..} <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
+      pure $ T.LetCallT  { T.async = True, .. }
 
     LetE (_,_,_,  SyncE) bod -> do
       bod' <- tail free_reg sym_tbl bod
@@ -1188,6 +1188,7 @@ prim p =
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     RequestSizeOf -> error "lower/prim: internal error. RequestSizeOf shouldn't be here."
+    RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
 
 isTrivial' :: Exp3 -> Bool
 isTrivial' e =
