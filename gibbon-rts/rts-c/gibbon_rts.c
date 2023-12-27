@@ -2022,25 +2022,26 @@ int gib_init(int argc, char **argv)
 // Called from gib_main_expr.
 int gib_exit(void)
 {
-    GibNursery *nursery = DEFAULT_NURSERY;
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldgen *oldgen = DEFAULT_GENERATION;
+    gib_free(gib_global_bench_prog_param);
+
+#ifndef _GIBBON_POINTER
 
 #ifdef _GIBBON_GCSTATS
     // Print GC statistics.
     gib_gc_stats_print(GC_STATS);
 #endif
 
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
 
     // Free all objects initialized by the Rust RTS.
-    gib_free(gib_global_bench_prog_param);
     gib_gc_cleanup(rstack, wstack, nursery, oldgen);
-
-#ifndef _GIBBON_POINTER
     // Next, free all objects initialized by the C RTS.
     gib_storage_free();
-#endif
+
+#endif // ifndef _GIBBON_POINTER
 
     // gib_free_symtable();
 
