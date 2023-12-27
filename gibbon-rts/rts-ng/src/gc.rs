@@ -147,8 +147,9 @@ pub fn cleanup(
                 (*((*oldgen).old_zct)).insert((*footer).reg_info);
             }
         }
-        for reg_info in (*((*oldgen).old_zct)).drain() {
-            // free_region((*reg_info).first_chunk_footer, null_mut())?;
+        for _reg_info in (*((*oldgen).old_zct)).drain() {
+            // Enable this again after ensuring that everything works.
+            // // free_region((*reg_info).first_chunk_footer, null_mut())?;
         }
     }
     // Free ZCTs associated with the oldest generation.

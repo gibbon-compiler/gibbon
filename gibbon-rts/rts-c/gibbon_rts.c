@@ -145,7 +145,7 @@ GibSym gib_read_gensym_counter(void)
 #ifdef _GIBBON_POINTER
 
 #ifdef _GIBBON_BUMPALLOC_HEAP
-#warning "Using bump allocator."
+#pragma message "Using bump allocator."
 
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -706,7 +706,7 @@ double gib_sum_timing_array(GibVector *times)
 
 #ifdef _GIBBON_BUMPALLOC_LISTS
 // #define _GIBBON_DEBUG
-#warning "Using bump allocator."
+#pragma message "Using bump allocator."
 
 static __thread char *gib_global_list_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_list_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -1036,26 +1036,26 @@ void gib_print_gc_config(void) {
     printf("C config\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
 #if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
-    #warning "Generational GC is disabled."
+    #pragma message "Generational GC is disabled."
     printf("Generational GC is disabled.\n");
 #else
-    #warning "Generational GC is enabled."
+    #pragma message "Generational GC is enabled."
     printf("Generational GC is enabled.\n");
 #endif
 
 #if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
-    #warning "Eager promotion is disabled."
+    #pragma message "Eager promotion is disabled."
     printf("Eager promotion is disabled.\n");
 #else
-    #warning "Eager promotion is enabled."
+    #pragma message "Eager promotion is enabled."
     printf("Eager promotion is enabled.\n");
 #endif
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 0
-    #warning "Simple write barrier is disabled."
+    #pragma message "Simple write barrier is disabled."
     printf("Simple write barrier is disabled.\n");
 #else
-    #warning "Simple write barrier is enabled."
+    #pragma message "Simple write barrier is enabled."
     printf("Simple write barrier is enabled.\n");
 #endif
 
@@ -1316,8 +1316,8 @@ void gib_print_global_region_count(void)
  */
 
 // Initialize nurseries, shadow stacks and generations.
-static void gib_storage_initialize(void);
-static void gib_storage_free(void);
+UNUSED_IN_POINTER_BAK static void gib_storage_initialize(void);
+UNUSED_IN_POINTER_BAK static void gib_storage_free(void);
 static void gib_nursery_initialize(GibNursery *nursery, size_t nsize);
 static void gib_nursery_free(GibNursery *nursery);
 static void gib_oldgen_initialize(GibOldgen *oldgen);
@@ -1328,7 +1328,7 @@ static void gib_gc_stats_initialize(GibGcStats *stats);
 static void gib_gc_stats_free(GibGcStats *stats);
 
 // Initialize nurseries, shadow stacks and generations.
-static void gib_storage_initialize(void)
+UNUSED_IN_POINTER_BAK static void gib_storage_initialize(void)
 {
     if (gib_storage_initialized) {
         return;
@@ -1339,7 +1339,7 @@ static void gib_storage_initialize(void)
     gib_gc_stats_initialize(gib_global_gc_stats);
 
     // Initialize nurseries.
-    int n;
+    uint64_t n;
     gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
                                                     sizeof(GibNursery));
     for (n = 0; n < gib_global_num_threads; n++) {
@@ -1351,7 +1351,7 @@ static void gib_storage_initialize(void)
     gib_oldgen_initialize(gib_global_oldgen);
 
     // Initialize shadow stacks.
-    int ss;
+    uint64_t ss;
     gib_global_read_shadowstacks =
             (GibShadowstack *) gib_alloc(gib_global_num_threads *
                                          sizeof(GibShadowstack));
@@ -1368,14 +1368,14 @@ static void gib_storage_initialize(void)
     return;
 }
 
-static void gib_storage_free(void)
+UNUSED_IN_POINTER_BAK static void gib_storage_free(void)
 {
     if (!gib_storage_initialized) {
         return;
     }
 
     // Free nurseries.
-    int n;
+    uint64_t n;
     for (n = 0; n < gib_global_num_threads; n++) {
         gib_nursery_free(&(gib_global_nurseries[n]));
      }
@@ -1386,7 +1386,7 @@ static void gib_storage_free(void)
     gib_free(gib_global_oldgen);
 
     // Free shadow-stacks.
-    int ss;
+    uint64_t ss;
     for (ss = 0; ss < gib_global_num_threads; ss++) {
         gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
         gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
@@ -1599,6 +1599,7 @@ static void gib_gc_stats_free(GibGcStats *stats)
     gib_free(stats);
 }
 
+#ifdef _GIBBON_GCSTATS
 static void gib_gc_stats_print(GibGcStats *stats)
 {
     printf("\nGC statistics\n----------------------------------------\n");
@@ -1652,6 +1653,7 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("Skipover env inserts:\t\t %ld\n", stats->skipover_env_inserts);
     printf("Root set size:\t\t\t %ld\n", stats->rootset_size);
 }
+#endif // ifdef _GIBBON_GCSTATS
 
 
 /*
@@ -1929,7 +1931,7 @@ int gib_init(int argc, char **argv)
     }
 #endif
 
-    int got_numargs = argc; // How many numeric arguments have we got.
+    // int got_numargs = argc; // How many numeric arguments have we got.
 
     int i;
     for (i = 1; i < argc; ++i)
