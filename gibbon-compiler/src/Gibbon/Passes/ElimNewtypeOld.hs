@@ -1,6 +1,6 @@
-module Gibbon.Passes.ElimNewtype where
+module Gibbon.Passes.ElimNewtypeOld where
 
-import Gibbon.L0.Syntax
+import Gibbon.L1.Syntax
 import Gibbon.Common
 
 import Control.Arrow
@@ -9,7 +9,7 @@ import qualified Data.Set as S
 import Data.Maybe ( fromMaybe )
 import Data.Symbol ( unintern )
 
-passProgram :: Prog0 -> Prog0
+passProgram :: Prog1 -> Prog1
 passProgram prog =
   Prog
     { mainExp = (elimE connames tynames (ddefs prog) *** elimTy tynames) <$> mainExp prog
@@ -25,9 +25,9 @@ passProgram prog =
       M.mapKeys (\(Var x) -> unintern x)
       $ M.map (snd . head . snd . head . dataCons) newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
-    fdefs = M.map (\d -> d {funTy=elimTyScheme tynames (funTy d)}) (fundefs prog)
+    fdefs = M.map (\d -> d {funTy=elimTyArrow tynames (funTy d)}) (fundefs prog)
 
-elimE :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> Exp0 -> Exp0
+elimE :: S.Set String -> M.Map String Ty1 -> DDefs Ty1 -> Exp1 -> Exp1
 elimE cns tns dds e0 = case e0 of
   DataConE _ty0 s [e]
     | S.member s cns -> f e
@@ -43,50 +43,18 @@ elimE cns tns dds e0 = case e0 of
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
-
-  -- update to use lambda
-  CaseE e1 [(s, [(var, t)], e2)]
-    | S.member s cns -> LetE (var, [g t], _, f e1) (f e2)
-
-
-
+  CaseE e1 [(s, [(var, _)], e2)]      -- hopefully gRecoverType works
+    | S.member s cns -> LetE (var, [()], gRecoverType dds emptyEnv2 e1, f e1) (f e2)
   CaseE e x -> CaseE (f e) ((\(c, v, e1) -> (c, v, f e1)) <$> x)
   TimeIt e t b -> TimeIt (f e) (g t) b
   WithArenaE var e -> WithArenaE var (f e)
   SpawnE var ts es -> SpawnE var ts (f <$> es)
-
-  Ext ext -> Ext (elimExt cns tns dds ext)
   _ -> e0
   where
     f = elimE cns tns dds
     g = elimTy tns
 
-elimExt :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> E0Ext Ty0 Ty0 -> E0Ext Ty0 Ty0
-elimExt cns tns dds ext0 = case ext0 of
-  LambdaE args applicand -> LambdaE (second g <$> args) (f applicand)
-  FunRefE locs var -> FunRefE (g <$> locs) var
-  BenchE var locs preexps bool -> BenchE var (g <$> locs) (f <$> preexps) bool
-  ParE0 preexps -> ParE0 (f <$> preexps)
-  -- PrintPacked dec preexp
-
-
-  _ -> _
-
---  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
---                      -- along with its tyapps.
---  | BenchE Var [loc] [(PreExp E0Ext loc dec)] Bool
---  | ParE0 [(PreExp E0Ext loc dec)]
---  | PrintPacked dec (PreExp E0Ext loc dec) -- ^ Print a packed value to standard out.
---  | CopyPacked dec (PreExp E0Ext loc dec) -- ^ Copy a packed value.
---  | TravPacked dec (PreExp E0Ext loc dec) -- ^ Traverse a packed value.
---  | L Loc.Loc (PreExp E0Ext loc dec)
---  | LinearExt (LinearExt loc dec)
-
-  where
-    f = elimE cns tns dds
-    g = elimTy tns
-
-elimPrim :: M.Map String Ty0 -> Prim Ty0 -> Prim Ty0
+elimPrim :: M.Map String Ty1 -> Prim Ty1 -> Prim Ty1
 elimPrim tns p0 = case p0 of
   ErrorP s t -> ErrorP s (f t)
   DictInsertP t -> DictInsertP (f t)
@@ -124,10 +92,10 @@ elimPrim tns p0 = case p0 of
   where
     f = elimTy tns
 
-elimTyScheme :: M.Map String Ty0 -> TyScheme -> TyScheme
-elimTyScheme tns (ForAll tvs t) = ForAll tvs (elimTy tns t)
+elimTyArrow :: M.Map String Ty1 -> ([Ty1], Ty1) -> ([Ty1], Ty1)
+elimTyArrow tns = fmap (elimTy tns) *** elimTy tns
 
-elimTy :: M.Map String Ty0 -> Ty0 -> Ty0
+elimTy :: M.Map String Ty1 -> Ty1 -> Ty1
 elimTy tns t0 = case t0 of
   PackedTy s _ -> fromMaybe t0 (M.lookup s tns)
   ProdTy ts -> ProdTy (f <$> ts)
