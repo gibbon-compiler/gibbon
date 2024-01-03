@@ -43,13 +43,8 @@ elimE cns tns dds e0 = case e0 of
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
-
-  -- update to use lambda
-  CaseE e1 [(s, [(var, t)], e2)]
-    | S.member s cns -> LetE (var, [g t], _, f e1) (f e2)
-
-
-
+  CaseE e1 [(s, vars, e2)]
+    | S.member s cns -> Ext (PolyAppE (Ext (LambdaE (second g <$> vars) (f e2))) (f e1))
   CaseE e x -> CaseE (f e) ((\(c, v, e1) -> (c, v, f e1)) <$> x)
   TimeIt e t b -> TimeIt (f e) (g t) b
   WithArenaE var e -> WithArenaE var (f e)
@@ -65,23 +60,17 @@ elimExt :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> E0Ext Ty0 Ty0 -> E0E
 elimExt cns tns dds ext0 = case ext0 of
   LambdaE args applicand -> LambdaE (second g <$> args) (f applicand)
   FunRefE locs var -> FunRefE (g <$> locs) var
+  PolyAppE pe1 pe2 -> PolyAppE (f pe1) (f pe2)
   BenchE var locs preexps bool -> BenchE var (g <$> locs) (f <$> preexps) bool
   ParE0 preexps -> ParE0 (f <$> preexps)
-  -- PrintPacked dec preexp
-
-
-  _ -> _
-
---  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
---                      -- along with its tyapps.
---  | BenchE Var [loc] [(PreExp E0Ext loc dec)] Bool
---  | ParE0 [(PreExp E0Ext loc dec)]
---  | PrintPacked dec (PreExp E0Ext loc dec) -- ^ Print a packed value to standard out.
---  | CopyPacked dec (PreExp E0Ext loc dec) -- ^ Copy a packed value.
---  | TravPacked dec (PreExp E0Ext loc dec) -- ^ Traverse a packed value.
---  | L Loc.Loc (PreExp E0Ext loc dec)
---  | LinearExt (LinearExt loc dec)
-
+  PrintPacked dec preexp -> PrintPacked (g dec) (f preexp)
+  CopyPacked dec preexp -> CopyPacked (g dec) (f preexp)
+  TravPacked dec preexp -> TravPacked (g dec) (f preexp)
+  L loc preexp -> L loc (f preexp)
+  LinearExt (ReverseAppE pe1 pe2) -> LinearExt (ReverseAppE (f pe1) (f pe2))
+  LinearExt (LseqE pe1 pe2) -> LinearExt (LseqE (f pe1) (f pe2))
+  LinearExt (AliasE pe) -> LinearExt (AliasE (f pe))
+  LinearExt (ToLinearE pe) -> LinearExt (ToLinearE (f pe))
   where
     f = elimE cns tns dds
     g = elimTy tns
