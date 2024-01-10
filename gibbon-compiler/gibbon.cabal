@@ -39,6 +39,7 @@ library
 
                        Gibbon.L0.Syntax
                        Gibbon.L0.Typecheck
+                       Gibbon.L0.ElimNewtype
                        Gibbon.L0.Specialize2
                        Gibbon.L0.Interp
                        Gibbon.L1.Syntax

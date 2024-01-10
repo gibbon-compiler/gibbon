@@ -1,4 +1,4 @@
-module Gibbon.Passes.ElimNewtype where
+module Gibbon.L0.ElimNewtype where
 
 import Gibbon.L0.Syntax
 import Gibbon.Common
@@ -9,8 +9,11 @@ import qualified Data.Set as S
 import Data.Maybe ( fromMaybe )
 import Data.Symbol ( unintern )
 
-passProgram :: Prog0 -> Prog0
-passProgram prog =
+elimNewtypes :: Monad m => Prog0 -> m Prog0
+elimNewtypes = pure . elimProgram
+
+elimProgram :: Prog0 -> Prog0
+elimProgram prog =
   Prog
     { mainExp = (elimE connames tynames (ddefs prog) *** elimTy tynames) <$> mainExp prog
     , fundefs = fdefs
