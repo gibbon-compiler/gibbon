@@ -42,7 +42,7 @@ elimE cns tns dds e0 = case e0 of
   LitSymE _ -> e0
   AppE var ty es -> AppE var ty (f <$> es)
   PrimAppE p es -> PrimAppE (elimPrim tns p) (f <$> es)
-  LetE (var, u, t, e1) e2 -> LetE (var, u, g t, f e1) (f e2)
+  LetE (var, u, t, e1) e2 -> LetE (var, g <$> u, g t, f e1) (f e2)
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
