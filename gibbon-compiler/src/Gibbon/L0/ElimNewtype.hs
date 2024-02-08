@@ -28,7 +28,9 @@ elimProgram prog =
       M.mapKeys (\(Var x) -> unintern x)
       $ M.map (snd . head . snd . head . dataCons) newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
-    fdefs = M.map (\d -> d {funTy=elimTyScheme tynames (funTy d)}) (fundefs prog)
+    fdefs = M.map (\d -> d { funTy=elimTyScheme tynames (funTy d)
+                           , funBody=elimE connames tynames (ddefs prog) (funBody d)
+                           }) (fundefs prog)
 
 elimE :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> Exp0 -> Exp0
 elimE cns tns dds e0 = case e0 of
