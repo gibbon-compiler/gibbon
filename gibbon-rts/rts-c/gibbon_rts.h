@@ -16,8 +16,7 @@
  *
  * _GIBBON_VERBOSITY=int     verbosity level for debug output
  * _GIBBON_DEBUG             enables various assertions if present
- * _GIBBON_GCSTATS           collect GC statistics if present
- * _GIBBON_PRINT_GCSTATS     print GC statistics if present
+ * _GIBBON_GCSTATS           collect and print GC statistics if present
  * _GIBBON_GENGC             only use old reference counted GC set to 0
  * _GIBBON_BOUNDSCHECK       boundscheck vector accesses
  * _GIBBON_BUMPALLOC_LISTS   bump allocated linked lists
@@ -81,8 +80,16 @@ typedef uint64_t GibThreadId;
 #define ATTR_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTR_HOT __attribute__((hot))
 
+#ifdef _GIBBON_POINTER
+#define UNUSED_IN_POINTER_BAK __attribute__((unused))
+#else
+#define UNUSED_IN_POINTER_BAK
+#endif
+
 #define LIKELY(x) __builtin_expect((bool) (x), 1)
 #define UNLIKELY(x) __builtin_expect((bool) (x), 0)
+#define IGNORE(x) (void) (x)
+
 
 /*
  * Inlining macros taken from GHC:
@@ -1070,9 +1077,9 @@ INLINE_HEADER void gib_indirection_barrier(
 {
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
-    #warning "Simple write barrier is enabled."
+    #pragma message "Simple write barrier is enabled."
 #else
-    #warning "Simple write barrier is disabled."
+    #pragma message "Simple write barrier is disabled."
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
@@ -1106,6 +1113,7 @@ INLINE_HEADER void gib_indirection_barrier(
     // old-to-old indirections.
 
 #if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
+    IGNORE(datatype);
     gib_add_old_to_old_indirection(from_footer, to_footer);
     return;
 #else

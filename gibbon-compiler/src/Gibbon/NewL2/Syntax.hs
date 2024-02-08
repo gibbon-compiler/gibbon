@@ -148,7 +148,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.GetCilkWorkerNum    -> MkTy2 $ IntTy
       Old.LetAvail _ bod      -> gRecoverType ddfs env2 bod
       Old.AllocateTagHere{}   -> MkTy2 $ ProdTy []
-      Old.AllocateScalarsHere{} -> MkTy2 $ProdTy []
+      Old.AllocateScalarsHere{} -> MkTy2 $ ProdTy []
       Old.SSPush{}              -> MkTy2 $ ProdTy []
       Old.SSPop{}               -> MkTy2 $ ProdTy []
 

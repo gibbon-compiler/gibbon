@@ -309,7 +309,7 @@ lookupVEnv v env2 = (vEnv env2) # v
 mblookupVEnv :: Var -> Env2 a -> Maybe a
 mblookupVEnv cur env2 = M.lookup cur (vEnv env2)
 
-lookupVEnv' :: Out a => Var -> Env2 a -> Maybe a
+lookupVEnv' :: Var -> Env2 a -> Maybe a
 lookupVEnv' v (Env2 ve _) = M.lookup v ve
 
 -- | Extend function type environment.

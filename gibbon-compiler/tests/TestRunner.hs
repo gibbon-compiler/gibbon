@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 module TestRunner where
 
 import           Control.Monad
@@ -9,8 +10,8 @@ import           Data.Maybe ( catMaybes )
 import           Data.Foldable
 import           Data.List
 import           Data.Scientific
-import           Data.Text.Prettyprint.Doc
-import           Data.Text.Prettyprint.Doc.Render.Terminal
+import           Prettyprinter
+import           Prettyprinter.Render.Terminal
 import           Data.Time.LocalTime
 import           Data.Yaml as Y
 import           Options.Applicative as OA hiding (empty, str)
@@ -242,10 +243,13 @@ readBenchResult :: String -> BenchResult
 readBenchResult str =
   case selftimed_indices of
     []    -> error $ "no SELFTIMED found in:\n" ++ show str
-    [one] -> let (selftimed:_) = lines (drop one str)
+    [one] -> let selftimed = case lines (drop one str) of
+                  st:_ -> st
+                  [] -> error "impossible" -- if we get here, the line is non-empty (cf. [one]),
+                                           -- and `lines` never returns [] on such input
                  timing_info = selftimed \\ "SELFTIMED: "
              in BenchResult (toRealFloat $ read timing_info)
-    oth   -> error $ "multiple SELFTIMED found in:\n" ++ show str
+    _     -> error $ "multiple SELFTIMED found in:\n" ++ show str
   where
     selftimed_indices = T.indices "SELFTIMED: " (T.pack str)
 
@@ -264,8 +268,14 @@ readPerfFile fp = do
     str <- readFile fp
     let stanza_indices = findIndices (== 'X') str
         pairs = partition' 2 1 (stanza_indices ++ [length str])
-        stanzas = map (\[a,b] -> drop a $ take b str) pairs
-        perf_res = map (\(h:_:br) -> (readHeader h, readBenchResult (intercalate "\n" br))) $
+        stanzas = map (\case
+                          [a,b] -> drop a $ take b str
+                          _ -> error "readPerfFile: incomplete pattern matching parsing stanzas"
+                      ) pairs
+        perf_res = map (\case
+                           (h:_:br) -> (readHeader h, readBenchResult (intercalate "\n" br))
+                           _ -> error "readPerfFile: incomplete pattern matching parsing perf result"
+                       ) $
                    map lines stanzas
     return $ M.fromList perf_res
 

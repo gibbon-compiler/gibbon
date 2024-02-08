@@ -4,7 +4,7 @@ module Gibbon.Passes.CalculateBounds ( inferRegSize ) where
 import           Gibbon.Common
 import qualified Data.Map                      as M
 import           Gibbon.L2.Syntax
-import           Data.List as L
+import qualified Data.List as L
 import           Debug.Trace
 import           Control.Monad
 
