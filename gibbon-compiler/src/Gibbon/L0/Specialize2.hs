@@ -715,7 +715,10 @@ monoLambdas ex =
     TimeIt e ty b  -> (\e' -> TimeIt e' ty b) <$> go e
     WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
     Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
-    Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    Ext (PolyAppE op args) -> do
+      op' <- go op
+      args' <- go args
+      pure $ Ext $ PolyAppE op' args'
     Ext (FunRefE{})  -> pure ex
     Ext (BenchE{})   -> pure ex
     Ext (ParE0 ls)   -> Ext <$> ParE0 <$> mapM monoLambdas ls
