@@ -146,6 +146,7 @@ elimTy tns t0 = case t0 of
     maybe (PackedTy s (f <$> args)) ($ f <$> args) (M.lookup s tns)
   ProdTy ts -> ProdTy (f <$> ts)
   SymDictTy varMaybe t -> SymDictTy varMaybe (f t)
+  ArrowTy ts t -> ArrowTy (f <$> ts) (f t)
   VectorTy t -> VectorTy (f t)
   PDictTy tK tV -> PDictTy (f tK) (f tV)
   ListTy t -> ListTy (f t)
