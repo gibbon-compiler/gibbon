@@ -6,7 +6,6 @@ import Gibbon.Common
 import Control.Arrow
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Maybe ( fromMaybe )
 import Data.Symbol ( unintern )
 
 elimNewtypes :: Monad m => Prog0 -> m Prog0
@@ -26,6 +25,12 @@ packedOccurs v@(Var s) t = case t of
   where
     go = packedOccurs v
 
+type TyMap = M.Map String ([Ty0] -> Ty0)
+-- type params -> type in terms of params -> args -> substituted type
+mkPolyNames :: [TyVar] -> Ty0 -> [Ty0] -> Ty0
+mkPolyNames params paramty args =
+  substTyVar (M.fromList $ zip params args) paramty
+
 elimProgram :: Prog0 -> Prog0
 elimProgram prog =
   Prog
@@ -38,15 +43,15 @@ elimProgram prog =
         [(_, [(_, t)])] -> not $ packedOccurs (tyName x) t
         _ -> False
       ) (ddefs prog)
-    tynames =  -- maps to underlying type
+    tynames =
       M.mapKeys (\(Var x) -> unintern x)
-      $ M.map (snd . head . snd . head . dataCons) newtys
+      $ M.map (mkPolyNames . tyArgs <*> snd . head . snd . head . dataCons) newtys
     connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
     fdefs = M.map (\d -> d { funTy=elimTyScheme tynames (funTy d)
                            , funBody=elimE connames tynames (ddefs prog) (funBody d)
                            }) (fundefs prog)
 
-elimE :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> Exp0 -> Exp0
+elimE :: S.Set String -> TyMap -> DDefs Ty0 -> Exp0 -> Exp0
 elimE cns tns dds e0 = case e0 of
   DataConE _ty0 s [e]
     | S.member s cns -> f e
@@ -75,7 +80,7 @@ elimE cns tns dds e0 = case e0 of
     f = elimE cns tns dds
     g = elimTy tns
 
-elimExt :: S.Set String -> M.Map String Ty0 -> DDefs Ty0 -> E0Ext Ty0 Ty0 -> E0Ext Ty0 Ty0
+elimExt :: S.Set String -> TyMap -> DDefs Ty0 -> E0Ext Ty0 Ty0 -> E0Ext Ty0 Ty0
 elimExt cns tns dds ext0 = case ext0 of
   LambdaE args applicand -> LambdaE (second g <$> args) (f applicand)
   FunRefE locs var -> FunRefE (g <$> locs) var
@@ -94,7 +99,7 @@ elimExt cns tns dds ext0 = case ext0 of
     f = elimE cns tns dds
     g = elimTy tns
 
-elimPrim :: M.Map String Ty0 -> Prim Ty0 -> Prim Ty0
+elimPrim :: TyMap -> Prim Ty0 -> Prim Ty0
 elimPrim tns p0 = case p0 of
   ErrorP s t -> ErrorP s (f t)
   DictInsertP t -> DictInsertP (f t)
@@ -132,12 +137,12 @@ elimPrim tns p0 = case p0 of
   where
     f = elimTy tns
 
-elimTyScheme :: M.Map String Ty0 -> TyScheme -> TyScheme
+elimTyScheme :: TyMap -> TyScheme -> TyScheme
 elimTyScheme tns (ForAll tvs t) = ForAll tvs (elimTy tns t)
 
-elimTy :: M.Map String Ty0 -> Ty0 -> Ty0
+elimTy :: TyMap -> Ty0 -> Ty0
 elimTy tns t0 = case t0 of
-  PackedTy s _ -> fromMaybe t0 (M.lookup s tns)
+  PackedTy s args -> maybe (PackedTy s (f <$> args)) ($ args) (M.lookup s tns)
   ProdTy ts -> ProdTy (f <$> ts)
   SymDictTy varMaybe t -> SymDictTy varMaybe (f t)
   VectorTy t -> VectorTy (f t)
