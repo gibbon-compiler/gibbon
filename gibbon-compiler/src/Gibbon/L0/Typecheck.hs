@@ -675,7 +675,16 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars is_main bod
       return (s4, zonkTy s4 (ArrowTy freshs bod_ty),
               Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s4 ty)) args) (zonkExp s4 bod_tc)))
-    Ext (PolyAppE{}) -> err $ text "TODO" <+> exp_doc
+
+    Ext (PolyAppE op arg) -> do
+      (s1, t1, op_tc) <- go op
+      (s2, t2, arg_tc) <- tcExp ddefs s1 venv fenv bound_tyvars is_main arg
+      fresh_out <- newMetaTy
+      let fresh_arrow = ArrowTy [t2] fresh_out
+      s3 <- unify op t1 fresh_arrow
+      let s4 = s2 <> s3
+      pure (s4, zonkTy s4 fresh_out, 
+        Ext (PolyAppE (zonkExp s4 op_tc) (zonkExp s4 arg_tc)))
 
     Ext (FunRefE tyapps f) -> do
       (_metas, ty) <-
