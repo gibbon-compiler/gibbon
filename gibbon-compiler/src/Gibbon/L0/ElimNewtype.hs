@@ -142,7 +142,8 @@ elimTyScheme tns (ForAll tvs t) = ForAll tvs (elimTy tns t)
 
 elimTy :: TyMap -> Ty0 -> Ty0
 elimTy tns t0 = case t0 of
-  PackedTy s args -> maybe (PackedTy s (f <$> args)) ($ args) (M.lookup s tns)
+  PackedTy s args -> 
+    maybe (PackedTy s (f <$> args)) ($ f <$> args) (M.lookup s tns)
   ProdTy ts -> ProdTy (f <$> ts)
   SymDictTy varMaybe t -> SymDictTy varMaybe (f t)
   VectorTy t -> VectorTy (f t)
