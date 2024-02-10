@@ -12,6 +12,20 @@ import Data.Symbol ( unintern )
 elimNewtypes :: Monad m => Prog0 -> m Prog0
 elimNewtypes = pure . elimProgram
 
+packedOccurs :: Var -> Ty0 -> Bool
+packedOccurs v@(Var s) t = case t of
+  PackedTy u ts
+    | unintern s == u -> True
+    | otherwise -> any go ts
+  ProdTy ts -> any go ts
+  SymDictTy _ x -> go x
+  ArrowTy ts x -> any go ts || go x
+  VectorTy x -> go x
+  ListTy x -> go x
+  _ -> False
+  where
+    go = packedOccurs v
+
 elimProgram :: Prog0 -> Prog0
 elimProgram prog =
   Prog
@@ -21,7 +35,7 @@ elimProgram prog =
     }
   where
     (newtys, tys) = M.partition (\x -> case dataCons x of
-        [(_, [_])] -> True
+        [(_, [(_, t)])] -> not $ packedOccurs (tyName x) t
         _ -> False
       ) (ddefs prog)
     tynames =  -- maps to underlying type
