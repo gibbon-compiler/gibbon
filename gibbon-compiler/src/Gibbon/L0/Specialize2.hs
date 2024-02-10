@@ -588,7 +588,10 @@ collectMonoObls ddefs env2 toplevel ex =
         LambdaE args bod -> do
           bod' <- collectMonoObls ddefs (extendsVEnv (M.fromList args) env2) toplevel bod
           pure $ Ext $ LambdaE args bod'
-        PolyAppE{} -> error ("collectMonoObls: TODO, "++ sdoc ext)
+        PolyAppE op arg -> do
+          op' <- go op
+          arg' <- go arg
+          pure $ Ext $ PolyAppE op' arg'
         FunRefE tyapps f ->
           case tyapps of
             [] -> pure $ Ext $ FunRefE [] f
