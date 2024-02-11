@@ -361,6 +361,8 @@ data PreExp (ext :: Type -> Type -> Type) loc dec =
    | MkProdE   [EXP] -- ^ Tuple construction
    | ProjE Int EXP   -- ^ Tuple projection.
 
+     -- in L0, loc carries the type of the corresponding var
+     -- as there is no location information
    | CaseE EXP [(DataCon, [(Var,loc)], EXP)]
      -- ^ Case on a datatype.  Each bound, unpacked variable lives at
      -- a fixed, read-only location.

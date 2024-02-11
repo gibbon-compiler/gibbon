@@ -28,6 +28,7 @@ import           Gibbon.Language hiding (UrTy(..))
 
 --------------------------------------------------------------------------------
 
+-- In L0, type information may be held in locations, as locations don't exist
 type Exp0     = PreExp E0Ext Ty0 Ty0
 type DDefs0   = DDefs Ty0
 type DDef0    = DDef Ty0
@@ -41,6 +42,7 @@ type Prog0    = Prog Exp0
 data E0Ext loc dec =
    LambdaE [(Var,dec)] -- Variable tagged with type
            (PreExp E0Ext loc dec)
+   -- unused for much of L0, may be due to a bug
  | PolyAppE (PreExp E0Ext loc dec) -- Operator
             (PreExp E0Ext loc dec) -- Operand
  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
