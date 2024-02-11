@@ -67,8 +67,8 @@ elimE cns tns dds e0 = case e0 of
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)
   MkProdE es -> MkProdE (f <$> es)
   ProjE n e -> ProjE n (f e)
-  CaseE e1 [(s, [(var, t)], e2)] | S.member s cns -> 
-    LetE (var, [g t], g $ snd $ head $ snd $ snd $ lkp dds s, e1) e2
+  CaseE e1 [(s, [(var, _)], e2)] | S.member s cns -> 
+    LetE (var, [], g $ snd $ head $ snd $ snd $ lkp dds s, e1) e2
   CaseE e x -> CaseE (f e) ((\(c, v, e1) -> (c, v, f e1)) <$> x)
   TimeIt e t b -> TimeIt (f e) (g t) b
   WithArenaE var e -> WithArenaE var (f e)
