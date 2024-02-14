@@ -588,7 +588,10 @@ collectMonoObls ddefs env2 toplevel ex =
         LambdaE args bod -> do
           bod' <- collectMonoObls ddefs (extendsVEnv (M.fromList args) env2) toplevel bod
           pure $ Ext $ LambdaE args bod'
-        PolyAppE{} -> error ("collectMonoObls: TODO, "++ sdoc ext)
+        PolyAppE op arg -> do
+          op' <- go op
+          arg' <- go arg
+          pure $ Ext $ PolyAppE op' arg'
         FunRefE tyapps f ->
           case tyapps of
             [] -> pure $ Ext $ FunRefE [] f
@@ -712,7 +715,10 @@ monoLambdas ex =
     TimeIt e ty b  -> (\e' -> TimeIt e' ty b) <$> go e
     WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
     Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
-    Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    Ext (PolyAppE op args) -> do
+      op' <- go op
+      args' <- go args
+      pure $ Ext $ PolyAppE op' args'
     Ext (FunRefE{})  -> pure ex
     Ext (BenchE{})   -> pure ex
     Ext (ParE0 ls)   -> Ext <$> ParE0 <$> mapM monoLambdas ls

@@ -56,6 +56,7 @@ import           Gibbon.L2.Interp ( Store, emptyStore )
 -- Compiler passes
 import qualified Gibbon.L0.Typecheck as L0
 import qualified Gibbon.L0.Specialize2 as L0
+import qualified Gibbon.L0.ElimNewtype as L0
 import qualified Gibbon.L1.Typecheck as L1
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L3.Typecheck as L3
@@ -640,6 +641,8 @@ passes config@Config{dynflags} l0 = do
           should_fuse = gopt Opt_Fusion dynflags
           tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
+      l0 <- goE0 "typecheck"       L0.tcProg             l0
+      l0 <- go  "elimNewtypes"     L0.elimNewtypes            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
       l0 <- goE0 "bindLambdas"     L0.bindLambdas       l0
       l0 <- goE0 "monomorphize"    L0.monomorphize      l0
