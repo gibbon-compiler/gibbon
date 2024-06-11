@@ -10,6 +10,11 @@
 #include <limits.h>
 #include <time.h>
 
+#ifdef _GIBBON_PARALLEL
+#include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
+#endif
+
 /*
  * CPP macros used in the RTS:
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
