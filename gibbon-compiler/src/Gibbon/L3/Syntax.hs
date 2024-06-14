@@ -296,29 +296,6 @@ cursorizeTy ty =
     SymHashTy-> SymHashTy
     IntHashTy-> IntHashTy
 
-cursorizeTy2 :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
-cursorizeTy2 fn ty =
-  case ty of
-    IntTy     -> IntTy
-    CharTy    -> CharTy
-    FloatTy   -> FloatTy
-    SymTy     -> SymTy
-    BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map (cursorizeTy2 fn) ls
-    SymDictTy v _ -> SymDictTy v CursorTy
-    PDictTy k v   -> PDictTy (cursorizeTy2 fn k) (cursorizeTy2 fn v)
-    -- TODO: This needs to change such that we don't always blindly return a CursorTy. 
-    PackedTy k l    -> fn (toVar k) l
-    VectorTy el_ty' -> VectorTy $ cursorizeTy2 fn el_ty'
-    ListTy el_ty'   -> ListTy $ cursorizeTy2 fn el_ty'
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
-    MutableCursorTy -> MutableCursorTy
-    ArenaTy  -> ArenaTy
-    SymSetTy -> SymSetTy
-    SymHashTy-> SymHashTy
-    IntHashTy-> IntHashTy
-
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before
 mapMExprs :: Monad m => (Env2 Ty3 -> Exp3 -> m Exp3) -> Prog3 -> m Prog3

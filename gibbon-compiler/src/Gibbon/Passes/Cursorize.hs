@@ -91,7 +91,7 @@ type Cursor = Ptr Char
 -- char**
 type MutableCursor = Ptr Ptr Char
 
-add1 :: Cursor -> Cursor -> (Cursor, MutableCursor)
+add1 :: Cursor -> Cursor -> ()
 add1 lout lin = 
   let tag = readTag lin 
    in case tag of 
@@ -100,7 +100,7 @@ add1 lout lin =
                      () = BumpMutableCursor lout 1  
                      () = writeIntMutable lout (n+1)
                      () = BumpMutableCursor lout 8
-                   in (lin + 9, lout)
+                   in ()
         Node -> ...
 
 Packed input still becomes a read cursor. 
@@ -124,6 +124,34 @@ type SyncEnv = M.Map Var [(Var,[()],Ty3,Ty2,Exp3)]
 type LazyProjectionEnv = M.Map Var ([()], Ty3, Exp3)
 
 type OldTy2 = UrTy LocVar
+
+cursorizeTy2 :: TyEnv Ty2 -> UrTy Var -> UrTy Var
+cursorizeTy2 tenv ty =
+  case ty of
+    IntTy     -> IntTy
+    CharTy    -> CharTy
+    FloatTy   -> FloatTy
+    SymTy     -> SymTy
+    BoolTy    -> BoolTy
+    ProdTy ls -> ProdTy $ L.map (cursorizeTy2 tenv) ls
+    SymDictTy v _ -> SymDictTy v CursorTy
+    PDictTy k v   -> PDictTy (cursorizeTy2 tenv k) (cursorizeTy2 tenv v)
+    -- TODO: This needs to change such that we don't always blindly return a CursorTy. 
+    PackedTy k l    -> case (M.lookup l tenv) of
+                              Nothing -> error $ "cursorizeTy2: Unbound variable: " ++ sdoc l
+                              Just ty -> case unTy2 ty of 
+                                             CursorTy -> ProdTy [CursorTy, CursorTy]
+                                             MutableCursorTy -> ProdTy []
+
+    VectorTy el_ty' -> VectorTy $ cursorizeTy2 tenv el_ty'
+    ListTy el_ty'   -> ListTy $ cursorizeTy2 tenv el_ty'
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
+    MutableCursorTy -> MutableCursorTy
+    ArenaTy  -> ArenaTy
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
+    IntHashTy-> IntHashTy
 
 -- |
 cursorize :: Prog2 -> PassM Prog3
@@ -170,9 +198,9 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
                            in mkLets bnds
 
       initTyEnv = M.fromList $ (map (\(a,b) -> (a,MkTy2 (cursorizeInTy (unTy2 b)))) $ zip funArgs in_tys) ++
-                               [(a, MkTy2 CursorTy) | (LRM a _ _) <- locVars funTy]
+                               [(a, if m == OutputMutable then MkTy2 MutableCursorTy else MkTy2 CursorTy) | (LRM a _ m) <- locVars funTy]
 
-      funargs = regBinds ++ outCurBinds ++ funArgs
+      funargs = dbgTraceIt "Print TyEnv after init." dbgTraceIt (sdoc (initTyEnv)) dbgTraceIt "End Init Env.\n" regBinds ++ outCurBinds ++ funArgs
 
   bod <- if hasPacked (unTy2 out_ty)
          then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv M.empty funBody
@@ -203,6 +231,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
         ListTy el_ty -> ListTy $ cursorizeInTy el_ty
         PtrTy -> PtrTy
         CursorTy  -> CursorTy
+        MutableCursorTy -> MutableCursorTy
         ArenaTy   -> ArenaTy
         SymSetTy  -> SymSetTy
         SymHashTy -> SymHashTy
@@ -258,7 +287,7 @@ This is used to create bindings for input location variables.
           -- Packed types in the output then become end-cursors for those same destinations.
           newOut = mapPacked (\_ l -> let locArg = filter (\(LRM l' _ m) -> l' == l) locVars
                                        in case locArg of 
-                                           [LRM _ _ OutputMutable] -> ProdTy [MutableCursorTy, CursorTy]
+                                           [LRM _ _ OutputMutable] ->  ProdTy [] -- for a mutable cursor there is no need to return anything
                                            _ -> ProdTy [CursorTy, CursorTy]
                              ) out_ty
             
@@ -495,6 +524,13 @@ isMutableCursorTy locArg = case locArg of
                                                                                           _ -> False
                                   _ -> False
 
+getCursorTy :: LocArg -> Ty2
+getCursorTy locArg = case locArg of
+                            Loc LREM{lremLoc, lremReg, lremEndReg, lremMode} -> case lremMode of 
+                                                                                          OutputMutable -> MkTy2 MutableCursorTy  
+                                                                                          _ -> MkTy2 CursorTy
+                            _ -> MkTy2 CursorTy 
+
 genReadMutableCursor :: LocArg -> Exp3 -> Var -> PassM Exp3
 genReadMutableCursor locArg bod newCursor = do
                                   let derefCursorExp = Ext $ L3.DerefMutableCursor (toLocVar locArg)
@@ -513,9 +549,16 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       let ty = case M.lookup v tenv of
                  Just t -> t
                  Nothing -> error $ sdoc v ++ " not found."
-      if isPackedTy (unTy2 ty)
-      then return $ mkDi (VarE v) [ VarE (toEndV v) ]
-      else return $ dl $ VarE v
+      case (unTy2 ty) of 
+        PackedTy k l -> case M.lookup l tenv of 
+                              Nothing -> error $ sdoc l ++ " not found."
+                              Just t -> case unTy2 t of 
+                                            CursorTy -> return $ mkDi (VarE v) [ VarE (toEndV v) ]
+                                            MutableCursorTy -> return $ dl $ VarE l
+        _ -> return $ dl $ VarE v
+      --if isPackedTy (unTy2 ty)
+      --then return $ mkDi (VarE v) [ VarE (toEndV v) ]
+      --else return $ dl $ VarE v
 
     LitE _n    -> error $ "Shouldn't encounter LitE in packed context:" ++ sdoc ex
     CharE _n   -> error $ "Shouldn't encounter CharE in packed context:" ++ sdoc ex
@@ -636,8 +679,11 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                  (if not marker_added
                   then LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc)
                   else id) <$>
-                   LetE (d',[], slocTy, projEnds rnd') <$>
-                   go2 True d' rst
+                   case isMutableCur of 
+                      False -> LetE (d',[], slocTy, projEnds rnd') <$>
+                                go2 True d' rst
+                      True -> go2 True d' rst
+                   
 
               -- Int, Float, Sym, or Bool
               _ | isScalarTy ty -> do
@@ -732,13 +778,13 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
               case rhs of
                 FromEndLE{} ->
                   if isBound (toLocVar loc) tenv
-                  then go (M.insert (toLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
+                  then go (M.insert (toLocVar loc) (getCursorTy loc) tenv''') senv' bod
                     -- Discharge bindings that were waiting on 'loc'.
                   else onDi (mkLets (bnds' ++ [((toLocVar loc),[],lTy',rhs')] ++ bnds)) <$>
-                         go (M.insert (toLocVar loc) (MkTy2 CursorTy) tenv') senv' bod
+                         go (M.insert (toLocVar loc) (getCursorTy loc) tenv') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> onDi (mkLets (bnds' ++ [((toLocVar loc),[],lTy',rhs')] ++ bnds)) <$>
-                       go (M.insert (toLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
+                       go (M.insert (toLocVar loc) (getCursorTy loc) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
 
@@ -1239,18 +1285,26 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
         --                                   _ -> ProdTy [CursorTy, CursorTy]
         --                 )
         let ty' = case locs of
-                    [] -> cursorizeTy ty
-                    xs -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (xs, ty, rhs', fresh)) dbgTraceIt "Print End\n." ProdTy (P.map getLocTy xs ++ [cursorizeTy ty])
-
-            tenv' = L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
+                    [] -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, ty, rhs', fresh)) dbgTraceIt "Print End\n." cursorizeTy2 tenv ty
+                    xs -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, xs, ty, rhs', fresh)) dbgTraceIt "Print End\n." ProdTy (P.map getLocTy xs ++ [cursorizeTy2 tenv ty])
+            
+            tenv' = if ty == CursorTy
+                    then 
+                       L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
                       [(v, MkTy2 ty),(fresh, MkTy2 ty'),(toEndV v, MkTy2 (projTy 1 ty'))] ++
+                      [(toLocVar loc,MkTy2 $ getLocTy loc) | loc <- locs]
+                    else
+                      L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
+                      [(v, MkTy2 ty),(fresh, MkTy2 ty'),(toEndV v, MkTy2 ty)] ++
                       [(toLocVar loc,MkTy2 $ getLocTy loc) | loc <- locs]
 
             -- TyEnv Ty2 and L3 expresssions are tagged with different types
-            ty''  = curDict $ stripTyLocs ty'
+            ty''  = dbgTraceIt "Print tenv prime" dbgTraceIt (sdoc (tenv', bod)) dbgTraceIt "tenv prime End\n." curDict $ stripTyLocs ty'
             rhs'' = VarE fresh
-
-            bnds = case locs of
+            
+            bnds = if ty'' == CursorTy
+                   then 
+                    case locs of
                       []    -> [ (fresh   , [], ty''          , rhs' )
                                , (v       , [], projTy 0 ty'' , mkProj 0 rhs'')
                                , (toEndV v, [], projTy 1 ty'' , mkProj 1 rhs'')]
@@ -1262,6 +1316,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
                                        ,(v       ,[], projTy 0 $ projTy nLocs ty'' , mkProj 0 $ mkProj nLocs rhs'')
                                        ,(toEndV v,[], projTy 1 $ projTy nLocs ty'' , mkProj 1 $ mkProj nLocs rhs'')]
                            in bnds' ++ locBnds
+                   else [ (fresh   , [], ty''          , rhs' )]  
         case M.lookup (toEndV v) denv of
           Just xs -> error $ "todo: " ++ sdoc xs
           Nothing -> return ()
