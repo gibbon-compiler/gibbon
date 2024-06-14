@@ -11,7 +11,6 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Vector as V
-import           Data.Symbol
 import           Data.Char ( toLower )
 import           Debug.Trace
 import           Control.DeepSeq

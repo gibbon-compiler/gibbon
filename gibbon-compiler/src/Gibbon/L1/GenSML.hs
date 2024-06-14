@@ -9,7 +9,6 @@ import Control.Monad
 import Data.Map hiding (foldr, fold, null, empty)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Symbol
 
 import Data.Foldable hiding ( toList )
 import Data.Graph

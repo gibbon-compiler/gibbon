@@ -6,7 +6,6 @@ import Gibbon.Common
 import Control.Arrow
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Symbol ( unintern )
 
 elimNewtypes :: Monad m => Prog0 -> m Prog0
 elimNewtypes = pure . elimProgram

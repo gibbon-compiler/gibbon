@@ -10,6 +10,7 @@ module Gibbon.Common
          -- * Variables
          Var(..), LocVar, RegVar, fromVar, toVar, varAppend, toEndV, toSeqV, cleanFunName
        , TyVar(..), isUserTv
+       , Symbol, intern, unintern
 
          -- * Gensym monad
        , SyM, gensym, gensym_tag, genLetter, newUniq, runSyM
@@ -49,7 +50,8 @@ import Data.Char
 import qualified Data.List as L
 import Data.Map as M
 import Data.String
-import Data.Symbol
+import qualified Data.Interned as DI
+import Data.Interned.String
 import Data.Word
 import GHC.Generics
 import GHC.Stack (HasCallStack)
@@ -66,6 +68,24 @@ import Language.C.Quote.CUDA (ToIdent, toIdent)
 import Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
+
+newtype Symbol = Symbol InternedString
+  deriving (Eq, Ord)
+
+instance Show Symbol where
+    showsPrec d s = showsPrec d (unintern s)
+
+instance Read Symbol where
+    readsPrec _d t = [(intern s, t') | (s, t') <- readList t]
+
+instance IsString Symbol where
+  fromString = intern
+
+intern :: String -> Symbol
+intern = Symbol . DI.intern
+
+unintern :: Symbol -> String
+unintern (Symbol is) = DI.unintern is
 
 -- type CursorVar = Var
 newtype Var = Var Symbol
