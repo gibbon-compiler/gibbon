@@ -1003,7 +1003,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                 let [(outV,CursorTy)] = bnds
                                     [val,(VarTriv cur)] = rnds
                                     tagged_t = [cty| typename uintptr_t |] in pure
-                                 [ C.BlockStm [cstm| *( $ty:tagged_t  *)($id:cur) = $(codegenTriv venv val); |]
+                                 [ C.BlockStm [cstm| *( $ty:tagged_t  *)($id:cur) = ($ty:tagged_t) $(codegenTriv venv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
 
                  ReadCursor -> let [(next,CursorTy),(afternext,CursorTy)] = bnds
