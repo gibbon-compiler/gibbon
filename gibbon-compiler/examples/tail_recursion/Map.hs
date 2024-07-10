@@ -16,10 +16,7 @@ map :: (Int -> Int) -> ConsIntList -> ConsIntList
 map f lst = case lst of 
                     Nil -> Nil 
                     Cons x rst -> Cons (f x) (map f rst)
-
-
-
-
+                    
 add1 :: Int -> Int 
 add1 x = x + 1
 

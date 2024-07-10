@@ -187,7 +187,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
       regBinds = map toEndV (inRegs ++ outRegs) --dbgTraceIt (sdoc funName) dbgTraceIt (sdoc funTy') dbgTraceIt ("\n")
 
       -- Output cursors after that.
-      outCurBinds = outLocs
+      outCurBinds = dbgTraceIt "Print function Ty." dbgTraceIt (sdoc (outLocs, outRegs, inRegs, in_tys, out_ty, funTy, funTy')) dbgTraceIt "End print function ty.\n" outLocs
 
       -- Then the input cursors. Bind an input cursor for every packed argument.
       inCurBinds = case inLocs of
@@ -268,10 +268,26 @@ This is used to create bindings for input location variables.
            ProdTy tys -> L.foldl (\acc2 (ty',n) -> go acc2 (mkProj n e) ty')
                                  acc (zip (map MkTy2 tys) [0..])
            _ -> acc
-
+    
+    -- TODO: maybe the function should be marked tail_recursive
+    -- through some additional analysis.
+    -- We mark the return type as void.
     cursorizeArrowTy :: ArrowTy2 Ty2 -> ([Ty3] , Ty3)
     cursorizeArrowTy ty@ArrowTy2{arrIns,arrOut,locVars,locRets} =
       let
+          -- Check of arrOut is output mutable 
+          arrOutLoc = unTy2 arrOut
+          arrOutVar = P.concatMap (\ty -> case ty of
+                                                  PackedTy _ l -> [l]
+                                                  _ -> []
+                                              ) [arrOutLoc]
+          arrOutTy = if (P.null arrOutVar)
+                     then Output
+                     else 
+                      P.head $ P.concatMap (\(LRM l' _ m) -> if (l' == P.head arrOutVar)
+                                                      then [m] 
+                                                      else [ ]
+                                    ) locVars
           -- Regions corresponding to ouput cursors. (See [Threading regions])
           numOutRegs = length (outRegVars ty)
           outRegs = L.map (\_ -> CursorTy) [1..numOutRegs]
@@ -285,14 +301,12 @@ This is used to create bindings for input location variables.
                      _  -> ProdTy $ out_curs ++ [unTy2 arrOut]
 
           -- Packed types in the output then become end-cursors for those same destinations.
-          newOut = mapPacked (\_ l -> let locArg = filter (\(LRM l' _ m) -> l' == l) locVars
-                                       in case locArg of 
-                                           [LRM _ _ OutputMutable] ->  ProdTy [] -- for a mutable cursor there is no need to return anything
-                                           _ -> ProdTy [CursorTy, CursorTy]
-                             ) out_ty
-            
-            
-            
+          newOut = case arrOutTy of 
+                        OutputMutable -> ProdTy []
+                        _ -> mapPacked (\_ l -> let locArg = filter (\(LRM l' _ m) -> l' == l) locVars
+                                                         in case locArg of 
+                                                               _ -> ProdTy [CursorTy, CursorTy]
+                                              ) out_ty
             
             -- P.concatMap (\LRM{lrmLoc, lrmMode} -> if l == lrmLoc
             --                                                           then
@@ -415,7 +429,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
-              _  -> return $ L3.MkProdE $ [VarE (toLocVar loc) | loc <- locs] ++ [VarE v]
+              _  -> dbgTraceIt "Ret:CursorizeExp" dbgTraceIt (sdoc locs) dbgTraceIt "ReturnEnd" return $ L3.MkProdE $ [VarE (toLocVar loc) | loc <- locs] ++ [VarE v]
 
         StartOfPkdCursor cur -> return (VarE cur)
 
@@ -538,9 +552,9 @@ genReadMutableCursor locArg bod newCursor = do
                               
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2
+cursorizePackedExp :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2
                    -> PassM (DiExp Exp3)
-cursorizePackedExp ddfs fundefs denv tenv senv ex =
+cursorizePackedExp isTalCallFunc ddfs fundefs denv tenv senv ex =
   case ex of
     -- Here the allocation has already been performed:
     -- To follow the calling convention, we are reponsible for tagging on the
@@ -661,7 +675,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           -- The final return value lives at the position of the out cursors:
           go2 :: Bool -> Var -> [(Exp2, Ty2)] -> PassM Exp3
           go2 marker_added d [] = do
-            let ret_prod = if isMutableCur then VarE sloc else MkProdE [VarE sloc, VarE d] 
+            let ret_prod = if isMutableCur then MkProdE [] else MkProdE [VarE sloc, VarE d] 
             if not (marker_added)
             then do
               end_scalars_alloc <- gensym "end_scalars_alloc"
@@ -800,7 +814,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           case locs of
             []    -> return v'
             [loc] ->  pure $ mkDi (VarE (toLocVar loc)) [ fromDi v' ]
-            _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE (toLocVar loc)):acc) [fromDi v'] locs
+            _ -> dbgTraceIt "return" dbgTraceIt (sdoc locs) dbgTraceIt "returnEnd"  return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE (toLocVar loc)):acc) [fromDi v'] locs
 
         LetRegionE r sz _ bod -> do
           onDi (mkLets (regionToBinds False r sz)) <$> go tenv senv bod
@@ -1284,9 +1298,25 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
         --                                   [LRM _ _ OutputMutable] -> ProdTy [MutableCursorTy, CursorTy]
         --                                   _ -> ProdTy [CursorTy, CursorTy]
         --                 )
-        let ty' = case locs of
-                    [] -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, ty, rhs', fresh)) dbgTraceIt "Print End\n." cursorizeTy2 tenv ty
-                    xs -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, xs, ty, rhs', fresh)) dbgTraceIt "Print End\n." ProdTy (P.map getLocTy xs ++ [cursorizeTy2 tenv ty])
+
+        let isVoidFunctionTy = case ty of 
+                                PackedTy k l -> case (M.lookup l tenv) of
+                                    Nothing -> error $ "cursorizeLet: Unbound variable: " ++ sdoc l
+                                    Just ty -> case unTy2 ty of 
+                                                CursorTy -> False
+                                                MutableCursorTy -> True
+        
+        --case locs of
+        --            [] -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, ty, rhs', fresh)) dbgTraceIt "Print End\n." cursorizeTy2 tenv ty
+        --            xs -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, xs, ty, rhs', fresh)) dbgTraceIt "Print End\n." ProdTy (P.map getLocTy xs ++ [cursorizeTy2 tenv ty])
+
+        let ty' = if isVoidFunctionTy
+                  then ProdTy []
+                  else 
+                    case locs of
+                      [] -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, ty, rhs', fresh)) dbgTraceIt "Print End\n." cursorizeTy2 tenv ty
+                      xs -> dbgTraceIt "Print in cursorize Let" dbgTraceIt (sdoc (tenv, xs, ty, rhs', fresh)) dbgTraceIt "Print End\n." ProdTy (P.map getLocTy xs ++ [cursorizeTy2 tenv ty])
+
             
             tenv' = if ty == CursorTy
                     then 
@@ -1299,7 +1329,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
                       [(toLocVar loc,MkTy2 $ getLocTy loc) | loc <- locs]
 
             -- TyEnv Ty2 and L3 expresssions are tagged with different types
-            ty''  = dbgTraceIt "Print tenv prime" dbgTraceIt (sdoc (tenv', bod)) dbgTraceIt "tenv prime End\n." curDict $ stripTyLocs ty'
+            ty''  = dbgTraceIt "Print tenv prime" dbgTraceIt (sdoc (tenv', bod, ty', ty)) dbgTraceIt "tenv prime End\n." curDict $ stripTyLocs ty'
             rhs'' = VarE fresh
             
             bnds = if ty'' == CursorTy
@@ -1316,7 +1346,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
                                        ,(v       ,[], projTy 0 $ projTy nLocs ty'' , mkProj 0 $ mkProj nLocs rhs'')
                                        ,(toEndV v,[], projTy 1 $ projTy nLocs ty'' , mkProj 1 $ mkProj nLocs rhs'')]
                            in bnds' ++ locBnds
-                   else [ (fresh   , [], ty''          , rhs' )]  
+                   else dbgTraceIt "RHS'\n" dbgTraceIt (sdoc (ty'', rhs')) dbgTraceIt "RHSEND\n" [ (fresh   , [], ty''          , rhs' )]  
         case M.lookup (toEndV v) denv of
           Just xs -> error $ "todo: " ++ sdoc xs
           Nothing -> return ()
