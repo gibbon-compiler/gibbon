@@ -77,7 +77,7 @@ backTrackLocs env v accum visited = case M.lookup v env of
             accum'' = accum' || mut
          in (accum'', visited'')
 
-markTailCallsFnBody :: Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables)
+markTailCallsFnBody :: Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables, TailRecType)
 markTailCallsFnBody funName env exp2 = case exp2 of
     VarE v -> (VarE v, env)
     LitE l -> (LitE l, env)
@@ -123,14 +123,14 @@ markTailCallsFnBody funName env exp2 = case exp2 of
                         rhs' = AppE (v', tailCallType) locs' args'
                         (rhs'', env'') = markTailCallsFnBody funName env' rhs'
                         (bod', env''') = markTailCallsFnBody funName env'' bod
-                     in (LetE (v, loc, ty, rhs'') bod', env''')
+                     in (LetE (v, loc, ty, rhs'') bod', env''', tailCallType)
                 else
                     let (rhs', env') = markTailCallsFnBody funName env rhs
                         (bod', env'') = markTailCallsFnBody funName env' bod
-                     in (LetE (v, loc, ty, rhs') bod', env'')
+                     in (LetE (v, loc, ty, rhs') bod', env'', tailCallType)
         _ ->
-            let (rhs', env') = markTailCallsFnBody funName env rhs
-                (bod', env'') = markTailCallsFnBody funName env' bod
+            let (rhs', env', tailTy) = markTailCallsFnBody funName env rhs
+                (bod', env'', tailTy) = markTailCallsFnBody funName env' bod
              in (LetE (v, loc, ty, rhs') bod', env'')
     IfE a b c ->
         let (a', e1) = markTailCallsFnBody funName env a
