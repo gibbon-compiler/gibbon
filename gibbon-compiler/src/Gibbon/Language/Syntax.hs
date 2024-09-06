@@ -198,6 +198,7 @@ data FunMeta = FunMeta
   , funInline :: FunInline
     -- Whether the transitive closure of this function can trigger GC.
   , funCanTriggerGC :: Bool
+  , funTailCallTy :: TailRecType
   }
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 

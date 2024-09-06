@@ -44,12 +44,12 @@ testTypeable = gRecoverType ddtree emptyEnv2 tTypeable
 -- Add1
 
 add1TraversedFun :: FunDef2
-add1TraversedFun = FunDef "add1" ["tr1"] add1TraversedFunTy add1FunBod (FunMeta Rec NoInline False)
+add1TraversedFun = FunDef "add1" ["tr1"] add1TraversedFunTy add1FunBod (FunMeta Rec NoInline False NoTail)
   where add1TraversedFunTy = add1FunTy { arrEffs = S.fromList [Traverse "lin2"] }
 
 
 add1Fun :: FunDef2
-add1Fun = FunDef "add1" ["tr1"] add1FunTy add1FunBod (FunMeta Rec NoInline False)
+add1Fun = FunDef "add1" ["tr1"] add1FunTy add1FunBod (FunMeta Rec NoInline False NoTail)
 
 
 add1FunTy :: ArrowTy2 Ty2
@@ -141,7 +141,7 @@ nodeProg = Prog ddtree M.empty (Just (nodeMainExp, PackedTy "Tree" "l156"))
 --------------------------------------------------------------------------------
 
 id1Fun :: FunDef2
-id1Fun = FunDef "id1" ["tr18"] idFunTy idFunBod (FunMeta NotRec NoInline False)
+id1Fun = FunDef "id1" ["tr18"] idFunTy idFunBod (FunMeta NotRec NoInline False NoTail)
   where
     idFunBod = VarE "tr18"
 
@@ -161,7 +161,7 @@ id1Prog = Prog ddtree (M.fromList [("id1", id1Fun)]) Nothing
 --------------------------------------------------------------------------------
 
 copyTreeFun :: FunDef2
-copyTreeFun = FunDef "copyTree" ["tr22"] copyFunTy copyBod (FunMeta NotRec NoInline False)
+copyTreeFun = FunDef "copyTree" ["tr22"] copyFunTy copyBod (FunMeta NotRec NoInline False NoTail)
   where
     copyFunTy = ArrowTy2
                  [LRM "lin23" (VarR "r24") Input, LRM "lout25" (VarR "r752") Output]
@@ -211,7 +211,7 @@ copyTreeProg = Prog ddtree (M.fromList [("copyTree", copyTreeFun)]) $
 --------------------------------------------------------------------------------
 
 id2Fun :: FunDef2
-id2Fun = FunDef "id2" ["tr41"] id2Ty id2Bod (FunMeta NotRec NoInline False)
+id2Fun = FunDef "id2" ["tr41"] id2Ty id2Bod (FunMeta NotRec NoInline False NoTail)
   where
     id2Ty :: ArrowTy2 Ty2
     id2Ty = ArrowTy2
@@ -263,7 +263,7 @@ id1WithCopyFun = id1Fun { funBody = AppE ("copyTree", NoTail) ["lin19","lout21"]
 --------------------------------------------------------------------------------
 
 id3Fun :: FunDef2
-id3Fun = FunDef "id3" ["i42"] id3Ty id3Bod (FunMeta NotRec NoInline False)
+id3Fun = FunDef "id3" ["i42"] id3Ty id3Bod (FunMeta NotRec NoInline False NoTail)
   where
     id3Ty :: ArrowTy2 Ty2
     id3Ty = ArrowTy2
@@ -286,7 +286,7 @@ id3Prog = Prog ddtree (M.fromList [("id3", id3Fun)]) $ Just (id3MainExp, IntTy)
 --------------------------------------------------------------------------------
 
 intAddFun :: FunDef2
-intAddFun = FunDef "intAdd" ["i109"] intAddTy id3Bod (FunMeta NotRec NoInline False)
+intAddFun = FunDef "intAdd" ["i109"] intAddTy id3Bod (FunMeta NotRec NoInline False NoTail)
   where
     intAddTy :: ArrowTy2 Ty2
     intAddTy = ArrowTy2
@@ -311,7 +311,7 @@ intAddProg = Prog M.empty (M.fromList [("intAdd", intAddFun)]) (Just (intAddMain
 --------------------------------------------------------------------------------
 
 leftmostFun :: FunDef2
-leftmostFun = FunDef "leftmost" ["t111"] leftmostTy leftmostBod (FunMeta Rec NoInline False)
+leftmostFun = FunDef "leftmost" ["t111"] leftmostTy leftmostBod (FunMeta Rec NoInline False NoTail)
   where
     leftmostTy :: ArrowTy2 Ty2
     leftmostTy = ArrowTy2
@@ -352,7 +352,7 @@ leftmostProg = Prog ddtree (M.fromList [("leftmost", leftmostFun)]) (Just (leftm
 --------------------------------------------------------------------------------
 
 rightmostFun :: FunDef2
-rightmostFun = FunDef "rightmost" ["t242"] rightmostTy rightmostBod (FunMeta Rec NoInline False)
+rightmostFun = FunDef "rightmost" ["t242"] rightmostTy rightmostBod (FunMeta Rec NoInline False NoTail)
   where
     rightmostTy :: ArrowTy2 Ty2
     rightmostTy = ArrowTy2
@@ -398,7 +398,7 @@ rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun)])
 --------------------------------------------------------------------------------
 
 buildLeafFun :: FunDef2
-buildLeafFun = FunDef "buildLeaf" ["i125"] buildLeafTy buildLeafBod (FunMeta Rec NoInline False)
+buildLeafFun = FunDef "buildLeaf" ["i125"] buildLeafTy buildLeafBod (FunMeta Rec NoInline False NoTail)
   where
     buildLeafTy :: ArrowTy2 Ty2
     buildLeafTy = ArrowTy2
@@ -425,7 +425,7 @@ buildLeafProg = Prog ddtree (M.fromList [("buildLeaf", buildLeafFun)]) (Just (bu
 --------------------------------------------------------------------------------
 
 buildTreeFun :: FunDef2
-buildTreeFun = FunDef "buildTree" ["i270"] buildTreeTy buildTreeBod (FunMeta Rec NoInline False)
+buildTreeFun = FunDef "buildTree" ["i270"] buildTreeTy buildTreeBod (FunMeta Rec NoInline False NoTail)
   where
     buildTreeTy :: ArrowTy2 Ty2
     buildTreeTy = ArrowTy2
@@ -465,7 +465,7 @@ buildTreeProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun)]) (Just (bu
 
 
 buildTwoTreesFun :: FunDef2
-buildTwoTreesFun = FunDef "buildTwoTrees" ["i750"] buildTreeTy buildTreeBod (FunMeta Rec NoInline False)
+buildTwoTreesFun = FunDef "buildTwoTrees" ["i750"] buildTreeTy buildTreeBod (FunMeta Rec NoInline False NoTail)
   where
     buildTreeTy :: ArrowTy2 Ty2
     buildTreeTy = ArrowTy2
@@ -502,7 +502,7 @@ buildTwoTreesProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun),
 --------------------------------------------------------------------------------
 
 buildTreeSumFun :: FunDef2
-buildTreeSumFun = FunDef "buildTreeSum" ["i302"] buildTreeSumTy buildTreeSumBod (FunMeta Rec NoInline False)
+buildTreeSumFun = FunDef "buildTreeSum" ["i302"] buildTreeSumTy buildTreeSumBod (FunMeta Rec NoInline False NoTail)
   where
     buildTreeSumTy :: ArrowTy2 Ty2
     buildTreeSumTy = ArrowTy2
@@ -554,7 +554,7 @@ buildTreeSumProg = Prog ddtree (M.fromList [("buildTreeSum", buildTreeSumFun)]) 
 --------------------------------------------------------------------------------
 
 sumTreeFun :: FunDef2
-sumTreeFun = FunDef "sumTree" ["tr762"] sumTreeTy sumTreeBod (FunMeta Rec NoInline False)
+sumTreeFun = FunDef "sumTree" ["tr762"] sumTreeTy sumTreeBod (FunMeta Rec NoInline False NoTail)
   where
     sumTreeTy :: ArrowTy2 Ty2
     sumTreeTy = ArrowTy2
@@ -644,7 +644,7 @@ addTrees t1 t2 =
 -}
 
 addTreesFun :: FunDef2
-addTreesFun = FunDef "addTrees" ["trees354"] addTreesTy addTreesBod (FunMeta Rec NoInline False)
+addTreesFun = FunDef "addTrees" ["trees354"] addTreesTy addTreesBod (FunMeta Rec NoInline False NoTail)
   where
     addTreesTy :: ArrowTy2 Ty2
     addTreesTy = ArrowTy2
@@ -719,7 +719,7 @@ addTreesProg = Prog ddtree (M.fromList [("addTrees", addTreesFun)
 --------------------------------------------------------------------------------
 
 testProdFun :: FunDef2
-testProdFun = FunDef "testprod" ["tup130"] testprodTy testprodBod (FunMeta Rec NoInline False)
+testProdFun = FunDef "testprod" ["tup130"] testprodTy testprodBod (FunMeta Rec NoInline False NoTail)
   where
     testprodTy = ArrowTy2
                   [LRM "lin131" (VarR "r132") Input, LRM "lout133" (VarR "r755") Output]
@@ -813,7 +813,7 @@ sumUp tree =
 -}
 
 sumUpFun :: FunDef2
-sumUpFun = FunDef "sumUp" ["tr1"] sumUpFunTy sumUpFunBod (FunMeta Rec NoInline False)
+sumUpFun = FunDef "sumUp" ["tr1"] sumUpFunTy sumUpFunBod (FunMeta Rec NoInline False NoTail)
   where
     sumUpFunTy :: ArrowTy2 Ty2
     sumUpFunTy = ArrowTy2
@@ -851,7 +851,7 @@ sumUpFun = FunDef "sumUp" ["tr1"] sumUpFunTy sumUpFunBod (FunMeta Rec NoInline F
 
 
 valueSTreeFun :: FunDef2
-valueSTreeFun = FunDef "valueSTree" ["tr522"] valueSTreeFunTy valueSTreeFunBod (FunMeta Rec NoInline False)
+valueSTreeFun = FunDef "valueSTree" ["tr522"] valueSTreeFunTy valueSTreeFunBod (FunMeta Rec NoInline False NoTail)
   where
     valueSTreeFunTy :: ArrowTy2 Ty2
     valueSTreeFunTy = ArrowTy2
@@ -873,7 +873,7 @@ valueSTreeFun = FunDef "valueSTree" ["tr522"] valueSTreeFunTy valueSTreeFunBod (
 
 
 buildSTreeFun :: FunDef2
-buildSTreeFun = FunDef "buildSTree" ["i543"] buildSTreeTy buildSTreeBod (FunMeta Rec NoInline False)
+buildSTreeFun = FunDef "buildSTree" ["i543"] buildSTreeTy buildSTreeBod (FunMeta Rec NoInline False NoTail)
   where
     buildSTreeTy :: ArrowTy2 Ty2
     buildSTreeTy = ArrowTy2
@@ -921,7 +921,7 @@ buildSTreeProg = Prog stree (M.fromList [("buildSTree", buildSTreeFun)])
 --------------------------------------------------------------------------------
 
 sumSTreeFun :: FunDef2
-sumSTreeFun = FunDef "sumSTree" ["tr762"] sumSTreeTy sumSTreeBod (FunMeta Rec NoInline False)
+sumSTreeFun = FunDef "sumSTree" ["tr762"] sumSTreeTy sumSTreeBod (FunMeta Rec NoInline False NoTail)
   where
     sumSTreeTy :: ArrowTy2 Ty2
     sumSTreeTy = ArrowTy2
@@ -984,7 +984,7 @@ sumUpProg = Prog stree (M.fromList [("sumUp", sumUpFun)
 --------------------------------------------------------------------------------
 
 evenFun :: FunDef2
-evenFun = FunDef "even" ["i560"] evenFunTy evenFunBod (FunMeta NotRec NoInline False)
+evenFun = FunDef "even" ["i560"] evenFunTy evenFunBod (FunMeta NotRec NoInline False NoTail)
   where
     evenFunTy :: ArrowTy2 Ty2
     evenFunTy = ArrowTy2
@@ -1020,7 +1020,7 @@ setEven tree =
 
 
 setEvenFun :: FunDef2
-setEvenFun = FunDef "setEven" ["tr570"] setEvenFunTy setEvenFunBod (FunMeta Rec NoInline False)
+setEvenFun = FunDef "setEven" ["tr570"] setEvenFunTy setEvenFunBod (FunMeta Rec NoInline False NoTail)
   where
     setEvenFunTy :: ArrowTy2 Ty2
     setEvenFunTy = ArrowTy2
@@ -1103,7 +1103,7 @@ merged tr =
 -}
 
 sumUpSetEvenFun :: FunDef2
-sumUpSetEvenFun = FunDef "sumUpSetEven" ["tr600"] sumUpSetEvenFunTy sumUpSetEvenFunBod (FunMeta Rec NoInline False)
+sumUpSetEvenFun = FunDef "sumUpSetEven" ["tr600"] sumUpSetEvenFunTy sumUpSetEvenFunBod (FunMeta Rec NoInline False NoTail)
   where
     sumUpSetEvenFunTy :: ArrowTy2 Ty2
     sumUpSetEvenFunTy = ArrowTy2
@@ -1195,7 +1195,7 @@ ddexpr = fromListDD [DDef (toVar "Expr") []
                       ]]
 
 copyExprFun :: FunDef2
-copyExprFun = FunDef "copyExpr" ["e700"] copyExprFunTy copyExprFunBod (FunMeta Rec NoInline False)
+copyExprFun = FunDef "copyExpr" ["e700"] copyExprFunTy copyExprFunBod (FunMeta Rec NoInline False NoTail)
   where
     copyExprFunTy :: ArrowTy2 Ty2
     copyExprFunTy = ArrowTy2
@@ -1227,7 +1227,7 @@ copyExprFun = FunDef "copyExpr" ["e700"] copyExprFunTy copyExprFunBod (FunMeta R
 
 
 substFun :: FunDef2
-substFun = FunDef "subst" ["tr653"] substFunTy substFunBod (FunMeta Rec NoInline False)
+substFun = FunDef "subst" ["tr653"] substFunTy substFunBod (FunMeta Rec NoInline False NoTail)
   where
     substFunTy :: ArrowTy2 Ty2
     substFunTy = ArrowTy2
@@ -1322,7 +1322,7 @@ ddtree' = fromListDD [DDef (toVar "Tree") []
 -- indirection pointers to get to the rightmost node of the tree.
 
 indrBuildTreeFun :: FunDef2
-indrBuildTreeFun = FunDef "indrBuildTree" ["i270"] indrBuildTreeTy indrBuildTreeBod (FunMeta Rec NoInline False)
+indrBuildTreeFun = FunDef "indrBuildTree" ["i270"] indrBuildTreeTy indrBuildTreeBod (FunMeta Rec NoInline False NoTail)
   where
     indrBuildTreeTy :: ArrowTy2 Ty2
     indrBuildTreeTy = ArrowTy2
@@ -1367,7 +1367,7 @@ indrBuildTreeProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun
 
 
 indrRightmostFun :: FunDef2
-indrRightmostFun = FunDef "indrRightmost" ["t742"] indrRightmostTy indrRightmostBod (FunMeta Rec NoInline False)
+indrRightmostFun = FunDef "indrRightmost" ["t742"] indrRightmostTy indrRightmostBod (FunMeta Rec NoInline False NoTail)
   where
     indrRightmostTy :: ArrowTy2 Ty2
     indrRightmostTy = ArrowTy2
@@ -1403,7 +1403,7 @@ indrRightmostProg = Prog ddtree' (M.fromList [("indrRightmost", indrRightmostFun
 --------------------------------------------------------------------------------
 
 indrIDFun :: FunDef2
-indrIDFun = FunDef "indrID" ["tr800"] indrIDTy indrIDBod (FunMeta NotRec NoInline False)
+indrIDFun = FunDef "indrID" ["tr800"] indrIDTy indrIDBod (FunMeta NotRec NoInline False NoTail)
   where
     indrIDTy :: ArrowTy2 Ty2
     indrIDTy = ArrowTy2

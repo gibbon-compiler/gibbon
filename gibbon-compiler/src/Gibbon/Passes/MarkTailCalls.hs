@@ -25,7 +25,7 @@ markTailCalls Prog{ddefs, fundefs, mainExp} = do
 
 markTailCallsFn :: NewL2.DDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 markTailCallsFn ddefs f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
-    let (funBody', env) = markTailCallsFnBody funName M.empty funBody
+    let (funBody', env, tailTy) = markTailCallsFnBody funName M.empty funBody
         (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTraceIt "Print env at the end." dbgTraceIt (sdoc (env, M.elems env)) dbgTraceIt "End\n" funTy
         locVars' =
             P.map
@@ -36,6 +36,7 @@ markTailCallsFn ddefs f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                 locVars
         funTy' = (ArrowTy2 locVars' arrIns _arrEffs arrOut _locRets _isPar)
         funBody'' = markMutableLocsAfterInitialPass env funBody'
+        
     --funBody''' <- copyOutputMutableBeforeCallsAndReplace funBody''
     return $ FunDef funName funArgs funTy' funBody'' funMeta
 
@@ -79,21 +80,23 @@ backTrackLocs env v accum visited = case M.lookup v env of
 
 markTailCallsFnBody :: Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables, TailRecType)
 markTailCallsFnBody funName env exp2 = case exp2 of
-    VarE v -> (VarE v, env)
-    LitE l -> (LitE l, env)
-    CharE c -> (CharE c, env)
-    FloatE f -> (FloatE f, env)
-    LitSymE v -> (LitSymE v, env)
+    VarE v -> (VarE v, env, NoTail)
+    LitE l -> (LitE l, env, NoTail)
+    CharE c -> (CharE c, env, NoTail)
+    FloatE f -> (FloatE f, env, NoTail)
+    LitSymE v -> (LitSymE v, env, NoTail)
     AppE (v, t) locs args ->
         let results = P.map (markTailCallsFnBody funName env) args
-            args' = P.map fst results
-            env' = M.unionsWith unionMapLambda $ P.map snd results
-         in (AppE (v, t) locs args', env')
+            args' = P.map fst3 results
+            env' = M.unionsWith unionMapLambda $ P.map snd3 results
+            tailTy = P.maximum $ P.map thd3 results
+         in (AppE (v, t) locs args', env', tailTy)
     PrimAppE p args ->
         let results = P.map (markTailCallsFnBody funName env) args
-            args' = P.map fst results
-            env' = M.unionsWith unionMapLambda $ P.map snd results
-         in (PrimAppE p args', env')
+            args' = P.map fst3 results
+            env' = M.unionsWith unionMapLambda $ P.map snd3 results
+            tailTy = P.maximum $ P.map thd3 results
+         in (PrimAppE p args', env', tailTy)
     LetE (v, loc, ty, rhs) bod -> case rhs of
         AppE (v', _) locs' args' ->
             if v' == funName
@@ -121,99 +124,104 @@ markTailCallsFnBody funName env exp2 = case exp2 of
                                     env
                                     locs'
                         rhs' = AppE (v', tailCallType) locs' args'
-                        (rhs'', env'') = markTailCallsFnBody funName env' rhs'
-                        (bod', env''') = markTailCallsFnBody funName env'' bod
-                     in (LetE (v, loc, ty, rhs'') bod', env''', tailCallType)
+                        (rhs'', env'', t1) = markTailCallsFnBody funName env' rhs'
+                        (bod', env''', t2) = markTailCallsFnBody funName env'' bod
+                     in (LetE (v, loc, ty, rhs'') bod', env''', P.maximum [tailCallType, t1, t2])
                 else
-                    let (rhs', env') = markTailCallsFnBody funName env rhs
-                        (bod', env'') = markTailCallsFnBody funName env' bod
-                     in (LetE (v, loc, ty, rhs') bod', env'', tailCallType)
+                    let (rhs', env', t1) = markTailCallsFnBody funName env rhs
+                        (bod', env'', t2) = markTailCallsFnBody funName env' bod
+                     in (LetE (v, loc, ty, rhs') bod', env'', P.max t1 t2)
         _ ->
             let (rhs', env', tailTy) = markTailCallsFnBody funName env rhs
-                (bod', env'', tailTy) = markTailCallsFnBody funName env' bod
-             in (LetE (v, loc, ty, rhs') bod', env'')
+                (bod', env'', tailTy') = markTailCallsFnBody funName env' bod
+             in (LetE (v, loc, ty, rhs') bod', env'', P.max tailTy tailTy')
     IfE a b c ->
-        let (a', e1) = markTailCallsFnBody funName env a
-            (b', e2) = markTailCallsFnBody funName e1 b
-            (c', e3) = markTailCallsFnBody funName e2 c
-         in (IfE a' b' c', e3)
+        let (a', e1, t) = markTailCallsFnBody funName env a
+            (b', e2, t1) = markTailCallsFnBody funName e1 b
+            (c', e3, t2) = markTailCallsFnBody funName e2 c
+         in (IfE a' b' c', e3, P.maximum [t, t1, t2])
     MkProdE ls ->
         let results = P.map (markTailCallsFnBody funName env) ls
-            ls' = P.map fst results
-            env' = M.unionsWith unionMapLambda $ P.map snd results
-         in (MkProdE ls', env')
+            ls' = P.map fst3 results
+            env' = M.unionsWith unionMapLambda $ P.map snd3 results
+            taiTy = P.maximum $ P.map thd3 results  
+         in (MkProdE ls', env', taiTy)
     ProjE i e ->
-        let (e', env') = markTailCallsFnBody funName env e
-         in (ProjE i e', env')
+        let (e', env', t) = markTailCallsFnBody funName env e
+         in (ProjE i e', env', t)
     -- [(DataCon, [(Var,loc)], EXP)]
     CaseE scrt brs ->
         let results =
                 P.map
                     ( \(a, b, c) ->
-                        let (c', env') = markTailCallsFnBody funName env c
-                         in ((a, b, c'), env')
+                        let (c', env', t) = markTailCallsFnBody funName env c
+                         in ((a, b, c'), env', t)
                     )
                     brs
-            brs' = P.map fst results
-            env'' = M.unionsWith unionMapLambda $ P.map snd results
-         in (CaseE scrt brs', env'')
+            brs' = P.map fst3 results
+            env'' = M.unionsWith unionMapLambda $ P.map snd3 results
+            taiTy = P.maximum $ P.map thd3 results
+         in (CaseE scrt brs', env'', taiTy)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     DataConE loc c args ->
         let locInDataCon = dbgTraceIt "In DataCon:" dbgTraceIt (sdoc (env, M.elems env)) dbgTraceIt ("End\n") toLocVar loc
          in case (backTrackLocs env locInDataCon False M.empty) of
                 (False, _) ->
                     let results = P.map (markTailCallsFnBody funName env) args
-                        args' = P.map fst results
-                        env' = M.unionsWith unionMapLambda $ P.map snd results
-                     in (DataConE loc c args', env')
+                        args' = P.map fst3 results
+                        env' = M.unionsWith unionMapLambda $ P.map snd3 results
+                        taiTy = P.maximum $ P.map thd3 results
+                     in (DataConE loc c args', env', taiTy)
                 (True, _) ->
                     let loc' = case loc of
                             NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
                             _ -> loc
                         results = P.map (markTailCallsFnBody funName env) args
-                        args' = P.map fst results
-                        env' = M.unionsWith unionMapLambda $ P.map snd results
-                     in (DataConE loc' c args', env')
+                        args' = P.map fst3 results
+                        env' = M.unionsWith unionMapLambda $ P.map snd3 results
+                        taiTy = P.maximum $ P.map thd3 results
+                     in (DataConE loc' c args', env', taiTy)
     TimeIt e d b ->
-        let (e', env') = markTailCallsFnBody funName env e
-         in (TimeIt e' d b, env')
+        let (e', env', t) = markTailCallsFnBody funName env e
+         in (TimeIt e' d b, env', t)
     MapE d e ->
-        let (e', env') = markTailCallsFnBody funName env e
-         in (MapE d e', env')
+        let (e', env', t) = markTailCallsFnBody funName env e
+         in (MapE d e', env', t)
     FoldE i it e ->
-        let (e', env') = markTailCallsFnBody funName env e
-         in (FoldE i it e', env')
+        let (e', env', t) = markTailCallsFnBody funName env e
+         in (FoldE i it e', env', t)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     SpawnE v locs exps ->
         let results = P.map (markTailCallsFnBody funName env) exps
-            exps' = P.map fst results
-            env' = M.unionsWith unionMapLambda $ P.map snd results
-         in (SpawnE v locs exps', env')
-    SyncE -> (exp2, env)
+            exps' = P.map fst3 results
+            env' = M.unionsWith unionMapLambda $ P.map snd3 results
+            taiTy = P.maximum $ P.map thd3 results
+         in (SpawnE v locs exps', env', taiTy)
+    SyncE -> (exp2, env, NoTail)
     WithArenaE _v e ->
-        let (e', env') = markTailCallsFnBody funName env e
-         in (WithArenaE _v e', env')
+        let (e', env', t) = markTailCallsFnBody funName env e
+         in (WithArenaE _v e', env', t)
     Ext ext ->
         case ext of
             Old.LetRegionE r a b bod ->
-                let (bod', env') = markTailCallsFnBody funName env bod
-                 in (Ext $ Old.LetRegionE r a b bod', env')
+                let (bod', env', t) = markTailCallsFnBody funName env bod
+                 in (Ext $ Old.LetRegionE r a b bod', env', t)
             Old.LetParRegionE r a b bod ->
-                let (bod', env') = markTailCallsFnBody funName env bod
-                 in (Ext $ Old.LetParRegionE r a b bod', env')
+                let (bod', env', t) = markTailCallsFnBody funName env bod
+                 in (Ext $ Old.LetParRegionE r a b bod', env', t)
             Old.LetLocE loc locexp bod ->
                 let locInExp = freeLoc locexp
                     env' = case locInExp of
                         Nothing -> env
                         Just l -> M.insert l (S.singleton (toLocVar loc), False) env
-                    (bod', env'') = markTailCallsFnBody funName env' bod
+                    (bod', env'', t) = markTailCallsFnBody funName env' bod
                     locexp' = case locInExp of
                         Nothing -> locexp
                         Just l -> case (backTrackLocs env'' l False M.empty) of
                             (False, _) -> locexp
                             (True, _) -> changeLocData locexp l
-                 in (Ext $ Old.LetLocE loc locexp' bod', env'')
-            _ -> (Ext ext, env)
+                 in (Ext $ Old.LetLocE loc locexp' bod', env'', t)
+            _ -> (Ext ext, env, NoTail)
   where
     -- Old.StartOfPkdCursor v -> [NoTail]
     -- Old.TagCursor a b -> [NoTail]
