@@ -13,7 +13,7 @@ import Gibbon.L2.Syntax
 lvl :: Int
 lvl = 5
 
-type FunEnv = TyEnv FunMeta
+type FunEnv = TyEnv Var FunMeta
 
 inferFunAllocs :: Prog2 -> PassM Prog2
 inferFunAllocs prg@Prog{fundefs} = do

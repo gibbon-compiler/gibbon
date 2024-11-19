@@ -116,7 +116,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
       -- intuitive and can be improved.
 
       -- Input & output regions are always inserted before all other arguments.
-      regBinds = map toEndV (inRegs ++ outRegs)
+      regBinds = map toEndVLoc (inRegs ++ outRegs)
 
       -- Output cursors after that.
       outCurBinds = outLocs
@@ -126,13 +126,13 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
                      [] -> mkLets []
                      _  ->
                            let projs = concatMap (\(e,t) -> mkInProjs e t) (zip (map VarE funArgs) in_tys)
-                               bnds  = [(loc,[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
+                               bnds  = [((unwrapLocVar loc),[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
                            in mkLets bnds
 
       initTyEnv = M.fromList $ (map (\(a,b) -> (a,MkTy2 (cursorizeInTy (unTy2 b)))) $ zip funArgs in_tys) ++
-                               [(a, MkTy2 CursorTy) | (LRM a _ _) <- locVars funTy]
+                               [(unwrapLocVar a, MkTy2 CursorTy) | (LRM a _ _) <- locVars funTy]
 
-      funargs = regBinds ++ outCurBinds ++ funArgs
+      funargs = (L.map unwrapLocVar regBinds) ++ (L.map unwrapLocVar outCurBinds) ++ funArgs
 
   bod <- if hasPacked (unTy2 out_ty)
          then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv M.empty funBody
@@ -235,7 +235,7 @@ This is used to create bindings for input location variables.
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2
+cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
              -> PassM Exp3
 cursorizeExp ddfs fundefs denv tenv senv ex =
   case ex of
@@ -273,7 +273,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
       cursorizeSync False ddfs fundefs denv tenv senv ex
 
     LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod ->
-      case M.lookup start tenv of
+      case M.lookup (unwrapLocVar start) tenv of
         Nothing -> go bod
         Just{}  -> do
           rhs' <- go rhs
@@ -282,7 +282,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
           return $ LetE (v,[],ty',rhs') bod'
 
     LetE (v,_locs,ty, rhs@(Ext (SSPop _ start _))) bod ->
-      case M.lookup start tenv of
+      case M.lookup (unwrapLocVar start) tenv of
         Nothing -> go bod
         Just{}  -> do
           rhs' <- go rhs
@@ -323,7 +323,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
-              _  -> return $ L3.MkProdE $ [VarE (toLocVar loc) | loc <- locs] ++ [VarE v]
+              _  -> return $ L3.MkProdE $ [VarE (((unwrapLocVar . toLocVar)) loc) | loc <- locs] ++ [VarE v]
 
         StartOfPkdCursor cur -> return (VarE cur)
 
@@ -357,13 +357,13 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
               case rhs of
                 FromEndLE{} ->
                   if isBound loc tenv
-                  then cursorizeExp ddfs fundefs denv (M.insert loc (MkTy2 CursorTy) tenv''') senv' bod
+                  then cursorizeExp ddfs fundefs denv (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
                   -- Discharge bindings that were waiting on 'loc'.
-                  else mkLets (bnds' ++ [(loc,[],CursorTy,rhs')] ++ bnds) <$>
-                         cursorizeExp ddfs fundefs denv (M.insert loc (MkTy2 CursorTy) tenv''') senv' bod
+                  else mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds) <$>
+                         cursorizeExp ddfs fundefs denv (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
-                _ -> mkLets (bnds' ++ [(loc,[],CursorTy,rhs')] ++ bnds) <$>
-                       cursorizeExp ddfs fundefs denv (M.insert loc (MkTy2 CursorTy) tenv''') senv bod
+                _ -> mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds) <$>
+                       cursorizeExp ddfs fundefs denv (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv bod
             Left denv' -> cursorizeExp ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
@@ -373,7 +373,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
         LetParRegionE reg sz _ bod -> do
           mkLets (regionToBinds True reg sz) <$> go bod
 
-        BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i (toLocVar bound) (toLocVar cur)
+        BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i (((unwrapLocVar . toLocVar)) bound) (((unwrapLocVar . toLocVar)) cur)
 
         FromEndE{} -> error $ "cursorizeExp: TODO FromEndE" ++ sdoc ext
 
@@ -383,12 +383,12 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         LetAvail vs bod  -> Ext <$> L3.LetAvail vs <$> go bod
 
-        AllocateTagHere v tycon -> pure $ Ext $ L3.AllocateTagHere v tycon
+        AllocateTagHere v tycon -> pure $ Ext $ L3.AllocateTagHere (unwrapLocVar v) tycon
 
-        AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere v
+        AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere (unwrapLocVar v)
 
-        SSPush a b c d -> pure $ Ext $ L3.SSPush a b c d
-        SSPop a b c -> pure $ Ext $ L3.SSPop a b c
+        SSPush a b c d -> pure $ Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d
+        SSPop a b c -> pure $ Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c)
 
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
@@ -398,7 +398,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2
+cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
                    -> PassM (DiExp Exp3)
 cursorizePackedExp ddfs fundefs denv tenv senv ex =
   case ex of
@@ -436,9 +436,9 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
     LetE (v,_locs,_ty, (PrimAppE (DictLookupP (MkTy2 (PackedTy _ ploc))) vs)) bod ->
         do vs' <- forM vs $ \w -> cursorizeExp ddfs fundefs denv tenv senv w
-           let bnd = mkLets [(ploc, [], CursorTy, (PrimAppE (DictLookupP CursorTy) vs'))
-                            ,(v, [], CursorTy, VarE ploc)]
-               tenv' = M.insert ploc (MkTy2 CursorTy) $ M.insert v (MkTy2 CursorTy) tenv
+           let bnd = mkLets [((unwrapLocVar ploc), [], CursorTy, (PrimAppE (DictLookupP CursorTy) vs'))
+                            ,(v, [], CursorTy, VarE (unwrapLocVar ploc))]
+               tenv' = M.insert (unwrapLocVar ploc) (MkTy2 CursorTy) $ M.insert v (MkTy2 CursorTy) tenv
            onDi bnd <$> go tenv' senv bod
 
     LetE (_v,_locs,_ty, (MkProdE _ls)) _bod ->
@@ -467,7 +467,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       dl <$> cursorizeSync True ddfs fundefs denv tenv senv ex
 
     LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod ->
-      case M.lookup start tenv of
+      case M.lookup (unwrapLocVar start) tenv of
         Nothing -> go tenv senv bod
         Just{}  -> do
           rhs' <- go tenv senv rhs
@@ -476,7 +476,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           return $ Di (LetE (v,[], ty', fromDi rhs') (fromDi bod'))
 
     LetE (v,_locs,ty, rhs@(Ext (SSPop _ start _))) bod ->
-      case M.lookup start tenv of
+      case M.lookup (unwrapLocVar start) tenv of
         Nothing -> go tenv senv bod
         Just{}  -> do
           rhs' <- go tenv senv rhs
@@ -507,7 +507,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           mapM (unpackDataCon ddfs fundefs denv tenv senv True v) brs
 
     DataConE slocarg dcon args -> do
-      let sloc = toLocVar slocarg
+      let sloc = (unwrapLocVar . toLocVar) slocarg
           -- Return (start,end) cursors
           -- The final return value lives at the position of the out cursors:
           go2 :: Bool -> Var -> [(Exp2, Ty2)] -> PassM Exp3
@@ -516,8 +516,8 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             then do
               end_scalars_alloc <- gensym "end_scalars_alloc"
               return (LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc)
-                           (MkProdE [VarE sloc, VarE d]))
-            else return (MkProdE [VarE sloc, VarE d])
+                           (MkProdE [VarE (sloc), VarE d]))
+            else return (MkProdE [VarE (sloc), VarE d])
 
           go2 marker_added d ((rnd, (MkTy2 ty)):rst) = do
             d' <- gensym "writecur"
@@ -527,7 +527,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                  rnd' <- go tenv senv rnd
                  end_scalars_alloc <- gensym "end_scalars_alloc"
                  (if not marker_added
-                  then LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc)
+                  then LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation (sloc))
                   else id) <$>
                    LetE (d',[], CursorTy, projEnds rnd') <$>
                    go2 True d' rst
@@ -563,11 +563,11 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       end_tag_alloc <- gensym "end_tag_alloc"
       start_scalars_alloc <- gensym "start_scalars_alloc"
       dl <$>
-        LetE (start_tag_alloc,[],ProdTy [], Ext $ StartTagAllocation sloc) <$>
-        LetE (writetag,[], CursorTy, Ext $ WriteTag dcon sloc) <$>
-        LetE (end_tag_alloc,[],ProdTy [], Ext $ EndTagAllocation sloc) <$>
-        LetE (start_scalars_alloc,[],ProdTy [], Ext $ StartScalarsAllocation sloc) <$>
-        LetE (after_tag,[], CursorTy, Ext $ AddCursor sloc (L3.LitE 1)) <$>
+        LetE (start_tag_alloc,[],ProdTy [], Ext $ StartTagAllocation (sloc)) <$>
+        LetE (writetag,[], CursorTy, Ext $ WriteTag dcon (sloc)) <$>
+        LetE (end_tag_alloc,[],ProdTy [], Ext $ EndTagAllocation (sloc)) <$>
+        LetE (start_scalars_alloc,[],ProdTy [], Ext $ StartScalarsAllocation (sloc)) <$>
+        LetE (after_tag,[], CursorTy, Ext $ AddCursor (sloc) (L3.LitE 1)) <$>
           go2 False after_tag (zip args (lookupDataCon ddfs dcon))
 
     TimeIt e t b -> do
@@ -598,13 +598,13 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
               case rhs of
                 FromEndLE{} ->
                   if isBound loc tenv
-                  then go (M.insert loc (MkTy2 CursorTy) tenv''') senv' bod
+                  then go (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
                     -- Discharge bindings that were waiting on 'loc'.
-                  else onDi (mkLets (bnds' ++ [(loc,[],CursorTy,rhs')] ++ bnds)) <$>
-                         go (M.insert loc (MkTy2 CursorTy) tenv') senv' bod
+                  else onDi (mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds)) <$>
+                         go (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
-                _ -> onDi (mkLets (bnds' ++ [(loc,[],CursorTy,rhs')] ++ bnds)) <$>
-                       go (M.insert loc (MkTy2 CursorTy) tenv''') senv' bod
+                _ -> onDi (mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds)) <$>
+                       go (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
 
@@ -619,8 +619,8 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           v' <- go tenv senv (VarE v)
           case locs of
             []    -> return v'
-            [loc] ->  pure $ mkDi (VarE (toLocVar loc)) [ fromDi v' ]
-            _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE (toLocVar loc)):acc) [fromDi v'] locs
+            [loc] ->  pure $ mkDi (VarE (((unwrapLocVar . toLocVar)) loc)) [ fromDi v' ]
+            _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE (((unwrapLocVar . toLocVar)) loc)):acc) [fromDi v'] locs
 
         LetRegionE r sz _ bod -> do
           onDi (mkLets (regionToBinds False r sz)) <$> go tenv senv bod
@@ -630,21 +630,21 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
-        BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i (toLocVar bound) (toLocVar cur)
+        BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i (((unwrapLocVar . toLocVar)) bound) (((unwrapLocVar . toLocVar)) cur)
 
         IndirectionE tycon dcon (from,from_reg) (to,to_reg) _ -> do
           dflags <- getDynFlags
           if gopt Opt_DisableGC dflags
              -- || (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
              -- [2022.03.02]: ckoparkar:WTH does this hack enable?
-          then go tenv senv (DataConE from dcon [VarE (toLocVar to)])
+          then go tenv senv (DataConE from dcon [VarE (((unwrapLocVar . toLocVar)) to)])
           else do
             start <- gensym "start"
             end <- gensym "end"
             return $ Di $
-              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon ((toLocVar from),(toLocVar from_reg),(toLocVar to),(toLocVar to_reg)))),
-                       (start, [], CursorTy, VarE (toLocVar from)),
-                       (end, [], CursorTy, Ext $ AddCursor (toLocVar from) (L3.LitE 9))]
+              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon (((unwrapLocVar . toLocVar) from),((unwrapLocVar . toLocVar) from_reg),((unwrapLocVar . toLocVar) to),((unwrapLocVar . toLocVar) to_reg)))),
+                       (start, [], CursorTy, VarE ((unwrapLocVar . toLocVar) from)),
+                       (end, [], CursorTy, Ext $ AddCursor ((unwrapLocVar . toLocVar) from) (L3.LitE 9))]
                  (MkProdE [VarE start, VarE end]))
 
         AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."
@@ -654,12 +654,12 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
         LetAvail vs bod  -> do
           onDi (Ext . L3.LetAvail vs) <$> go tenv senv bod
 
-        AllocateTagHere v tycon -> pure <$> dl <$> Ext $ L3.AllocateTagHere v tycon
+        AllocateTagHere v tycon -> pure <$> dl <$> Ext $ L3.AllocateTagHere (unwrapLocVar v) tycon
 
-        AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere v
+        AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere (unwrapLocVar v)
 
-        SSPush a b c d -> pure <$> dl <$> Ext $ L3.SSPush a b c d
-        SSPop a b c -> pure <$> dl <$> Ext $ L3.SSPop a b c
+        SSPush a b c d -> pure <$> dl <$> Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d
+        SSPop a b c -> pure <$> dl <$> Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c)
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"
@@ -668,7 +668,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
         dl = Di
 
 
-cursorizeReadPackedFile :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Bool -> Var
+cursorizeReadPackedFile :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
                         -> Maybe FilePath -> TyCon -> Maybe Var -> Ty2 -> Exp2
                         -> PassM Exp3
 cursorizeReadPackedFile ddfs fundefs denv tenv senv isPackedContext v path tyc reg ty2 bod = do
@@ -691,14 +691,14 @@ cursorizeReadPackedFile ddfs fundefs denv tenv senv isPackedContext v path tyc r
 --
 -- i.e `loc_a` may not always be bound. If that's the case, don't process `loc_b`
 -- now. Instead, add it to the dependency environment.
-cursorizeLocExp :: DepEnv -> TyEnv Ty2 -> SyncEnv -> LocVar -> LocExp -> Either DepEnv (Exp3, [Binds Exp3], TyEnv Ty2, SyncEnv)
+cursorizeLocExp :: DepEnv -> TyEnv Var Ty2 -> SyncEnv -> LocVar -> LocExp -> Either DepEnv (Exp3, [Binds Exp3], TyEnv Var Ty2, SyncEnv)
 cursorizeLocExp denv tenv senv lvar locExp =
   case locExp of
     AfterConstantLE i loc ->
-      let rhs = Ext $ AddCursor (toLocVar loc) (LitE i)
-      in if isBound (toLocVar loc) tenv
+      let rhs = Ext $ AddCursor ((unwrapLocVar . toLocVar) loc) (LitE i)
+      in if isBound ((toLocVar) loc) tenv
          then Right (rhs, [], tenv, senv)
-         else Left$ M.insertWith (++) (toLocVar loc) [(lvar,[],CursorTy,rhs)] denv
+         else Left$ M.insertWith (++) ((toLocVar) loc) [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
     -- TODO: handle product types here
 
 {- [2018.03.07]:
@@ -761,13 +761,13 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                   let tenv' = foldr (\(v1,_,_,ty2,_) env -> M.insert v1 ty2 env) tenv pending_bnds
                       bnds  = map (\(a,b,c,_,e) -> (a,b,c,e)) pending_bnds
                   Right (bod, bnds, tenv', M.delete v senv)
-      else Left $ M.insertWith (++) loc [(lvar,[],CursorTy,bod)] denv
+      else Left $ M.insertWith (++) loc [((unwrapLocVar lvar),[],CursorTy,bod)] denv
 
     FromEndLE locarg ->
                    let loc = toLocVar locarg in
                      if isBound loc tenv
-                     then Right (VarE loc, [], tenv, senv)
-                     else Left$ M.insertWith (++) loc [(lvar,[],CursorTy,VarE loc)] denv
+                     then Right (VarE (unwrapLocVar loc), [], tenv, senv)
+                     else Left$ M.insertWith (++) loc [((unwrapLocVar lvar),[],CursorTy,VarE (unwrapLocVar loc))] denv
     StartOfRegionLE r   -> case r of
                        GlobR v _ -> Right (VarE v, [], tenv, senv)
                        VarR v    -> Right (VarE v, [], tenv, senv)
@@ -788,7 +788,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
 cursorizeAppE ddfs fundefs denv tenv senv ex =
   case ex of
     AppE f locs args -> do
@@ -809,13 +809,13 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
       let starts = zipWith giveStarts (map unTy2 argTys) args'
       let bod = case locs of
                   [] -> AppE f [] starts
-                  _  -> AppE f [] ([VarE (toLocVar loc) | loc <- outs] ++ starts)
+                  _  -> AppE f [] ([VarE ((unwrapLocVar . toLocVar) loc) | loc <- outs] ++ starts)
       asserts <- foldrM (\loc acc ->
                            case loc of
                              Loc LREM{lremEndReg,lremLoc} -> do
                                chk <- gensym "chk"
                                pure $
-                                 LetE (chk,[],BoolTy,PrimAppE LtP [VarE lremLoc, VarE lremEndReg]) $
+                                 LetE (chk,[],BoolTy,PrimAppE LtP [VarE (unwrapLocVar lremLoc), VarE lremEndReg]) $
                                  LetE ("_",[],ProdTy [], Ext $ Assert (VarE chk)) $
                                  acc
                              _ -> pure acc)
@@ -845,7 +845,7 @@ There are two ways in which projections can be cursorized:
 `cursorizeLet` creates the former, while the special case here outputs the latter.
 Reason: unariser can only eliminate direct projections of this form.
 -}
-cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
 cursorizeProj isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v,_locs,ty, rhs@ProjE{}) bod | isPackedTy (unTy2 ty) -> do
@@ -883,7 +883,7 @@ If it's just `CursorTy`, this packed value doesn't have an end cursor,
 otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
 -}
-cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
 cursorizeProd isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v, _locs, MkTy2 (ProdTy tys), rhs@(MkProdE ls)) bod -> do
@@ -917,7 +917,7 @@ and add fewer things to the type environemnt because we have to wait until the
 join point.
 
 -}
-cursorizeSpawn :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeSpawn :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
 cursorizeSpawn isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, locs, MkTy2 ty, (SpawnE fn applocs args)) bod
@@ -943,14 +943,14 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv senv ex = do
                                   [ (v       , [], projTy 0 ty'', MkTy2 ty            , mkProj 0 fresh_rhs)
                                   , (toEndV v, [], projTy 1 ty'', MkTy2 (projTy 1 ty'), mkProj 1 fresh_rhs)])
                         _ -> let nLocs = length locs
-                                 locBnds = [(toLocVar loc  ,[], CursorTy, MkTy2 CursorTy, mkProj n fresh_rhs)
+                                 locBnds = [((unwrapLocVar . toLocVar) loc  ,[], CursorTy, MkTy2 CursorTy, mkProj n fresh_rhs)
                                            | (loc,n) <- zip locs [0..]]
                                  bnds' = [(fresh ,[], ty'', rhs'') ]
                                  pending_bnds' = [(v       ,[], projTy 0 $ projTy nLocs ty'', MkTy2 ty,                            mkProj 0 $ mkProj nLocs fresh_rhs)
                                                  ,(toEndV v,[], projTy 1 $ projTy nLocs ty'', MkTy2 (projTy 0 $ projTy nLocs ty'), mkProj 1 $ mkProj nLocs fresh_rhs)]
                                                  ++ locBnds
                              in (bnds', pending_bnds')
-          case M.lookup (toEndV v) denv of
+          case M.lookup (Single (toEndV v)) denv of
             Just xs -> error $ "cursorizeSpawn todo: " ++ sdoc xs
             Nothing -> return ()
           let senv' = M.insert v pending_bnds senv
@@ -975,7 +975,7 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv senv ex = do
             _  -> do
               let (bnds, pending_bnds) =
                     ([(fresh, [], ty'', rhs'')],
-                     [(toLocVar loc,[],CursorTy, MkTy2 CursorTy, ProjE n (VarE fresh)) | (loc,n) <- (zip locs [0..])] ++
+                     [((unwrapLocVar . toLocVar) loc,[],CursorTy, MkTy2 CursorTy, ProjE n (VarE fresh)) | (loc,n) <- (zip locs [0..])] ++
                      [(v           ,[], projTy (length locs) ty'', MkTy2 ty, ProjE (length locs) (VarE fresh))])
                   senv' = M.insert v pending_bnds senv
               mkLets bnds <$> go tenv' senv' bod
@@ -996,7 +996,7 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv senv ex = do
                   ty'' :: Ty3
                   ty'' = stripTyLocs ty'
                   rhs''' = Di (VarE fresh)
-                  pending_bnds = [ (toLocVar loc ,[] , projTy 0 ty'', MkTy2 (projTy 0 ty') , projVal rhs''')
+                  pending_bnds = [ ((unwrapLocVar . toLocVar) loc ,[] , projTy 0 ty'', MkTy2 (projTy 0 ty') , projVal rhs''')
                                  -- [2022.09.21]: Shouldn't this be projTy 1 ty'?
                                  , (v            ,[] , projTy 1 ty'', MkTy2 (projTy 1 ty') , projEnds rhs''')]
                   senv' = M.insert v pending_bnds senv
@@ -1011,7 +1011,7 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv senv ex = do
                    then fromDi <$> cursorizePackedExp ddfs fundefs denv t s x
                    else cursorizeExp ddfs fundefs denv t s x
 
-cursorizeSync :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeSync :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
 cursorizeSync isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, _locs, MkTy2 ty, SyncE) bod -> do
@@ -1050,7 +1050,7 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 Other bindings are straightforward projections of the processed RHS.
 
 -}
-cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv
+cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv
              -> (Var, [LocArg], Ty2, Exp2) -> Exp2 -> PassM Exp3
 cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs) bod
     | isPackedTy ty = do
@@ -1062,7 +1062,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
 
             tenv' = L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
                       [(v, MkTy2 ty),(fresh, MkTy2 ty'),(toEndV v, MkTy2 (projTy 1 ty'))] ++
-                      [(toLocVar loc,MkTy2 CursorTy) | loc <- locs]
+                      [((unwrapLocVar . toLocVar) loc,MkTy2 CursorTy) | loc <- locs]
 
             -- TyEnv Ty2 and L3 expresssions are tagged with different types
             ty''  = curDict $ stripTyLocs ty'
@@ -1074,13 +1074,13 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
                                , (toEndV v, [], projTy 1 ty'' , mkProj 1 rhs'')]
 
                       _ -> let nLocs = length locs
-                               locBnds = [(toLocVar loc  ,[], CursorTy, mkProj n rhs'')
+                               locBnds = [((unwrapLocVar . toLocVar) loc  ,[], CursorTy, mkProj n rhs'')
                                          | (loc,n) <- zip locs [0..]]
                                bnds' = [(fresh   ,[], ty''                         , rhs')
                                        ,(v       ,[], projTy 0 $ projTy nLocs ty'' , mkProj 0 $ mkProj nLocs rhs'')
                                        ,(toEndV v,[], projTy 1 $ projTy nLocs ty'' , mkProj 1 $ mkProj nLocs rhs'')]
                            in bnds' ++ locBnds
-        case M.lookup (toEndV v) denv of
+        case M.lookup (Single (toEndV v)) denv of
           Just xs -> error $ "todo: " ++ sdoc xs
           Nothing -> return ()
         bod' <- go tenv' bod
@@ -1093,16 +1093,16 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs)
                     [] -> cursorizeTy ty
                     xs -> ProdTy ([CursorTy | _ <- xs] ++ [cursorizeTy ty])
             ty''  = stripTyLocs ty'
-            tenv' = M.union (M.insert v (MkTy2 ty) tenv) (M.fromList [(toLocVar loc,MkTy2 CursorTy) | loc <- locs])
+            tenv' = M.union (M.insert v (MkTy2 ty) tenv) (M.fromList [((unwrapLocVar . toLocVar) loc,MkTy2 CursorTy) | loc <- locs])
         case locs of
           [] -> LetE (v,[], ty'', rhs') <$>
                   go tenv' bod
           _  -> do
             let tenv'' =  M.union tenv' $
-                          M.fromList [(toLocVar loc, MkTy2 CursorTy) | loc <- locs]
+                          M.fromList [((unwrapLocVar . toLocVar) loc, MkTy2 CursorTy) | loc <- locs]
 
                 bnds  = [(fresh, [], ty'', rhs')] ++
-                        [(toLocVar loc,[],CursorTy, ProjE n (VarE fresh)) | (loc,n) <- (zip locs [0..])]
+                        [((unwrapLocVar . toLocVar) loc,[],CursorTy, ProjE n (VarE fresh)) | (loc,n) <- (zip locs [0..])]
                         ++ [(v,[], projTy (length locs) ty'', ProjE (length locs) (VarE fresh))]
             mkLets bnds <$> go tenv'' bod
 
@@ -1136,9 +1136,9 @@ Also, the binding itself now changes to:
                   -- tagged with different
                   ty'' = stripTyLocs ty'
                   tenv' =  M.union (M.insert v (MkTy2 ty) tenv) $
-                           M.fromList [(toLocVar loc,MkTy2 CursorTy) | loc <- locs]
+                           M.fromList [((unwrapLocVar . toLocVar) loc,MkTy2 CursorTy) | loc <- locs]
                   bnds  = [ (fresh, [] , ty''          , rhs') ] ++
-                          [ (toLocVar loc,[],CursorTy, ProjE n rhs'') | (loc,n) <- (zip locs [0..]) ] ++
+                          [ ((unwrapLocVar . toLocVar) loc,[],CursorTy, ProjE n rhs'') | (loc,n) <- (zip locs [0..]) ] ++
                           [ (v,[], projTy (length locs) ty'', ProjE (length locs) rhs'') ]
               bod' <- go tenv' bod
               return $ mkLets bnds bod'
@@ -1166,7 +1166,7 @@ Consider an example of unpacking of a Node^ pattern:
 ..TODO..
 
 -}
-unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncEnv -> Bool -> Var
+unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
               -> (DataCon, [(Var, LocArg)], Exp2) -> PassM (DataCon, [t], Exp3)
 unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) = do
   field_cur <- gensym "field_cur"
@@ -1201,7 +1201,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
     unpackRegularDataCon :: Var -> PassM Exp3
     unpackRegularDataCon field_cur = go field_cur vlocs1 tys1 True denv1 (M.insert field_cur (MkTy2 CursorTy) tenv1)
       where
-        go :: Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Ty2 -> PassM Exp3
+        go :: Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
         go cur vlocs tys canBind denv tenv =
           case (vlocs, tys) of
             ([],[]) -> processRhs denv tenv
@@ -1216,8 +1216,8 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     -- If the location exists in the environment, it indicates that the
                     -- corresponding variable was also bound and we shouldn't create duplicate
                     -- bindings (checked in the LetLocE cases).
-                    let binds' = (loc,[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
+                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                     bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
                     return $ mkLets binds' bod
                   else do
@@ -1230,7 +1230,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                 CursorTy -> do
                   tmp <- gensym "readcursor_indir"
                   let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
-                                                   (loc     , MkTy2 CursorTy),
+                                                   ((unwrapLocVar loc)     , MkTy2 CursorTy),
                                                    (v       , MkTy2 CursorTy),
                                                    (toEndV v, MkTy2 CursorTy),
                                                    (toTagV v, MkTy2 IntTy),
@@ -1240,7 +1240,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                     then Ext (ReadTaggedCursor cur)
                                     else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                       binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                               (loc     , [], CursorTy, VarE cur),
+                               ((unwrapLocVar loc)     , [], CursorTy, VarE cur),
                                (v       , [], CursorTy, ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
                                (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
@@ -1256,7 +1256,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndV v, MkTy2 CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector loc (stripTyLocs el_ty)),
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector (unwrapLocVar loc) (stripTyLocs el_ty)),
                                (v       , [], ty'     , ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
                   if canBind
@@ -1264,8 +1264,8 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     -- If the location exists in the environment, it indicates that the
                     -- corresponding variable was also bound and we shouldn't create duplicate
                     -- bindings (checked in the LetLocE cases).
-                    let binds' = (loc,[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
+                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                     bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
                     return $ mkLets binds' bod
                   else do
@@ -1281,7 +1281,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndV v, MkTy2 CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList loc (stripTyLocs el_ty)),
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList (unwrapLocVar loc) (stripTyLocs el_ty)),
                                (v       , [], ty'     , ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
                   if canBind
@@ -1289,8 +1289,8 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     -- If the location exists in the environment, it indicates that the
                     -- corresponding variable was also bound and we shouldn't create duplicate
                     -- bindings (checked in the LetLocE cases).
-                    let binds' = (loc,[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
+                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                     bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
                     return $ mkLets binds' bod
                   else do
@@ -1302,16 +1302,16 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                   let tenv' = M.insert v (MkTy2 CursorTy) tenv
                   if canBind
                   then do
-                    let tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                    let tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                     -- Flip canBind to indicate that the subsequent fields
                     -- should be added to the dependency environment.
                     bod <- go (toEndV v) rst_vlocs rst_tys False denv tenv''
-                    return $ mkLets [(loc, [], CursorTy, VarE cur)
-                                    ,(v  , [], CursorTy, VarE loc)]
+                    return $ mkLets [((unwrapLocVar loc), [], CursorTy, VarE cur)
+                                    ,(v  , [], CursorTy, VarE (unwrapLocVar loc))]
                              bod
                   else do
                     -- Cannot read this. Instead, we add it to DepEnv.
-                    let denv' = M.insertWith (++) loc [(v,[],CursorTy,VarE loc)] denv
+                    let denv' = M.insertWith (++) loc [(v,[],CursorTy,VarE (unwrapLocVar loc))] denv
                     go (toEndV v) rst_vlocs rst_tys False denv' tenv'
 
                 _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
@@ -1339,11 +1339,11 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                          -- which depends on some random access node
                          data_fields = reverse $ L.take n (reverse vlocs1)
                          (vars, var_locargs) = unzip data_fields
-                         var_locs = map toLocVar var_locargs
+                         var_locs = map (unwrapLocVar . toLocVar) var_locargs
                      in M.fromList $ zip vars (zip var_locs ind_vars)
         in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur (MkTy2 CursorTy) tenv1)
       where
-        go :: Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TyEnv Ty2 -> PassM Exp3
+        go :: Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
         go cur vlocs tys indirections_env denv tenv = do
           case (vlocs, tys) of
             ([], []) -> processRhs denv tenv
@@ -1372,7 +1372,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                 CursorTy -> do
                   tmp <- gensym "readcursor_shortcut"
                   let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
-                                                   (loc     , MkTy2 CursorTy),
+                                                   ((unwrapLocVar loc)     , MkTy2 CursorTy),
                                                    (v       , MkTy2 CursorTy),
                                                    (toEndV v, MkTy2 CursorTy),
                                                    (toTagV v, MkTy2 IntTy),
@@ -1380,7 +1380,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                               tenv
                       read_cursor = Ext (ReadTaggedCursor cur)
                       binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                               (loc     , [], CursorTy, VarE cur),
+                               ((unwrapLocVar loc)     , [], CursorTy, VarE cur),
                                (v       , [], CursorTy, ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
                                (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
@@ -1394,12 +1394,12 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                   (tenv', binds) <- scalarBinds ty v loc tenv
                   let loc_bind = case M.lookup v indirections_env of
                                    Nothing ->
-                                     (loc,[],CursorTy, VarE cur)
+                                     ((unwrapLocVar loc),[],CursorTy, VarE cur)
                                    -- Read this using a random access node
                                    Just (_var_loc, ind_var) ->
-                                     (loc,[],CursorTy, VarE ind_var)
+                                     ((unwrapLocVar loc),[],CursorTy, VarE ind_var)
                       binds' = loc_bind:binds
-                      tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                      tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
                   return $ mkLets binds' bod
 
@@ -1410,16 +1410,16 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndV v, MkTy2 CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector loc (stripTyLocs el_ty)),
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector (unwrapLocVar loc) (stripTyLocs el_ty)),
                                (v       , [], ty'     , ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
                       loc_bind = case M.lookup v indirections_env of
                                    Nothing ->
-                                     (loc, [], CursorTy, VarE cur)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE cur)
                                    Just (_var_loc, ind_var) ->
-                                     (loc, [], CursorTy, VarE ind_var)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE ind_var)
                       binds' = loc_bind : binds
-                      tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                      tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
                   return $ mkLets binds' bod
 
@@ -1430,32 +1430,32 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndV v, MkTy2 CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList loc (stripTyLocs el_ty)),
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList (unwrapLocVar loc) (stripTyLocs el_ty)),
                                (v       , [], ty'     , ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
                       loc_bind = case M.lookup v indirections_env of
                                    Nothing ->
-                                     (loc, [], CursorTy, VarE cur)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE cur)
                                    Just (_var_loc, ind_var) ->
-                                     (loc, [], CursorTy, VarE ind_var)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE ind_var)
                       binds' = loc_bind : binds
-                      tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                      tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
                   return $ mkLets binds' bod
 
                 PackedTy{} -> do
-                  let tenv' = M.union (M.fromList [ (loc, MkTy2 CursorTy)
+                  let tenv' = M.union (M.fromList [ ((unwrapLocVar loc), MkTy2 CursorTy)
                                                   , (v,   MkTy2 CursorTy) ])
                               tenv
                       loc_bind = case M.lookup v indirections_env of
                                    -- This is the first packed value. We can unpack this.
                                    Nothing ->
-                                     (loc, [], CursorTy, VarE cur)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE cur)
                                    -- We need to access this using a random access node
                                    Just (_var_loc, ind_var) ->
-                                     (loc, [], CursorTy, VarE ind_var)
+                                     ((unwrapLocVar loc), [], CursorTy, VarE ind_var)
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
-                  return $ mkLets [ loc_bind, (v, [], CursorTy, VarE loc) ] bod
+                  return $ mkLets [ loc_bind, (v, [], CursorTy, VarE (unwrapLocVar loc)) ] bod
 
                 _ -> error $ "unpackWitnAbsRAN: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
@@ -1482,11 +1482,11 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                          -- which depends on some random access node
                          data_fields = reverse $ L.take n (reverse vlocs1)
                          (vars, var_locargs) = unzip data_fields
-                         var_locs = map toLocVar var_locargs
-                     in M.fromList $ zip vars (zip var_locs (map (\(x,y) -> (x,toLocVar y)) inds))
+                         var_locs = map (unwrapLocVar . toLocVar) var_locargs
+                     in M.fromList $ zip vars (zip var_locs (map (\(x,y) -> (x,(unwrapLocVar . toLocVar) y)) inds))
         in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur (MkTy2 CursorTy) tenv1)
       where
-        go :: Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var,(Var,Var)) -> DepEnv -> TyEnv Ty2 -> PassM Exp3
+        go :: Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var,(Var,Var)) -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
         go cur vlocs tys indirections_env denv tenv = do
           case (vlocs, tys) of
             ([], []) -> processRhs denv tenv
@@ -1500,37 +1500,37 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                    -- This appears before the first packed field. Unpack it
                                    -- in the usual way.
                                    Nothing ->
-                                     (loc,[],CursorTy, VarE cur)
+                                     ((unwrapLocVar loc),[],CursorTy, VarE cur)
                                    -- We need to read this using a random access node
                                    Just (_var_loc, (ind_var, ind_loc)) ->
-                                     (loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
+                                     ((unwrapLocVar loc),[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
                       binds' = loc_bind:binds
-                      tenv'' = M.insert loc (MkTy2 CursorTy) tenv'
+                      tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
                   return $ mkLets binds' bod
 
                 PackedTy{} -> do
                   tmp_loc <- gensym "loc"
-                  let tenv' = M.union (M.fromList [ (loc, MkTy2 CursorTy)
+                  let tenv' = M.union (M.fromList [ ((unwrapLocVar loc), MkTy2 CursorTy)
                                                   , (v,   MkTy2 CursorTy) ])
                               tenv
                       loc_binds = case M.lookup v indirections_env of
                                     -- This is the first packed value. We can unpack this.
                                     Nothing ->
-                                      [(loc, [], CursorTy, VarE cur)]
+                                      [((unwrapLocVar loc), [], CursorTy, VarE cur)]
                                     -- We need to access this using a random access node
                                     Just (_var_loc, (ind_var, ind_loc)) ->
                                       [ (tmp_loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
-                                      , (loc,[],CursorTy, Ext $ AddCursor tmp_loc (LitE 8)) ]
+                                      , ((unwrapLocVar loc),[],CursorTy, Ext $ AddCursor tmp_loc (LitE 8)) ]
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
-                  return $ mkLets  (loc_binds ++ [(v, [], CursorTy, VarE loc)]) bod
+                  return $ mkLets  (loc_binds ++ [(v, [], CursorTy, VarE (unwrapLocVar loc))]) bod
 
                 _ -> error $ "unpackWithRelRAN: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
             _ -> error $ "unpackWithRelRAN: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
     -- Generate bindings for unpacking int fields. A convenient
-    scalarBinds :: OldTy2 -> Var -> LocVar -> TyEnv Ty2 -> PassM (TyEnv Ty2, [(Var, [()], Ty3, Exp3)])
+    scalarBinds :: OldTy2 -> Var -> LocVar -> TyEnv Var Ty2 -> PassM (TyEnv Var Ty2, [(Var, [()], Ty3, Exp3)])
     scalarBinds ty v loc tenv = do
       tmp <- gensym "read_scalar_tuple"
       -- Note that the location is not added to the type environment here.
@@ -1544,7 +1544,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
 
           ty'   = stripTyLocs ty
 
-          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadScalar s loc),
+          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadScalar s (unwrapLocVar loc)),
                    (v       , [], ty'     , ProjE 0 (VarE tmp)),
                    (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
       return (tenv', binds)
@@ -1593,9 +1593,10 @@ regionToBinds for_parallel_allocs r sz =
       Undefined     -> mul
 
 
-isBound :: LocVar -> TyEnv Ty2 -> Bool
-isBound = M.member
-
+isBound :: LocVar -> TyEnv Var Ty2 -> Bool
+isBound l m = case l of 
+               Single v -> M.member v m 
+               
 -- ================================================================================
 --                         Dilation Conventions
 -- ================================================================================

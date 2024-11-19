@@ -20,8 +20,9 @@ import qualified Data.List as L
 import Data.Loc ( Loc(..), Pos(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Text hiding (map, head, init, last, length, zip, reverse, foldr)
 import qualified Data.Text as T
+import qualified Safe as Sf
+
 import Data.Text.IO (readFile)
 import System.FilePath
 import Text.Parsec
@@ -57,7 +58,7 @@ deriving instance Generic HaskLikeAtom
 instance (Generic a, Out a) => Out (SExpr a)
 instance (Generic a, Out a) => Out (RichSExpr a)
 instance Out HaskLikeAtom
-instance Out Text where
+instance Out T.Text where
   doc t = doc (T.unpack t)
   docPrec n t = docPrec n (T.unpack t)
 
@@ -66,10 +67,10 @@ type Sexp = RichSExpr (SC.Located HaskLikeAtom)
 prnt :: Sexp -> String
 prnt = T.unpack . encodeOne locatedHaskLikePrinter . fromRich
 
-textToVar :: Text -> Var
+textToVar :: T.Text -> Var
 textToVar = toVar . T.unpack
 
-textToDataCon :: Text -> DataCon
+textToDataCon :: T.Text -> DataCon
 textToDataCon = T.unpack
 
 -- | Convert Location (s-cargot) to Loc (Data.Loc)
@@ -98,14 +99,14 @@ treelangParser =
         addQuoteReader locatedHaskLikeParser
 
 -- Hack:
-_stripHashLang :: Text -> Text
+_stripHashLang :: T.Text -> T.Text
 _stripHashLang txt =
   if T.isPrefixOf "#lang" txt
   then snd $ T.break (== '\n') txt
        -- (\c -> generalCategory c == LineSeparator)
   else txt
 
-bracketHacks :: Text -> Text
+bracketHacks :: T.Text -> T.Text
 bracketHacks = T.map $ \case '[' -> '('
                              ']' -> ')'
                              x   -> x
@@ -255,10 +256,10 @@ if a thing is a type variable or a data constructor.
        bod' <- exp bod
        go rst dds fds ((textToVar topid,ty,bod') : cds) mn
 
-     (Ls [A _ "define", _args, _bod] : _) -> error$ "Function is missing return type:\n  "++prnt (head xs)
-     (Ls (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++show (head xs)
+     (Ls [A _ "define", _args, _bod] : _) -> error$ "Function is missing return type:\n  "++prnt (Sf.headErr xs)
+     (Ls (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++show (Sf.headErr xs)
 
-     (Ls (A _ "data" : _) : _) -> error$ "Badly formed data definition:\n  "++prnt (head xs)
+     (Ls (A _ "data" : _) : _) -> error$ "Badly formed data definition:\n  "++prnt (Sf.headErr xs)
 
      (Ls3 _ "module+" _ bod : rst) -> go (bod:rst) dds fds cds mn
 
@@ -296,7 +297,7 @@ typ s = case s of
          _ -> error$ "SExpression encodes invalid type:\n "++ show s
 
 -- Some text is a tyvar if it starts with a lowercase alphabet.
-isTyVar :: Text -> Bool
+isTyVar :: T.Text -> Bool
 isTyVar t = isLower h && isAlpha h
   where h = T.head t
 
@@ -330,15 +331,15 @@ falseE = PrimAppE MkFalse []
 -- hackySymbol :: String -> Int
 -- hackySymbol s = product (L.map ord s)
 
-keywords :: S.Set Text
-keywords = S.fromList $ L.map pack $
+keywords :: S.Set T.Text
+keywords = S.fromList $ L.map T.pack $
            [ "quote", "if", "or", "and", "time", "let", "let*"
            , "case", "vector-ref", "for/fold", "for/list"
            , "insert", "empty-dict", "lookup", "error", "ann"
            , "div", "mod", "exp", "rand"
            ]
 
-isKeyword :: Text -> Bool
+isKeyword :: T.Text -> Bool
 isKeyword s = s `S.member` keywords
 
 exp :: Sexp -> PassM Exp0
@@ -649,12 +650,12 @@ letbind s =
      (textToVar vr, [], , ) <$> newMetaTy <*> exp rhs
    _ -> error $ "Badly formed let binding:\n  "++prnt s
 
-isPrim :: Text -> Bool
+isPrim :: T.Text -> Bool
 isPrim p = S.member p (M.keysSet primMap)
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
 -- abstract Primops.
-primMap :: M.Map Text (Prim d)
+primMap :: M.Map T.Text (Prim d)
 primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
@@ -691,7 +692,7 @@ primMap = M.fromList
   , ("is-big", IsBig)
   ]
 
-prim :: Text -> Prim Ty0
+prim :: T.Text -> Prim Ty0
 prim t = case M.lookup t primMap of
            Just x -> x
            Nothing -> error$ "Internal error, this is not a primitive: "++show t
@@ -706,7 +707,7 @@ handleRequire baseFile (l:ls) =
     -- (Ls2 "require" arg) -> do
        ls' <- handleRequire baseFile ls
        let file = case arg of
-                    RSAtom (SC.At _ (HSString str)) -> (takeDirectory baseFile) </> (unpack str)
+                    RSAtom (SC.At _ (HSString str)) -> (takeDirectory baseFile) </> (T.unpack str)
                     _ -> error $ "bad require line: " ++ (show arg)
        dbgPrintLn lvl $ "Including required file: "++show file
        txt <- fmap bracketHacks $ readFile file

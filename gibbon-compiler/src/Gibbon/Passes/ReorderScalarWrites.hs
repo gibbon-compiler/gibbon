@@ -16,6 +16,7 @@ import           Gibbon.Common hiding ( Mode )
 import           Gibbon.Language
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
+import qualified Safe as Sf
 
 --------------------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
         funBody' <- go reg_env alloc_env M.empty env2 funBody
         pure $ f { funBody = funBody' }
 
-    go :: RegEnv -> AllocEnv -> StoreEnv -> Env2 L2.Ty2 -> L2.Exp2 -> PassM L2.Exp2
+    go :: RegEnv -> AllocEnv -> StoreEnv -> Env2 Var L2.Ty2 -> L2.Exp2 -> PassM L2.Exp2
     go reg_env alloc_env store_env env2 ex =
       case ex of
         LetE (v,locs,ty,rhs) bod -> do
@@ -67,7 +68,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                      in if is_ok
                         then (LetE (v,locs,ty,rhs)) <$> (go reg_env' alloc_env' store_env env2' bod)
                         else do
-                          let tag_loc = head locs_before
+                          let tag_loc = Sf.headErr locs_before
                           let tag_tycon = findTyCon tag_loc bod
                           let in_scope = M.keysSet (vEnv env2) `S.union` M.keysSet (fEnv env2)
                               (move_set,move_scalars) = checkScalarDeps ddefs in_scope tag_loc ex
@@ -168,7 +169,8 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                           Just rloc@(RegionLocs locs allocated_to) ->
                             let locs_before = takeWhile (/= loc) locs in
                               case locs_before of
-                                [] -> (True, locs_before, reg, rloc)
+                                [] -> let ret = (True, locs_before, reg, rloc) 
+                                        in ret
                                 _  ->
                                   let freev = L2.allFreeVars rhs `S.union` L2.allFreeVars bod
                                       locs_before' = filter (\x -> S.member x freev) locs_before
@@ -188,8 +190,8 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                              then tycon_b
                              else error $ "findTyCon want: types don't match"
             CaseE _scrt brs -> let tycons = foldr (\(_a,_b,c) acc -> findTyCon want c : acc) [] brs
-                               in if all (== (head tycons)) tycons
-                                  then head tycons
+                               in if all (== (Sf.headErr tycons)) tycons
+                                  then Sf.headErr tycons
                                   else error $ "findTyCon want: types don't match"
             WithArenaE _ar bod -> (findTyCon want bod)
             TimeIt e0 _ty _b -> (findTyCon want e0)
@@ -314,7 +316,7 @@ checkScalarDeps ddefs in_scope tag_loc ex0 =
                    in (dep_env, move_set0, move0)
       | otherwise = (dep_env,move_set,move)
 
-type StoreEnv = M.Map Var Var
+type StoreEnv = M.Map Var LocVar
 type RegEnv = M.Map LocVar L2.Region
 type AllocEnv = M.Map L2.Region RegionLocs
 data RegionLocs = RegionLocs { locs :: [LocVar], allocated_to :: S.Set LocVar }

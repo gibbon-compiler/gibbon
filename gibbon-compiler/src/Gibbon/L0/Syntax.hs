@@ -22,6 +22,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Text.PrettyPrint.HughesPJ as PP
 import qualified Data.Set as S
 import qualified Data.Map as M
+import qualified Safe as Sf
 
 import           Gibbon.Common as C
 import           Gibbon.Language hiding (UrTy(..))
@@ -32,9 +33,9 @@ import           Gibbon.Language hiding (UrTy(..))
 type Exp0     = PreExp E0Ext Ty0 Ty0
 type DDefs0   = DDefs Ty0
 type DDef0    = DDef Ty0
-type FunDef0  = FunDef Exp0
-type FunDefs0 = FunDefs Exp0
-type Prog0    = Prog Exp0
+type FunDef0  = FunDef Var Exp0
+type FunDefs0 = FunDefs Var Exp0
+type Prog0    = Prog Var Exp0
 
 --------------------------------------------------------------------------------
 
@@ -497,7 +498,7 @@ isValidListElemTy0 ty
 -- Or we can have a special function just for L0, which is what recoverType is.
 -- ¯\_(ツ)_/¯
 --
-recoverType :: DDefs0 -> Env2 Ty0 -> Exp0 -> Ty0
+recoverType :: DDefs0 -> Env2 Var Ty0 -> Exp0 -> Ty0
 recoverType ddfs env2 ex =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
@@ -528,7 +529,7 @@ recoverType ddfs env2 ex =
                          in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     SyncE -> voidTy0
     CaseE _ mp ->
-      let (c,args,e) = head mp
+      let (c,args,e) = Sf.headErr mp
           args' = map fst args
       in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
     WithArenaE{} -> error "recoverType: WithArenaE not handled."

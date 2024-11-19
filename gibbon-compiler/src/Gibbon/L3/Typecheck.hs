@@ -11,6 +11,8 @@ import Control.Monad
 import Control.Monad.Except
 import qualified Data.Map as M
 import qualified Data.List as L
+import qualified Safe as Sf
+
 import Data.Maybe
 import Prelude hiding (exp)
 
@@ -20,7 +22,7 @@ import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
 --
-tcExp :: Bool -> DDefs3 -> Env2 Ty3 -> Exp3 -> TcM Ty3 Exp3
+tcExp :: Bool -> DDefs3 -> Env2 Var Ty3 -> Exp3 -> TcM Ty3 Exp3
 tcExp isPacked ddfs env exp =
   case exp of
     Ext ext ->
@@ -903,7 +905,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: Bool -> DDefs3 -> Env2 Ty3 -> [(DataCon, [(Var, ())], Exp3)] -> TcM Ty3 (Exp3)
+tcCases :: Bool -> DDefs3 -> Env2 Var Ty3 -> [(DataCon, [(Var, ())], Exp3)] -> TcM Ty3 (Exp3)
 tcCases isPacked ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
@@ -915,8 +917,8 @@ tcCases isPacked ddfs env cs = do
             -- then return acc
             -- else throwError $ GenericTC ("Case branches have mismatched types: "
             --                              ++ sdoc acc ++ ", " ++ sdoc ty) ex)
-         (head tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
-  return $ head tys
+         (Sf.headErr tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
+  return $ Sf.headErr tys
 
 -- | Ensure that two things are equal.
 -- Includes an expression for error reporting.

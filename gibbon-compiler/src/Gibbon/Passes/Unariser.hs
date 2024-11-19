@@ -77,7 +77,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
 -- perform, from left to right.
 type ProjStack = [Int]
 
-unariserExp :: Bool -> DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
+unariserExp :: Bool -> DDefs Ty3 -> ProjStack -> Env2 Var Ty3 -> Exp3 -> PassM Exp3
 unariserExp isTerminal ddfs stk env2 ex =
   case ex of
     LetE (v,locs,ty,rhs) bod ->
@@ -232,7 +232,7 @@ unariserExp isTerminal ddfs stk env2 ex =
 
 
 -- | Flatten nested tuples
-flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
+flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Var Ty3 -> Exp3 -> PassM Exp3
 flattenProd ddfs stk env2 ex =
   case ex of
     MkProdE{} -> do

@@ -29,6 +29,7 @@ module Gibbon.Passes.RouteEnds
     ( routeEnds ) where
 
 import qualified Data.List as L
+import qualified Safe as Sf
 import Data.Maybe ( fromJust )
 import Data.Map as M
 import Data.Set as S
@@ -205,7 +206,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
   -- Then process the actual function bodies using the new fundefs structure:
   fds'' <- mapM (fd fundefs') fds'
   let fundefs'' = M.fromList $ L.map (\f -> (funName f,f)) fds''
-      env2 = progToEnv prg
+      env2 = progToEnv' prg
   -- Handle the main expression (if it exists):
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
@@ -235,18 +236,19 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
         do let (ArrowTy2 locin tyins eff _tyout _locout _isPar) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
+               funArgs' = L.map singleLocVar funArgs
                lenv = L.foldr
                         (\(a,t) acc -> case t of
                                          PackedTy _ loc -> M.insert a loc acc
                                          _ -> acc)
-                        M.empty (zip funArgs tyins)
+                        M.empty (zip funArgs' tyins)
                pakdLocs = concatMap
                             (\t -> case t of
                                      PackedTy _ loc -> [(loc, t)]
                                      ProdTy ys -> pakdLocs ys
                                      _ -> [])
-               initVEnv = M.fromList $ pakdLocs tyins ++ zip funArgs tyins
-               env2 = Env2 initVEnv (initFunEnv fundefs)
+               initVEnv = M.fromList $ pakdLocs tyins ++ zip funArgs' tyins
+               env2 = Env2 initVEnv (initFunEnv' fundefs)
            funBody' <- bindReturns funBody
            funBody'' <- exp fns retlocs emptyRel lenv M.empty env2 funBody'
            return FunDef{funName,funTy,funArgs,funBody=funBody'',funMeta}
@@ -260,8 +262,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
     -- 4. a map of var to location
     -- 5. a map from location to location after it
     -- 6. the expression to process
-    exp :: FunDefs2 -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
-           M.Map LocVar LocVar -> Env2 Ty2 -> Exp2 -> PassM Exp2
+    exp :: FunDefs2 -> [LocVar] -> EndOfRel -> M.Map LocVar LocVar ->
+           M.Map LocVar LocVar -> Env2 LocVar Ty2 -> Exp2 -> PassM Exp2
     exp fns retlocs eor lenv afterenv env2 e =
         case e of
 
@@ -291,21 +293,21 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- the end witnesses returned from the function.
           LetE (v,_ls,ty,(AppE f lsin e1)) e2 -> do
                  let lenv' = case ty of
-                               PackedTy _n l -> M.insert v l lenv
+                               PackedTy _n l -> M.insert (singleLocVar v) l lenv
                                _ -> lenv
 
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
+                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
                  return $ LetE (v,outlocs,ty, AppE f lsin e1)
                                (wrapBody e2' newls)
 
           -- Exactly like AppE.
           LetE (v,_ls,ty,(SpawnE f lsin e1)) e2 -> do
                  let lenv' = case ty of
-                               PackedTy _n l -> M.insert v l lenv
+                               PackedTy _n l -> M.insert (singleLocVar v) l lenv
                                _ -> lenv
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
+                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
                  return $ LetE (v,outlocs,ty, SpawnE f lsin e1)
                                (wrapBody e2' newls)
 
@@ -319,18 +321,19 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                      forM brs $ \(dc, vls, e) ->
                        case vls of
                          [] ->
-                           case (M.lookup x lenv) of
+                           case (M.lookup (singleLocVar x) lenv) of
                              Just l1 -> do
                                l2 <- gensym "jump"
-                               let eor' = mkEnd l1 l2 eor
-                                   e' = Ext $ LetLocE l2 (AfterConstantLE 1 l1) e
-                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) env2 e'
+                               let l2loc = singleLocVar l2
+                                   eor' = mkEnd l1 l2loc eor
+                                   e' = Ext $ LetLocE l2loc (AfterConstantLE 1 l1) e
+                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2loc lenv) env2 e'
                                return (dc, vls, e'')
                              Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
                          _ -> do
                            let need = snd $ last vls
                                argtys = lookupDataCon ddefs dc
-                               lx = case M.lookup x lenv of
+                               lx = case M.lookup (singleLocVar x) lenv of
                                       Nothing -> error $ "Failed to find " ++ (show x)
                                       Just l -> l
                                -- we know lx and need have the same end, since
@@ -339,7 +342,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                -- what we really want is the end of need.
                                eor' = mkEqual lx need eor
                                f (l1,l2) env = M.insert l1 l2 env
-                               afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (tail $ L.map snd vls)
+                               afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (Sf.tailErr $ L.map snd vls)
                                -- two cases here for handing bound parameters:
                                -- we have a packed type:
                                handleLoc (eor,e) (_,(PackedTy _ _)) = return (eor,e)
@@ -347,14 +350,17 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                -- bind a location to after it
                                handleLoc (eor,e) (l1,ty) = do
                                     l2 <- gensym "jump"
-                                    let eor' = mkEnd l1 l2 eor
+                                    let l2loc = singleLocVar l2
+                                        eor' = mkEnd l1 l2loc eor
                                         (Just jump) = L1.sizeOfTy ty
-                                        e' = Ext $ LetLocE l2 (AfterConstantLE jump l1) e
+                                        e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
                                     return (eor', e')
                                vars = L.map fst vls
+                               varsToLocs = L.map singleLocVar vars 
                                locs = L.map snd vls
-                               env2' = extendsVEnv (M.fromList (zip locs argtys ++ zip vars argtys)) env2
-                               lenv' = M.union lenv $ M.fromList vls
+                               vls' = L.map (\(v, l) -> (singleLocVar v, l)) vls
+                               env2' = extendsVEnvLocVar (M.fromList (zip locs argtys ++ zip varsToLocs argtys)) env2
+                               lenv' = M.union lenv $ M.fromList vls'
                            (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
                            e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
                            return (dc, vls, e'')
@@ -363,10 +369,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
 
           CaseE complex brs -> do
-            let ty = gRecoverType ddefs env2 complex
+            let ty = gRecoverTypeLoc ddefs env2 complex
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],ty,complex)] (CaseE (VarE v) brs)
-            exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) ex
+            exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) ty env2) ex
 
 
           -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
@@ -374,7 +380,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- Question: should this fail instead? I'm not sure.
           AppE v args arg -> do
                  v' <- gensym "tailapp"
-                 let ty = gRecoverType ddefs env2 e
+                 let ty = gRecoverTypeLoc ddefs env2 e
                      e' = LetE (v',[], ty, AppE v args arg) (VarE v')
                  go (e')
 
@@ -397,41 +403,41 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- Processing the RHS here would cause an infinite loop.
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@DataConE{}) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv (extendVEnv v ty env2) e2
+            e2' <- exp fns retlocs eor (M.insert (singleLocVar v) loc lenv) afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@(PrimAppE (ReadPackedFile{}) [])) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv (extendVEnv v ty env2) e2
+            e2' <- exp fns retlocs eor (M.insert (singleLocVar v) loc lenv) afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@ProjE{}) e2 -> do
             let lenv' = case ty of
-                          PackedTy _ loc -> M.insert v loc lenv
+                          PackedTy _ loc -> M.insert (singleLocVar v) loc lenv
                           _ -> lenv
-            e2' <- exp fns retlocs eor lenv' afterenv (extendVEnv v ty env2) e2
+            e2' <- exp fns retlocs eor lenv' afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@MkProdE{}) e2 -> do
-            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
 
           LetE (v,ls,ty,e1@(PrimAppE (DictLookupP _) _)) e2 -> do
-            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
 
           --
 
           LetE (v,ls,ty@(PackedTy n l),e1) e2 -> do
                  e1' <- go e1
-                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv (extendVEnv v ty env2) e2
+                 e2' <- exp fns retlocs eor (M.insert (singleLocVar v) l lenv) afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
                  return $ LetE (v,ls,PackedTy n l,e1') e2'
 
           LetE (v,ls,ty,e1@TimeIt{}) e2 -> do
                  e1' <- go e1
-                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) ty env2) e2
                  return $ LetE (v,ls,ty,e1') e2'
 
           -- Most boring LetE case, just recur on body
           LetE (v,ls,ty,rhs) bod -> do
-            bod' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) bod
+            bod' <- exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) ty env2) bod
             return $ LetE (v,ls,ty,rhs) bod'
 
           IfE e1 e2 e3 -> do
@@ -440,20 +446,20 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  return $ IfE e1 e2' e3'
 
           MkProdE ls -> do
-            let tys = L.map (gRecoverType ddefs env2) ls
+            let tys = L.map (gRecoverTypeLoc ddefs env2) ls
                 prodty = ProdTy tys
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],prodty,(MkProdE ls))] (VarE v)
-            exp fns retlocs eor lenv afterenv (extendVEnv v prodty env2) ex
+            exp fns retlocs eor lenv afterenv (extendVEnvLocVar (singleLocVar v) prodty env2) ex
 
           ProjE{} -> do
             v <- gensym "flt_RE"
-            let ty = gRecoverType ddefs env2 e
+            let ty = gRecoverTypeLoc ddefs env2 e
                 lenv' = case ty of
-                          PackedTy _ loc -> M.insert v loc lenv
+                          PackedTy _ loc -> M.insert (singleLocVar v) loc lenv
                           _ -> lenv
                 ex = L1.mkLets [(v,[],ty,e)] (VarE v)
-            exp fns retlocs eor lenv' afterenv (extendVEnv v ty env2) ex
+            exp fns retlocs eor lenv' afterenv (extendVEnvLocVar (singleLocVar v) ty env2) ex
 
           -- Could fail here, but try to fix the broken program
           DataConE loc dc es -> do
@@ -461,7 +467,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let ty = PackedTy (getTyOfDataCon ddefs dc) loc
                      e' = LetE (v',[],ty, DataConE loc dc es)
                                (VarE v')
-                 exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (e')
+                 exp fns retlocs eor (M.insert (singleLocVar v') loc lenv) afterenv (extendVEnvLocVar (singleLocVar v') ty env2) (e')
 
           LitE i -> return (LitE i)
           CharE i -> return (CharE i)
@@ -547,7 +553,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                wrapBody e [] = e
 
                -- Process a let bound fn app.
-               doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, Var)], EndOfRel)
+               doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, LocVar)], EndOfRel)
                doBoundApp f lsin = do
                  let fty = funtype f
                      rets = S.fromList $ locRets fty
@@ -559,7 +565,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  -- For each traversed location, gensym a new variable for its end,
                  -- and generate a list of (location, endof location) pairs.
                  let handleTravList lst (_l,False) = return lst
-                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l,l'):lst
+                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l, (singleLocVar l')):lst
 
                  -- Walk through our pairs of (location, endof location) and update the
                  -- endof relation.

@@ -27,6 +27,7 @@ import           Data.Word (Word8)
 import           Data.Char ( ord )
 import           Data.Foldable as F
 import           Data.Maybe ( fromJust )
+import qualified Data.List as L
 
 import           Gibbon.Common
 import           Gibbon.Passes.Lower ( getTagOfDataCon )
@@ -35,13 +36,13 @@ import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-instance Interp Store Exp2 where
+instance Interp Store Exp2 Var where
   gInterpExp rc valenv ddefs fenv ext = fst <$> interp M.empty rc valenv ddefs fenv ext
 
-instance InterpExt Store Exp2 (E2Ext LocVar Ty2) where
+instance InterpExt Store Exp2 (E2Ext LocVar Ty2) Var where
   gInterpExt rc valenv ddefs fenv ext = fst <$> interpExt M.empty rc valenv ddefs fenv ext
 
-instance InterpProg Store Exp2 where
+instance InterpProg Store Exp2 Var where
   gInterpProg store rc Prog{ddefs,fundefs,mainExp} =
       case mainExp of
         -- Print nothing, return "void"
@@ -60,14 +61,14 @@ instance InterpProg Store Exp2 where
 
 --------------------------------------------------------------------------------
 
-interp :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+interp :: SizeEnv -> RunConfig -> ValEnv Var Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Var Exp2)
        -> Exp2 -> InterpM Store Exp2 (Value Exp2, Size)
 interp szenv rc valenv ddefs fenv e = go valenv szenv e
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env sizeEnv ex = go env sizeEnv ex
 
-    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> InterpM Store Exp2 (Value Exp2, Size)
+    go :: ValEnv Var Exp2 -> SizeEnv -> Exp2 -> InterpM Store Exp2 (Value Exp2, Size)
     go env sizeEnv ex =
       case ex of
         -- We interpret a function application by substituting the operand (at
@@ -92,7 +93,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                   -- that the input locations appear before output locations.
                   env' = foldr
                            (\(fnLoc, callSiteLoc) acc ->
-                              M.insert fnLoc (acc M.! callSiteLoc)  acc)
+                              M.insert (unwrapLocVar fnLoc) (acc M.! (unwrapLocVar callSiteLoc))  acc)
                            env
                            (zip (inLocs ++ outLocs) locs)
               go (M.union (M.fromList $ zip funArgs rands) env')
@@ -112,6 +113,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                     SerTag _tg datacon :< _rst -> do
                       let -- tycon = getTyOfDataCon ddefs datacon
                           (_dcon,vlocs,rhs) = lookup3 (dbgTrace 3 (show datacon ++ "\n" ++ show alts) $ datacon) alts
+                          vlocs' = L.map (\(a, b) -> (a, unwrapLocVar b) ) vlocs
                           tys = lookupDataCon ddefs datacon
                       (env', sizeEnv', _off') <- foldlM
                                 (\(aenv, asizeEnv, prev_off) ((v,loc), ty) -> do
@@ -132,7 +134,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                           let trav_fn = mkTravFunName pkd_tycon
                                           -- Bind v to (SOne -1) in sizeEnv temporarily, just long enough
                                           -- to evaluate the call to trav_fn.
-                                          (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn [loc] [VarE v])
+                                          (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn [(Single loc)] [VarE v])
                                           let sizeloc = fromJust $ byteSizeOfTy CursorTy
                                               asizeEnv' = M.insert v sizev $
                                                           M.insert loc (SOne sizeloc) $
@@ -151,7 +153,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                         pure (aenv', asizeEnv', prev_off + size)
                                       _ -> error $ "L2.Interp: TODO: " ++ sdoc ty)
                                 (env, sizeEnv, off+1)
-                                (zip vlocs tys)
+                                (zip vlocs' tys)
                       go env' sizeEnv' rhs
                     oth :< _ -> error $ "L2.Interp: expected to read tag from scrutinee cursor, found: "++show oth++
                                         ".\nRead " ++ sdoc scrt ++ " in buffer: " ++ sdoc seq1
@@ -161,7 +163,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
         -- buffer. The packed value is represented by a 1 byte tag,
         -- followed by other arguments.
         DataConE loc dcon args ->
-          case M.lookup loc env of
+          case M.lookup (unwrapLocVar loc) env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
             Just (VLoc reg offset) -> do
               buf_maybe <- lookupInStore reg
@@ -286,7 +288,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
 
 -}
 
-interpExt :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+interpExt :: SizeEnv -> RunConfig -> ValEnv Var Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Var Exp2)
            -> E2Ext LocVar Ty2 -> InterpM Store Exp2 (Value Exp2, Size)
 interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
@@ -304,24 +306,24 @@ interpExt sizeEnv rc env ddefs fenv ext =
           case buf_maybe of
             Nothing -> error $ "L2.Interp: Unbound region: " ++ sdoc reg
             Just _ ->
-              go (M.insert loc (VLoc (regionToVar reg) 0) env) sizeEnv bod
+              go (M.insert (unwrapLocVar loc) (VLoc (regionToVar reg) 0) env) sizeEnv bod
 
         AfterConstantLE i loc2 -> do
-          case M.lookup loc2 env of
+          case M.lookup (unwrapLocVar loc2) env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->
-              go (M.insert loc (VLoc reg (offset + i)) env) sizeEnv bod
+              go (M.insert (unwrapLocVar loc) (VLoc reg (offset + i)) env) sizeEnv bod
             Just val ->
               error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
 
         AfterVariableLE v loc2 _ -> do
-          case M.lookup loc2 env of
+          case M.lookup (unwrapLocVar loc2) env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->
               case M.lookup v sizeEnv of
                 Nothing -> error $ "L2.Interp: No size info found: " ++ sdoc v
                 Just sz ->
-                  go (M.insert loc (VLoc reg (offset + (sizeToInt sz))) env)
+                  go (M.insert (unwrapLocVar loc) (VLoc reg (offset + (sizeToInt sz))) env)
                      sizeEnv bod
             Just val ->
               error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val

@@ -47,7 +47,7 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
       else error $ "freshDDef: Unbound type variables " ++ sdoc free_tvs
                    ++ " in the constructor:\n" ++ msg
 
-freshFun :: FunDef Exp0 -> PassM (FunDef Exp0)
+freshFun :: FunDef Var Exp0 -> PassM (FunDef Var Exp0)
 freshFun (FunDef nam nargs funty bod meta) =
     do nargs' <- mapM gensym nargs
        let msubst = (M.fromList $ zip nargs nargs')

@@ -6,6 +6,7 @@ import Gibbon.Common
 import Control.Arrow
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Safe as Sf
 
 elimNewtypes :: Monad m => Prog0 -> m Prog0
 elimNewtypes = pure . elimProgram
@@ -44,8 +45,8 @@ elimProgram prog =
       ) (ddefs prog)
     tynames =
       M.mapKeys (\(Var x) -> unintern x)
-      $ M.map (mkPolyNames . tyArgs <*> snd . head . snd . head . dataCons) newtys
-    connames = S.fromList $ fst . head . dataCons <$> M.elems newtys
+      $ M.map (mkPolyNames . tyArgs <*> snd . Sf.headErr . snd . Sf.headErr . dataCons) newtys
+    connames = S.fromList $ fst . Sf.headErr . dataCons <$> M.elems newtys
     fdefs = M.map (\d -> d { funTy=elimTyScheme tynames (funTy d)
                            , funBody=elimE connames tynames (ddefs prog) (funBody d)
                            }) (fundefs prog)

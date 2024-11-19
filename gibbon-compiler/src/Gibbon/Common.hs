@@ -8,7 +8,8 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, RegVar, fromVar, toVar, varAppend, toEndV, toSeqV, cleanFunName
+         Var(..), LocVar(..), Location
+       , RegVar, fromVar, toVar, varAppend, toEndV, toEndVLoc, toSeqV, cleanFunName
        , TyVar(..), isUserTv
        , Symbol, intern, unintern
 
@@ -29,7 +30,8 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar
+
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
@@ -123,14 +125,22 @@ cleanFunName f =
           then c
           else '_'
         | c <- fromVar f ]
+
 toEndV :: Var -> Var
 toEndV = varAppend "end_"
+
+toEndVLoc :: LocVar -> LocVar 
+toEndVLoc loc = case loc of 
+                    Single v -> Single (toEndV v)
 
 toSeqV :: Var -> Var
 toSeqV v = varAppend v (toVar "_seq")
 
--- | Abstract location variables.
-type LocVar = Var
+-- | A location variable stores the abstract location. 
+type Location = Var
+
+data LocVar = Single Location
+  deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.
 type RegVar = Var
@@ -491,3 +501,10 @@ truePrinted = "#t"
 
 falsePrinted :: String
 falsePrinted = "#f"
+
+unwrapLocVar :: LocVar -> Var
+unwrapLocVar locvar = case locvar of 
+                            Single loc -> loc
+                            
+singleLocVar :: Location -> LocVar 
+singleLocVar loc = Single loc 

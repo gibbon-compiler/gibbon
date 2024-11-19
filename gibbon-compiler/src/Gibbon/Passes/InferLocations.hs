@@ -87,6 +87,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Foldable as F
+import qualified Safe as Sf 
 import Prelude as P
 import Data.Maybe
 import qualified Control.Monad.Trans.State.Strict as St
@@ -110,14 +111,14 @@ import Gibbon.Passes.Flatten (flattenL1)
 -- | Combine the different kinds of contextual information in-scope.
 data FullEnv = FullEnv
     { dataDefs :: DDefs Ty2 -- ^ Data type definitions
-    , valEnv :: TyEnv Ty2   -- ^ Type env for local bindings
-    , funEnv :: TyEnv (ArrowTy Ty2)  -- ^ Top level fundef types
+    , valEnv :: TyEnv Var Ty2   -- ^ Type env for local bindings
+    , funEnv :: TyEnv Var (ArrowTy Ty2)  -- ^ Top level fundef types
     } deriving Show
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv
 extendVEnv v ty fe@FullEnv{valEnv} = fe { valEnv = M.insert v ty valEnv }
 
-extendsVEnv :: TyEnv Ty2 -> FullEnv -> FullEnv
+extendsVEnv :: TyEnv Var Ty2 -> FullEnv -> FullEnv
 extendsVEnv env fe@FullEnv{valEnv} = fe { valEnv = valEnv <> env }
 
 lookupVEnv :: Var -> FullEnv -> Ty2
@@ -149,7 +150,7 @@ convertFunTy (from,to,isPar) = do
  where
    toLRM md ls =
        mapM (\v -> do r <- freshLocVar "r"
-                      return $ LRM v (VarR r) md)
+                      return $ LRM v (VarR (unwrapLocVar r)) md)
             (F.toList ls)
 
 convertTy :: Ty1 -> PassM Ty2
@@ -182,8 +183,8 @@ type TiM a = ExceptT Failure (St.StateT InferState PassM) a
 type InferState = M.Map LocVar UnifyLoc
 
 -- | A location is either fixed or fresh. Two fixed locations cannot unify.
-data UnifyLoc = FixedLoc Var
-              | FreshLoc Var
+data UnifyLoc = FixedLoc LocVar
+              | FreshLoc LocVar
                 deriving (Show, Eq)
 
 data Failure = FailUnify Ty2 Ty2
@@ -693,7 +694,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                              (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                              (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                              (AppE f lvs [(VarE v)]) -> do v' <- lift $ lift $ freshLocVar "cpy"
-                                                           return $ ArgCopy v v' f lvs
+                                                           return $ ArgCopy v (unwrapLocVar v') f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
                   let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
@@ -707,12 +708,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                       constrs = concat $ [c | (_,_,c) <- ls']
                       constrs' = if null locs
                                  then constrs
-                                 else let tmpconstrs = [AfterTagL (L.head locs) d] ++
+                                 else let tmpconstrs = [AfterTagL (Sf.headErr locs) d] ++
                                                        (mapMaybe afterVar $ zip3
                                                          -- ((map Just $ L.tail ([a | (a,_,_) <- ls' ])) ++ [Nothing])
                                                         argLs
                                                          -- (map Just locs)
-                                                        ((map Just $ L.tail locs) ++ [Nothing])
+                                                        ((map Just $ Sf.tailErr locs) ++ [Nothing])
                                                         (map Just locs))
                                                          -- ((map Just $ L.tail locs) ++ [Nothing])) ++
                                       in tmpconstrs ++ constrs
@@ -846,7 +847,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
       let src = locOfTy ty2
       pairs <- mapM (doCase dataDefs env src dest) ls
       return (CaseE ex' ([a | (a,_,_) <- pairs]),
-              (\(_,b,_)->b) (L.head pairs),
+              (\(_,b,_)->b) (Sf.headErr pairs),
               (concat $ [c | (_,_,c) <- pairs]))
 
     Ext (L1.AddFixed cur i) -> pure (L2.Ext (L2.AddFixed cur i), CursorTy, [])
@@ -1293,10 +1294,10 @@ cleanExp e =
       LetE (v,ls,t,e1@(Ext (L2.StartOfPkdCursor _cur))) e2 ->
                         let (e1', s1') = cleanExp e1
                             (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1') e2', S.delete v (S.unions [s1',s2',S.fromList ls]))
+                        in (LetE (v,ls,t,e1') e2', S.delete (Single v) (S.unions [s1',s2',S.fromList ls]))
       LetE (v,ls,t,e1@(Ext (L2.AddFixed _cur _i))) e2 ->
                         let (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1) e2', S.delete v (S.unions [s2',S.fromList ls]))
+                        in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2',S.fromList ls]))
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
                                  (e2', s2') = cleanExp e2
                              in (LetE (v,ls,t,e1') e2', S.unions [s1',s2',S.fromList ls])
@@ -1427,10 +1428,11 @@ fixProj renam pvar proj e =
 
 
 -- Runs after projTups in the SpawnE case in inferExp.
-moveProjsAfterSync :: Var -> Exp2 -> Exp2
-moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
+moveProjsAfterSync :: LocVar -> Exp2 -> Exp2
+moveProjsAfterSync sv ex = case sv of 
+                                l@(Single loc) -> go [] (S.singleton l) ex
   where
-    go :: [Binds (Exp2)] -> S.Set Var -> Exp2 -> Exp2
+    go :: [Binds (Exp2)] -> S.Set LocVar -> Exp2 -> Exp2
     go acc1 pending ex =
       case ex of
         VarE{}    -> ex
@@ -1447,7 +1449,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
           let vars = allFreeVars rhs
           in if S.null (S.intersection vars pending)
              then LetE (v, locs, ty, rhs) (go acc1 pending bod)
-             else go ((v, locs, ty, rhs):acc1) (S.insert v pending) bod
+             else go ((v, locs, ty, rhs):acc1) (S.insert (singleLocVar v) pending) bod
         IfE a b c   -> IfE (go acc1 pending a) (go acc1 pending b) (go acc1 pending c)
         MkProdE ls  -> MkProdE $ L.map (go acc1 pending) ls
         ProjE i arg -> ProjE i $ go acc1 pending arg
@@ -1567,7 +1569,8 @@ isCpyCall (AppE f _ _) = True -- TODO: check if it's a real copy call, to be saf
 isCpyCall _ = False 
 
 freshLocVar :: String -> PassM LocVar
-freshLocVar m = gensym (toVar m)
+freshLocVar m = do v <- gensym (toVar m)
+                   return $ Single v
 
 freshRegVar :: PassM Region
 freshRegVar = do rv <- gensym (toVar "r")
@@ -1795,7 +1798,7 @@ fixRANs prg@(Prog defs funs main) = do
 
     env20 = progToEnv prg
 
-    exp :: DDefs2 -> Env2 Ty2 -> Exp2 -> PassM ([(DataCon, [Exp2])], Exp2)
+    exp :: DDefs2 -> Env2 Var Ty2 -> Exp2 -> PassM ([(DataCon, [Exp2])], Exp2)
     exp ddfs env2 e0 =
       let go :: Exp2 -> PassM ([(DataCon, [Exp2])], Exp2)
           go = exp ddfs env2
@@ -1922,7 +1925,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
         (_, funBody') <- go env2 M.empty funArgs funBody
         pure $ fn { funBody = funBody' }
 
-    go :: Env2 Ty1 -> M.Map Var [(Var,Var)] -> [Var] -> Exp1
+    go :: Env2 Var Ty1 -> M.Map Var [(Var,Var)] -> [Var] -> Exp1
        -> PassM (M.Map Var [(Var,Var)], Exp1)
     go env2 cpy_env order ex =
       case ex of
@@ -1939,7 +1942,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
             [] -> pure $ (cpy_env, DataConE loc dcon args)
             ((hv,_hw,hh):rst_idxs) -> do
               -- let (vars,want,have) = unzip3 idxs
-              let (hv,_hw,hh) = head idxs
+              let (hv,_hw,hh) = Sf.headErr idxs
               let copies =
                         L.groupBy (\x y -> fst x == fst y) $
                         snd $
@@ -1964,7 +1967,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
                             (\(args1', acc) x ->
                                case x of
                                  VarE v | isPackedTy (L1.lookupVEnv v env2) ->
-                                      (tail args1', acc ++ [VarE (head args1')])
+                                      (Sf.tailErr args1', acc ++ [VarE (Sf.headErr args1')])
                                  _ -> (args1', acc ++ [x]))
                             (args1, [])
                             args

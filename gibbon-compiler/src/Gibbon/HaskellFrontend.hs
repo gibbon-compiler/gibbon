@@ -10,6 +10,8 @@ import           Data.Foldable ( foldrM, foldl' )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Safe as Sf
+
 import           Data.IORef
 import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
@@ -149,12 +151,12 @@ removeLinearArrows str =
 
 data TopLevel
   = HDDef (DDef Ty0)
-  | HFunDef (FunDef Exp0)
+  | HFunDef (FunDef Var Exp0)
   | HMain (Maybe (Exp0, Ty0))
   | HInline Var
   deriving (Show, Eq)
 
-type TopTyEnv = TyEnv TyScheme
+type TopTyEnv = TyEnv Var TyScheme
 type TypeSynEnv = M.Map TyCon Ty0
 
 desugarModule :: (Show a,  Pretty a)
@@ -1379,7 +1381,7 @@ desugarLinearExts (Prog ddefs fundefs main) = do
                   fn' <- go fn
                   case fn' of
                     Ext (LambdaE [(v,ProdTy tys)] bod) -> do
-                      let ty = head tys
+                      let ty = Sf.headErr tys
                           bod'' = foldl' (\acc i -> gSubstE (ProjE i (VarE v)) (VarE v) acc) bod [0..(length tys)]
                       pure (LetE (v,[],ty,e) bod'')
                     _ -> error $ "desugarLinearExts: couldn't desugar " ++ sdoc ex

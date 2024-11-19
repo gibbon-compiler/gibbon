@@ -18,7 +18,7 @@ import           Gibbon.Language
 -- | Inline trivial let bindings (binding a var to a var or int), mainly to clean up
 --   the output of `flatten`.
 inlineTriv :: (HasSimplifiable e l d)
-           => Prog (PreExp e l d) -> PassM (Prog (PreExp e l d))
+           => Prog Var (PreExp e l d) -> PassM (Prog Var (PreExp e l d))
 inlineTriv (Prog ddefs funs main) =
     return (Prog ddefs (fmap (inlineTrivFun . inlineTrivFun) funs) main')
   where

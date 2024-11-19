@@ -25,6 +25,7 @@ module Gibbon.Language
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Set as S
+import qualified Safe as Sf
 -- import           Data.Functor.Foldable
 import           Text.PrettyPrint.GenericPretty
 
@@ -144,9 +145,47 @@ instance (Show (), Out (),
       SpawnE v _ _    -> outTy $ fEnv env2 # v
       SyncE           -> voidTy
       CaseE _ mp ->
-        let (c,args,e) = head mp
+        let 
+          
+            (c,args,e) = Sf.headErr mp
             args' = L.map fst args
         in gRecoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+
+  gRecoverTypeLoc ddfs env2 ex =
+    case ex of
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) (singleLocVar v) (vEnv env2)
+      LitE _       -> IntTy
+      CharE _      -> CharTy
+      FloatE{}     -> FloatTy
+      LitSymE _    -> SymTy
+      AppE v _ _   -> outTy $ fEnv env2 # (singleLocVar v)
+      PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE p _ -> primRetTy p
+
+      LetE (v,_,t,_) e -> gRecoverTypeLoc ddfs (extendVEnvLocVar (singleLocVar v) t env2) e
+      IfE _ e _        -> gRecoverTypeLoc ddfs env2 e
+      MkProdE es       -> ProdTy $ L.map (gRecoverTypeLoc ddfs env2) es
+      DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) loc
+      TimeIt e _ _     -> gRecoverTypeLoc ddfs env2 e
+      MapE _ e         -> gRecoverTypeLoc ddfs env2 e
+      FoldE _ _ e      -> gRecoverTypeLoc ddfs env2 e
+      Ext ext          -> gRecoverTypeLoc ddfs env2 ext
+      ProjE i e ->
+        case gRecoverTypeLoc ddfs env2 e of
+          (ProdTy tys) -> tys !! i
+          oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
+                        ++"\nExpression:\n  "++ sdoc ex
+                        ++"\nEnvironment:\n  "++sdoc (vEnv env2)
+      WithArenaE _v e -> gRecoverTypeLoc ddfs env2 e
+      SpawnE v _ _    -> outTy $ fEnv env2 # (singleLocVar v)
+      SyncE           -> voidTy
+      CaseE _ mp ->
+        let 
+          
+            (c,args,e) = Sf.headErr mp
+            args' = L.map (singleLocVar . fst) args
+        in gRecoverTypeLoc ddfs (extendsVEnvLocVar (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
 
 
 instance Renamable Var where
@@ -190,7 +229,6 @@ instance HasRenamable e l d => Renamable (PreExp e l d) where
 instance Renamable a => Renamable (UrTy a) where
   gRename env = fmap (gRename env)
 
-
 --------------------------------------------------------------------------------
 -- Helpers operating on expressions
 --------------------------------------------------------------------------------
@@ -204,7 +242,7 @@ mapLocs :: (e l2 d -> e l2 d) -> PreExp e l2 d -> PreExp e l2 d
 mapLocs fn = visitExp id fn id
 
 -- | Transform the expressions within a program.
-mapExprs :: (e -> e) -> Prog e -> Prog e
+mapExprs :: (e -> e) -> Prog loc e -> Prog loc e
 mapExprs fn prg@Prog{fundefs,mainExp} =
   let mainExp' = case mainExp of
                    Nothing -> Nothing
@@ -214,7 +252,7 @@ mapExprs fn prg@Prog{fundefs,mainExp} =
      , mainExp =  mainExp' }
 
 -- | Monadic 'mapExprs'.
-mapMExprs :: Monad m => (e -> m e) -> Prog e -> m (Prog e)
+mapMExprs :: Monad m => (e -> m e) -> Prog loc e -> m (Prog loc e)
 mapMExprs fn prg@Prog{fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
@@ -348,7 +386,7 @@ hasTimeIt rhs =
       Ext _ -> False
       WithArenaE _ e -> hasTimeIt e
 
-hasSpawnsProg :: Prog (PreExp e l d) -> Bool
+hasSpawnsProg :: Prog loc (PreExp e l d) -> Bool
 hasSpawnsProg (Prog _ fundefs mainExp) =
   any (\FunDef{funBody} -> hasSpawns funBody) (M.elems fundefs) ||
     case mainExp of

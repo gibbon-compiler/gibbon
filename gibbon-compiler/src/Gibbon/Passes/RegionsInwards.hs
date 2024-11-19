@@ -22,8 +22,9 @@ type DelayedBindEnv = M.Map (S.Set LocVar) [DelayedBind]                        
 
 regionsInwards :: Prog2 -> PassM Prog2
 regionsInwards Prog{ddefs,fundefs,mainExp} = do
-    let scopeSetMain = S.fromList $ map funName (M.elems fundefs)                --Init scopeSet with all the function names
-        functionArgs = S.fromList $ concatMap funArgs (M.elems fundefs)          --Init functionArgs with all the function arguments, concatenate into one list
+    let scopeSetMain = S.fromList $ map (singleLocVar  . funName) (M.elems fundefs)                --Init scopeSet with all the function names
+        lambdaToLoc = L.map (\l -> singleLocVar l)
+        functionArgs = S.fromList $ concatMap (lambdaToLoc . funArgs) (M.elems fundefs)          --Init functionArgs with all the function arguments, concatenate into one list
         scopeSetFun  = scopeSetMain `S.union` functionArgs                       --scope set for function body is the union of function args and the function names
     fds' <- mapM (placeRegionsInwardsFunBody scopeSetFun) (M.elems fundefs)      --Delay Regions for the function body
     let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
@@ -37,21 +38,21 @@ regionsInwards Prog{ddefs,fundefs,mainExp} = do
 
 
 
-placeRegionsInwardsFunBody :: S.Set Var -> FunDef2  -> PassM FunDef2
+placeRegionsInwardsFunBody :: S.Set LocVar -> FunDef2  -> PassM FunDef2
 placeRegionsInwardsFunBody scopeSet f@FunDef{funBody}  = do
   let env     = M.empty                                                          --Create empty environment
   funBody' <- placeRegionInwards env scopeSet funBody                            --Recursively delay regions for function body
   return $ f {funBody = funBody'}
 
 
-placeRegionInwards :: DelayedBindEnv -> S.Set Var -> Exp2 -> PassM Exp2          --Recursive funtion that will move the regions inwards
+placeRegionInwards :: DelayedBindEnv -> S.Set LocVar -> Exp2 -> PassM Exp2          --Recursive funtion that will move the regions inwards
 placeRegionInwards env scopeSet ex  =
   case ex of
     Ext ext ->
       case ext of
 
         LetRegionE r sz ty rhs -> do                                                   --take care of regions
-          let key' = S.singleton (regionToVar r)
+          let key' = S.singleton (singleLocVar $ regionToVar r)
               val' = [DelayRegion r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
@@ -64,7 +65,7 @@ placeRegionInwards env scopeSet ex  =
 
             StartOfRegionLE r -> do
               let keyList' = M.keys env
-                  key'     = F.find (S.member (regionToVar r)) keyList'
+                  key'     = F.find (S.member (singleLocVar $ regionToVar r)) keyList'
                   in case key' of
                     Nothing -> do
                       let key'' = S.singleton loc
@@ -115,7 +116,7 @@ placeRegionInwards env scopeSet ex  =
 
             InRegionLE r -> do
               let keyList' = M.keys env
-                  key'     = F.find (S.member (regionToVar r) ) keyList'
+                  key'     = F.find (S.member (singleLocVar $ regionToVar r) ) keyList'
                   in case key' of
                     Nothing -> error "No existing region found for this Location in case InRegionLE"
                     Just myKey -> do
@@ -142,7 +143,7 @@ placeRegionInwards env scopeSet ex  =
             FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this?
 
         LetParRegionE r sz ty rhs -> do                                                --Handle a parallel LetRegion
-          let key' = S.singleton (regionToVar r)
+          let key' = S.singleton (singleLocVar $ regionToVar r)
               val' = [DelayParRegion r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
@@ -186,7 +187,7 @@ placeRegionInwards env scopeSet ex  =
     DataConE loc dataCons args      -> do
                                        let allKeys  =  M.keys env                                                         -- List of all keys from env
                                            freelist = map freeVars args 
-                                           freevars = foldl (\s1 s2 -> s1 `S.union` s2) (S.empty) freelist  
+                                           freevars = foldl (\s1 s2 -> s1 `S.union` s2) (S.empty) freelist
                                            keyList  = map (\variable -> F.find (S.member variable) allKeys) ((S.toList freevars) ++ [loc])       -- For each var in the input set find its corresponding key
                                            keyList' = S.catMaybes keyList                                                 -- Filter all the Nothing values from the list and let only Just values in the list
                                            newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'   -- Filter all the Nothing values from the list and let only Just values in the list
@@ -219,7 +220,7 @@ placeRegionInwards env scopeSet ex  =
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
     LetE (v,locs,ty,rhs) bod      -> do
-                                    let newScope = S.insert v scopeSet                                                     {- The locs will be empty at this point, so just update scope set and recurse -}
+                                    let newScope = S.insert (singleLocVar v) scopeSet                                                     {- The locs will be empty at this point, so just update scope set and recurse -}
                                         allKeys  =  M.keys env
                                         free_vars =   locsInTy ty                                                          -- List of all keys from env
                                         keyList  = map (\variable -> F.find (S.member variable) allKeys) free_vars         -- For each var in the input set find its corresponding key
@@ -235,9 +236,10 @@ placeRegionInwards env scopeSet ex  =
     CaseE scrt brs                -> do
       brs' <- mapM
         (\(a,b,c) -> do let varList = fmap fst b                                                                       -- Get all the variables from the tuple list
-                            newScope  = scopeSet `S.union` S.fromList varList                                          -- Make the newScope set by unioning the old one with the varList
+                            varList' = L.map singleLocVar varList
+                            newScope  = scopeSet `S.union` S.fromList varList'                                          -- Make the newScope set by unioning the old one with the varList
                             allKeys   =  M.keys env
-                            free_vars = freeVars c `S.union` newScope                                                  -- List of all keys from env
+                            free_vars = (freeVars c) `S.union` newScope                                                 -- List of all keys from env
                             keyList   = map (\variable -> F.find (S.member variable) allKeys) (S.toList free_vars)     -- For each var in the input set find its corresponding key
                             keyList'  = S.catMaybes keyList
                             newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'               -- Filter all the Nothing values from the list and let only Just values in the list
@@ -261,9 +263,10 @@ placeRegionInwards env scopeSet ex  =
     go = placeRegionInwards env scopeSet
 
 -- This is a function to discharge binds given a dictionary, scopeSet and expression where free variables might exist
-dischargeBinds :: DelayedBindEnv -> S.Set Var -> Exp2 -> (DelayedBindEnv, Exp2)
+dischargeBinds :: DelayedBindEnv -> S.Set LocVar -> Exp2 -> (DelayedBindEnv, Exp2)
 dischargeBinds env scopeSet exp2 =
-  let free_vars        = S.difference (freeVars exp2) scopeSet                         -- Take the difference of the scopeSet with the set that freeVar gives.
+  let free_vars_exp2   = freeVars exp2
+      free_vars        = S.difference free_vars_exp2 scopeSet                         -- Take the difference of the scopeSet with the set that freeVar gives.
       (newEnv, newExp) = codeGen free_vars env exp2
   in  (newEnv, newExp)
 
@@ -298,7 +301,7 @@ bindDelayedBind delayed body =
 -- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the
 -- returned set
 
-freeVars :: Exp2 -> S.Set Var
+freeVars :: Exp2 -> S.Set LocVar
 freeVars ex = case ex of
   Ext ext                           ->
     case ext of
@@ -313,11 +316,13 @@ freeVars ex = case ex of
         _                           -> S.empty
       _                             -> S.empty
 
-  LetE (_,locs, ty,rhs) bod         -> S.fromList locs  `S.union` S.fromList (locsInTy ty) `S.union` freeVars rhs `S.union` freeVars bod
+  LetE (_,locs, ty,rhs) bod         -> let freeVarsRhs = freeVars rhs
+                                           freeVarsBod = freeVars bod
+                                         in S.fromList locs  `S.union` S.fromList (locsInTy ty) `S.union` freeVarsRhs `S.union` freeVarsBod
   LitE _                            -> S.empty
   LitSymE _                         -> S.empty
-  VarE v                            -> S.singleton v
-  AppE v locvarList ls              -> S.unions (L.map freeVars ls) `S.union` S.singleton v `S.union` S.fromList locvarList
+  VarE v                            -> S.singleton (singleLocVar v)
+  AppE v locvarList ls              -> S.unions (L.map freeVars ls) `S.union` S.singleton (singleLocVar v) `S.union` S.fromList locvarList
   PrimAppE _ ls                     -> S.unions (L.map freeVars ls)
   MkProdE ls                        -> S.unions (L.map freeVars ls)
   DataConE locVar _ ls              -> S.singleton locVar  `S.union`  S.unions (L.map freeVars ls)
@@ -326,5 +331,6 @@ freeVars ex = case ex of
   CaseE e ls                        -> freeVars e `S.union`
                                         S.unions (L.map (\(_, vlocs, ee) ->
                                            let (vars, locVars) = unzip vlocs
-                                           in freeVars ee `S.union` S.fromList vars `S.union` S.fromList locVars) ls)
+                                               vars' = L.map singleLocVar vars
+                                           in freeVars ee `S.union` S.fromList vars' `S.union` S.fromList locVars) ls)
   _                                 -> S.empty

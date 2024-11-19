@@ -31,16 +31,16 @@ import           Gibbon.Language                hiding (mapMExprs)
 import qualified Gibbon.NewL2.Syntax as L2
 
 
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------- 
 
-type Prog3 = Prog Exp3
+type Prog3 = Prog Var Exp3
 
 type DDef3  = DDef Ty3
 type DDefs3 = DDefs Ty3
 
-type FunDefs3 = FunDefs Exp3
+type FunDefs3 = FunDefs Var Exp3
 
-type FunDef3 = FunDef Exp3
+type FunDef3 = FunDef Var Exp3
 
 -- GHC uses the instance defined for L1.Ty1
 -- instance FunctionTy Ty3 where
@@ -82,13 +82,13 @@ data E3Ext loc dec =
     -- ^ Do one of the following:
     -- (1) If it's a old-to-young indirection, record it in the remembered set.
     -- (2) Otherwise, bump the refcount and update the outset.
-  | BumpArenaRefCount Var Var      -- ^ Given an arena and end-of-region ptr, add a
-                                   --   reference from the arena to the region
-  | NullCursor                     -- ^ Constant null cursor value (hack?).
-                                   --   Used for dict lookup, which returns a packed value but
-                                   --   no end witness.
-  | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE.
-  | GetCilkWorkerNum               -- ^ Translates to  __cilkrts_get_worker_number().
+  | BumpArenaRefCount Var Var -- ^ Given an arena and end-of-region ptr, add a
+                                    --   reference from the arena to the region
+  | NullCursor                      -- ^ Constant null cursor value (hack?).
+                                    --   Used for dict lookup, which returns a packed value but
+                                    --   no end witness.
+  | RetE [(PreExp E3Ext loc dec)]   -- ^ Analogous to L2's RetE.
+  | GetCilkWorkerNum                -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
   | AllocateTagHere Var TyCon  -- ^ Analogous to L2's extension.
   | AllocateScalarsHere Var    -- ^ Analogous to L2's extension.
@@ -155,6 +155,11 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverType _ddfs _env2 NullCursor = CursorTy
     gRecoverType ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverType ddfs env2) ls
     gRecoverType _ _ _ = error "L3.gRecoverType"
+
+
+    gRecoverTypeLoc _ddfs _env2 NullCursor = CursorTy
+    gRecoverTypeLoc ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverTypeLoc ddfs env2) ls
+    gRecoverTypeLoc _ _ _ = error "L3.gRecoverTypeLoc"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
@@ -289,7 +294,7 @@ cursorizeTy ty =
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before
-mapMExprs :: Monad m => (Env2 Ty3 -> Exp3 -> m Exp3) -> Prog3 -> m Prog3
+mapMExprs :: Monad m => (Env2 Var Ty3 -> Exp3 -> m Exp3) -> Prog3 -> m Prog3
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
     (mapM (\f@FunDef{funArgs,funTy,funBody} ->

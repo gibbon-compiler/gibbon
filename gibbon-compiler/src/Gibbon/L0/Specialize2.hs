@@ -459,7 +459,7 @@ monoOblsTy ddefs1 t = do
 
 
 -- | Collect monomorphization obligations.
-collectMonoObls :: DDefs0 -> Env2 Ty0 -> S.Set Var -> Exp0 -> MonoM Exp0
+collectMonoObls :: DDefs0 -> Env2 Var Ty0 -> S.Set Var -> Exp0 -> MonoM Exp0
 collectMonoObls ddefs env2 toplevel ex =
   case ex of
     AppE f [] args -> do
@@ -998,7 +998,7 @@ specLambdasFun ddefs new_fn_name refs fn@FunDef{funArgs, funTy} = do
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-specLambdasExp :: DDefs0 -> Env2 Ty0 -> Exp0 -> SpecM Exp0
+specLambdasExp :: DDefs0 -> Env2 Var Ty0 -> Exp0 -> SpecM Exp0
 specLambdasExp ddefs env2 ex =
   case ex of
     -- TODO, docs.
@@ -1204,7 +1204,7 @@ specLambdasExp ddefs env2 ex =
         _ -> False
 
     -- fn_0 (fn_1, thing, fn_2) => fn_0 (thing)
-    dropFunRefs :: Var -> Env2 Ty0 -> [Exp0] -> [Exp0]
+    dropFunRefs :: Var -> Env2 Var Ty0 -> [Exp0] -> [Exp0]
     dropFunRefs fn_name env21 args =
       foldr (\(a,t) acc -> if isFunTy t then acc else a:acc) [] (zip args arg_tys)
       where
@@ -1737,7 +1737,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
   where
     err1 msg = error $ "floatOutCase: " ++ msg
 
-    float_fn :: Env2 Ty0 -> Exp0 -> FloatM Exp0
+    float_fn :: Env2 Var Ty0 -> Exp0 -> FloatM Exp0
     float_fn env2 ex = do
       fundefs' <- get
       let fenv' = M.map funTy fundefs'
@@ -1752,7 +1752,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
       let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False)
       state (\s -> ((AppE fn_name [] (map VarE free)), M.insert fn_name fn s))
 
-    go :: Bool -> Env2 Ty0 -> Exp0 -> FloatM Exp0
+    go :: Bool -> Env2 Var Ty0 -> Exp0 -> FloatM Exp0
     go float env2 ex =
       case ex of
         VarE{}    -> pure ex

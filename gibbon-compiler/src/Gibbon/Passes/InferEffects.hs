@@ -73,7 +73,7 @@ inferFunDef ddfs fenv FunDef{funArgs,funBody,funTy} = funTy { arrEffs = S.inters
     (eff,_outLoc) = inferExp ddfs fenv env0 M.empty funBody
 
 
-inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> Deps -> Exp2 -> (Set Effect, Maybe LocVar)
+inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Var Ty2 -> Deps -> Exp2 -> (Set Effect, Maybe LocVar)
 inferExp ddfs fenv env dps expr =
   case expr of
     -- QUESTION: does a variable reference count as traversing to the end?

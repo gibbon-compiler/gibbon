@@ -13,7 +13,7 @@ import qualified Gibbon.L1.Interp as L1
 
 --------------------------------------------------------------------------------
 
-instance InterpExt () Exp0 (E0Ext Ty0 Ty0) where
+instance InterpExt () Exp0 (E0Ext Ty0 Ty0) Var where
   gInterpExt rc valenv ddefs fundefs ex =
       case ex of
         LambdaE args bod -> return (VLam (map fst args) bod valenv)
@@ -34,8 +34,8 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) where
         PolyAppE{} -> error "L0.Interp: PolyAppE not handled."
         LinearExt{} -> error $ "L0.Interp: a linear types extension wasn't desugared: " ++ sdoc ex
 
-instance Interp () Exp0 where
+instance Interp () Exp0 Var where
   gInterpExp  = L1.interp
 
-instance InterpProg () Exp0 where
+instance InterpProg () Exp0 Var where
   gInterpProg _s = L1.interpProg

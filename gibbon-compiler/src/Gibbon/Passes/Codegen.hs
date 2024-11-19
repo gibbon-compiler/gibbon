@@ -20,6 +20,7 @@ import qualified Data.Set as S
 import           Language.C.Quote.C (cdecl, cedecl, cexp, cfun, cparam, csdecl, cstm, cty)
 import qualified Language.C.Quote.C as C
 import qualified Language.C.Syntax as C
+import qualified Safe as Sf
 import           Prelude hiding (init)
 import           Text.PrettyPrint.Mainland
 import           Text.PrettyPrint.Mainland.Class
@@ -784,7 +785,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  AddP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
-                 SubP -> let (outV,outT) = head bnds
+                 SubP -> let (outV,outT) = Sf.headErr bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) - $(codegenTriv venv pright); |] ]
                  MulP -> let [(outV,outT)] = bnds

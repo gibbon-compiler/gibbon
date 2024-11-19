@@ -28,7 +28,7 @@ assertInferEffects prg fnName expected = expected @=? eff
 -- | Add1 function has a traversal effect [Traverse "lin2"]
 --
 case_add1 :: Assertion
-case_add1 = assertInferEffects add1Prog "add1" (S.singleton $ Traverse "lin2")
+case_add1 = assertInferEffects add1Prog "add1" (S.singleton $ Traverse (singleLocVar "lin2"))
 
 -- | Identity fn doesn't have any traversal effect
 case_id1 :: Assertion
@@ -36,11 +36,11 @@ case_id1 = assertInferEffects id1Prog "id1" S.empty
 
 -- | Copying has a traversal effect
 case_copyTree :: Assertion
-case_copyTree =  assertInferEffects copyTreeProg "copyTree" (S.singleton $ Traverse "lin23")
+case_copyTree =  assertInferEffects copyTreeProg "copyTree" (S.singleton $ Traverse (singleLocVar "lin23"))
 
 -- | Call copy on the body of id1
 case_call_copy_on_id1 :: Assertion
-case_call_copy_on_id1 = assertInferEffects copyOnId1Prog "id1WithCopy" (S.singleton $ Traverse "lin19")
+case_call_copy_on_id1 = assertInferEffects copyOnId1Prog "id1WithCopy" (S.singleton $ Traverse (singleLocVar "lin19"))
 
 case_id2 :: Assertion
 case_id2 = assertInferEffects id2Prog "id2" S.empty
@@ -52,7 +52,7 @@ case_int_add :: Assertion
 case_int_add = assertInferEffects intAddProg "intAdd" S.empty
 
 case_packed_tuple :: Assertion
-case_packed_tuple = assertInferEffects testProdProg "testprod" (S.singleton $ Traverse "lin131")
+case_packed_tuple = assertInferEffects testProdProg "testprod" (S.singleton $ Traverse (singleLocVar "lin131"))
 
 inferEffects2Tests :: TestTree
 inferEffects2Tests = $(testGroupGenerator)

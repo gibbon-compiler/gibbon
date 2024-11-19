@@ -69,91 +69,91 @@ case_test2 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
 case_test3 :: Assertion
 case_test3 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-                              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
+                              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
                               LitE 1
 
 
 case_test4 :: Assertion
 case_test4 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-                              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
+                              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
                               LetE ("throwaway", [],
-                                              PackedTy "Tree" "l",
-                                              DataConE "l" "Leaf" [LitE 1]) $
+                                              PackedTy "Tree" (singleLocVar "l"),
+                                              DataConE (singleLocVar "l") "Leaf" [LitE 1]) $
                               LitE 2
 
 
 case_test4_error1 :: Assertion
 case_test4_error1 =  assertError exp expected
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r1")) $
-              LetE ("throwaway", [], PackedTy "Tree" "l",
-                              DataConE "l" "Leaf" [LitE 1]) $
+              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r1")) $
+              LetE ("throwaway", [], PackedTy "Tree" (singleLocVar "l"),
+                              DataConE (singleLocVar "l") "Leaf" [LitE 1]) $
                LitE 2
 
-        expected = GenericTC "Region VarR (Var \"r1\") not in scope" (Ext (LetLocE (Var "l") (StartOfRegionLE (VarR (Var "r1"))) (LetE (Var "throwaway",[],PackedTy "Tree" (Var "l"), DataConE (Var "l") "Leaf" [LitE 1]) (LitE 2))))
+        expected = GenericTC "Region VarR (Var \"r1\") not in scope" (Ext (LetLocE (singleLocVar "l") (StartOfRegionLE (VarR (Var "r1"))) (LetE (Var "throwaway",[],PackedTy "Tree" (singleLocVar "l"), DataConE (singleLocVar "l") "Leaf" [LitE 1]) (LitE 2))))
 
 
 case_test4_error2 :: Assertion
 case_test4_error2 =  assertError exp expected
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
-              LetE ("throwaway", [], PackedTy "Tree" "l1",
-                              DataConE "l1" "Leaf" [LitE 1]) $
+              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
+              LetE ("throwaway", [], PackedTy "Tree" (singleLocVar "l1"),
+                              DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
               LitE 2
 
-        expected = GenericTC "Unknown location Var \"l1\"" (DataConE (Var "l1") "Leaf" [LitE 1])
+        expected = GenericTC "Unknown location Var \"l1\"" (DataConE (singleLocVar "l1") "Leaf" [LitE 1])
 
 
 case_test5 :: Assertion
 case_test5 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
-              Ext $ LetLocE "l1" (AfterConstantLE 1 "l") $
-              LetE ("x", [], PackedTy "Tree" "l1", DataConE "l1" "Leaf" [LitE 1]) $
-              Ext $ LetLocE "l2" (AfterVariableLE "x" "l1" False) $
-              LetE ("y", [], PackedTy "Tree" "l2", DataConE "l2" "Leaf" [LitE 2]) $
-              LetE ("z", [], PackedTy "Tree" "l", DataConE "l" "Node" [VarE "x", VarE "y"]) $
+              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
+              Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
+              LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"), DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
+              Ext $ LetLocE (singleLocVar "l2") (AfterVariableLE "x" (singleLocVar "l1") False) $
+              LetE ("y", [], PackedTy "Tree" (singleLocVar "l2"), DataConE (singleLocVar "l2") "Leaf" [LitE 2]) $
+              LetE ("z", [], PackedTy "Tree" (singleLocVar "l"), DataConE (singleLocVar "l") "Node" [VarE "x", VarE "y"]) $
               LitE 1
 
 case_test5_error1 :: Assertion
 case_test5_error1 =  assertError exp expected
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
-              Ext $ LetLocE "l1" (AfterConstantLE 1 "l") $
-              LetE ("x", [], PackedTy "Tree" "l1",
-                              DataConE "l1" "Leaf" [LitE 1]) $
-              Ext $ LetLocE "l2" (AfterVariableLE "x" "l1" False) $
-              LetE ("y", [], PackedTy "Tree" "l2",
-                              DataConE "l2" "Leaf" [LitE 2]) $
-              LetE ("z", [], PackedTy "Tree" "l",
-                              DataConE "l" "Node"
+              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
+              Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
+              LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"),
+                              DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
+              Ext $ LetLocE (singleLocVar "l2") (AfterVariableLE "x" (singleLocVar "l1") False) $
+              LetE ("y", [], PackedTy "Tree" (singleLocVar "l2"),
+                              DataConE (singleLocVar "l2") "Leaf" [LitE 2]) $
+              LetE ("z", [], PackedTy "Tree" (singleLocVar "l"),
+                              DataConE (singleLocVar "l") "Node"
                               [VarE "y", VarE "x"]) $
               LitE 1
 
-        expected = LocationTC "Expected after relationship" (DataConE (Var "l") "Node" [VarE (Var "y"),VarE (Var "x")]) (Var "l") (Var "l2")
+        expected = LocationTC "Expected after relationship" (DataConE (singleLocVar "l") "Node" [VarE (Var "y"),VarE (Var "x")]) (singleLocVar "l") (singleLocVar "l2")
 
 case_test6 :: Assertion
 case_test6 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
   where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
-              Ext $ LetLocE "l" (StartOfRegionLE (VarR "r")) $
-              Ext $ LetLocE "l1" (AfterConstantLE 1 "l") $
-              LetE ("x", [], PackedTy "Tree" "l1",
-                              DataConE "l1" "Leaf" [LitE 1]) $
-              Ext $ LetLocE "l2" (AfterVariableLE "x" "l1" False) $
-              LetE ("y", [], PackedTy "Tree" "l2",
-                              DataConE "l2" "Leaf" [LitE 2]) $
-              LetE ("z", [], PackedTy "Tree" "l",
-                              DataConE "l" "Node" [VarE "x",
+              Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
+              Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
+              LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"),
+                              DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
+              Ext $ LetLocE (singleLocVar "l2") (AfterVariableLE "x" (singleLocVar "l1") False) $
+              LetE ("y", [], PackedTy "Tree" (singleLocVar "l2"),
+                              DataConE (singleLocVar "l2") "Leaf" [LitE 2]) $
+              LetE ("z", [], PackedTy "Tree" (singleLocVar "l"),
+                              DataConE (singleLocVar "l") "Node" [VarE "x",
                                                              VarE "y"]) $
               CaseE (VarE "z")
-              [ ("Leaf",[("num","lnum")], VarE "num")
-              , ("Node",[("x","lnodex"),("y","lnodey")],
+              [ ("Leaf",[("num",(singleLocVar "lnum"))], VarE "num")
+              , ("Node",[("x",(singleLocVar "lnodex")),("y",(singleLocVar "lnodey"))],
                  LitE 0)]
 
 -- | Return type of a function is updated with locVars at the call-site
 case_copy_on_add1 :: Assertion
-case_copy_on_add1 = PackedTy "Tree" (Var "lout21") @=? (arrOut funTy)
+case_copy_on_add1 = PackedTy "Tree" (singleLocVar "lout21") @=? (arrOut funTy)
   where Prog{fundefs} = fst $ defaultPackedRunPassM $ tcProg copyOnId1Prog
         FunDef{funTy} = fundefs ! "id1WithCopy"
 

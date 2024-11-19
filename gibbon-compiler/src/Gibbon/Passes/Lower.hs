@@ -17,12 +17,12 @@ import           Data.Maybe
 import qualified Data.List as L hiding (tail)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Safe as Sf
 import           Data.Int (Int64)
 import           Data.Word (Word16)
 import           Data.Tuple (swap)
 import           Prelude hiding (tail)
 import           Text.PrettyPrint.GenericPretty
-import qualified Data.List as L
 
 import           Gibbon.Common
 import           Gibbon.DynFlags
@@ -307,7 +307,7 @@ properTrivs pkd ty trvs =
     go acc [] _trvs = acc
     go acc (ty:tys) (x:xs) =
       if isPackedTy ty
-      then go (acc++[x]) tys (L.tail xs)
+      then go (acc++[x]) tys (Sf.tailErr xs)
       else go (acc++[x]) tys xs
     go _ tys xs = error $ "properTrivs: unexpected tys and trvs: " ++ sdoc tys ++ " " ++ sdoc xs
 
@@ -973,7 +973,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                      return (zip tmps (L.map typ tys), e')
                             -- More than one should not currently be
                             -- possible (no nested tuple returns):
-                            [ix] -> do garbages <- sequence [ gensym "garbage" | _ <- L.tail tys ]
+                            [ix] -> do garbages <- sequence [ gensym "garbage" | _ <- Sf.tailErr tys ]
                                        let (lead,trail) = L.splitAt ix garbages
                                        return ( zip (lead++[vr]++trail)
                                                     (L.map typ tys)

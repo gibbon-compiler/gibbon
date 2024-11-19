@@ -42,7 +42,7 @@ removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   return $ f {funBody = bod'}
 
 -- ASSUMPTION: copy functions would always be called on a single argument.
-removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> Exp2 -> PassM Exp2
+removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Var Ty2 -> Exp2 -> PassM Exp2
 removeCopiesExp ddefs fundefs lenv env2 ex =
   case ex of
     -- This AppE copies data from 'lin' to 'lout'. When this becomes an
@@ -57,7 +57,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         [dcon] -> do
           return $
             mkLets ([(indirection,[],PackedTy tycon lout,
-                      Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg)])
+                      Ext $ IndirectionE tycon dcon (lout , singleLocVar $ lenv # lout) (lin, singleLocVar $ lenv # lin) arg)])
             (VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
@@ -67,7 +67,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
-          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg) <$>
+          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ lenv # lout) (lin, singleLocVar $ lenv # lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 

@@ -81,9 +81,10 @@ inferRegScopeExp env ex =
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps
                          regV = regionToVar r
+                         regVLoc = singleLocVar regV
                          -- Vertex of the region variable
                          regVertex =
-                           case vtxF regV of
+                           case vtxF regVLoc of
                              Just x  -> x
                              Nothing -> error $ "No vertex for:" ++ sdoc r
                          -- Vertex of the return value
@@ -119,9 +120,10 @@ inferRegScopeExp env ex =
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps
                          regV = regionToVar r
+                         regVLoc = singleLocVar regV
                          -- Vertex of the region variable
                          regVertex =
-                           case vtxF regV of
+                           case vtxF regVLoc of
                              Just x  -> x
                              Nothing -> error $ "No vertex for:" ++ sdoc r
                          -- Vertex of the return value

@@ -54,7 +54,7 @@ addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
         return $ f {funBody = bod'}
 
 -- Generate traversals for the first (n-1) packed elements
-addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> String -> Exp2 -> PassM Exp2
+addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Var Ty2 -> RegEnv -> String -> Exp2 -> PassM Exp2
 addTraversalsExp ddefs fundefs env2 renv context ex =
   case ex of
     CaseE scrt@(VarE sv) brs -> do
@@ -133,7 +133,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
 -- If we cannot unpack all the pattern matched variables:
 -- (1) Everything after the first packed element should be unused in the RHS
 -- (2) Otherwise, we must traverse the first (n-1) packed elements
-needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], Exp2) -> Maybe [(Var, LocVar)]
+needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Var Ty2 -> (DataCon, [(Var, LocVar)], Exp2) -> Maybe [(Var, LocVar)]
 needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
   if isAbsRANDataCon dcon || isRelRANDataCon dcon then Nothing else
   let (vars, _locs) = unzip vlocs

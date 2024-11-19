@@ -37,7 +37,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
                , funMeta = funMeta
                }
 
-    go :: Env2 Ty1 -> Exp1 -> Exp3
+    go :: Env2 Var Ty1 -> Exp1 -> Exp3
     go env2 ex =
       case ex of
         VarE v    -> VarE v

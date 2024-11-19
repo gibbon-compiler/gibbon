@@ -343,7 +343,7 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
 type RegEnv = M.Map LocVar Var
 type TyConEnv = M.Map LocVar TyCon
 
-needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> Exp2 -> S.Set TyCon
+needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Var Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> Exp2 -> S.Set TyCon
 needsRANExp ddefs fundefs env2 renv tcenv parlocss ex =
   case ex of
     CaseE (VarE scrt) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
@@ -444,7 +444,7 @@ we need random access for that type.
       in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' tcenv1 parlocss1 bod
 
     -- Return the location and tycon of an argument to a function call.
-    parAppLoc :: Env2 Ty2 -> Exp2 -> M.Map LocVar TyCon
+    parAppLoc :: Env2 Var Ty2 -> Exp2 -> M.Map LocVar TyCon
     parAppLoc env21 (SpawnE _ _ args) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
           fn (ProdTy tys1) = L.concatMap fn tys1

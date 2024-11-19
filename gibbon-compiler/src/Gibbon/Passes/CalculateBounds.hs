@@ -3,7 +3,7 @@ module Gibbon.Passes.CalculateBounds ( inferRegSize ) where
 
 import           Gibbon.Common
 import qualified Data.Map                      as M
-import           Gibbon.L2.Syntax
+import           Gibbon.L2.Syntax  as Old 
 import qualified Data.List as L
 import           Debug.Trace
 import           Control.Monad
@@ -15,10 +15,10 @@ type VarLocMapping = M.Map Var LocVar
 type RegionSizeMapping = M.Map Var RegionSize
 type RegionTypeMapping = M.Map Var RegionType
 
-inferRegSize :: Prog2 -> PassM Prog2
+inferRegSize :: Old.Prog2 -> PassM Old.Prog2
 inferRegSize = calculateBounds
 
-calculateBounds :: Prog2 -> PassM Prog2
+calculateBounds :: Old.Prog2 -> PassM Old.Prog2
 calculateBounds Prog { ddefs, fundefs, mainExp } = do
   let env2 = Env2 M.empty (initFunEnv fundefs)
   fundefs' <- mapM (calculateBoundsFun ddefs env2 M.empty) fundefs
@@ -28,7 +28,7 @@ calculateBounds Prog { ddefs, fundefs, mainExp } = do
   return $ Prog ddefs fundefs' mainExp'
 
 
-calculateBoundsFun :: DDefs Ty2 -> Env2 Ty2 -> VarSizeMapping -> FunDef2 -> PassM FunDef2
+calculateBoundsFun :: DDefs Old.Ty2 -> Env2 Var Old.Ty2 -> VarSizeMapping -> Old.FunDef2 -> PassM Old.FunDef2
 calculateBoundsFun ddefs env2 varSzEnv f@FunDef { funName, funBody, funTy, funArgs } = do
   if "_" `L.isPrefixOf` fromVar funName
     then return f
@@ -59,16 +59,16 @@ calculateBoundsFun ddefs env2 varSzEnv f@FunDef { funName, funBody, funTy, funAr
   * we will not update the region size inside that function .
 -}
 calculateBoundsExp
-  :: DDefs Ty2 -- ^ Data Definitions
-  -> Env2 Ty2 -- ^ Type Environment (Variables + Functions)
+  :: DDefs Old.Ty2 -- ^ Data Definitions
+  -> Env2 Var Old.Ty2 -- ^ Type Environment (Variables + Functions)
   -> VarSizeMapping -- ^ var => size
   -> VarLocMapping -- ^ var => location
   -> LocationRegionMapping -- ^ location => region
   -> LocationOffsetMapping -- ^ location => offset
   -> RegionSizeMapping -- ^ region => size
   -> RegionTypeMapping -- ^ region => type
-  -> Exp2 -- ^ expression
-  -> PassM (Exp2, RegionSizeMapping, RegionTypeMapping)
+  -> Old.Exp2 -- ^ expression
+  -> PassM (Old.Exp2, RegionSizeMapping, RegionTypeMapping)
 calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv ex = case ex of
   Ext (BoundsCheck{}) -> return (ex, regSzEnv, regTyEnv)
   Ext (IndirectionE _tycon _dcon (fromLoc, _fromvar) (toLoc, _tovar) _exp) -> do
@@ -134,7 +134,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
               (cases', res, rts) <-
                 unzip3
                   <$> mapM
-                        (\(dcon :: DataCon, vlocs :: [(Var, LocVar)], bod :: Exp2) -> do
+                        (\(dcon :: DataCon, vlocs :: [(Var, LocVar)], bod :: Old.Exp2) -> do
                           -- TODO use for traversal somewhere down the line?
                           -- let offsets =
                           --       M.fromList
@@ -170,7 +170,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                 return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
               LetLocE loc locExp ex1 -> do
                 -- * NOTE: jumps are only necessary for route ends, skipping them.
-                if "jump_" `L.isPrefixOf` fromVar loc
+                if "jump_" `L.isPrefixOf` fromVar (unwrapLocVar loc)
                   then do
                     (ex1', re', rt') <- go ex1
                     return (Ext $ LetLocE loc locExp ex1', re', rt')

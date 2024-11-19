@@ -53,7 +53,7 @@ indentLevel = 4
 type HasPretty ex = (Pretty ex, Pretty (TyOf ex), Pretty (ArrowTy (TyOf ex)))
 
 -- Program:
-instance HasPretty ex => Pretty (Prog ex) where
+instance HasPretty ex => Pretty (Prog Var ex) where
     pprintWithStyle sty (Prog ddefs funs me) =
         let meDoc = case me of
                       Nothing -> empty
@@ -165,7 +165,7 @@ instance Pretty FunMeta where
     pprintWithStyle _sty = text . show
 
 -- Functions:
-instance HasPretty ex => Pretty (FunDef ex) where
+instance HasPretty ex => Pretty (FunDef Var ex) where
     pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody,funMeta} =
         braces (text "meta:" <+> pprintWithStyle sty funMeta) $$
           text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
@@ -482,6 +482,9 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
           L2.SSPush mode loc endloc tycon -> text "ss_push" <+> doc mode <+> pprint loc <+> pprint endloc <+> doc tycon
           L2.SSPop mode loc endloc -> text "ss_pop" <+> doc mode <+> pprint loc <+> pprint endloc
 
+instance Pretty L2.LocVar where 
+  pprintWithStyle _ loc = parens $ text $ sdoc loc
+
 instance Pretty L2.Region where
   pprintWithStyle _ reg = parens $ text $ sdoc reg
 
@@ -647,7 +650,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
     sty = PPHaskell
 
-    ppFun :: Env2 Ty1 -> FunDef1 -> Doc
+    ppFun :: Env2 Var Ty1 -> FunDef1 -> Doc
     ppFun env2 FunDef{funName, funArgs, funTy, funBody} =
       text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
              $$ renderBod <> text "\n"
@@ -657,7 +660,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
                       $$ nest indentLevel (ppExp False env2' funBody)
 
-    ppExp :: Bool -> Env2 Ty1 -> Exp1 -> Doc
+    ppExp :: Bool -> Env2 Var Ty1 -> Exp1 -> Doc
     ppExp monadic env2 ex0 =
       case ex0 of
           VarE v -> pprintWithStyle sty v

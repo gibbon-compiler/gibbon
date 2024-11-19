@@ -39,16 +39,16 @@ instance FunctionTy Ty1 where
 type Exp1 = PreExp E1Ext () Ty1
 
 -- | An L1 program.
-type Prog1 = Prog Exp1
+type Prog1 = Prog Var Exp1
 
 -- | Datatypes
 type DDefs1 = DDefs Ty1
 type DDef1  = DDef Ty1
 
 -- | Function definition used in L1 programs.
-type FunDef1 = FunDef Exp1
+type FunDef1 = FunDef Var Exp1
 
-type FunDefs1 = FunDefs Exp1
+type FunDefs1 = FunDefs Var Exp1
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
@@ -111,6 +111,17 @@ instance Typeable (E1Ext () (UrTy ())) where
                          else error $ "AddFixed: unbound variable " ++ show v
       StartOfPkdCursor cur ->
                          case M.lookup cur (vEnv env2) of
+                           Just (PackedTy{}) -> CursorTy
+                           ty -> error $ "StartOfPkdCursor: got " ++ show ty
+
+  gRecoverTypeLoc _ddefs env2 ext =
+    case ext of
+      BenchE fn _ _ _ -> outTy $ fEnv env2 # (singleLocVar fn)
+      AddFixed v _i   -> if M.member (singleLocVar v) (vEnv env2)
+                         then CursorTy
+                         else error $ "AddFixed: unbound variable " ++ show v
+      StartOfPkdCursor cur ->
+                         case M.lookup (singleLocVar cur) (vEnv env2) of
                            Just (PackedTy{}) -> CursorTy
                            ty -> error $ "StartOfPkdCursor: got " ++ show ty
 

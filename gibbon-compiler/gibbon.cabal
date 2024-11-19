@@ -122,6 +122,7 @@ library
                      , GenericPretty            >= 1.2.1     &&  < 2
                      , language-c-quote         >= 0.12.1    &&  < 1
                      , mainland-pretty          >= 0.6.1     &&  < 1
+                     , safe
 -- Brings in lots of ekmett dependencies:
 --                     , either
 

@@ -26,8 +26,8 @@ import Control.Monad.Trans (lift)
 -- some basic tests of unification, some should succeed and others should fail
 utest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
-            u1 <- fixLoc "a"
-            u2 <- fixLoc "b"
+            u1 <- fixLoc (singleLocVar "a")
+            u2 <- fixLoc (singleLocVar "b")
             l1 <- fresh
             l2 <- fresh
             assocLoc l1 u1
@@ -36,8 +36,8 @@ utest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
 
 utest2 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
-            u1 <- fixLoc "a"
-            u2 <- fixLoc "b"
+            u1 <- fixLoc (singleLocVar "a")
+            u2 <- fixLoc (singleLocVar "b")
             l1 <- fresh
             l2 <- fresh
             assocLoc l1 u1
@@ -46,8 +46,8 @@ utest2 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
 
 utest3 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
-            u1 <- fixLoc "a"
-            u2 <- fixLoc "b"
+            u1 <- fixLoc (singleLocVar "a")
+            u2 <- fixLoc (singleLocVar "b")
             u3 <- freshUnifyLoc
             l1 <- fresh
             l2 <- fresh
@@ -59,8 +59,8 @@ utest3 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
 
 utest4 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
-            u1 <- fixLoc "a"
-            u2 <- fixLoc "b"
+            u1 <- fixLoc (singleLocVar "a")
+            u2 <- fixLoc (singleLocVar "b")
             u3 <- freshUnifyLoc
             l1 <- fresh
             l2 <- fresh
@@ -85,8 +85,8 @@ case_unify4 = (Right True) @=? (fst $ fst utest4)
 
 etest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
-            u1 <- fixLoc "a"
-            u2 <- fixLoc "b"
+            u1 <- fixLoc (singleLocVar "a")
+            u2 <- fixLoc (singleLocVar "b")
             l1 <- fresh
             l2 <- fresh
             assocLoc l1 u1
@@ -95,7 +95,7 @@ etest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
             finishExp $ DataConE l1 "Node" [VarE "x",VarE "y"]
 
 case_etest1 :: Assertion
-case_etest1 = (Right (DataConE "a" "Node" [VarE "x", VarE "y"])) @=? (fst $ fst etest1)
+case_etest1 = (Right (DataConE (singleLocVar "a") "Node" [VarE "x", VarE "y"])) @=? (fst $ fst etest1)
 
 tester1 :: L1.Exp1 -> Exp2
 tester1 e = case fst $ fst $ defaultPackedRunPassM $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of

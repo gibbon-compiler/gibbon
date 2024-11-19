@@ -838,13 +838,13 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
       go :: PassRunner a b v
       go = pass config
 
-      goE2 :: (InterpProg Store b, Show v) => InterpPassRunner a b Store v
+      goE2 :: (InterpProg Store b Var, Show v) => InterpPassRunner a b Store v
       goE2 = passE emptyStore config
 
-      goE0 :: (InterpProg () b, Show v) => InterpPassRunner a b () v
+      goE0 :: (InterpProg () b Var, Show v) => InterpPassRunner a b () v
       goE0 = passE () config
 
-      goE1 :: (InterpProg () b, Show v) => InterpPassRunner a b () v
+      goE1 :: (InterpProg () b Var, Show v) => InterpPassRunner a b () v
       goE1 = passE () config
 
 type PassRunner a b v = (Pretty b, Out b, NFData a, NFData b) =>
@@ -852,7 +852,7 @@ type PassRunner a b v = (Pretty b, Out b, NFData a, NFData b) =>
 
 type InterpPassRunner a b s v = (HasPretty a, HasPretty b, HasOut a, HasOut b,
                                 HasGeneric a, HasGeneric b, HasNFData a, HasNFData b) =>
-                                String -> (Prog a -> PassM (Prog b)) -> Prog a -> StateT (CompileState v) IO (Prog b)
+                                String -> (Prog Var a -> PassM (Prog Var b)) -> Prog Var a -> StateT (CompileState v) IO (Prog Var b)
 
 -- | Run a pass and return the result
 --
@@ -882,7 +882,7 @@ passChatterLvl = 3
 
 -- | Like 'pass', but also evaluates and checks the result.
 --
-passE :: (InterpProg s p2, Show v) => s -> Config -> InterpPassRunner p1 p2 s v
+passE :: (InterpProg s p2 Var, Show v) => s -> Config -> InterpPassRunner p1 p2 s v
 passE s config@Config{mode} = wrapInterp s mode (pass config)
 
 
@@ -896,7 +896,7 @@ passF = pass
 
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
-wrapInterp :: (InterpProg s b, Show v)
+wrapInterp :: (InterpProg s b Var, Show v)
            => s -> Mode -> InterpPassRunner a b s v -> InterpPassRunner a b s v
 wrapInterp s mode pass who fn x =
   do CompileState{result} <- get

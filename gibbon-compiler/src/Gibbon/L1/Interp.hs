@@ -30,22 +30,22 @@ interpChatter = 7
 
 ------------------------------------------------------------
 
-instance InterpExt () Exp1 (E1Ext () Ty1) where
+instance InterpExt () Exp1 (E1Ext () Ty1) Var where
   gInterpExt rc valenv ddefs fundefs ex =
       case ex of
           BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn locs args)
           AddFixed{}   -> error "L1.Interp: AddFixed not handled."
           StartOfPkdCursor{} -> error "L1.Interp: StartOfPkdCursor not handled."
 
-instance Interp () Exp1 where
+instance Interp () Exp1 Var where
   gInterpExp = interp
 
-instance InterpProg () Exp1 where
+instance InterpProg () Exp1 Var where
   gInterpProg _s = interpProg
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: Interp () e => RunConfig -> Prog e -> IO ((), Value e, B.ByteString)
+interpProg :: Interp () e Var => RunConfig -> Prog Var e -> IO ((), Value e, B.ByteString)
 interpProg rc Prog{ddefs,fundefs,mainExp} =
   case mainExp of
     -- Print nothing, return "void"
@@ -59,11 +59,11 @@ interp :: forall e l d s.
           (Show l, Ord l, NFData l, Out l,
            Show d, NFData d, Out d, Ord d,
            Ord (e l d), NFData (e l d),
-           InterpExt s (PreExp e l d) (e l d))
+           InterpExt s (PreExp e l d) (e l d) Var)
        => RunConfig
-       -> ValEnv (PreExp e l d)
+       -> ValEnv Var (PreExp e l d)
        -> DDefs (TyOf (PreExp e l d))
-       -> FunDefs (PreExp e l d)
+       -> FunDefs Var (PreExp e l d)
        -> (PreExp e l d)
        -> InterpM s (PreExp e l d) (Value (PreExp e l d))
 interp rc valenv ddefs fenv = go valenv
@@ -71,7 +71,7 @@ interp rc valenv ddefs fenv = go valenv
     {-# NOINLINE goWrapper #-}
     goWrapper env !_ix ex = go env ex
 
-    go :: ValEnv (PreExp e l d) -> (PreExp e l d) -> InterpM s (PreExp e l d) (Value (PreExp e l d))
+    go :: ValEnv Var (PreExp e l d) -> (PreExp e l d) -> InterpM s (PreExp e l d) (Value (PreExp e l d))
     go env x0 = do
         case x0 of
           Ext ext -> do
