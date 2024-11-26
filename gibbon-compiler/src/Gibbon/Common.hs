@@ -142,7 +142,7 @@ type Location = Var
 -- | The position or index of a field in a data constructor value. 
 type FieldIndex = Int
 
-data LocVar = Single Location
+data LocVar = Single Location | SoA Location 
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.

@@ -31,8 +31,8 @@ RUN echo "export PATH=${PATH}" >> /home/${USERNAME}/.profile
 # install ghcup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
 
-ARG GHC=9.4.6
-ARG CABAL=3.8.1.0
+ARG GHC=9.10.1
+ARG CABAL=3.12.1.0
 ARG STACK=2.9.3
 ARG HLS=recommended
 
