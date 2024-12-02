@@ -1013,7 +1013,9 @@ getRegion exp (ConstraintSet cs) l = go $ S.toList cs
 funRegs :: [LRM] -> RegionSet
 funRegs ((LRM _l r _m):lrms) =
     let (RegionSet rs) = funRegs lrms
-    in RegionSet $ S.insert (regionToVar r) rs
+    in case r of 
+         AoSR reg -> RegionSet $ S.insert (regionToVar reg) rs
+         SoAR _ _ -> error "TODO: Typecheck: implement SoA Region."
 funRegs [] = RegionSet $ S.empty
 
 globalReg :: Region
@@ -1021,8 +1023,9 @@ globalReg = GlobR "GLOBAL" BigInfinite
 
 -- | Get the constraints from the location bindings in a function type.
 funConstrs :: [LRM] -> ConstraintSet
-funConstrs ((LRM l r _m):lrms) =
-    extendConstrs (InRegionC l r) $ funConstrs lrms
+funConstrs ((LRM l r _m):lrms) = case r of 
+                                    AoSR reg -> extendConstrs (InRegionC l reg) $ funConstrs lrms
+                                    SoAR _ _ -> error "TODO: funConstrs: SoAR case not implemented!"
 funConstrs [] = ConstraintSet $ S.empty
 
 -- | Get the type state implied by the location bindings in a function type.

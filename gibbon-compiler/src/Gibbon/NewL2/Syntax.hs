@@ -93,7 +93,9 @@ instance NFData LREM where
   rnf (LREM a b c d)  = rnf a `seq` rnf b `seq` rnf c `seq` rnf d
 
 fromLRM :: Old.LRM -> LREM
-fromLRM (Old.LRM loc reg mode) = LREM loc (Old.regionToVar reg) (toEndV (Old.regionToVar reg)) mode
+fromLRM (Old.LRM loc reg mode) = case reg of 
+  Old.AoSR r -> LREM loc (Old.regionToVar r) (toEndV (Old.regionToVar r)) mode
+  Old.SoAR _ _ -> error "TODO: NewL2/Syntax.hs, fromLRM, implement SoA region."
 
 data LocArg = Loc LREM
             | EndWitness LREM Var

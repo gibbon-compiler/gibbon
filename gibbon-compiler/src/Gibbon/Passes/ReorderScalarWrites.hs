@@ -38,13 +38,16 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
     gofun f@FunDef{funArgs,funBody,funTy} = do
         let (reg_env, alloc_env) =
               foldr (\(L2.LRM loc reg mode) (renv,aenv) ->
-                       let renv' = M.insert loc reg renv
-                           aenv' = case mode of
-                                     L2.Output ->
-                                       let reg_locs = RegionLocs [loc] S.empty
-                                       in M.insert reg reg_locs aenv
-                                     L2.Input -> aenv
-                       in (renv',aenv'))
+                            case reg of 
+                                L2.AoSR rr -> let renv' = M.insert loc rr renv
+                                                  aenv' = case mode of
+                                                    L2.Output ->
+                                                      let reg_locs = RegionLocs [loc] S.empty
+                                                        in M.insert rr reg_locs aenv
+                                                    L2.Input -> aenv
+                                                in (renv',aenv')
+                                L2.SoAR _ _ -> error "TODO: writeOrderMarkers structure of arrays not implemented yet." 
+                    )
                     (M.empty,M.empty)
                     (L2.locVars funTy)
             init_ty_env  = M.fromList $ zip funArgs (L2.arrIns funTy)

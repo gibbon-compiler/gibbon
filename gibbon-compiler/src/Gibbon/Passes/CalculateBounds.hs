@@ -33,7 +33,10 @@ calculateBoundsFun ddefs env2 varSzEnv f@FunDef { funName, funBody, funTy, funAr
   if "_" `L.isPrefixOf` fromVar funName
     then return f
     else do
-      let locRegEnv = M.fromList $ map (\lv -> (lrmLoc lv, regionToVar $ lrmReg lv)) (locVars funTy)
+      let locRegEnv = M.fromList $ map (\lv -> case (lrmReg lv) of 
+                                                      AoSR reg -> (lrmLoc lv, regionToVar reg)
+                                                      SoAR _ _ -> error "TODO: calculateBoundsFn SoA region not implemented."
+                                       ) (locVars funTy)
       let locTyEnv  = M.map (const $ BoundedSize 0) locRegEnv
       let argTys    = M.fromList $ zip funArgs (arrIns funTy)
       let env2'     = env2 { vEnv = argTys }

@@ -8,7 +8,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar(..), Location
+         Var(..), LocVar(..), Location, FieldIndex
        , RegVar, fromVar, toVar, varAppend, toEndV, toEndVLoc, toSeqV, cleanFunName
        , TyVar(..), isUserTv
        , Symbol, intern, unintern
@@ -138,6 +138,9 @@ toSeqV v = varAppend v (toVar "_seq")
 
 -- | A location variable stores the abstract location. 
 type Location = Var
+
+-- | The position or index of a field in a data constructor value. 
+type FieldIndex = Int
 
 data LocVar = Single Location
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)

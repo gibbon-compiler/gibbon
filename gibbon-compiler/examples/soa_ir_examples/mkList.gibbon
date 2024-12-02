@@ -1,0 +1,39 @@
+-- AoS IR representation
+{meta: FunMeta {funRec = Rec, funInline = NoInline, funCanTriggerGC = False}}
+mkList :: Int -> List
+          {locvars [LRM {lrmLoc = Single "loc_140",
+                         lrmReg = AoSR (VarR "r_141"),
+                         lrmMode = Output}],
+           effs:  [],
+           locrets:  [],
+           parallel:  False}
+mkList length_14_82_117 =
+    letloc (Single "loc_175") = ((Single "loc_140") + 1) in
+    letloc (Single "loc_176") = ((Single "loc_175") + 8) in
+    let fltIf_97_118 :: Bool = <=(length_14_82_117, 0) in
+    if fltIf_97_118
+    then (Nil (Single "loc_140"))
+    else let fltAppE_98_119 :: Int = length_14_82_117 - 1 in
+         let rst_15_83_120 :: (Packed List (Single "loc_176")) = (mkList [(Single "loc_176")] fltAppE_98_119) in
+         (Cons (Single "loc_140") length_14_82_117 rst_15_83_120)
+
+
+-- SoA IR representation
+{meta: FunMeta {funRec = Rec, funInline = NoInline, funCanTriggerGC = False}}
+mkList :: Int -> List
+          {locvars [LRM {lrmLoc = SoA "loc_140" [(("Cons", 0), "loc_141")],
+                         lrmReg = SoAR (VarR "r_141") [("Cons", 0), (VarR "r_142")],
+                         lrmMode = Output}],
+           effs:  [],
+           locrets:  [],
+           parallel:  False}
+mkList length_14_82_117 =
+    -- This may need a new IR primitive?? to increment an SoA loc.
+    letloc (SoA "loc_175" [(("Cons", 0), "loc_176")]) = (SoA ("loc_175" + 1) [(("Cons", 0), ("loc_141" + 8))]) in
+    let fltIf_97_118 :: Bool = <=(length_14_82_117, 0) in
+    if fltIf_97_118
+    then (Nil (SoA "loc_140" [(("Cons", 0), "loc_141")]))
+    else let fltAppE_98_119 :: Int = length_14_82_117 - 1 in
+         let rst_15_83_120 :: (Packed List (SoA "loc_175" [(("Cons", 0), "loc_176")])) = (mkList [(SoA "loc_175" [(("Cons", 0), "loc_176")])] fltAppE_98_119) in
+         (Cons (SoA "loc_140" [(("Cons", 0), "loc_141")]) length_14_82_117 rst_15_83_120)
+

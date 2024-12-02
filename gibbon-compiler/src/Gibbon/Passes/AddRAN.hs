@@ -328,7 +328,10 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
              then S.empty
              else let tyenv = M.fromList $ zip funArgs (inTys funTy)
                       env2 = Env2 tyenv funenv
-                      renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm))) (locVars funTy)
+                      renv = M.fromList $ L.map (\lrm -> case (lrmReg lrm) of 
+                                                              AoSR reg -> (lrmLoc lrm, regionToVar reg)
+                                                              SoAR _ _ -> error "TODO: needsRAN structure of arrays not implemented yet."
+                                                ) (locVars funTy)
                   in needsRANExp ddefs fundefs env2 renv M.empty [] funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs

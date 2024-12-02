@@ -35,7 +35,10 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
 
 removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
 removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
-  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
+  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> case r of 
+                                                          AoSR reg -> (lc, regionToVar reg)
+                                                          SoAR _ _ -> error "TODO: removeCopiesFn structure of arrays not implemented yet."
+                                    ) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
   bod' <- removeCopiesExp ddefs fundefs initLocEnv env2 funBody

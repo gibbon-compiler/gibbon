@@ -32,6 +32,7 @@ module Gibbon.L2.Syntax
 -- * Regions and locations
   , LocVar
   , Region(..)
+  , ExtendedRegion(..)
   , Modality(..)
   , LRM(..)
   , dummyLRM
@@ -478,13 +479,35 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
                                      --   are no free locations in the program.
   deriving (Read,Show,Eq,Ord, Generic)
 
+data ExtendedRegion = AoSR Region                                   -- ^ A simple "flat" region where the datatype 
+                                                                    --   will reside in an array of structure representation.
+                    | SoAR Region [((DataCon, FieldIndex), Region)] -- ^ A complex region representation for a datatype 
+                                                                    --   One "flat" buffer makes space for all the data constructors. 
+                                                                    --   In addition to a list containing a "flat" buffer for each 
+                                                                    --   field. The region can also be mapped to which data constructore 
+                                                                    --   and field tuple it belongs to. A structure of arrays representation. 
+      deriving (Read,Show,Eq,Ord, Generic)
+
+
+
 instance Out Region
+instance Out ExtendedRegion
 
 instance NFData Region where
   rnf (GlobR v _) = rnf v
   rnf (DynR v _)  = rnf v
   rnf (VarR v)    = rnf v
   rnf (MMapR v)   = rnf v
+
+instance NFData ExtendedRegion where
+  rnf (AoSR reg) = rnf reg
+  rnf (SoAR reg fieldRegs) = let 
+                               regions = L.map (\(_, fregs) -> fregs) fieldRegs
+                               regions' = L.map rnf regions  
+                              in case regions' of 
+                                      [] -> rnf reg 
+                                      _ -> L.foldr (\r accum -> r `seq` accum) (rnf reg) regions' 
+                                      
 
 
 -- | The modality of locations and cursors: input/output, for reading
@@ -498,7 +521,7 @@ instance NFData Modality where
 
 -- | A location and region, together with modality.
 data LRM = LRM { lrmLoc :: LocVar
-               , lrmReg :: Region
+               , lrmReg :: ExtendedRegion
                , lrmMode :: Modality }
   deriving (Read,Show,Eq,Ord, Generic)
 
@@ -509,7 +532,7 @@ instance NFData LRM where
 
 -- | A designated doesn't-really-exist-anywhere location.
 dummyLRM :: LRM
-dummyLRM = LRM (singleLocVar "l_dummy") (VarR "r_dummy") Input
+dummyLRM = LRM (singleLocVar "l_dummy") (AoSR $ VarR "r_dummy") Input
 
 regionToVar :: Region -> Var
 regionToVar r = case r of
@@ -649,15 +672,29 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 outRegVars :: ArrowTy2 ty2 -> [LocVar]
-outRegVars ty = L.map (\(LRM _ r _) -> (singleLocVar (regionToVar r))) $
-                L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
+outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of 
+                                          AoSR rr -> [(singleLocVar (regionToVar rr))] 
+                                          SoAR rr fieldRegions -> 
+                                            let 
+                                              regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
+                                             in L.map singleLocVar regVars
+                      ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [LocVar]
-inRegVars ty = L.nub $ L.map (\(LRM _ r _) -> (singleLocVar (regionToVar r))) $
-               L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
+inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
+                                                AoSR rr -> [singleLocVar $ regionToVar rr] 
+                                                SoAR rr fieldRegions -> 
+                                                  let 
+                                                    regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
+                                                   in L.map singleLocVar regVars
+                      ) $ L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 allRegVars :: ArrowTy2 ty2 -> [LocVar]
-allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> (singleLocVar (regionToVar r))) (locVars ty)
+allRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
+                                                AoSR rr -> [singleLocVar $ regionToVar rr]
+                                                SoAR rr fieldRegions -> [singleLocVar $ regionToVar rr] 
+                                                                    ++ L.map (\(_, freg) -> singleLocVar $ regionToVar freg) fieldRegions
+                                    ) (locVars ty)
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2

@@ -1,0 +1,45 @@
+-- AoS list representation of add1
+{meta: FunMeta {funRec = Rec, funInline = NoInline, funCanTriggerGC = False}}
+add1 :: List -> List
+        {locvars [LRM {lrmLoc = Single "loc_154",
+                       lrmReg = AoSR (VarR "r_156"),
+                       lrmMode = Input},
+                  LRM {lrmLoc = Single "loc_155",
+                       lrmReg = AoSR (VarR "r_157"),
+                       lrmMode = Output}],
+         effs:  [],
+         locrets:  [],
+         parallel:  False}
+add1 lst_17_96_134 =
+    letloc (Single "loc_218") = ((Single "loc_155") + 1) in
+    letloc (Single "loc_219") = ((Single "loc_218") + 8) in
+    case lst_17_96_134 of
+        Nil ->
+            (Nil (Single "loc_155"))
+        Cons i_18_97_135::(Single "case_213") rst_19_98_136::(Single "case_214") ->
+            let i1_20_99_137 :: Int = i_18_97_135 + 1 in
+            let fltPkd_102_138 :: (Packed List (Single "loc_219")) = (add1 [(Single "case_214"),(Single "loc_219")] rst_19_98_136) in
+            (Cons (Single "loc_155") i1_20_99_137 fltPkd_102_138)
+
+-- SoA list representation of add1 
+{meta: FunMeta {funRec = Rec, funInline = NoInline, funCanTriggerGC = False}}
+add1 :: List -> List
+        {locvars [LRM {lrmLoc = SoA "loc_154" [(("Cons", 0), "loc_156")],
+                       lrmReg = SoAR (VarR "r_156") [(("Cons", 0)), (VarR "r_158")],
+                       lrmMode = Input},
+                  LRM {lrmLoc = SoA "loc_155" [(("Cons", 0), "loc_157")] ,
+                       lrmReg = SoAR (VarR "r_157") [(("Cons", 0), (VarR "r_159"))],
+                       lrmMode = Output}],
+         effs:  [],
+         locrets:  [],
+         parallel:  False}
+add1 lst_17_96_134 =
+    letloc (SoA "loc_218" [(("Cons", 0), "loc_219")]) = (SoA ("loc_155" + 1) [(("Cons", 0), ("loc_157" + 8))]) in
+    case lst_17_96_134 of
+        Nil ->
+            (Nil (SoA "loc_155" [(("Cons", 0), "loc_157")]))
+        Cons i_18_97_135::(Single "case_213") rst_19_98_136::(Single "case_214") ->
+            let i1_20_99_137 :: Int = i_18_97_135 + 1 in
+            let fltPkd_102_138 :: (Packed List (SoA "loc_218" [(("Cons", 0), "loc_219")])) = (add1 [(Single "case_213"), (Single "case_214"),(SoA "loc_218" [(("Cons", 0), "loc_219")])] rst_19_98_136) in
+            (Cons (SoA "loc_155" [(("Cons", 0), "loc_157")]) i1_20_99_137 fltPkd_102_138)
+

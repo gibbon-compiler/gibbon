@@ -488,6 +488,9 @@ instance Pretty L2.LocVar where
 instance Pretty L2.Region where
   pprintWithStyle _ reg = parens $ text $ sdoc reg
 
+instance Pretty L2.ExtendedRegion where 
+  pprintWithStyle _ reg = parens $ text $ sdoc reg
+
 instance Pretty L2.Modality where
   pprintWithStyle _ mode = text $ show mode
 

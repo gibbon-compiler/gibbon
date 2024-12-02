@@ -150,7 +150,7 @@ convertFunTy (from,to,isPar) = do
  where
    toLRM md ls =
        mapM (\v -> do r <- freshLocVar "r"
-                      return $ LRM v (VarR (unwrapLocVar r)) md)
+                      return $ LRM v (AoSR $ VarR (unwrapLocVar r)) md)
             (F.toList ls)
 
 convertTy :: Ty1 -> PassM Ty2
