@@ -634,6 +634,7 @@ addRedirectionCon p@Prog{ddefs} = do
 passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l0 = do
       let isPacked   = gopt Opt_Packed dynflags
+          isSoA      = gopt Opt_Packed_SoA dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags

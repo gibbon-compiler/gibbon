@@ -39,6 +39,7 @@ data GeneralFlag
   | Opt_GenGc              -- ^ Use the new generational GC.
   | Opt_NoEagerPromote     -- ^ Disable eager promotion.
   | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
+  | Opt_Packed_SoA         -- ^ Use packed representation but use a structure of arrays representation for the datatype
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -114,9 +115,10 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_PrintGcStats (long "print-gc-stats" <> short 'S' <> help "Record and print GC statistics.") <|>
                    flag' Opt_GenGc (long "gen-gc" <> help "Use the new generational GC.") <|>
                    flag' Opt_NoEagerPromote (long "no-eager-promote" <> help "Disable eager promotion.") <|>
-                   flag' Opt_SimpleWriteBarrier (long "simple-write-barrier" <> help "Disables eliminate-indirection-chains optimization.")
-
-
+                   flag' Opt_SimpleWriteBarrier (long "simple-write-barrier" <> help "Disables eliminate-indirection-chains optimization.") <|>
+                   flag' Opt_Packed_SoA (long "SoA" <>
+                                         help "Use a structure of arrays representation for all datatypes.")
+                                         
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
                                             help "Dump some information while running RepairProgram") <|>
