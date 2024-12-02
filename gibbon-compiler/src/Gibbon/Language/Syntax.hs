@@ -14,7 +14,7 @@
 module Gibbon.Language.Syntax
   (
     -- * Datatype definitions
-    DDefs, DataCon, TyCon, Tag, IsBoxed, DDef(..)
+    DDefs, TyCon, Tag, IsBoxed, DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
@@ -78,7 +78,6 @@ import           Gibbon.Common
 
 type DDefs a = M.Map Var (DDef a)
 
-type DataCon = String
 type TyCon   = String
 type Tag     = Word8
 

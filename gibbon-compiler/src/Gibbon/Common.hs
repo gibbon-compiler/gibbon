@@ -8,7 +8,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar(..), Location, FieldIndex
+         Var(..), LocVar(..), Location, FieldIndex, DataCon
        , RegVar, fromVar, toVar, varAppend, toEndV, toEndVLoc, toSeqV, cleanFunName
        , TyVar(..), isUserTv
        , Symbol, intern, unintern
@@ -66,7 +66,6 @@ import System.IO.Unsafe ( unsafePerformIO )
 import System.Random    ( randomIO )
 import Debug.Trace
 import Language.C.Quote.CUDA (ToIdent, toIdent)
-
 import Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
@@ -138,21 +137,18 @@ toSeqV v = varAppend v (toVar "_seq")
 
 -- | A location variable stores the abstract location. 
 type Location = Var
--- | Index position of the filed in the data constructor. 
+-- | The position or index of a field in a data constructor value.
 type FieldIndex = Int 
--- | Location of the buffer where all the data constructor tags are stored. 
-type DataConBuf = Location 
--- | Store the name of the data constructor as a String. 
-type DataConName = String 
--- | Store the location of the buffer with the factored out fields.
--- | Stores extra meta data like data constructor to which it comes from and the index position.
-type FieldBuf = ((DataConName, FieldIndex), Location) 
--- | List of field locations for a datatype
-type FieldLocs = [FieldBuf]
--- | A data type that stores either a single location, AoS 
--- | or a SoA representation: A data constructor buffer in addition to location for fields.
--- | LocVar can also be a pointer. 
-data LocVar = Single Location | SoA DataConBuf FieldLocs
+-- | A data constructor is a String type in the compiler
+type DataCon = String
+
+-- | Single: For storing a single location, useful for adding a cursor in a region. 
+-- | SoA: A location signature for a structure of arrays representation. 
+--        The first location points to a location in the data constructor buffer. 
+--        The list includes locations for each field and a tuple storing 
+--        information about which data constructor and corresponding index the field 
+--        comes from. 
+data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.

@@ -103,7 +103,7 @@ type Label = Var
 type SymTable = M.Map Word16 String
 
 type InfoTable = (M.Map L.TyCon TyConInfo)
-type TyConInfo = M.Map L.DataCon DataConInfo
+type TyConInfo = M.Map DataCon DataConInfo
 
 data DataConInfo = DataConInfo
   { dcon_tag :: Tag
