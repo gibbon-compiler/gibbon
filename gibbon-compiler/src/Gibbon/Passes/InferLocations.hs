@@ -142,8 +142,8 @@ convertFunTy ddefs (from,to,isPar) = do
     from' <- mapM (convertTy ddefs useSoA) from
     to'   <- convertTy ddefs useSoA to
     -- For this simple version, we assume every location is in a separate region:
-    lrm1 <- concat <$> mapM (toLRM Input) from'
-    lrm2 <- toLRM Output to'
+    lrm1 <- concat <$> mapM (toLRM useSoA Input) from'
+    lrm2 <- toLRM useSoA Output to'
     dbgTraceIt "convertFunTy: " dbgTraceIt (sdoc (from', to', lrm1, lrm2, useSoA)) dbgTraceIt "\n" return $ ArrowTy2 { locVars = lrm1 ++ lrm2
                      , arrIns  = from'
                      , arrEffs = S.empty
@@ -151,10 +151,31 @@ convertFunTy ddefs (from,to,isPar) = do
                      , locRets = []
                      , hasParallelism = isPar }
  where
-   toLRM md ls =
-       mapM (\v -> do r <- freshLocVar "r"
-                      return $ LRM v (AoSR $ VarR (unwrapLocVar r)) md)
-            (F.toList ls)
+   toLRM soa md ls  = do
+                      case soa of 
+                          True -> mapM (\v -> do
+                                              dataBufRegion <- freshLocVar "r"
+                                              case v of 
+                                                Single _ -> error "InferLocations : toLRM : Expected an SoA location!\n"
+                                                SoA _ fieldLocs -> do
+                                                                   fieldRegions <- getSoARegionsFromLocs fieldLocs 
+                                                                   let region = SoAR (VarR (unwrapLocVar dataBufRegion)) fieldRegions
+                                                                   return $ LRM v region md
+                                       ) (F.toList ls)
+                          False -> mapM (\v -> do r <- freshLocVar "r"
+                                                  return $ LRM v (AoSR $ VarR (unwrapLocVar r)) md) (F.toList ls)
+
+getSoARegionsFromLocs :: [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Region)]
+getSoARegionsFromLocs locs = case locs of 
+                                  [] -> return [] 
+                                  (a, b):rst -> do 
+                                                regionVariable <- freshLocVar "r"
+                                                let region = VarR (unwrapLocVar regionVariable)
+                                                rst' <- getSoARegionsFromLocs rst
+                                                let elem = (a, region) 
+                                                return $ [elem] ++ rst'
+
+
 
 convertTy :: DDefs1 -> Bool -> Ty1 -> PassM Ty2
 convertTy ddefs useSoA ty = case useSoA of 
@@ -162,7 +183,6 @@ convertTy ddefs useSoA ty = case useSoA of
                             True ->  case ty of 
                                         PackedTy tycon _ -> do 
                                                              dconBuff <- freshLocVar "loc"
-                                                             let ddef = lookupDDef ddefs tycon
                                                              let dcons = getConOrdering ddefs tycon
                                                              locsForFields <- convertTyHelperSoAParent tycon ddefs dcons
                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
