@@ -185,13 +185,15 @@ data E2Ext loc dec
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfRegionLE Region
-                   | AfterConstantLE Int  -- Number of bytes after.
-                                     loc  -- Location which this location is offset from.
-                   | AfterVariableLE Var  -- Name of variable v. This loc is size(v) bytes after.
-                                     loc  -- Location which this location is offset from.
-                                     Bool -- Whether it's running in a stolen continuation i.e
-                                          -- whether this should return an index in a fresh region or not.
-                                          -- It's True by default and flipped by ParAlloc if required.
+                   | AfterConstantLE  Int  -- Number of bytes after. (In case of an SoA loc, this is the offset into the data constructor buffer)
+                                     [Int] -- Optional list with offset bytes, these offsets can be used for bumping field locations for an SoA location. 
+                                      loc  -- Location which this location is offset from.
+                   | AfterVariableLE  Var  -- Name of variable v. This loc is size(v) bytes after.
+                                     [Var] -- Optional list with offset bytes, each size(v) bytes, these can be used for bumping field locations for an SoA location.
+                                      loc  -- Location which this location is offset from.
+                                      Bool -- Whether it's running in a stolen continuation i.e
+                                           -- whether this should return an index in a fresh region or not.
+                                           -- It's True by default and flipped by ParAlloc if required.
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
@@ -209,7 +211,7 @@ instance FreeVars (E2Ext l d) where
      LetRegionE _ _ _ bod   -> gFreeVars bod
      LetParRegionE _ _ _ bod   -> gFreeVars bod
      LetLocE _ rhs bod  -> (case rhs of
-                              AfterVariableLE v _loc _ -> S.singleton v
+                              AfterVariableLE v vs  _loc _ -> S.singleton v `S.union` S.fromList vs
                               _ -> S.empty)
                            `S.union`
                            gFreeVars bod
@@ -230,8 +232,8 @@ instance FreeVars (E2Ext l d) where
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      AfterConstantLE _ loc   -> S.singleton $ unwrapLocVar loc
-      AfterVariableLE v loc _ -> S.fromList $ [v, unwrapLocVar loc]
+      AfterConstantLE _ _ loc   -> S.singleton $ unwrapLocVar loc
+      AfterVariableLE v vs loc _ -> S.fromList [v, unwrapLocVar loc] `S.union` S.fromList vs
       _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -479,6 +481,17 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
                                      --   are no free locations in the program.
   deriving (Read,Show,Eq,Ord, Generic)
 
+{- 
+   Why a new datatype? -- Well, For a location, we changed the exisiting datatype, i.e. LocVar.
+   That's acceptable, because locations are just cursors into regions, they are an indices into 
+   regions which don't necessarily signify an entity/allocated object. 
+
+   A region encapsulates an allocated space and i'd like a region to represent a unit of space. 
+   We can create more "complex" regions using that unit, for instance a SoA region. 
+   In additon, it preserves statements like "is region A within region B?"
+   It would be tough to formalize what is means by saying an SoA region exists within another region 
+   (VarR x). Since an SoA region contains multiple regions.
+-}
 data ExtendedRegion = AoSR Region                                   -- ^ A simple "flat" region where the datatype 
                                                                     --   will reside in an array of structure representation.
                     | SoAR Region [((DataCon, FieldIndex), Region)] -- ^ A complex region representation for a datatype 
@@ -896,7 +909,12 @@ occurs w ex =
         LetLocE _ le bod  ->
           let oc_bod = go bod in
           case le of
-            AfterVariableLE v _  _ -> v `S.member` w || oc_bod
+            AfterVariableLE v vs _  _ -> let func = (\v accum -> if v `S.member` w 
+                                                                 then True || accum 
+                                                                 else False || accum
+                                                    )
+                                             reduce = L.foldr func False vs
+                                           in reduce || v `S.member` w || oc_bod
             StartOfRegionLE{}         -> oc_bod
             AfterConstantLE{}   -> oc_bod
             InRegionLE{}        -> oc_bod
@@ -1033,8 +1051,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep ex =
         case ex of
           StartOfRegionLE r -> [singleLocVar $ regionToVar r]
-          AfterConstantLE _ loc -> [loc]
-          AfterVariableLE v loc _ -> [singleLocVar v,loc]
+          AfterConstantLE _ _ loc -> [loc]
+          AfterVariableLE v vs loc _ -> [singleLocVar v,loc] ++ L.map singleLocVar vs
           InRegionLE r  -> [singleLocVar $ regionToVar r]
           FromEndLE loc -> [loc]
           FreeLE -> []

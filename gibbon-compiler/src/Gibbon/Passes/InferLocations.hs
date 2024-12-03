@@ -237,9 +237,11 @@ convertTyHelperGetLocForField' dcon index nameForLoc = do
 convertDDefs :: DDefs Ty1 -> PassM (DDefs Ty2)
 convertDDefs ddefs = traverse f ddefs
     where f (DDef tyargs n dcs) = do
+            dflags <- getDynFlags
+            let useSoA = gopt Opt_Packed_SoA dflags
             dcs' <- forM dcs $ \(dc,bnds) -> do
                              bnds' <- forM bnds $ \(isb,ty) -> do
-                                               ty' <- convertTy ddefs False ty
+                                               ty' <- convertTy ddefs useSoA ty
                                                return (isb, ty')
                              return (dc,bnds')
             return $ DDef tyargs n dcs'
