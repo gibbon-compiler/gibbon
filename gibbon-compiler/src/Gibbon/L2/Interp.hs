@@ -308,7 +308,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
             Just _ ->
               go (M.insert (unwrapLocVar loc) (VLoc (regionToVar reg) 0) env) sizeEnv bod
 
-        AfterConstantLE i loc2 -> do
+        AfterConstantLE i _ loc2 -> do
           case M.lookup (unwrapLocVar loc2) env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->
@@ -316,7 +316,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
             Just val ->
               error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
 
-        AfterVariableLE v loc2 _ -> do
+        AfterVariableLE v _ loc2 _ -> do
           case M.lookup (unwrapLocVar loc2) env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->

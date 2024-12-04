@@ -108,8 +108,8 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
               let reg = case rhs of
                       L2.StartOfRegionLE r  -> r
                       L2.InRegionLE r -> r
-                      L2.AfterConstantLE _ lc   -> reg_env # lc
-                      L2.AfterVariableLE _ lc _ -> reg_env # lc
+                      L2.AfterConstantLE _ _ lc   -> reg_env # lc
+                      L2.AfterVariableLE _ _ lc _ -> reg_env # lc
                       L2.FromEndLE lc           -> reg_env # lc
                   reg_env' = M.insert loc reg reg_env
               case M.lookup reg alloc_env of

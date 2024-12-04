@@ -276,8 +276,11 @@ data Failure = FailUnify Ty2 Ty2
 -- | Constraints here mean almost the same thing as they do in the L2 type checker.
 -- One difference is the presence of an AfterTag constraint, though I'm not opposed to
 -- adding one to the L2 language for symmetry.
-data Constraint = AfterConstantL LocVar Int LocVar
-                | AfterVariableL LocVar Var LocVar
+-- [2024.12.04] VS
+-- For AfterConstantL and AfterVariableL add a list argument with offsets for fields in an SoA location 
+-- Optional for AoS Location. 
+data Constraint = AfterConstantL LocVar Int [Int] LocVar
+                | AfterVariableL LocVar Var [Var] LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
                 | AfterCopyL LocVar Var Var LocVar Var [LocVar]
@@ -390,10 +393,10 @@ inferExp' ddefs env exp bound dest=
                 expr' = foldr addLetLoc expr constrs'
                 addLetLoc i a =
                     case i of
-                      AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
-                      AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
+                      AfterConstantL lv1 v vs lv2 -> Ext (LetLocE lv1 (AfterConstantLE v vs lv2) a)
+                      AfterVariableL lv1 v vs lv2 -> Ext (LetLocE lv1 (AfterVariableLE v vs lv2 True) a)
                       StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
-                      AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
+                      AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 [] lv2) a) {- VS: I think it may be fine to hardcode [] since AfterTagL is reserved for a Tag loc?-}
                       FreeL lv -> Ext (LetLocE lv FreeLE a)
                       AfterCopyL lv1 v1 v' lv2 f lvs ->
                         let arrty = arrOut $ lookupFEnv f env
@@ -404,7 +407,7 @@ inferExp' ddefs env exp bound dest=
                                           _ -> error "bindAllLocations: Not a packed type"
                             a' = subst v1 (VarE v') a
                         in LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) $
-                           Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
+                           Ext (LetLocE lv1 (AfterVariableLE v' [] lv2 True) a')
 
   in do res <- inferExp ddefs env exp dest
         (e,ty,cs) <-  bindAllLocations res
@@ -510,7 +513,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
              lv2' <- finalLocVar lv2
              if lv' == lv1'
              then do (bod',ty',cs') <- bindImmediateDependentLoc lv (bod,ty,cs)
-                     let bod'' = Ext (LetLocE lv1' (AfterConstantLE 1 lv2') bod')
+                     let bod'' = Ext (LetLocE lv1' (AfterConstantLE 1 [] lv2') bod')
                      return (bod'',ty',cs')
              else do (bod',ty',cs') <- bindImmediateDependentLoc lv (bod,ty,cs)
                      return (bod',ty',(AfterTagL lv1 lv2):cs')
@@ -526,21 +529,22 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       handleTrailingBindLoc v res =
           do (e,ty,cs) <- bindAfterLoc v res
              case e of
-               (Ext (LetLocE lv1 (AfterVariableLE v lv2 True) e)) ->
+               (Ext (LetLocE lv1 (AfterVariableLE v [] lv2 True) e)) ->
                    do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
-                      return (Ext (LetLocE lv1 (AfterVariableLE v lv2 True) e'), ty', cs')
+                      return (Ext (LetLocE lv1 (AfterVariableLE v [] lv2 True) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
 
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
       -- associated with the passed-in variable.
+      {- TODO: what about the extra list of offset in case of an SoA loc now? -}
       bindAfterLoc :: Var -> Result -> TiM Result
       bindAfterLoc v (e,ty,c:cs) =
           case c of
-            AfterVariableL lv1 v' lv2 ->
+            AfterVariableL lv1 v' vs lv2 ->
                 if v == v'
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
-                        let res' = (Ext (LetLocE lv1' (AfterVariableLE v lv2 True) e), ty, cs)
+                        let res' = (Ext (LetLocE lv1' (AfterVariableLE v vs lv2 True) e), ty, cs)
                         res'' <- bindAfterLoc v res'
                         return res''
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -555,7 +559,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                             copyRetTy = case arrOut arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
                                           _ -> error "bindAfterLoc: Not a packed type"
-                        let res'  = (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $ Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
+                        let res'  = (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $ Ext (LetLocE lv1' (AfterVariableLE v' [] lv2' True) e), ty, cs)
                         res'' <- bindAfterLoc v res'
                         return res''
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -585,16 +589,16 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    lv' <- finalLocVar lv
                    if lv2' == lv'
                    then do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
-                           return (Ext (LetLocE lv1' (AfterConstantLE 1 lv2') e'), ty', cs')
+                           return (Ext (LetLocE lv1' (AfterConstantLE 1 [] lv2') e'), ty', cs')
                    else do (e',ty',cs') <- bindTrivialAfterLoc lv (e,ty,cs)
                            return (e',ty',c:cs')
-            AfterConstantL lv1 v lv2 ->
+            AfterConstantL lv1 v vs lv2 ->
                 do lv1' <- finalLocVar lv1
                    lv2' <- finalLocVar lv2
                    lv' <- finalLocVar lv
                    if lv2' == lv'
                    then do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
-                           return (Ext (LetLocE lv1' (AfterConstantLE v lv2') e'), ty', cs')
+                           return (Ext (LetLocE lv1' (AfterConstantLE v vs lv2') e'), ty', cs')
                    else do (e',ty',cs') <- bindTrivialAfterLoc lv (e,ty,cs)
                            return (e',ty',c:cs')
             _ -> do (e',ty',cs') <- bindTrivialAfterLoc lv (e,ty,cs)
@@ -777,11 +781,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                            return $ ArgCopy v (unwrapLocVar v') f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
+                  {-VS: DCArg needs to be extended to include offset in case of an SoA loc, harcoding empty list atm. -}
                   let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
                       afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
-                          Just $ AfterVariableL loc1 v loc2
+                          Just $ AfterVariableL loc1 v [] loc2
                       afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
-                          Just $ AfterConstantL loc1 s loc2
+                          Just $ AfterConstantL loc1 s [] loc2
                       afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
                           Just $ AfterCopyL loc1 v v' loc2 f lvs
                       afterVar _ = Nothing
@@ -1297,12 +1302,12 @@ finishExp e =
              e1' <- finishExp e1
              loc' <- finalLocVar loc
              lex' <- case lex of
-                       AfterConstantLE i lv -> do
+                       AfterConstantLE i irst lv -> do
                                     lv' <- finalLocVar lv
-                                    return $ AfterConstantLE i lv'
-                       AfterVariableLE v lv b -> do
+                                    return $ AfterConstantLE i irst lv'
+                       AfterVariableLE v vs lv b -> do
                                     lv' <- finalLocVar lv
-                                    return $ AfterVariableLE v lv' b
+                                    return $ AfterVariableLE v vs lv' b
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
@@ -1418,8 +1423,8 @@ cleanExp e =
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
                                  in if S.member loc s'
                                     then let ls = case lex of
-                                                    AfterConstantLE _i lv   -> [lv]
-                                                    AfterVariableLE _v lv _ -> [lv]
+                                                    AfterConstantLE _i _irst lv   -> [lv]
+                                                    AfterVariableLE _v _vrst lv _ -> [lv]
                                                     oth -> []
                                          in (Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
@@ -1555,7 +1560,7 @@ moveProjsAfterSync sv ex = case sv of
 noAfterLoc :: LocVar -> [Constraint] -> [Constraint] -> TiM Bool
 noAfterLoc lv fcs (c:cs) =
     case c of
-      AfterVariableL lv1 v lv2 ->
+      AfterVariableL lv1 v vs lv2 ->
           do lv2' <- finalLocVar lv2
              lv' <- finalLocVar lv
              if lv' == lv2' then return False else noAfterLoc lv fcs cs
@@ -1568,7 +1573,7 @@ noAfterLoc lv fcs (c:cs) =
                  --    b2 <- noAfterLoc lv1 fcs fcs
                  --    return (b1 && b2)
              else noAfterLoc lv fcs cs
-      AfterConstantL lv1 v lv2 ->
+      AfterConstantL lv1 v vs lv2 ->
           do lv2' <- finalLocVar lv2
              lv' <- finalLocVar lv
              if lv' == lv2' then return False else noAfterLoc lv fcs cs
@@ -1578,11 +1583,11 @@ noAfterLoc _ _ [] = return True
 noBeforeLoc :: LocVar -> [Constraint] -> TiM Bool
 noBeforeLoc lv (c:cs) =
     case c of
-      AfterVariableL lv1 v lv2 ->
+      AfterVariableL lv1 v vs lv2 ->
           do lv1' <- finalLocVar lv1
              lv' <- finalLocVar lv
              if lv' == lv1' then return False else noBeforeLoc lv cs
-      AfterConstantL lv1 v lv2 ->
+      AfterConstantL lv1 v vs lv2 ->
           do lv1' <- finalLocVar lv1
              lv' <- finalLocVar lv
              if lv' == lv1' then return False else noBeforeLoc lv cs

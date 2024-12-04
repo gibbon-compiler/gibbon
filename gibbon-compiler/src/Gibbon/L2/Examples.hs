@@ -72,10 +72,10 @@ add1FunBod = CaseE (VarE "tr1")
       VarE "lf8")
 
   , ("Node", [("x9",(Single "l10")),("y11",(Single "l12"))],
-     Ext $ LetLocE (Single "l13") (AfterConstantLE 1 (Single "lout4")) $
+     Ext $ LetLocE (Single "l13") (AfterConstantLE 1 [] (Single "lout4")) $
      LetE ("x14",[],PackedTy "Tree" (Single "l13"),
                AppE "add1" [(Single "l10"),(Single "l13")] [VarE "x9"]) $
-     Ext $ LetLocE (Single "l15") (AfterVariableLE "x14" (Single "l13") True) $
+     Ext $ LetLocE (Single "l15") (AfterVariableLE "x14" [] (Single "l13") True) $
      LetE ("y16",[],PackedTy "Tree" (Single "l15"), AppE "add1" [(Single "l12"),(Single "l15")] [VarE "y11"]) $
      LetE ("z17",[],PackedTy "Tree" (Single "lout4"),
               DataConE (Single "lout4") "Node" [ VarE "x14" , VarE "y16"]) $
@@ -85,10 +85,10 @@ add1FunBod = CaseE (VarE "tr1")
 add1MainExp :: Exp2
 add1MainExp = Ext $ LetRegionE (VarR "r99") Undefined Nothing $
               Ext $ LetLocE (Single "l100") (StartOfRegionLE (VarR "r99")) $
-              Ext $ LetLocE (Single "l101") (AfterConstantLE 1 (Single "l100")) $
+              Ext $ LetLocE (Single "l101") (AfterConstantLE 1 [] (Single "l100")) $
               LetE ("x102",[],PackedTy "Tree" (Single "l101"),
                       DataConE (Single "l101") "Leaf" [LitE 1]) $
-              Ext $ LetLocE (Single "l103") (AfterVariableLE "x102" (Single "l101") True) $
+              Ext $ LetLocE (Single "l103") (AfterVariableLE "x102" [] (Single "l101") True) $
               LetE ("y104",[],PackedTy "Tree" (Single "l103"),
                       DataConE (Single "l103") "Leaf" [LitE 2]) $
               LetE ("z105",[],PackedTy "Tree" (Single "l100"),
@@ -124,10 +124,10 @@ leafProg = Prog ddtree M.empty (Just (leafMainExp, PackedTy "Tree" (Single "l151
 nodeMainExp :: Exp2
 nodeMainExp = Ext $ LetRegionE (VarR "r155") Undefined Nothing $
                Ext $ LetLocE (Single "l156") (StartOfRegionLE (VarR "r155")) $
-               Ext $ LetLocE (Single "l157") (AfterConstantLE 1 (Single "l156")) $
+               Ext $ LetLocE (Single "l157") (AfterConstantLE 1 [] (Single "l156")) $
                LetE ("x158",[],PackedTy "Tree" (Single "l157"),
                        DataConE (Single "l157") "Leaf" [LitE 1]) $
-               Ext $ LetLocE (Single "l159") (AfterVariableLE "x158" (Single "l157") True) $
+               Ext $ LetLocE (Single "l159") (AfterVariableLE "x158" [] (Single "l157") True) $
                LetE ("y160",[],PackedTy "Tree" (Single "l159"),
                        DataConE (Single "l159") "Leaf" [LitE 2]) $
                LetE ("z161",[],PackedTy "Tree" (Single "l156"),
@@ -178,10 +178,10 @@ copyTreeFun = FunDef "copyTree" [ "tr22"] copyFunTy copyBod (FunMeta NotRec NoIn
                      VarE "n28")
 
                  , ("Node", [("x29",(Single "lx30")),("y31",(Single "ly32"))],
-                    Ext  $ LetLocE (Single "lx33") (AfterConstantLE 1 (Single "lout25")) $
+                    Ext  $ LetLocE (Single "lx33") (AfterConstantLE 1 [] (Single "lout25")) $
                     LetE ("x34", [], PackedTy "Tree" (Single "lx33"),
                              AppE "copyTree" [(Single "lx30"),(Single "lx33")] [VarE "x29"]) $
-                    Ext  $ LetLocE (Single "ly35") (AfterVariableLE "x34" (Single "lx33") True) $
+                    Ext  $ LetLocE (Single "ly35") (AfterVariableLE "x34" [] (Single "lx33") True) $
                     LetE ("y36", [], PackedTy "Tree" (Single "ly35"),
                             AppE "copyTree" [(Single "ly32"),(Single "ly35")] [VarE "y31"]) $
                     DataConE (Single "lout25") "Node" [VarE "x34", VarE "y36"])
@@ -190,10 +190,10 @@ copyTreeFun = FunDef "copyTree" [ "tr22"] copyFunTy copyBod (FunMeta NotRec NoIn
 copyTreeMainExp :: Exp2
 copyTreeMainExp = Ext $ LetRegionE (VarR "r200") Undefined Nothing $
                   Ext $ LetLocE (Single "l201") (StartOfRegionLE (VarR "r200")) $
-                  Ext $ LetLocE (Single "l202") (AfterConstantLE 1 (Single "l201")) $
+                  Ext $ LetLocE (Single "l202") (AfterConstantLE 1 [] (Single "l201")) $
                   LetE ("x203",[],PackedTy "Tree" (Single "l202"),
                           DataConE (Single "l202") "Leaf" [LitE 1]) $
-                  Ext $ LetLocE (Single "r204") (AfterVariableLE "x203" (Single "l202") True) $
+                  Ext $ LetLocE (Single "r204") (AfterVariableLE "x203" [] (Single "l202") True) $
                   LetE ("y205",[],PackedTy "Tree" (Single "r204"),
                            DataConE (Single "r204") "Leaf" [LitE 2]) $
                   LetE ("z206",[],PackedTy "Tree" (Single "l201"),
@@ -240,10 +240,10 @@ copyOnId1Prog = Prog ddtree funs $ Just (copyOnId1MainExp, PackedTy "Tree" (Sing
 copyOnId1MainExp :: Exp2
 copyOnId1MainExp = Ext $ LetRegionE (VarR "r220") Undefined Nothing $
                    Ext $ LetLocE (Single "l221") (StartOfRegionLE (VarR "r220")) $
-                   Ext $ LetLocE (Single "l222") (AfterConstantLE 1 (Single "l221")) $
+                   Ext $ LetLocE (Single "l222") (AfterConstantLE 1 [] (Single "l221")) $
                    LetE ("l223",[],PackedTy "Tree" (Single "l222"),
                            DataConE (Single "l222") "Leaf" [LitE 1]) $
-                   Ext $ LetLocE (Single "l224") (AfterVariableLE "l223" (Single "l222") True) $
+                   Ext $ LetLocE (Single "l224") (AfterVariableLE "l223" [] (Single "l222") True) $
                    LetE ("l225",[],PackedTy "Tree" (Single "l224"),
                             DataConE (Single "l224") "Leaf" [LitE 2]) $
                    LetE ("z226",[],PackedTy "Tree" (Single "l221"),
@@ -331,10 +331,10 @@ leftmostBod = CaseE (VarE "t111")
 leftmostMainExp :: Exp2
 leftmostMainExp = Ext $ LetRegionE (VarR "r122") Undefined Nothing $
                   Ext $ LetLocE (Single "l123") (StartOfRegionLE (VarR "r122")) $
-                  Ext $ LetLocE (Single "l124") (AfterConstantLE 1 (Single "l123")) $
+                  Ext $ LetLocE (Single "l124") (AfterConstantLE 1 [] (Single "l123")) $
                   LetE ("x125",[],PackedTy "Tree" (Single "l124"),
                           DataConE (Single "l124") "Leaf" [LitE 1]) $
-                  Ext $ LetLocE (Single "l126") (AfterVariableLE "x125" (Single "l124") True) $
+                  Ext $ LetLocE (Single "l126") (AfterVariableLE "x125" [] (Single "l124") True) $
                   LetE ("y128",[],PackedTy "Tree" (Single "l126"),
                           DataConE (Single "l126") "Leaf" [LitE 2]) $
                   LetE ("z127",[],PackedTy "Tree" (Single "l123"),
@@ -376,10 +376,10 @@ rightmostBod = CaseE (VarE "t242")
 rightmostMainExp :: Exp2
 rightmostMainExp = Ext $ LetRegionE (VarR "r253") Undefined Nothing $
                    Ext $ LetLocE (Single "l254") (StartOfRegionLE (VarR "r253")) $
-                   Ext $ LetLocE (Single "l255") (AfterConstantLE 1 (Single "l254")) $
+                   Ext $ LetLocE (Single "l255") (AfterConstantLE 1 [] (Single "l254")) $
                    LetE ("x256",[],PackedTy "Tree" (Single "l255"),
                             DataConE (Single "l255") "Leaf" [LitE 1]) $
-                   Ext $ LetLocE (Single "l257") (AfterVariableLE "x256" (Single "l255") True) $
+                   Ext $ LetLocE (Single "l257") (AfterVariableLE "x256" [] (Single "l255") True) $
                    LetE ("y258",[],PackedTy "Tree" (Single "l257"),
                             DataConE (Single "l257") "Leaf" [LitE 2]) $
                    LetE ("z259",[],PackedTy "Tree" (Single "l254"),
@@ -439,10 +439,10 @@ buildTreeFun = FunDef "buildTree" [ "i270"] buildTreeTy buildTreeBod (FunMeta Re
                    IfE (VarE "b279")
                    (DataConE (Single "lout272") "Leaf" [LitE 1])
                    (LetE ("i273",[], IntTy, PrimAppE SubP [VarE "i270", LitE 1]) $
-                    Ext $ LetLocE (Single "l274") (AfterConstantLE 1 (Single "lout272")) $
+                    Ext $ LetLocE (Single "l274") (AfterConstantLE 1 [] (Single "lout272")) $
                     LetE ("x275",[],PackedTy "Tree" (Single "l274"),
                              AppE "buildTree" [(Single "l274")] [VarE "i273"]) $
-                    Ext $ LetLocE (Single "l276") (AfterVariableLE "x275" (Single "l274") True) $
+                    Ext $ LetLocE (Single "l276") (AfterVariableLE "x275" [] (Single "l274") True) $
                     LetE ("y277",[],PackedTy "Tree" (Single "l276"),
                              AppE "buildTree" [(Single "l276")] [VarE "i273"]) $
                     LetE ("a278",[],PackedTy "Tree" (Single "lout272"),
@@ -520,12 +520,12 @@ buildTreeSumFun = FunDef "buildTreeSum" [ "i302"] buildTreeSumTy buildTreeSumBod
                                MkProdE [LitE 1, VarE "c316"]) $
                        VarE "t317")
                       (LetE ("i303",[], IntTy, PrimAppE SubP [VarE "i302", LitE 1]) $
-                       Ext $ LetLocE (Single "l304") (AfterConstantLE 1 (Single "lout301")) $
+                       Ext $ LetLocE (Single "l304") (AfterConstantLE 1 [] (Single "lout301")) $
                        LetE ("t318",[],ProdTy [IntTy, PackedTy "Tree" (Single "l304")],
                                 AppE "buildTreeSum" [(Single "l304")] [VarE "i303"]) $
                        LetE ("i309",[],IntTy, ProjE 0 (VarE "t318")) $
                        LetE ("x305",[],PackedTy "Tree" (Single "l304"), ProjE 1 (VarE "t318")) $
-                       Ext $ LetLocE (Single "l306") (AfterVariableLE "x305" (Single "l304") True) $
+                       Ext $ LetLocE (Single "l306") (AfterVariableLE "x305" [] (Single "l304") True) $
                        LetE ("t319",[],ProdTy [IntTy, PackedTy "Tree" (Single "l306")],
                                 AppE "buildTreeSum" [(Single "l306")] [VarE "i303"]) $
                        LetE ("i310",[],IntTy, ProjE 0 (VarE "t319")) $
@@ -614,7 +614,7 @@ printTupMainExp2 = Ext $ LetRegionE (VarR "r400") Undefined Nothing $
                   Ext $ LetLocE (Single "l401") (StartOfRegionLE (VarR "r400")) $
                   LetE ("x402",[], PackedTy "Tree" (Single "l401"),
                            AppE "buildTree" [(Single "l401")] [LitE 2]) $
-                  Ext $ LetLocE (Single "l403") (AfterVariableLE "x402" (Single "l401") True) $
+                  Ext $ LetLocE (Single "l403") (AfterVariableLE "x402" [] (Single "l401") True) $
                   LetE ("y404",[], PackedTy "Tree" (Single "l403"),
                            AppE "buildTree" [(Single "l403")] [LitE 1]) $
                   LetE ("z405",[], ProdTy [PackedTy "Tree" (Single "l401"), PackedTy "Tree" (Single "l403")],
@@ -673,13 +673,13 @@ addTreesFun = FunDef "addTrees" [ "trees354"] addTreesTy addTreesBod (FunMeta Re
                     ("Node", [("x360",(Single "l361")), ("y362",(Single "l363"))],
                      CaseE (VarE "tree2")
                         [("Node", [("x364",(Single "l365")), ("y366", (Single "l367"))],
-                          Ext $ LetLocE (Single "l368") (AfterConstantLE 1 (Single "lout353")) $
+                          Ext $ LetLocE (Single "l368") (AfterConstantLE 1 [] (Single "lout353")) $
                           LetE ("tree3",[],ProdTy [PackedTy "Tree" (Single "l361"),
                                                       PackedTy "Tree" (Single "l365")],
                                    MkProdE [VarE "x360", VarE "x364"]) $
                           LetE ("x369",[],PackedTy "Tree" (Single "l368"),
                                    AppE "addTrees" [(Single "l361"),(Single "l365"),(Single "l368")] [VarE "tree3"]) $
-                          Ext $ LetLocE (Single "l370") (AfterVariableLE "x369" (Single "l368") True) $
+                          Ext $ LetLocE (Single "l370") (AfterVariableLE "x369" [] (Single "l368") True) $
                           LetE ("tree4",[],ProdTy [PackedTy "Tree" (Single "l363"),
                                                       PackedTy "Tree" (Single "l367")],
                                    MkProdE [VarE "y362", VarE "y366"]) $
@@ -738,13 +738,13 @@ testProdFun = FunDef "testprod" [ "tup130"] testprodTy testprodBod (FunMeta Rec 
                     VarE "tup148"
                    ),
                    ("Node",[("x140",(Single "l141")), ("y142",(Single "l143"))],
-                    Ext $ LetLocE (Single "l144") (AfterConstantLE 1 (Single "lout133")) $
+                    Ext $ LetLocE (Single "l144") (AfterConstantLE 1 [] (Single "lout133")) $
                     LetE ("tup145",[], ProdTy [PackedTy "Tree" (Single "l144"), IntTy],
                              AppE "testprod" [(Single "l141"),(Single "l144")]
                              [MkProdE [VarE "x140", VarE "i135"]]) $
 
                     LetE ("x149",[], PackedTy "Tree" (Single "l144"), ProjE 0 (VarE "tup145")) $
-                    Ext $ LetLocE (Single "l146") (AfterVariableLE "x149" (Single "l144") True) $
+                    Ext $ LetLocE (Single "l146") (AfterVariableLE "x149" [] (Single "l144") True) $
                     LetE ("tup147",[], ProdTy [PackedTy "Tree" (Single "l146"), IntTy],
                             AppE "testprod" [(Single "l143"),(Single "l146")]
                             [MkProdE [VarE "y142", VarE "i135"]]) $
@@ -769,7 +769,7 @@ testFlattenProg = Prog M.empty (M.fromList [( "intAdd",intAddFun)]) $ Just (test
     testFlattenBod =
       Ext $ LetRegionE (VarR "_") Undefined Nothing $
       Ext $ LetLocE (Single "_") (StartOfRegionLE (VarR "_")) $
-      Ext $ LetLocE (Single "_") (AfterConstantLE 1 (Single "_")) $
+      Ext $ LetLocE (Single "_") (AfterConstantLE 1 [] (Single "_")) $
       LetE ("v170",[],IntTy,
                LetE ("v171",[],IntTy,
                         AppE "intAdd" []
@@ -830,12 +830,12 @@ sumUpFun = FunDef "sumUp" [ "tr1"] sumUpFunTy sumUpFunBod (FunMeta Rec NoInline 
           VarE "x505")
 
       , ("Inner", [("i506",(Single "l507")),("b508", (Single "l509")),("x510", (Single "l511")),("y512", (Single "l513"))],
-         Ext $ LetLocE (Single "l514") (AfterConstantLE 1 (Single "lout502")) $
-         Ext $ LetLocE (Single "l550") (AfterVariableLE "i506" (Single "l514") True) $
-         Ext $ LetLocE (Single "l551") (AfterVariableLE "b508" (Single "l550") True) $
+         Ext $ LetLocE (Single "l514") (AfterConstantLE 1 [] (Single "lout502")) $
+         Ext $ LetLocE (Single "l550") (AfterVariableLE "i506" [] (Single "l514") True) $
+         Ext $ LetLocE (Single "l551") (AfterVariableLE "b508" [] (Single "l550") True) $
          LetE ("x515",[],PackedTy "STree" (Single "l551"),
                    AppE "sumUp" [(Single "l511"),(Single "l551")] [VarE "x510"]) $
-         Ext $ LetLocE (Single "l516") (AfterVariableLE "x515" (Single "l551") True) $
+         Ext $ LetLocE (Single "l516") (AfterVariableLE "x515" [] (Single "l551") True) $
          LetE ("y517",[],PackedTy "STree" (Single "l516"),
                   AppE "sumUp" [(Single "l513"),(Single "l516")] [VarE "y512"]) $
          LetE ("v518",[],IntTy, AppE "valueSTree" [(Single "l551")] [VarE "x515"]) $
@@ -889,12 +889,12 @@ buildSTreeFun = FunDef "buildSTree" [ "i543"] buildSTreeTy buildSTreeBod (FunMet
                    (LetE ("i548",[], IntTy, PrimAppE SubP [VarE "i543", LitE 1]) $
                     LetE ("i554",[], IntTy, LitE 0) $
                     LetE ("b555",[], IntTy, LitE 0) $
-                    Ext $ LetLocE (Single "l544") (AfterConstantLE 1 (Single "lout541")) $
-                    Ext $ LetLocE (Single "l552") (AfterVariableLE "i554" (Single "l544") True) $
-                    Ext $ LetLocE (Single "l553") (AfterVariableLE "b555" (Single "l552") True) $
+                    Ext $ LetLocE (Single "l544") (AfterConstantLE 1 [] (Single "lout541")) $
+                    Ext $ LetLocE (Single "l552") (AfterVariableLE "i554" [] (Single "l544") True) $
+                    Ext $ LetLocE (Single "l553") (AfterVariableLE "b555" [] (Single "l552") True) $
                     LetE ("x545",[],PackedTy "STree" (Single "l553"),
                              AppE "buildSTree" [(Single "l553")] [VarE "i548"]) $
-                    Ext $ LetLocE (Single "l545") (AfterVariableLE "x545" (Single "l553") True) $
+                    Ext $ LetLocE (Single "l545") (AfterVariableLE "x545" [] (Single "l553") True) $
                     LetE ("y546",[],PackedTy "STree" (Single "l545"),
                              AppE "buildSTree" [(Single "l545")] [VarE "i548"]) $
                     LetE ("a547",[],PackedTy "STree" (Single "lout541"),
@@ -1038,12 +1038,12 @@ setEvenFun = FunDef "setEven" [ "tr570"] setEvenFunTy setEvenFunBod (FunMeta Rec
           VarE "x575")
 
       , ("Inner", [("i576",(Single "l577")),("b578",(Single "l579")),("x580",(Single "l581")),("y582",(Single "l583"))],
-         Ext $ LetLocE (Single "l584") (AfterConstantLE 1 (Single "lout572")) $
-         Ext $ LetLocE (Single "l585") (AfterVariableLE "i576" (Single "l584") True) $
-         Ext $ LetLocE (Single "l586") (AfterVariableLE "b578" (Single "l585") True) $
+         Ext $ LetLocE (Single "l584") (AfterConstantLE 1 [] (Single "lout572")) $
+         Ext $ LetLocE (Single "l585") (AfterVariableLE "i576" [] (Single "l584") True) $
+         Ext $ LetLocE (Single "l586") (AfterVariableLE "b578" [] (Single "l585") True) $
          LetE ("x587",[],PackedTy "STree" (Single "l586"),
                   AppE "setEven" [(Single "l581"),(Single "l586")] [VarE "x580"]) $
-         Ext $ LetLocE (Single "l588") (AfterVariableLE "x587" (Single "l586") True) $
+         Ext $ LetLocE (Single "l588") (AfterVariableLE "x587" [] (Single "l586") True) $
          LetE ("y589",[],PackedTy "STree" (Single "l588"),
                   AppE "setEven" [(Single "l583"),(Single "l588")] [VarE "y582"]) $
          LetE ("v590",[],IntTy, AppE "valueSTree" [(Single "l586")] [VarE "x587"]) $
@@ -1123,14 +1123,14 @@ sumUpSetEvenFun = FunDef "sumUpSetEven" [ "tr600"] sumUpSetEvenFunTy sumUpSetEve
           VarE "tx606")
 
       , ("Inner", [("i607",(Single "l608")),("b609", (Single "l610")),("x611", (Single "l612")),("y613", (Single "l622"))],
-         Ext $ LetLocE (Single "l614") (AfterConstantLE 1 (Single "lout602")) $
-         Ext $ LetLocE (Single "l615") (AfterVariableLE "i607" (Single "l614") True) $
-         Ext $ LetLocE (Single "l616") (AfterVariableLE "b609" (Single "l615") True) $
+         Ext $ LetLocE (Single "l614") (AfterConstantLE 1 [] (Single "lout602")) $
+         Ext $ LetLocE (Single "l615") (AfterVariableLE "i607" [] (Single "l614") True) $
+         Ext $ LetLocE (Single "l616") (AfterVariableLE "b609" [] (Single "l615") True) $
          LetE ("tx617",[], ProdTy [PackedTy "STree" (Single "l616"), IntTy],
                   AppE "sumUpSetEven" [(Single "l612"),(Single "l616")] [VarE "x611"]) $
          LetE ("x618",[],PackedTy "STree" (Single "l616"), ProjE 0 (VarE "tx617")) $
          LetE ("v619",[],IntTy, ProjE 1 (VarE "tx617")) $
-         Ext $ LetLocE (Single "l620") (AfterVariableLE "x618" (Single "l616") True) $
+         Ext $ LetLocE (Single "l620") (AfterVariableLE "x618" [] (Single "l616") True) $
          LetE ("tx621",[],ProdTy [PackedTy "STree" (Single "l620"), IntTy],
                   AppE "sumUpSetEven" [(Single "l622"),(Single "l620")] [VarE "y613"]) $
          LetE ("y623",[],PackedTy "STree" (Single "l620"), ProjE 0 (VarE "tx621")) $
@@ -1212,11 +1212,11 @@ copyExprFun = FunDef "copyExpr" [ "e700"] copyExprFunTy copyExprFunBod (FunMeta 
                         DataConE (Single "lout703") "VARREF" [VarE "v704"]
                        )
                      , ("LETE", [("v706",(Single "l707")), ("rhs708", (Single "l709")), ("bod710", (Single "l711"))],
-                        Ext $ LetLocE (Single "l712") (AfterConstantLE 1 (Single "lout703")) $
-                        Ext $ LetLocE (Single "l713") (AfterVariableLE "v706" (Single "l712") True) $
+                        Ext $ LetLocE (Single "l712") (AfterConstantLE 1 [] (Single "lout703")) $
+                        Ext $ LetLocE (Single "l713") (AfterVariableLE "v706" [] (Single "l712") True) $
                         LetE ("rhs714",[], PackedTy "Expr" (Single "l713"),
                                  AppE "copyExpr" [(Single "l709"),(Single "l713")] [VarE "rhs708"]) $
-                        Ext $ LetLocE (Single "l715") (AfterVariableLE "rhs714" (Single "l713") True) $
+                        Ext $ LetLocE (Single "l715") (AfterVariableLE "rhs714" [] (Single "l713") True) $
                         LetE ("bod716",[],PackedTy "Expr" (Single "l715"),
                                  AppE "copyExpr" [(Single "l711"), (Single "l715")] [VarE "bod710"]) $
                         LetE ("z717",[],PackedTy "Expr" (Single "lout703"),
@@ -1258,13 +1258,13 @@ substFun = FunDef "subst" [ "tr653"] substFunTy substFunBod (FunMeta Rec NoInlin
                      LetE ("b662",[],BoolTy,
                               PrimAppE EqIntP [VarE "v656", VarE "old654"])
                      -- IfE (VarE "b662")
-                     (Ext $ LetLocE (Single "l663") (AfterConstantLE 1 (Single "lout653")) $
-                      Ext $ LetLocE (Single "l664") (AfterVariableLE "v656" (Single "l663") True) $
+                     (Ext $ LetLocE (Single "l663") (AfterConstantLE 1 [] (Single "lout653")) $
+                      Ext $ LetLocE (Single "l664") (AfterVariableLE "v656" [] (Single "l663") True) $
                       LetE ("p668",[], ProdTy [IntTy, PackedTy "Expr" (Single "lin651"), PackedTy "Expr" (Single "l659")],
                                MkProdE [VarE "old654", VarE "new655", VarE "rhs658"]) $
                       LetE ("rhs665",[],PackedTy "Expr" (Single "l664"),
                                AppE "subst" [(Single "lin651"), (Single "l659"), (Single "l664")] [VarE "p668"]) $
-                      Ext $ LetLocE (Single "l669") (AfterVariableLE "rhs665" (Single "l664") True) $
+                      Ext $ LetLocE (Single "l669") (AfterVariableLE "rhs665" [] (Single "l664") True) $
                       LetE ("bod670",[], PackedTy "Expr" (Single "l669"),
                                AppE "copyExpr" [(Single "l661"), (Single "l669")] [VarE "bod660"]) $
                       LetE ("z671",[], PackedTy "Expr" (Single "lout653"),
@@ -1277,11 +1277,11 @@ substFun = FunDef "subst" [ "tr653"] substFunTy substFunBod (FunMeta Rec NoInlin
 substMainExp :: Exp2
 substMainExp = Ext $ LetRegionE (VarR "r720") Undefined Nothing $
                Ext $ LetLocE (Single "l721") (StartOfRegionLE (VarR "r720")) $
-               Ext $ LetLocE (Single "l722") (AfterConstantLE 1 (Single "l721")) $
-               Ext $ LetLocE (Single "l723") (AfterConstantLE 8 (Single "l722")) $
+               Ext $ LetLocE (Single "l722") (AfterConstantLE 1 [] (Single "l721")) $
+               Ext $ LetLocE (Single "l723") (AfterConstantLE 8 [] (Single "l722")) $
                LetE ("rhs724",[], PackedTy "Expr" (Single "l723"),
                         DataConE (Single "l723") "VARREF" [LitE 1]) $
-               Ext $ LetLocE (Single "l724") (AfterVariableLE "rhs724" (Single "l723") True) $
+               Ext $ LetLocE (Single "l724") (AfterVariableLE "rhs724" [] (Single "l723") True) $
                LetE ("bod725",[], PackedTy "Expr" (Single "l724"),
                         DataConE (Single "l724") "VARREF" [LitE 10]) $
                LetE ("old726",[],IntTy,LitE 1) $
@@ -1293,7 +1293,7 @@ substMainExp = Ext $ LetRegionE (VarR "r720") Undefined Nothing $
                         DataConE (Single "l729") "VARREF" [LitE 42]) $
                LetE ("p731",[],ProdTy [IntTy, PackedTy "Expr" (Single "l729"), PackedTy "Expr" (Single "l721")],
                         MkProdE [VarE "old726", VarE "new730", VarE "z727"]) $
-               Ext $ LetLocE (Single "l730") (AfterVariableLE "new730" (Single "l729") True) $
+               Ext $ LetLocE (Single "l730") (AfterVariableLE "new730" [] (Single "l729") True) $
                LetE ("z732",[], PackedTy "Expr" (Single "l730"),
                         AppE "subst" [(Single "l729"), (Single "l721"), (Single "l730")] [VarE "p731"]) $
                VarE "z732"
@@ -1337,11 +1337,11 @@ indrBuildTreeFun = FunDef "indrBuildTree" [ "i270"] indrBuildTreeTy indrBuildTre
                        IfE (VarE "b279")
                        (DataConE (Single "lout272") "Leaf" [LitE 1])
                        (LetE ("i273",[], IntTy, PrimAppE SubP [VarE "i270", LitE 1]) $
-                        Ext $ LetLocE (Single "loc_indr") (AfterConstantLE 1 (Single "lout272")) $
-                        Ext $ LetLocE (Single "l274") (AfterConstantLE 8 (Single "loc_indr")) $
+                        Ext $ LetLocE (Single "loc_indr") (AfterConstantLE 1 [] (Single "lout272")) $
+                        Ext $ LetLocE (Single "l274") (AfterConstantLE 8 [] (Single "loc_indr")) $
                         LetE ("x275",[],PackedTy "Tree" (Single "l274"),
                                  AppE "indrBuildTree" [(Single "l274")] [VarE "i273"]) $
-                        Ext $ LetLocE (Single "l276") (AfterVariableLE "x275" (Single "l274") True) $
+                        Ext $ LetLocE (Single "l276") (AfterVariableLE "x275" [] (Single "l274") True) $
                         LetE ("y277",[],PackedTy "Tree" (Single "l276"),
                                  AppE "indrBuildTree" [(Single "l276")] [VarE "i273"]) $
                         LetE ("indr_cur",[],CursorTy,Ext (StartOfPkdCursor "y277"))  $

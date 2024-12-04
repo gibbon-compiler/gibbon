@@ -134,13 +134,14 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
           case ext of
             LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go env bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go env bod))
-            LetLocE loc (AfterConstantLE i loc2) bod ->
+            {- TODO VS: fix for SOA case -}
+            LetLocE loc (AfterConstantLE i irst loc2) bod ->
               case (M.lookup loc2 env) of
                 Nothing ->
-                  Ext $ LetLocE loc (AfterConstantLE i loc2) $
+                  Ext $ LetLocE loc (AfterConstantLE i irst loc2) $
                         go (M.insert loc (loc2,i) env) bod
                 Just (loc3,j) ->
-                  Ext $ LetLocE loc (AfterConstantLE (i+j) loc3) $
+                  Ext $ LetLocE loc (AfterConstantLE (i+j) irst loc3) $
                         go (M.insert loc (loc3,i+j) env) bod
             LetLocE loc rhs bod -> Ext (LetLocE loc rhs (go env bod))
             LetAvail vars bod -> Ext (LetAvail vars (go env bod))
@@ -198,8 +199,8 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
             LetLocE loc rhs bod ->
               let rhs' = case rhs of
-                           AfterConstantLE i loc2 -> AfterConstantLE i (substloc env2 loc2)
-                           AfterVariableLE v loc2 b -> AfterVariableLE v (substloc env2 loc2) b
+                           AfterConstantLE i irst loc2 -> AfterConstantLE i irst (substloc env2 loc2)
+                           AfterVariableLE v vrst loc2 b -> AfterVariableLE v vrst (substloc env2 loc2) b
                            _ -> rhs
               in case M.lookup rhs' env1 of
                 Nothing  -> Ext (LetLocE loc rhs' (go0 (M.insert rhs' loc env1) env2 bod))

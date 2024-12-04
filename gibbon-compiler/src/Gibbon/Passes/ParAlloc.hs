@@ -141,7 +141,8 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                      (\acc b ->
                         case b of
                           PVar vbnd -> mkLets [vbnd] acc
-                          PAfter (loc1, (w, loc2)) -> Ext $ LetLocE loc1 (AfterVariableLE w loc2 False) $ acc)
+                          {-[2024.12.04] VS: Harcoding an empty list for now, seems bad. TODO: fix-}
+                          PAfter (loc1, (w, loc2)) -> Ext $ LetLocE loc1 (AfterVariableLE w [] loc2 False) $ acc)
                      bod2 pending_binds
       pure $ LetE (v, endlocs, ty, SyncE) bod3
 
@@ -227,7 +228,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
         LetLocE loc locexp bod -> do
           case locexp of
             -- Binding is swallowed, and it's continuation allocates in a fresh region.
-            AfterVariableLE v loc2 True | S.member v spawned -> do
+            AfterVariableLE v vs loc2 True | S.member v spawned -> do
               let (Just parent_id) = mb_parent_id
               cont_id <- gensym "cont_id"
               r <- gensym "rafter"
@@ -251,24 +252,24 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                        LetE (not_stolen, [], BoolTy, PrimAppE EqIntP [VarE cont_id, VarE parent_id]) $
                        IfE (VarE not_stolen)
                            (Ext $ LetAvail [v] $
-                            Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod2) -- don't allocate in a fresh region
+                            Ext $ LetLocE loc (AfterVariableLE v vs loc2 False) bod2) -- don't allocate in a fresh region
                            (Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE (singleLocVar newloc) (StartOfRegionLE newreg) bod1)
               else
                 pure $ Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE (singleLocVar newloc) (StartOfRegionLE newreg) bod1
 
             -- Binding is swallowed, but no fresh region is created. This can brought back safely after a sync.
-            AfterVariableLE v loc2 True | not (S.member loc2 boundlocs) || not (S.member (singleLocVar v) boundlocs) -> do
+            AfterVariableLE v _ loc2 True | not (S.member loc2 boundlocs) || not (S.member (singleLocVar v) boundlocs) -> do
               let pending_binds'  = PAfter (loc, (v, loc2)) : pending_binds
                   reg      = reg_env # loc2
                   reg_env' = M.insert loc reg reg_env
               parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds' spawned boundlocs region_on_spawn bod
 
-            AfterVariableLE v loc2 True | S.member loc2 boundlocs && S.member (singleLocVar v) boundlocs -> do
+            AfterVariableLE v vs loc2 True | S.member loc2 boundlocs && S.member (singleLocVar v) boundlocs -> do
               let reg = reg_env # loc2
                   reg_env'  = M.insert loc reg reg_env
                   boundlocs'= S.insert loc boundlocs
               bod' <- parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' region_on_spawn bod
-              pure $ Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod'
+              pure $ Ext $ LetLocE loc (AfterVariableLE v vs loc2 False) bod'
 
             FreeLE -> do
               let boundlocs'= S.insert loc boundlocs
@@ -279,8 +280,8 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
               let reg = case locexp of
                           StartOfRegionLE r  -> regionToVar r
                           InRegionLE r -> regionToVar r
-                          AfterConstantLE _ lc   -> reg_env # lc
-                          AfterVariableLE _ lc _ -> reg_env # lc
+                          AfterConstantLE _ _ lc   -> reg_env # lc
+                          AfterVariableLE _ _ lc _ -> reg_env # lc
                           FromEndLE lc           -> reg_env # lc
                   reg_env'  = M.insert loc reg reg_env
                   boundlocs'= S.insert loc boundlocs
@@ -361,8 +362,8 @@ substLocInExp mp ex1 =
 
         go2 lexp = case lexp of
                      StartOfRegionLE{} -> lexp
-                     AfterConstantLE i loc -> AfterConstantLE i (sub loc)
-                     AfterVariableLE i loc b -> AfterVariableLE i (sub loc) b
+                     AfterConstantLE i irst loc -> AfterConstantLE i irst (sub loc)
+                     AfterVariableLE i irst loc b -> AfterVariableLE i irst (sub loc) b
                      InRegionLE{} -> lexp
                      FreeLE -> lexp
                      FromEndLE loc -> FromEndLE (sub loc)

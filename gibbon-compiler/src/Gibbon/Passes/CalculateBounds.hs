@@ -180,10 +180,12 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                   else do
                     let (re, off) = case locExp of
                           (StartOfRegionLE r          ) -> (regionToVar r, BoundedSize 0)
-                          (AfterConstantLE n l  ) -> (locRegEnv # l, locOffEnv # l <> BoundedSize n)
+                          -- [2024.12.04] VS: currently discarding offsets for SoA representation
+                          (AfterConstantLE n _ l  ) -> (locRegEnv # l, locOffEnv # l <> BoundedSize n)
                           -- [2022.12.26] CSK: the lookup in varSzEnv always fails since the
                           -- pass never inserts anything into it. Disabling it for now.
-                          (AfterVariableLE v l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v)) -- <> varSzEnv # v
+                          -- [2024.12.04] VS: currently discarding offsets for SoA representation
+                          (AfterVariableLE v _ l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v)) -- <> varSzEnv # v
                           (InRegionLE r         ) -> (regionToVar r, Undefined)
                           (FromEndLE  l         ) -> (locRegEnv # l, Undefined)
                           FreeLE                  -> undefined

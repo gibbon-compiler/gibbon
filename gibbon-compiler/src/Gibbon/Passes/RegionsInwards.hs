@@ -80,7 +80,7 @@ placeRegionInwards env scopeSet ex  =
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs         --recurse on rhs using the newenv
 
-            AfterConstantLE _ loc' -> do                                    --In case statement, actual match = AfterConstantLE integralVal loc'
+            AfterConstantLE _ _ loc' -> do                                    --In case statement, actual match = AfterConstantLE integralVal loc'
               let keyList' = M.keys env
                   key'     = F.find (S.member loc') keyList'
                   in case key' of
@@ -97,7 +97,7 @@ placeRegionInwards env scopeSet ex  =
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
 
-            AfterVariableLE _ loc' _ -> do                                  --In case statement, actual match = AfterVariableLE variable loc' boolVal
+            AfterVariableLE _ _ loc' _ -> do                                  --In case statement, actual match = AfterVariableLE variable loc' boolVal
               let keyList' = M.keys env
                   key'     = F.find (S.member loc') keyList'
                   in case key' of
@@ -309,7 +309,7 @@ freeVars ex = case ex of
       LetLocE _ phs rhs             ->
         case phs of
         StartOfRegionLE _                 -> freeVars rhs
-        AfterConstantLE _ _         -> freeVars rhs
+        AfterConstantLE _ _ _         -> freeVars rhs
         AfterVariableLE{}           -> freeVars rhs
         InRegionLE _                -> freeVars rhs
         FromEndLE _                 -> freeVars rhs
