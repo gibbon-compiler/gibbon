@@ -197,8 +197,10 @@ data PreLocExp loc = StartOfRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
 
-                   | AfterVectorLE [PreLocExp loc]
-
+                   | AfterSoALE (PreLocExp loc) [PreLocExp loc] loc  -- Compute new SoA location from an old SoA location 
+								     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer 
+								     -- [PreLocExp loc] -> expressions for arithmetic on each field location 
+								     -- loc, store the old loc, why? -- capture more metadata, also style
 
   deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 

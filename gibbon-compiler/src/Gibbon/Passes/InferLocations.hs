@@ -276,15 +276,16 @@ data Failure = FailUnify Ty2 Ty2
 -- | Constraints here mean almost the same thing as they do in the L2 type checker.
 -- One difference is the presence of an AfterTag constraint, though I'm not opposed to
 -- adding one to the L2 language for symmetry.
--- [2024.12.04] VS
--- For AfterConstantL and AfterVariableL add a list argument with offsets for fields in an SoA location 
--- Optional for AoS Location. 
+-- [05.12.2024] 
+-- VS: add AfterSoAL for a new location after an SoA location. 
+-- first contraint is for a data constructor buffer and list of constraints for the fields.  
 data Constraint = AfterConstantL LocVar Int LocVar
                 | AfterVariableL LocVar Var LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
                 | AfterCopyL LocVar Var Var LocVar Var [LocVar]
                 | FreeL LocVar
+                | AfterSoAL LocVar Constraint [Constraint] LocVar
                   deriving (Show, Eq, Generic)
 
 instance Out Constraint
