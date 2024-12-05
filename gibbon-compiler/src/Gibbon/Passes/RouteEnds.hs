@@ -326,7 +326,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                l2 <- gensym "jump"
                                let l2loc = singleLocVar l2
                                    eor' = mkEnd l1 l2loc eor
-                                   e' = Ext $ LetLocE l2loc (AfterConstantLE 1 [] l1) e
+                                   e' = Ext $ LetLocE l2loc (AfterConstantLE 1 l1) e
                                e'' <- exp fns retlocs eor' lenv (M.insert l1 l2loc lenv) env2 e'
                                return (dc, vls, e'')
                              Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
@@ -353,7 +353,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                     let l2loc = singleLocVar l2
                                         eor' = mkEnd l1 l2loc eor
                                         (Just jump) = L1.sizeOfTy ty
-                                        e' = Ext $ LetLocE l2loc (AfterConstantLE jump [] l1) e
+                                        e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
                                     return (eor', e')
                                vars = L.map fst vls
                                varsToLocs = L.map singleLocVar vars 
@@ -545,7 +545,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                          scalar_witnesses = go la []
                          bind_witnesses bod ls =
                            L.foldr (\(v,w,sz) acc ->
-                                     Ext $ LetLocE v (AfterConstantLE sz [] w) acc)
+                                     Ext $ LetLocE v (AfterConstantLE sz w) acc)
                            bod ls
                          bod' = bind_witnesses e scalar_witnesses
                          bod'' =  Ext (LetLocE la (FromEndLE l2) bod')

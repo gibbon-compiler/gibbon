@@ -139,8 +139,8 @@ toEndFromTaggedV v = (toVar "end_from_tagged_") `varAppend` v
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      Old.AfterConstantLE _ _ loc  -> S.singleton $ unwrapLocVar (toLocVar loc)
-      Old.AfterVariableLE v vs loc _ -> S.fromList [v, unwrapLocVar (toLocVar loc)] `S.union` S.fromList vs 
+      Old.AfterConstantLE _ loc  -> S.singleton $ unwrapLocVar (toLocVar loc)
+      Old.AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar (toLocVar loc)] 
       _ -> S.empty
 
 
@@ -510,8 +510,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep ex =
         case ex of
           Old.StartOfRegionLE r -> [Old.regionToVar r]
-          Old.AfterConstantLE _ _ loc   -> [unwrapLocVar $ toLocVar loc]
-          Old.AfterVariableLE v vs loc _ -> [v, unwrapLocVar $ toLocVar loc] ++ vs
+          Old.AfterConstantLE _ loc   -> [unwrapLocVar $ toLocVar loc]
+          Old.AfterVariableLE v loc _ -> [v, unwrapLocVar $ toLocVar loc]
           Old.InRegionLE r  -> [Old.regionToVar r]
           Old.FromEndLE loc -> [unwrapLocVar $ toLocVar loc]
           Old.FreeLE -> []

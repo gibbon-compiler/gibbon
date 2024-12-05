@@ -455,8 +455,8 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           let reg = case rhs of
                       StartOfRegionLE r      -> regionToVar r
                       InRegionLE r           -> regionToVar r
-                      AfterConstantLE _ _ lc   -> renv # (toLocVar lc)
-                      AfterVariableLE _ _ lc _ -> renv # (toLocVar lc)
+                      AfterConstantLE _ lc   -> renv # (toLocVar lc)
+                      AfterVariableLE _ lc _ -> renv # (toLocVar lc)
                       FromEndLE lc           -> renv # (toLocVar lc)
               wlocs_env' = M.insert loc hole_tycon wlocs_env
               region_locs1 = case rhs of

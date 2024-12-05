@@ -435,21 +435,10 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
           StartOfRegionLE r -> lparen <> text "startOfRegion" <+> text (sdoc r) <> rparen
-          AfterConstantLE i irst loc   -> case irst of
-                                                {- AoS operation -} 
-                                                [] -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
-                                                {-VS: for some reason i cannot pattern match on loc here!!-}
-                                                --_ -> case loc of 
-                                                --          Single x -> error "This should be an SoA loc!"
-                                                --          SoA dataBufLoc fieldLocs -> error "TODO: Pretty print for SoA operation not implemented yet."
-          AfterVariableLE v vrst loc b -> case vrst of 
-                                                [] -> if b
-                                                      then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
-                                                      else parens $ pprint loc <+> text "+" <+> doc v
-                                                --_ -> case loc of 
-                                                --         Single x -> error "This should be an SoA loc!"
-                                                --         SoA dataBufLoc fieldLocs -> error "TODO: Pretty print for SoA operation not implemented yet."
-
+          AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
+	  AfterVariableLE v loc b -> if b
+				     then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
+				     else parens $ pprint loc <+> text "+" <+> doc v
           InRegionLE r  -> lparen <> text "inRegion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromEnd" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen

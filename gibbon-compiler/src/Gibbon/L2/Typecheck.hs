@@ -781,14 +781,14 @@ tcExp ddfs env funs constrs regs tstatein exp =
                        tstate3 <- removeLoc exp tstate2 (Single loc)
                        return (ty,tstate3)
                 {-TODO handle what needs to happen with the wildcard argument, list of offsets in case of soa -}
-                AfterConstantLE i _ l1 ->
+                AfterConstantLE i l1 ->
                      do r <- getRegion exp constrs l1
                         let tstate1 = extendTS (Single loc) (Output,True) $ setAfter l1 tstatein
                         let constrs1 = extendConstrs (InRegionC (Single loc) r) $ extendConstrs (AfterConstantC i l1 (Single loc)) constrs
                         (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
                         tstate3 <- removeLoc exp tstate2 (Single loc)
                         return (ty,tstate3)
-                AfterVariableLE x _ l1 _ ->
+                AfterVariableLE x l1 _ ->
                     do r <- getRegion exp constrs l1
                        (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ VarE x
                        -- NOTE: We now allow aliases (offsets) from scalar vars too. So we can leave out this check

@@ -86,8 +86,8 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
           let reg = case rhs of
                       StartOfRegionLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
-                      AfterConstantLE _ _ lc   -> lenv # lc
-                      AfterVariableLE _ _ lc _ -> lenv # lc
+                      AfterConstantLE _ lc   -> lenv # lc
+                      AfterVariableLE _ lc _ -> lenv # lc
                       FromEndLE lc           -> lenv # lc -- TODO: This needs to be fixed
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod

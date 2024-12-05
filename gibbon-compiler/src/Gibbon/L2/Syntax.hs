@@ -186,10 +186,9 @@ data E2Ext loc dec
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfRegionLE Region
                    | AfterConstantLE  Int  -- Number of bytes after. (In case of an SoA loc, this is the offset into the data constructor buffer)
-                                     [Int] -- Optional list with offset bytes, these offsets can be used for bumping field locations for an SoA location. 
                                       loc  -- Location which this location is offset from.
+
                    | AfterVariableLE  Var  -- Name of variable v. This loc is size(v) bytes after.
-                                     [Var] -- Optional list with offset bytes, each size(v) bytes, these can be used for bumping field locations for an SoA location.
                                       loc  -- Location which this location is offset from.
                                       Bool -- Whether it's running in a stolen continuation i.e
                                            -- whether this should return an index in a fresh region or not.
@@ -197,6 +196,10 @@ data PreLocExp loc = StartOfRegionLE Region
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
+
+                   | AfterVectorLE [PreLocExp loc]
+
+
   deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 
 type LocExp = PreLocExp LocVar
@@ -211,7 +214,7 @@ instance FreeVars (E2Ext l d) where
      LetRegionE _ _ _ bod   -> gFreeVars bod
      LetParRegionE _ _ _ bod   -> gFreeVars bod
      LetLocE _ rhs bod  -> (case rhs of
-                              AfterVariableLE v vs  _loc _ -> S.singleton v `S.union` S.fromList vs
+                              AfterVariableLE v _loc _ -> S.singleton v
                               _ -> S.empty)
                            `S.union`
                            gFreeVars bod
@@ -232,8 +235,8 @@ instance FreeVars (E2Ext l d) where
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      AfterConstantLE _ _ loc   -> S.singleton $ unwrapLocVar loc
-      AfterVariableLE v vs loc _ -> S.fromList [v, unwrapLocVar loc] `S.union` S.fromList vs
+      AfterConstantLE _ loc   -> S.singleton $ unwrapLocVar loc
+      AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar loc]
       _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -909,12 +912,7 @@ occurs w ex =
         LetLocE _ le bod  ->
           let oc_bod = go bod in
           case le of
-            AfterVariableLE v vs _  _ -> let func = (\v accum -> if v `S.member` w 
-                                                                 then True || accum 
-                                                                 else False || accum
-                                                    )
-                                             reduce = L.foldr func False vs
-                                           in reduce || v `S.member` w || oc_bod
+            AfterVariableLE v _  _ -> v `S.member` w || oc_bod
             StartOfRegionLE{}         -> oc_bod
             AfterConstantLE{}   -> oc_bod
             InRegionLE{}        -> oc_bod
@@ -1051,8 +1049,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep ex =
         case ex of
           StartOfRegionLE r -> [singleLocVar $ regionToVar r]
-          AfterConstantLE _ _ loc -> [loc]
-          AfterVariableLE v vs loc _ -> [singleLocVar v,loc] ++ L.map singleLocVar vs
+          AfterConstantLE _ loc -> [loc]
+          AfterVariableLE v loc _ -> [singleLocVar v,loc]
           InRegionLE r  -> [singleLocVar $ regionToVar r]
           FromEndLE loc -> [loc]
           FreeLE -> []

@@ -100,8 +100,8 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
           let reg = case locexp of
                       StartOfRegionLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
-                      AfterConstantLE _ _ lc   -> renv # lc
-                      AfterVariableLE _ _ lc _ -> renv # lc
+                      AfterConstantLE _ lc   -> renv # lc
+                      AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod

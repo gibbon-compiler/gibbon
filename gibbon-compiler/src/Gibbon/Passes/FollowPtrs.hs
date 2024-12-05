@@ -55,7 +55,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
             let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((Single indir_ptrv) : acc) else (loc : acc)) [] (inLocVars funTy)
             let out_locs = outLocVars funTy
             wc <- gensym "wildcard"
-            let indir_bod = Ext $ LetLocE (Single jump) (AfterConstantLE 8 [] (Single indir_ptrloc)) $
+            let indir_bod = Ext $ LetLocE (Single jump) (AfterConstantLE 8 (Single indir_ptrloc)) $
                             (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
                             LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
                             Ext (RetE ret_endofs callv)

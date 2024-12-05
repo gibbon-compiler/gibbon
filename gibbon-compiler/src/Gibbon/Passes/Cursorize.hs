@@ -694,12 +694,12 @@ cursorizeReadPackedFile ddfs fundefs denv tenv senv isPackedContext v path tyc r
 cursorizeLocExp :: DepEnv -> TyEnv Var Ty2 -> SyncEnv -> LocVar -> LocExp -> Either DepEnv (Exp3, [Binds Exp3], TyEnv Var Ty2, SyncEnv)
 cursorizeLocExp denv tenv senv lvar locExp =
   case locExp of
-    AfterConstantLE i [] loc ->
+    AfterConstantLE i loc ->
       let rhs = Ext $ AddCursor ((unwrapLocVar . toLocVar) loc) (LitE i)
       in if isBound ((toLocVar) loc) tenv
          then Right (rhs, [], tenv, senv)
          else Left$ M.insertWith (++) ((toLocVar) loc) [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
-    AfterConstantLE i irst loc -> error "cursorizeLocExp :: AfterConstantLE Bounds for SoA not implemented."
+
     -- TODO: handle product types here
 
 {- [2018.03.07]:
@@ -712,7 +712,7 @@ For BigInfinite regions, this is simple:
 
 But Infinite regions do not support sizes yet. Re-enable this later.
 -}
-    AfterVariableLE v [] locarg was_stolen -> do
+    AfterVariableLE v locarg was_stolen -> do
       let vty = case M.lookup v tenv of
                   Just ty -> ty
                   Nothing -> case M.lookup v senv of
@@ -763,8 +763,6 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                       bnds  = map (\(a,b,c,_,e) -> (a,b,c,e)) pending_bnds
                   Right (bod, bnds, tenv', M.delete v senv)
       else Left $ M.insertWith (++) loc [((unwrapLocVar lvar),[],CursorTy,bod)] denv
-
-    AfterVariableLE v vrst locarg was_stolen -> error "TODO: cursorizeLocExp: AfterVariableLE offsets for SoA not implemented yet."
 
     FromEndLE locarg ->
                    let loc = toLocVar locarg in
