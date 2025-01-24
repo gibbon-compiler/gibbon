@@ -11,7 +11,7 @@ module Gibbon.Common
          Var(..), LocVar(..), Location, FieldIndex, DataCon
        , RegVar, fromVar, toVar, varAppend, toEndV, toEndVLoc, toSeqV, cleanFunName
        , TyVar(..), isUserTv
-       , Symbol, intern, unintern
+       , Symbol, intern, unintern, isSoALoc
 
          -- * Gensym monad
        , SyM, gensym, gensym_tag, genLetter, newUniq, runSyM
@@ -165,6 +165,12 @@ instance Out TyVar where
   doc (UserTv v)     = text "u:" PP.<> doc v
 
   docPrec _ = doc
+
+  
+isSoALoc :: LocVar -> Bool 
+isSoALoc locvar = case locvar of 
+                        Single _ -> False 
+                        SoA _ _ -> True
 
 isUserTv :: TyVar -> Bool
 isUserTv tv =

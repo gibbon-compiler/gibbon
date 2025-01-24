@@ -1015,7 +1015,7 @@ funRegs :: [LRM] -> RegionSet
 funRegs ((LRM _l r _m):lrms) =
     let (RegionSet rs) = funRegs lrms
     in case r of 
-         AoSR reg -> RegionSet $ S.insert (regionToVar reg) rs
+         _ -> RegionSet $ S.insert (regionToVar r) rs
          SoAR _ _ -> error "TODO: Typecheck: implement SoA Region."
 funRegs [] = RegionSet $ S.empty
 
@@ -1025,7 +1025,7 @@ globalReg = GlobR "GLOBAL" BigInfinite
 -- | Get the constraints from the location bindings in a function type.
 funConstrs :: [LRM] -> ConstraintSet
 funConstrs ((LRM l r _m):lrms) = case r of 
-                                    AoSR reg -> extendConstrs (InRegionC l reg) $ funConstrs lrms
+                                    _ -> extendConstrs (InRegionC l r) $ funConstrs lrms
                                     SoAR _ _ -> error "TODO: funConstrs: SoAR case not implemented!"
 funConstrs [] = ConstraintSet $ S.empty
 

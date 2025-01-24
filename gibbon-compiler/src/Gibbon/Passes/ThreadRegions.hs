@@ -96,8 +96,8 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
 threadRegionsFn :: DDefs NewL2.Ty2 -> NewL2.FunDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> case r of 
-                                                        AoSR reg -> (lc, regionToVar reg)
                                                         SoAR _ _ -> error "TODO: threadRegionsFn not implemented for SoA reg."
+                                                        _ -> (lc, regionToVar r)
                                     ) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
@@ -110,8 +110,8 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
       wlocs_env = fn (arrOut funTy) M.empty
       fnlocargs = map fromLRM (locVars funTy)
       region_locs = M.fromList $ map (\(LRM l r _m) -> case r of 
-                                                          AoSR reg -> (regionToVar reg, [l]) 
                                                           SoAR _ _ -> error "TODO: threadRegionsFn structure of arrays not implemented yet."
+                                                          _ -> (regionToVar r, [l]) 
                                      ) (locVars funTy)
   bod' <- threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs M.empty S.empty S.empty funBody
   -- Boundschecking
@@ -140,9 +140,10 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                     packed_outs
                     boundschecks = concatMap
                                      (\(LRM loc reg mode) ->
-                                        case reg of 
-                                          AoSR rr -> if mode == Output
-                                                     then let rv = regionToVar rr
+                                        case reg of
+                                                SoAR _ _ -> error "TODO: threadRegionsFn structure of arrays not implemented yet." 
+                                                _ -> if mode == Output
+                                                     then let rv = regionToVar reg
                                                               end_rv = toEndV rv
                                                               -- rv = end_reg
                                                               bc = boundsCheck ddefs (locs_tycons M.! loc)
@@ -152,7 +153,6 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                           -- maintain shadowstack in no eager promotion mode
                                                               [("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg)]
                                                      else []
-                                          SoAR _ _ -> error "TODO: threadRegionsFn structure of arrays not implemented yet."
                                      )
                                      (locVars funTy)
                 in

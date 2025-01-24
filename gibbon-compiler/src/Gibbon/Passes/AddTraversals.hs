@@ -49,8 +49,9 @@ addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
             tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> case (lrmReg lrm) of 
-                                                      AoSR reg -> (lrmLoc lrm, regionToVar reg)
                                                       SoAR _ _ -> error "TODO: addTraversalsFn structure of arrays not implemented yet."
+                                                      _ -> (lrmLoc lrm, regionToVar (lrmReg lrm))
+
                                       )
                                       (locVars funTy)
         bod' <- addTraversalsExp ddefs fundefs env2 renv (fromVar funName) funBody

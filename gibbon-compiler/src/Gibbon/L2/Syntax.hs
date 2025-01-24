@@ -32,7 +32,7 @@ module Gibbon.L2.Syntax
 -- * Regions and locations
   , LocVar
   , Region(..)
-  , ExtendedRegion(..)
+  --, ExtendedRegion(..)
   , Modality(..)
   , LRM(..)
   , dummyLRM
@@ -484,6 +484,10 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
             | MMapR Var              -- ^ A region that doesn't result in an (explicit)
                                      --   memory allocation. It merely ensures that there
                                      --   are no free locations in the program.
+
+            | SoAR Region [((DataCon, FieldIndex), Region)]
+
+
   deriving (Read,Show,Eq,Ord, Generic)
 
 {- 
@@ -497,34 +501,41 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
    It would be tough to formalize what is means by saying an SoA region exists within another region 
    (VarR x). Since an SoA region contains multiple regions.
 -}
-data ExtendedRegion = AoSR Region                                   -- ^ A simple "flat" region where the datatype 
-                                                                    --   will reside in an array of structure representation.
-                    | SoAR Region [((DataCon, FieldIndex), Region)] -- ^ A complex region representation for a datatype 
-                                                                    --   One "flat" buffer makes space for all the data constructors. 
-                                                                    --   In addition to a list containing a "flat" buffer for each 
-                                                                    --   field. The region can also be mapped to which data constructore 
-                                                                    --   and field tuple it belongs to. A structure of arrays representation. 
-      deriving (Read,Show,Eq,Ord, Generic)
+-- data ExtendedRegion = AoSR Region                                   -- ^ A simple "flat" region where the datatype 
+--                                                                     --   will reside in an array of structure representation.
+--                     | SoAR Region [((DataCon, FieldIndex), Region)] -- ^ A complex region representation for a datatype 
+--                                                                     --   One "flat" buffer makes space for all the data constructors. 
+--                                                                     --   In addition to a list containing a "flat" buffer for each 
+--                                                                     --   field. The region can also be mapped to which data constructore 
+--                                                                     --   and field tuple it belongs to. A structure of arrays representation. 
+--       deriving (Read,Show,Eq,Ord, Generic)
 
 
 
 instance Out Region
-instance Out ExtendedRegion
+-- instance Out ExtendedRegion
 
 instance NFData Region where
   rnf (GlobR v _) = rnf v
   rnf (DynR v _)  = rnf v
   rnf (VarR v)    = rnf v
   rnf (MMapR v)   = rnf v
-
-instance NFData ExtendedRegion where
-  rnf (AoSR reg) = rnf reg
   rnf (SoAR reg fieldRegs) = let 
-                               regions = L.map (\(_, fregs) -> fregs) fieldRegs
-                               regions' = L.map rnf regions  
-                              in case regions' of 
-                                      [] -> rnf reg 
-                                      _ -> L.foldr (\r accum -> r `seq` accum) (rnf reg) regions' 
+                                regions = L.map (\(_, fregs) -> fregs) fieldRegs
+                                regions' = L.map rnf regions  
+                               in case regions' of 
+                                        [] -> rnf reg 
+                                        _ -> L.foldr (\r accum -> r `seq` accum) (rnf reg) regions' 
+
+
+-- instance NFData ExtendedRegion where
+--   rnf (AoSR reg) = rnf reg
+--   rnf (SoAR reg fieldRegs) = let 
+--                                regions = L.map (\(_, fregs) -> fregs) fieldRegs
+--                                regions' = L.map rnf regions  
+--                               in case regions' of 
+--                                       [] -> rnf reg 
+--                                       _ -> L.foldr (\r accum -> r `seq` accum) (rnf reg) regions' 
                                       
 
 
@@ -539,7 +550,7 @@ instance NFData Modality where
 
 -- | A location and region, together with modality.
 data LRM = LRM { lrmLoc :: LocVar
-               , lrmReg :: ExtendedRegion
+               , lrmReg :: Region
                , lrmMode :: Modality }
   deriving (Read,Show,Eq,Ord, Generic)
 
@@ -550,7 +561,7 @@ instance NFData LRM where
 
 -- | A designated doesn't-really-exist-anywhere location.
 dummyLRM :: LRM
-dummyLRM = LRM (singleLocVar "l_dummy") (AoSR $ VarR "r_dummy") Input
+dummyLRM = LRM (singleLocVar "l_dummy") (VarR "r_dummy") Input
 
 regionToVar :: Region -> Var
 regionToVar r = case r of
@@ -691,7 +702,7 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
 
 outRegVars :: ArrowTy2 ty2 -> [LocVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of 
-                                          AoSR rr -> [(singleLocVar (regionToVar rr))] 
+                                          _ -> [(singleLocVar (regionToVar r))] 
                                           SoAR rr fieldRegions -> 
                                             let 
                                               regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
@@ -700,7 +711,7 @@ outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
 
 inRegVars :: ArrowTy2 ty2 -> [LocVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                AoSR rr -> [singleLocVar $ regionToVar rr] 
+                                                _ -> [singleLocVar $ regionToVar r] 
                                                 SoAR rr fieldRegions -> 
                                                   let 
                                                     regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
@@ -709,7 +720,7 @@ inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of
 
 allRegVars :: ArrowTy2 ty2 -> [LocVar]
 allRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                AoSR rr -> [singleLocVar $ regionToVar rr]
+                                                _ -> [singleLocVar $ regionToVar r]
                                                 SoAR rr fieldRegions -> [singleLocVar $ regionToVar rr] 
                                                                     ++ L.map (\(_, freg) -> singleLocVar $ regionToVar freg) fieldRegions
                                     ) (locVars ty)
