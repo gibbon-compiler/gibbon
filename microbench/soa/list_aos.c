@@ -93,6 +93,21 @@ IntTy sum(CursorTy list){
         }
 }
 
+void add1ForInPlace(CursorTy list){
+
+	CursorTy intCursor = list;
+	TagTy tag = *((TagTy*) intCursor);
+
+	while(tag != '1'){
+                
+	        intCursor = intCursor + 1;	
+		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
+		intCursor = intCursor + 8; 
+		tag = *((TagTy*) intCursor);
+	
+	}
+}
+
 
 
 int main(){
@@ -122,14 +137,20 @@ int main(){
   double cpu_time_used;
 
   start = clock();
-  CursorTy add1Out = add1(mkListOut, add1List, add1List);
+  //CursorTy add1Out = add1(mkListOut, add1List, add1List);
+  add1ForInPlace(mkListOut);
   end = clock();
 
   cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
   
   //printList(add1Out);
 
-  IntTy sumList = sum(add1Out);
+  //printList(mkListOut);
+
+  //IntTy sumList = sum(add1Out);
+  
+
+  IntTy sumList = sum(mkListOut);
 
   printf("The sum of the list is %d\n", sumList);
   printf("The time it took for add 1 was %f\n", cpu_time_used);

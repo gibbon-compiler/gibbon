@@ -1,5 +1,5 @@
-#include<stdio.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 typedef char* CursorTy; 
@@ -40,9 +40,11 @@ void printSoAList(SoAList *InRegion){
 		        printf("%d ", val);
 		        CursorTy newTagLocation = (InRegion->tagRegion) + 1;
                 	CursorTy newIntLocation = (InRegion->IntRegion) + 8;
-                	InRegion->tagRegion = newTagLocation;
-                	InRegion->IntRegion = newIntLocation;
-			printSoAList(InRegion);
+
+			SoAList temp;
+                	temp.tagRegion = newTagLocation;
+                	temp.IntRegion = newIntLocation;
+			printSoAList(&temp);
 		        break;	
 		case '1':
 			printf("(Nil))\n");
@@ -100,6 +102,36 @@ IntTy sum(SoAList *InRegion){
         }
 }
 
+void add1InPlaceSoA(SoAList *InRegion){
+
+	TagTy tag = *((TagTy*) InRegion->tagRegion);
+        CursorTy intCursor = InRegion->IntRegion;
+        CursorTy tagCursor = InRegion->tagRegion;	
+
+	while (tag != '1'){
+	    
+	    *((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
+	    intCursor = intCursor + 8;
+	    tagCursor = tagCursor + 1;
+            tag = *((TagTy*) tagCursor);
+	}
+}
+
+void add1InPlaceSoAOpt(SoAList *InRegion, int intBufferSize){
+
+        CursorTy intCursor = InRegion->IntRegion;
+
+	for (int i=0; i < intBufferSize; i++){
+		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
+		intCursor = intCursor + 8;
+	}
+
+
+
+
+}
+
+
 
 int main(){
  
@@ -128,16 +160,28 @@ int main(){
 
  clock_t start, end; 
  double cpu_time_used;
+
+ //printSoAList(mkListOut);
+
  
  start = clock();
- SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
+ //SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
+ //add1InPlaceSoA(mkListOut);
+ add1InPlaceSoAOpt(mkListOut, listLength);
  end = clock();
 
  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
  //printSoAList(Add1SoAOut);
+ 
+ //printSoAList(mkListOut);
+ 
 
- IntTy sumList = sum(Add1SoAOut);
+ //IntTy sumList = sum(Add1SoAOut);
+ 
+ IntTy sumList = sum(mkListOut);
+ 
+ 
 
  printf("The sum of the list is %d\n", sumList);
  printf("The time taken by add1 was %f seconds.\n", cpu_time_used);
