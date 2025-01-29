@@ -708,7 +708,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         (rhs',ty',cs') <-   bindAfterLocs (orderOfVarsOutputDataConE rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
-        return ((con,vars',rhs'),ty',cs')
+        dbgTraceIt "Print in docase: " dbgTraceIt (sdoc (src, dst)) dbgTraceIt "End doCase.\n" return ((con,vars',rhs'),ty',cs')
 
 
   in
@@ -732,7 +732,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                   let ty' = case ty of
                               PackedTy k lv -> PackedTy k d
                               t -> t
-                  unify d loc
+                  dbgTraceIt "Print in VarE inferExp: " dbgTraceIt (sdoc (v, d, loc)) dbgTraceIt "End VarE unify.\n" unify d loc
                             (return (e',ty',[]))
                             (copy (e',ty,[]) d)
 
@@ -750,7 +750,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                 let ty' = case ty of
                             PackedTy k lv -> PackedTy k d
                             t -> t
-                unify d loc
+                dbgTraceIt "Print in ProjE inferExp: " dbgTraceIt (sdoc (d, loc)) dbgTraceIt "End ProjE unify.\n" unify d loc
                           (return (e',ty',[]))
                           (copy (e',ty,[]) d)
 
@@ -797,7 +797,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
            case dest of
              SingleDest d -> do
                case locsInTy valTy of
-                 [outloc] -> dbgTraceIt "Print in AppE" dbgTraceIt (sdoc (valTy, d)) dbgTraceIt "\n" unify d outloc
+                 [outloc] -> dbgTraceIt "Print in AppE" dbgTraceIt (sdoc (valTy, d, outloc)) dbgTraceIt "End AppE inferExp unify.\n" unify d outloc
                                (return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                (err$ "(AppE) Cannot unify" ++ sdoc d ++ " and " ++ sdoc outloc)
                  _ -> err$ "AppE expected a single output location in type: " ++ sdoc valTy
@@ -834,7 +834,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                   -- VS: does this constraint still need to be generated?? 
                                   -- For now, I am commenting it out. 
                                   let constrs = [] --[AfterTagL fakeLoc (singleLocVar dl)]
-                                  dbgTraceIt "inferExp DataConE soa " dbgTraceIt (sdoc (dl)) dbgTraceIt "End soa inferExp DataConE.\n" return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)   
+                                  dbgTraceIt "inferExp DataConE soa " dbgTraceIt (sdoc (d, dl)) dbgTraceIt "End soa inferExp DataConE.\n" return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)   
                  
 
     DataConE () k ls ->
@@ -847,48 +847,6 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           tryBindReg (e', ty, fcs)
         TupleDest _ds -> err $ "Expected single location destination for DataConE" ++ sdoc ex0
         SingleDest d -> do
-                  {-
-                   VS: Here we assign new locations for each argument 
-                       in the data contructor.
-                  -}
-                  locs <- sequence $ replicate (length ls) fresh
-                  mapM_ fixLoc locs -- Don't allow argument locations to freely unify
-                  ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
-                  -- let ls'' = L.map unNestLet ls'
-                  --     bnds = catMaybes $ L.map pullBnds ls'
-                  --     env' = addCopyVarToEnv ls' env
-                  -- Arguments are either a fixed size or a variable
-                  -- TODO: audit this!
-                  argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
-                    case arg of
-                      (VarE v) -> case lookupVEnv v env of
-                                               CursorTy -> return $ ArgFixed 8
-                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                               _ -> return $ ArgVar v
-                      (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                      (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                      (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                      (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                      (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                      (AppE f lvs [(VarE v)]) -> do 
-                                                  v' <- lift $ lift $ freshLocVar "cpy"
-                                                  return $ ArgCopy v (unwrapLocVar v') f lvs
-                      _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
-                  newLocs <- mapM finalLocVar locs
-                  let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
-                      afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
-                        Just $ AfterVariableL loc1 v loc2
-                      afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
-                        Just $ AfterConstantL loc1 s loc2
-                      afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
-                        Just $ AfterCopyL loc1 v v' loc2 f lvs
-                      afterVar _ = Nothing
                   {- VS: 
                      Case d of
                         Single loc -> This remains the same as now
@@ -899,9 +857,53 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           for each argument to the data constructor 
                             check its type 
                                add constraints ... 
-                   -}
+                  -}
                   case d of
-                    Single dVar -> do 
+                    Single dVar -> do
+                      locs <- sequence $ replicate (length ls) fresh
+                      mapM_ fixLoc locs -- Don't allow argument locations to freely unify
+                      ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> 
+                    
+                        dbgTraceIt "Print in lambda DataConE inferExp: "
+                        dbgTraceIt (sdoc (e, lv))
+                        dbgTraceIt "End in lambda inferExp.\n"
+                    
+                        (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
+                      -- let ls'' = L.map unNestLet ls'
+                      --     bnds = catMaybes $ L.map pullBnds ls'
+                      --     env' = addCopyVarToEnv ls' env
+                      -- Arguments are either a fixed size or a variable
+                      -- TODO: audit this!
+                      argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
+                        case arg of
+                          (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ ArgFixed 8
+                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                               _ -> return $ ArgVar v
+                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                          (AppE f lvs [(VarE v)]) -> do 
+                                                  v' <- lift $ lift $ freshLocVar "cpy"
+                                                  return $ ArgCopy v (unwrapLocVar v') f lvs
+                          _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                      newLocs <- mapM finalLocVar locs
+                      let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
+                          afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
+                            Just $ AfterVariableL loc1 v loc2
+                          afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
+                            Just $ AfterConstantL loc1 s loc2
+                          afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
+                            Just $ AfterCopyL loc1 v v' loc2 f lvs
+                          afterVar _ = Nothing
                       let constrs = concat $ [c | (_,_,c) <- ls']
                           constrs' = if null locs
                                      then constrs
@@ -914,22 +916,22 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                             (map Just locs))
                                                             -- ((map Just $ L.tail locs) ++ [Nothing])) ++
                                             in dbgTraceIt "Print in afterVar" dbgTraceIt (sdoc (locs, argLs, ls')) dbgTraceIt "\n" tmpconstrs ++ constrs
-                      -- traceShow k $ traceShow locs $
-                      --let newe = buildLets bnds $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      -- case d of
-                      --  Single loc -> 
-                      --  SoA dataConLoc fieldLocs -> 
-                      -- dbgTraceIt "Print contrs'" dbgTraceIt (sdoc constrs') dbgTraceIt "\n"
+                        -- traceShow k $ traceShow locs $
+                        --let newe = buildLets bnds $ DataConE d k [ e' | (e',_,_)  <- ls'']
+                        -- case d of
+                        --  Single loc -> 
+                        --  SoA dataConLoc fieldLocs -> 
+                        -- dbgTraceIt "Print contrs'" dbgTraceIt (sdoc constrs') dbgTraceIt "\n"
                       ls'' <- forM (zip argLs ls') $ \(arg,(e,ty,cs)) -> do
-                            case e of
-                              (AppE _ _ _) -> case arg of
+                              case e of
+                                (AppE _ _ _) -> case arg of
                                                     ArgCopy _ v' _ _ -> return (VarE v',ty,cs)
                                                     _ -> undefined
-                              _ -> return (e,ty,cs)
-                      -- bod <- return $ DataConE d k [ e' | (e',_,_)  <- ls'']
+                                _ -> return (e,ty,cs)
+                        -- bod <- return $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
                              then case last [e | (e,_,_) <- ls'] of
-                                (AppE f lvs e) ->
+                                  (AppE f lvs e) ->
                                     let (ArgCopy _ v' _ copy_locs) = last argLs
                                         arrty = arrOut $ lookupFEnv f env
                                         -- Substitute the location occurring at the call site
@@ -940,11 +942,70 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                           _ -> error "inferExp: Not a packed type"
                                     in return $ LetE (v',[],copyRetTy, AppE f lvs e) $
                                        DataConE d k [ e' | (e',_,_) <- ls'']
-                                _ -> error "inferExp: Unexpected pattern <error1>"
+                                  _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
                     SoA dataBufferVar fieldLocs -> do 
-                      let dataBufferLoc = Single dataBufferVar
+                      {-
+                        VS: Here we assign new locations for each argument 
+                        in the data contructor.
+                      -}
+                      -- This doesn't exactly work. 
+                      -- I think we might need to check the type here? 
+                      -- The current constraints i generate don't really work.  
+                      -- locs <- sequence $ replicate (length ls) fresh
+                      -- Here we are assuming that the DataConE has flattened expressions and each argument is in ANF form. 
+                      -- Here we check the type of the variable, in case of a PackedTy type we need to generate a new loc 
+                      -- expression. 
+                      locs <- mapM (\exp -> case exp of 
+                                                  VarE v -> case lookupVEnv v env of 
+                                                                PackedTy tycon loc -> freshSoALoc loc 
+                                                                _ -> fresh  
+                                   ) ls
+                      mapM_ fixLoc locs -- Don't allow argument locations to freely unify
+                      ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> 
+                    
+                        dbgTraceIt "Print in lambda DataConE inferExp: "
+                        dbgTraceIt (sdoc (e, lv))
+                        dbgTraceIt "End in lambda inferExp.\n"
+                    
+                        (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
+                      -- let ls'' = L.map unNestLet ls'
+                      --     bnds = catMaybes $ L.map pullBnds ls'
+                      --     env' = addCopyVarToEnv ls' env
+                      -- Arguments are either a fixed size or a variable
+                      -- TODO: audit this!
+                      argLs <- dbgTraceIt "inferExp SoA case: " dbgTraceIt (sdoc ((ls, locs, ls'))) dbgTraceIt "End SoA ls'.\n" forM [a | (a,_,_) <- ls'] $ \arg ->
+                        case arg of
+                          (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ ArgFixed 8
+                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                               _ -> return $ ArgVar v
+                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                          (AppE f lvs [(VarE v)]) -> do 
+                                                  v' <- lift $ lift $ freshLocVar "cpy"
+                                                  return $ ArgCopy v (unwrapLocVar v') f lvs
+                          _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                      newLocs <- mapM finalLocVar locs
+                      let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
+                          afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
+                            Just $ AfterVariableL loc1 v loc2
+                          afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
+                            Just $ AfterConstantL loc1 s loc2
+                          afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
+                            Just $ AfterCopyL loc1 v v' loc2 f lvs
+                          afterVar _ = Nothing
+                      let dataBufferLoc = dbgTraceIt "Print DataConE SoA case argsLs: " dbgTraceIt (sdoc (d, argLs, newLocs)) dbgTraceIt "End DataConE SoA case argLs.\n" Single dataBufferVar
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
                           -- the same datatype. 
@@ -1000,7 +1061,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                   ) fieldLocsOld 
                                                                        newLoc = SoA (unwrapLocVar loc_new) newFieldLocs
                                                                        soa_constraint = AfterSoAL newLoc dc fieldConstraints d                                                                     
-                                                                     in soa_constraint
+                                                                     in dbgTraceIt "Print loc afterTag: " dbgTraceIt (sdoc (loc_new)) dbgTraceIt "End loc_new.\n" soa_constraint
                                       _ -> error "TODO: InferExp SoA, other than AfterTag constraint not expected."
 
                             _ -> error "TODO: InferExp SoA, more that one data constructor constraint not handled."
@@ -1162,7 +1223,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           let acs = concat acss
           tupBod <- projTups valTy (VarE vr) bod
           res <- inferExp ddefs (extendVEnv vr valTy env) tupBod dest
-          (bod'',ty'',cs'') <- dbgTraceIt "Print res LetE, inferExp " dbgTraceIt (sdoc (f, res)) dbgTraceIt "End inferExp.\n" handleTrailingBindLoc vr res
+          (bod'',ty'',cs'') <- dbgTraceIt "Print res LetE, inferExp " dbgTraceIt (sdoc (f, res, dest, argDests)) dbgTraceIt "End LeE inferExp.\n" handleTrailingBindLoc vr res
           let conc_ass_cs'' = acs ++ cs''
           let locs_in_valty = locsInTy valTy
           vcs <- tryNeedRegion locs_in_valty ty'' $ conc_ass_cs''
@@ -1836,22 +1897,23 @@ unify v1 v2 successA failA = do
   ut1 <- lookupUnifyLoc v1
   ut2 <- lookupUnifyLoc v2
   case (ut1,ut2) of
-    (FixedLoc l1, FixedLoc l2) ->
-        if l1 == l2 then successA else failA
-    (FreshLoc l1, FixedLoc l2) ->
+    -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1.\n"
+    (FixedLoc l1, FixedLoc l2) -> 
+        if l1 == l2 then dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1 success.\n" successA else dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1 fail.\n" failA
+    (FreshLoc l1, FixedLoc l2) -> 
         do assocLoc l1 (FixedLoc l2)
-           successA
+           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify2.\n" successA
     (FixedLoc l2, FreshLoc l1) ->
         do assocLoc l1 (FixedLoc l2)
-           successA
-    (FreshLoc l1, FreshLoc l2) ->
+           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify3.\n" successA
+    (FreshLoc l1, FreshLoc l2) -> 
         do assocLoc l1 (FreshLoc l2)
-           successA
+           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify4.\n" successA
 
 unifyAll :: [Dest] -> [Ty2] -> TiM a -> TiM a -> TiM a
 unifyAll (d:ds) (ty:tys) successA failA =
     case (d,ty) of
-      (SingleDest lv1, PackedTy _ lv2) -> unify lv1 lv2 (unifyAll ds tys successA failA) failA
+      (SingleDest lv1, PackedTy _ lv2) -> dbgTraceIt "Print in unifyAll: " dbgTraceIt (sdoc (lv1, lv2)) dbgTraceIt "End unifyAll unify.\n" unify lv1 lv2 (unifyAll ds tys successA failA) failA
       (TupleDest ds', ProdTy tys') -> unifyAll ds' tys' (unifyAll ds tys successA failA) failA
       (NoDest, PackedTy _ _) -> err$ "Expected destination for packed type"
       (SingleDest _, ProdTy _ ) -> err$ "Expected prod destination for prod type: " ++ (show (d,ty))
@@ -1941,25 +2003,25 @@ lookupUnifyLoc lv = do
                     -- TODO: generate a new SoA Location here 
                     l' <- freshSoALoc lv
                     lift $ St.put $ M.insert lv (FreshLoc l') m
-                    dbgTraceIt "LookupUnifyLoc Nothing" dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh\n" return $ FreshLoc l'
+                    dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" return $ FreshLoc l'
         Single _ -> do 
                     l' <- fresh
                     lift $ St.put $ M.insert lv (FreshLoc l') m
-                    dbgTraceIt "LookupUnifyLoc Nothing" dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh\n" return $ FreshLoc l'
-    Just (FreshLoc l') -> dbgTraceIt "LookupUnifyLoc Fresh" dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh\n" finalUnifyLoc l'
-    Just (FixedLoc l') -> dbgTraceIt "LookupUnifyLoc Fixed" dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fixed\n" return $ FixedLoc l'
+                    dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" return $ FreshLoc l'
+    Just (FreshLoc l') -> dbgTraceIt "LookupUnifyLoc Fresh " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" finalUnifyLoc l'
+    Just (FixedLoc l') -> dbgTraceIt "LookupUnifyLoc Fixed " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fixed loc insert.\n" return $ FixedLoc l'
 
 fixLoc :: LocVar -> TiM UnifyLoc
 fixLoc lv = do
   -- l' <- fresh
-  m <- dbgTraceIt "Print in fixLoc " dbgTraceIt (sdoc (lv)) dbgTraceIt "End fixloc.\n" lift $ St.get
+  m <- dbgTraceIt "Print in fixLoc " dbgTraceIt (sdoc (lv, FixedLoc lv)) dbgTraceIt "End fixloc loc insert.\n" lift $ St.get
   lift $ St.put $ M.insert lv (FixedLoc lv) m
   return $ FixedLoc lv
 
 assocLoc :: LocVar -> UnifyLoc -> TiM ()
 assocLoc lv ul = do
   m <- lift $ St.get
-  dbgTraceIt "Print in assocLoc " dbgTraceIt (sdoc (lv, ul)) dbgTraceIt "End in assocLoc.\n" lift $ St.put $ M.insert lv ul m
+  dbgTraceIt "Print in assocLoc " dbgTraceIt (sdoc (lv, ul)) dbgTraceIt "End in assocLoc loc insert.\n" lift $ St.put $ M.insert lv ul m
 
 -- | The copy repair tactic:
 copy :: Result -> LocVar -> TiM Result
