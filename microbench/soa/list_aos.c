@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 typedef char* CursorTy; 
 typedef char TagTy; 
@@ -71,6 +72,27 @@ CursorTy add1(CursorTy list, CursorTy newList, CursorTy listStart){
 	}
 }
 
+IntTy sum(CursorTy list){
+
+        TagTy tag = *((TagTy*) list);
+        switch (tag){
+                case '0' :
+                        ;
+                        IntTy val = *((IntTy*) (list + 1));
+                        CursorTy listNext = list + 9;
+                        IntTy valNext = sum(listNext);
+			return val + valNext;
+                        break;
+                case '1':
+                      ;
+                      return 0;
+                      break;
+                default:
+                        printf("Error: List was not formed correctly.\n");
+                        break;
+        }
+}
+
 
 
 int main(){
@@ -79,7 +101,7 @@ int main(){
   //1 Nil tag == 1 byte 
   //list length = 1000000 => 9 * 1000000 + 1 bytes for allocation. 
 
-  int listLength = 1000000;
+  int listLength = 10000000;
   int listBytes = 9 * listLength + 1;   
   CursorTy allocList = (CursorTy) malloc(sizeof(char) * listBytes);
   if (allocList == NULL){
@@ -96,10 +118,21 @@ int main(){
           exit(0);
   }
 
+  clock_t start, end; 
+  double cpu_time_used;
+
+  start = clock();
   CursorTy add1Out = add1(mkListOut, add1List, add1List);
- 
+  end = clock();
+
+  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
   
-  printList(add1Out);
+  //printList(add1Out);
+
+  IntTy sumList = sum(add1Out);
+
+  printf("The sum of the list is %d\n", sumList);
+  printf("The time it took for add 1 was %f\n", cpu_time_used);
 
 }
 

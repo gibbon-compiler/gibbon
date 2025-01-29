@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<stdlib.h>
+#include <time.h>
 
 typedef char* CursorTy; 
 typedef int IntTy; 
@@ -78,6 +79,28 @@ SoAList *add1(SoAList *InRegion, SoAList *newRegion, SoAList *newRegionStart){
 }
 
 
+IntTy sum(SoAList *InRegion){
+
+        TagTy tag = *((TagTy*) InRegion->tagRegion);
+        switch (tag){
+                case '0':
+                        ;
+                        IntTy val = *((IntTy*) InRegion->IntRegion);
+                        InRegion->tagRegion = InRegion->tagRegion + 1;
+                        InRegion->IntRegion = InRegion->IntRegion + 8;
+                        
+			IntTy valNext = sum(InRegion);
+			return val + valNext;
+                        break;
+
+                case '1':
+                        ;
+                        return 0;
+                        break;
+        }
+}
+
+
 int main(){
  
  //for a list of 100 elements 
@@ -85,7 +108,7 @@ int main(){
  // each Int in the cons tag takes 8 bytes 
  // 100 bytes for Cons tag + 1 for Nil tag 
  // 800 bytes for Ints 	
- int listLength = 1000000;
+ int listLength = 10000000;
  SoAList *SoARegion = (SoAList*) malloc(sizeof(SoAList));
  SoARegion->tagRegion = (CursorTy) malloc(sizeof(char) * (listLength + 1)); 
  SoARegion->IntRegion = (CursorTy) malloc(sizeof(char) * listLength * 8);
@@ -102,9 +125,22 @@ int main(){
  SoAList copyLocationAdd; 
  copyLocationAdd.tagRegion = SoARegionAdd->tagRegion; 
  copyLocationAdd.IntRegion = SoARegionAdd->IntRegion;
- SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
 
- printSoAList(Add1SoAOut);
+ clock_t start, end; 
+ double cpu_time_used;
+ 
+ start = clock();
+ SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
+ end = clock();
+
+ cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
+ //printSoAList(Add1SoAOut);
+
+ IntTy sumList = sum(Add1SoAOut);
+
+ printf("The sum of the list is %d\n", sumList);
+ printf("The time taken by add1 was %f seconds.\n", cpu_time_used);
 
  return 0;
 }
