@@ -19,7 +19,7 @@ CursorTy mkList(CursorTy list, int length, CursorTy listStart){
 		*((TagTy*) list) = '0'; 
 		CursorTy writeInt = list + 1; 
 		*((IntTy*) writeInt) = length; 
-		CursorTy writeNext = list + 9;
+		CursorTy writeNext = list + 1 + sizeof(IntTy);
 	        CursorTy listHead = mkList(writeNext, length - 1, listStart);
 		return listHead;
 	
@@ -34,7 +34,7 @@ void printList(CursorTy listHead){
 		  printf("(Cons ");
 		  IntTy val = *((IntTy*) (listHead + 1));
 		  printf("%d ", val);
-		  CursorTy listNext = listHead + 9;
+		  CursorTy listNext = listHead + 1 + sizeof(IntTy);
 		  printList(listNext);
 		  break;
 		case '1' : 
@@ -55,10 +55,10 @@ CursorTy add1(CursorTy list, CursorTy newList, CursorTy listStart){
 			;
 			IntTy val = *((IntTy*) (list + 1)); 
 			IntTy val_new = val + 1; 
-			CursorTy listNext = list + 9; 
+			CursorTy listNext = list + 1 + sizeof(IntTy); 
 			*((TagTy*) newList) = '0';
 			*((IntTy*) (newList + 1)) = val_new;
-			CursorTy newListNext = newList + 9; 
+			CursorTy newListNext = newList + 1 + sizeof(IntTy); 
 			return add1(listNext, newListNext, listStart);
 			break;
 		case '1':
@@ -79,7 +79,7 @@ IntTy sum(CursorTy list){
                 case '0' :
                         ;
                         IntTy val = *((IntTy*) (list + 1));
-                        CursorTy listNext = list + 9;
+                        CursorTy listNext = list + 1 + sizeof(IntTy);
                         IntTy valNext = sum(listNext);
 			return val + valNext;
                         break;
@@ -102,23 +102,23 @@ void add1ForInPlace(CursorTy list){
                 
 	        intCursor = intCursor + 1;	
 		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
-		intCursor = intCursor + 8; 
+		intCursor = intCursor + sizeof(IntTy); 
 		tag = *((TagTy*) intCursor);
 	
 	}
 }
 
 
-
+/*
 int main(){
 
-  //1 Cons cell = Cons Int == 1 byte for tag + 8 types for Int = 9 bytes
+  //1 Cons cell = Cons Int == 1 byte for tag + 4 bytes for Int = 5 bytes
   //1 Nil tag == 1 byte 
-  //list length = 1000000 => 9 * 1000000 + 1 bytes for allocation. 
+  //list length = 1000000 => 5 * 1000000 + 1 bytes for allocation. 
 
   int listLength = 10000000;
-  int listBytes = 9 * listLength + 1;   
-  CursorTy allocList = (CursorTy) malloc(sizeof(char) * listBytes);
+  int listBytes = (sizeof(IntTy) + 1) * listLength + 1;   
+  CursorTy allocList = (CursorTy) malloc(sizeof(TagTy) * listBytes);
   if (allocList == NULL){
 	  printf("Malloc failed to allocate array of size %d\n", listLength);
 	  exit(0);
@@ -127,7 +127,7 @@ int main(){
 
   CursorTy mkListOut = mkList(allocList, listLength, allocList);
   
-  CursorTy add1List = (CursorTy) malloc(sizeof(char) * listBytes);
+  CursorTy add1List = (CursorTy) malloc(sizeof(TagTy) * listBytes);
   if (add1List == NULL){
           printf("Malloc failed to allocate array of size %d\n", listLength);
           exit(0);
@@ -137,8 +137,8 @@ int main(){
   double cpu_time_used;
 
   start = clock();
-  //CursorTy add1Out = add1(mkListOut, add1List, add1List);
-  add1ForInPlace(mkListOut);
+  CursorTy add1Out = add1(mkListOut, add1List, add1List);
+  //add1ForInPlace(mkListOut);
   end = clock();
 
   cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -147,15 +147,16 @@ int main(){
 
   //printList(mkListOut);
 
-  //IntTy sumList = sum(add1Out);
+  IntTy sumList = sum(add1Out);
   
 
-  IntTy sumList = sum(mkListOut);
+  //IntTy sumList = sum(mkListOut);
 
   printf("The sum of the list is %d\n", sumList);
   printf("The time it took for add 1 was %f\n", cpu_time_used);
 
 }
+*/
 
 
 

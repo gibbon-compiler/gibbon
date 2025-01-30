@@ -20,7 +20,7 @@ SoAList *mkSoAList(SoAList *InRegion, int listLength, SoAList *StartPosition){
 		*((TagTy*) InRegion->tagRegion) = '0';
 		*((IntTy*) InRegion->IntRegion) = listLength;
 		CursorTy newTagLocation = (InRegion->tagRegion) + 1;
-		CursorTy newIntLocation = (InRegion->IntRegion) + 8;
+		CursorTy newIntLocation = (InRegion->IntRegion) + sizeof(IntTy);
 		InRegion->tagRegion = newTagLocation; 
 		InRegion->IntRegion = newIntLocation;
 		SoAList *returnedRegion = mkSoAList(InRegion, listLength - 1, StartPosition); 
@@ -39,7 +39,7 @@ void printSoAList(SoAList *InRegion){
 		        IntTy val = *((IntTy*) InRegion->IntRegion); 
 		        printf("%d ", val);
 		        CursorTy newTagLocation = (InRegion->tagRegion) + 1;
-                	CursorTy newIntLocation = (InRegion->IntRegion) + 8;
+                	CursorTy newIntLocation = (InRegion->IntRegion) + sizeof(IntTy);
 
 			SoAList temp;
                 	temp.tagRegion = newTagLocation;
@@ -62,13 +62,13 @@ SoAList *add1(SoAList *InRegion, SoAList *newRegion, SoAList *newRegionStart){
 		case '0':
 			;
 			IntTy val = *((IntTy*) InRegion->IntRegion); 
-			IntTy newVal = val + 1; 
+			//IntTy new_val = val + 1;
 			*((TagTy*) newRegion->tagRegion) = '0';
-			*((IntTy*) newRegion->IntRegion) = newVal;
-			newRegion->tagRegion = newRegion->tagRegion + 1;
-			newRegion->IntRegion = newRegion->IntRegion + 8; 
-			InRegion->tagRegion = InRegion->tagRegion + 1; 
-			InRegion->IntRegion = InRegion->IntRegion + 8;
+			*((IntTy*) newRegion->IntRegion) = val + 1;
+			newRegion->tagRegion += 1;
+			newRegion->IntRegion += sizeof(IntTy); 
+			InRegion->tagRegion += 1; 
+			InRegion->IntRegion += sizeof(IntTy);
 			return add1(InRegion, newRegion, newRegionStart);
 			break;
 
@@ -89,7 +89,7 @@ IntTy sum(SoAList *InRegion){
                         ;
                         IntTy val = *((IntTy*) InRegion->IntRegion);
                         InRegion->tagRegion = InRegion->tagRegion + 1;
-                        InRegion->IntRegion = InRegion->IntRegion + 8;
+                        InRegion->IntRegion = InRegion->IntRegion + sizeof(IntTy);
                         
 			IntTy valNext = sum(InRegion);
 			return val + valNext;
@@ -111,7 +111,7 @@ void add1InPlaceSoA(SoAList *InRegion){
 	while (tag != '1'){
 	    
 	    *((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
-	    intCursor = intCursor + 8;
+	    intCursor = intCursor + sizeof(IntTy);
 	    tagCursor = tagCursor + 1;
             tag = *((TagTy*) tagCursor);
 	}
@@ -123,27 +123,23 @@ void add1InPlaceSoAOpt(SoAList *InRegion, int intBufferSize){
 
 	for (int i=0; i < intBufferSize; i++){
 		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
-		intCursor = intCursor + 8;
+		intCursor = intCursor + sizeof(IntTy);
 	}
-
-
-
-
 }
 
 
-
+/*
 int main(){
  
  //for a list of 100 elements 
  // a Cons Tag takes 1 byte 
- // each Int in the cons tag takes 8 bytes 
+ // each Int in the cons tag takes 4 bytes 
  // 100 bytes for Cons tag + 1 for Nil tag 
- // 800 bytes for Ints 	
+ // 400 bytes for Ints 	
  int listLength = 10000000;
  SoAList *SoARegion = (SoAList*) malloc(sizeof(SoAList));
- SoARegion->tagRegion = (CursorTy) malloc(sizeof(char) * (listLength + 1)); 
- SoARegion->IntRegion = (CursorTy) malloc(sizeof(char) * listLength * 8);
+ SoARegion->tagRegion = (CursorTy) malloc(sizeof(TagTy) * (listLength + 1)); 
+ SoARegion->IntRegion = (CursorTy) malloc(sizeof(IntTy) * listLength * sizeof(IntTy));
 
  SoAList copyLocation;
  copyLocation.tagRegion = SoARegion->tagRegion;
@@ -151,8 +147,8 @@ int main(){
  SoAList *mkListOut = mkSoAList(SoARegion, listLength, &copyLocation);
 
  SoAList *SoARegionAdd = (SoAList*) malloc(sizeof(SoAList));
- SoARegionAdd->tagRegion = (CursorTy) malloc(sizeof(char) * (listLength + 1));
- SoARegionAdd->IntRegion = (CursorTy) malloc(sizeof(char) * listLength * 8);
+ SoARegionAdd->tagRegion = (CursorTy) malloc(sizeof(TagTy) * (listLength + 1));
+ SoARegionAdd->IntRegion = (CursorTy) malloc(sizeof(IntTy) * listLength * sizeof(IntTy));
 
  SoAList copyLocationAdd; 
  copyLocationAdd.tagRegion = SoARegionAdd->tagRegion; 
@@ -165,9 +161,9 @@ int main(){
 
  
  start = clock();
- //SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
+ SoAList *Add1SoAOut = add1(mkListOut, SoARegionAdd, &copyLocationAdd); 
  //add1InPlaceSoA(mkListOut);
- add1InPlaceSoAOpt(mkListOut, listLength);
+ //add1InPlaceSoAOpt(mkListOut, listLength);
  end = clock();
 
  cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -177,9 +173,9 @@ int main(){
  //printSoAList(mkListOut);
  
 
- //IntTy sumList = sum(Add1SoAOut);
+ IntTy sumList = sum(Add1SoAOut);
  
- IntTy sumList = sum(mkListOut);
+ //IntTy sumList = sum(mkListOut);
  
  
 
@@ -188,3 +184,4 @@ int main(){
 
  return 0;
 }
+*/
