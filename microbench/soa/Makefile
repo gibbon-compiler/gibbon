@@ -53,4 +53,4 @@ all: compile_clang compile_gcc gen_clang_assembly gen_gcc_assembly
 
 
 clean:
-	rm *.exe 
+	rm *.exe *.s  

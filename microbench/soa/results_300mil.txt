@@ -1,0 +1,17 @@
+Average runtime for soa_recursive.clang.exe: 0.827709 seconds
+Average runtime for soa_inplace.gcc.exe: 0.111343 seconds
+Average runtime for soa_inplace_optimized_O3_disable_autovec.gcc.exe: 0.110445 seconds
+Average runtime for soa_inplace_optimized_O3_disable_autovec.clang.exe: 0.110627 seconds
+Average runtime for soa_inplace_optimized_O3_enable_arch_rpass_autovec.gcc.exe: 0.059567 seconds
+Average runtime for aos_inplace.gcc.exe: 0.119517 seconds
+Average runtime for aos_recursive.gcc.exe: 0.753102 seconds
+Average runtime for soa_recursive.gcc.exe: 1.484525 seconds
+Average runtime for soa_inplace_optimized_O3_enable_arch_rpass_autovec.clang.exe: 0.056302 seconds
+Average runtime for soa_inplace_optimized_O3_manually_vectorized.gcc.exe: 0.059462 seconds
+Average runtime for aos_recursive.clang.exe: 0.687578 seconds
+Average runtime for soa_inplace_optimized_O3.clang.exe: 0.063128 seconds
+Average runtime for soa_inplace_optimized_O3.gcc.exe: 0.070953 seconds
+Average runtime for aos_inplace.clang.exe: 0.154353 seconds
+Average runtime for soa_inplace.clang.exe: 0.122595 seconds
+Average runtime for soa_inplace_optimized_O3_manually_vectorized.clang.exe: 0.060071 seconds
+

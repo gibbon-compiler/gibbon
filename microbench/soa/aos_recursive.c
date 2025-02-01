@@ -1,3 +1,4 @@
+#include "globals.c"
 #include "list_aos.c"
 
 int main(){
@@ -6,7 +7,7 @@ int main(){
   //1 Nil tag == 1 byte
   //list length = 1000000 => 5 * 1000000 + 1 bytes for allocation.
 
-  int listLength = 10000000;
+  //int listLength = 10000000;
   int listBytes = (sizeof(IntTy) + 1) * listLength + 1;
   CursorTy allocList = (CursorTy) malloc(sizeof(TagTy) * listBytes);
   if (allocList == NULL){

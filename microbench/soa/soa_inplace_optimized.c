@@ -1,3 +1,4 @@
+#include "globals.c"
 #include "list_soa.c"
 
 int main(){
@@ -7,7 +8,7 @@ int main(){
  // each Int in the cons tag takes 4 bytes
  // 100 bytes for Cons tag + 1 for Nil tag
  // 400 bytes for Ints
- int listLength = 10000000;
+ //int listLength = 10000000;
  SoAList *SoARegion = (SoAList*) malloc(sizeof(SoAList));
  SoARegion->tagRegion = (CursorTy) malloc(sizeof(TagTy) * (listLength + 1));
  SoARegion->IntRegion = (CursorTy) malloc(sizeof(IntTy) * listLength * sizeof(IntTy));
