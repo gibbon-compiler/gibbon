@@ -8,7 +8,7 @@ int main(){
   //list length = 1000000 => 5 * 1000000 + 1 bytes for allocation.
 
   //int listLength = 10000000;
-  int listBytes = (sizeof(IntTy) + 1) * listLength + 1;
+  int listBytes = ((sizeof(IntTy) + 1) * listLength) + 1;
   CursorTy allocList = (CursorTy) malloc(sizeof(TagTy) * listBytes);
   if (allocList == NULL){
           printf("Malloc failed to allocate array of size %d\n", listLength);
@@ -36,8 +36,9 @@ int main(){
   //printList(add1Out);
 
   IntTy sumList = sum(add1Out);
+  IntTy sumListMkList = sum(mkListOut);
 
-  printf("The sum of the list is %d\n", sumList);
+  printf("The sum of the list is %d %d\n", sumList, sumListMkList);
   printf("The time taken by add1 was %f seconds.\n", cpu_time_used);
 
 }
