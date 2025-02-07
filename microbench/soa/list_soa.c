@@ -55,7 +55,7 @@ void printSoAList(SoAList *InRegion){
 }
 
 
-SoAList *add1(SoAList *InRegion, SoAList *newRegion, SoAList *newRegionStart){
+SoAList *add1RecursiveOutOfPlace(SoAList *InRegion, SoAList *newRegion, SoAList *newRegionStart){
 
 	TagTy tag = *((TagTy*) InRegion->tagRegion); 
 	switch (tag){
@@ -69,13 +69,32 @@ SoAList *add1(SoAList *InRegion, SoAList *newRegion, SoAList *newRegionStart){
 			newRegion->IntRegion += sizeof(IntTy); 
 			InRegion->tagRegion += 1; 
 			InRegion->IntRegion += sizeof(IntTy);
-			return add1(InRegion, newRegion, newRegionStart);
+			return add1RecursiveOutOfPlace(InRegion, newRegion, newRegionStart);
 			break;
 
 		case '1':
 			; 
 			*((TagTy*) newRegion->tagRegion) = '1';
 			return newRegionStart; 
+			break;
+	}
+}
+
+SoAList *add1RecursiveInPlace(SoAList *inRegion, SoAList *inRegionStart){
+
+	TagTy tag = *((TagTy*) inRegion->tagRegion); 
+	switch (tag){
+		case '0':
+			; 
+			*((IntTy*) inRegion->IntRegion) += 1;
+			inRegion->tagRegion += 1; 
+			inRegion->IntRegion += sizeof(IntTy);
+			return add1RecursiveInPlace(inRegion, inRegionStart);
+			break;
+
+		case '1':
+			;
+			return inRegionStart; 
 			break;
 	}
 }
@@ -102,7 +121,7 @@ IntTy sum(SoAList *InRegion){
         }
 }
 
-void add1InPlaceSoA(SoAList *InRegion){
+void add1ForInPlaceSoA(SoAList *InRegion){
 
 	TagTy tag = *((TagTy*) InRegion->tagRegion);
         CursorTy intCursor = InRegion->IntRegion;
@@ -117,13 +136,60 @@ void add1InPlaceSoA(SoAList *InRegion){
 	}
 }
 
+void add1ForOutOfPlaceSoA(SoAList *inRegion, SoAList *outRegion){
+
+	TagTy tag = *((TagTy*) inRegion->tagRegion);
+	
+    CursorTy intCursor = inRegion->IntRegion;
+    CursorTy tagCursor = inRegion->tagRegion;
+
+	CursorTy intOutCursor = outRegion->IntRegion; 
+	CursorTy tagOutCursor = outRegion->tagRegion;	
+
+	while (tag != '1'){
+	    
+	    *((IntTy*) intOutCursor) = *((IntTy*) intCursor) + 1;
+	    intCursor += sizeof(IntTy);
+		intOutCursor += sizeof(IntTy);
+		*((TagTy*) tagOutCursor) = tag;
+		tagOutCursor += 1;
+		tagCursor += 1;
+        tag = *((TagTy*) tagCursor);
+	}
+    
+	//write the last tag;
+	*((TagTy*) tagOutCursor) = tag;
+
+}
+
 void add1InPlaceSoAOpt(SoAList *InRegion, int intBufferSize){
 
-        CursorTy intCursor = InRegion->IntRegion;
+    CursorTy intCursor = InRegion->IntRegion;
 
 	for (int i=0; i < intBufferSize; i++){
 		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
 		intCursor = intCursor + sizeof(IntTy);
+	}
+}
+
+void add1OutOfPlaceSoAOpt(SoAList *InRegion, SoAList *OutRegion, int intBufferSize){
+
+    CursorTy intCursor = InRegion->IntRegion;
+	CursorTy outCursor = OutRegion->IntRegion;
+
+	CursorTy inTagCursor = InRegion->tagRegion;
+	CursorTy outTagCursor = OutRegion->tagRegion;
+
+	for (int i = 0; i < intBufferSize; i++){
+		*((TagTy*) outTagCursor) = *((TagTy*) inTagCursor);
+		inTagCursor += 1;
+		outTagCursor += 1;
+	}
+
+	for (int i = 0; i < intBufferSize; i++){
+		*((IntTy*) outCursor) = *((IntTy*) intCursor) + 1;
+		intCursor = intCursor + sizeof(IntTy);
+		outCursor = outCursor + sizeof(IntTy);
 	}
 }
 

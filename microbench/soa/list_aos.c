@@ -47,7 +47,7 @@ void printList(CursorTy listHead){
 }
 
 
-CursorTy add1(CursorTy list, CursorTy newList, CursorTy listStart){
+CursorTy add1RecursiveOutOfPlace(CursorTy list, CursorTy newList, CursorTy listStart){
 
 	TagTy tag = *((TagTy*) list);
 	switch (tag){
@@ -59,11 +59,33 @@ CursorTy add1(CursorTy list, CursorTy newList, CursorTy listStart){
 			*((TagTy*) newList) = '0';
 			*((IntTy*) (newList + 1)) = val_new;
 			CursorTy newListNext = newList + 1 + sizeof(IntTy); 
-			return add1(listNext, newListNext, listStart);
+			return add1RecursiveOutOfPlace(listNext, newListNext, listStart);
 			break;
 		case '1':
 		      ;
 		      *((TagTy*) newList) = '1';
+		      return listStart;
+		      break;
+		default:
+			printf("Error: List was not formed correctly.\n");
+			break;
+	}
+}
+
+CursorTy add1RecursiveInPlace(CursorTy list, CursorTy listStart){
+
+	TagTy tag = *((TagTy*) list);
+	switch (tag){
+		case '0' :
+			;
+			IntTy val = *((IntTy*) (list + 1)); 
+			IntTy val_new = val + 1; 
+			CursorTy listNext = list + 1 + sizeof(IntTy); 
+			*((IntTy*) (list + 1)) = val_new; 
+			return add1RecursiveInPlace(listNext, listStart);
+			break;
+		case '1':
+		      ;
 		      return listStart;
 		      break;
 		default:
@@ -99,13 +121,34 @@ void add1ForInPlace(CursorTy list){
 	TagTy tag = *((TagTy*) intCursor);
 
 	while(tag != '1'){
-                
-	        intCursor = intCursor + 1;	
-		*((IntTy*) intCursor) = *((IntTy*) intCursor) + 1;
-		intCursor = intCursor + sizeof(IntTy); 
+                	
+		*((IntTy*) (intCursor + 1)) = *((IntTy*) (intCursor + 1)) + 1;
+		intCursor += 1 + sizeof(IntTy); 
 		tag = *((TagTy*) intCursor);
+	}
+}
+
+void add1ForOutOfPlace(CursorTy list, CursorTy listOut){
+
+	CursorTy inCursor = list;
+	CursorTy outCursor = listOut;
+	TagTy tag = *((TagTy*) inCursor);
+	
+
+	while(tag != '1'){
+        
+		*((TagTy*) outCursor) = tag;
+		inCursor += 1;
+		outCursor += 1;	
+		*((IntTy*) outCursor) = *((IntTy*) inCursor) + 1;
+		inCursor += sizeof(IntTy); 
+		outCursor += sizeof(IntTy);
+		tag = *((TagTy*) inCursor);
 	
 	}
+    
+	//write the last tag;
+	*((TagTy*) outCursor) = tag;
 }
 
 
