@@ -452,7 +452,7 @@ def generate_papi_init_code(indentation, code):
     #    fprintf(stderr, "Error adding load instructions event\n");
 
     code.append(indentation + "int retval, EventSet = PAPI_NULL;")
-    code.append(indentation + "long long values[2];")
+    code.append(indentation + "long long values[3];")
 
     code.append(indentation + "retval = PAPI_library_init(PAPI_VER_CURRENT);")
     code.append(indentation + "if (retval != PAPI_VER_CURRENT) {")
@@ -466,8 +466,11 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding total instructions event\\n\");")
 
-    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_DCM) != PAPI_OK)")
-    code.append(indentation + "     " + "fprintf(stderr, \"Error adding load instructions event\\n\");")
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_TCM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 TCM event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L3_TCM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L3 TCM event\\n\");")
 
 
 
@@ -507,7 +510,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ");")
     elif gen_function == "add1RecursiveInPlace":
@@ -516,7 +520,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ");")
     elif gen_function == "add1IterativeInPlace":
@@ -524,7 +529,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
             code.append("   " + "printList(" + variableMkListOut + ");")
     elif gen_function == "add1IterativeOutOfPlace":
@@ -534,7 +540,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
             code.append("   " + "printList(" + newMemForAdd1 + ");")
     elif gen_function == "add1IterativeOpt":
@@ -545,7 +552,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
             code.append("   " + "printList(" + variableMkListOut + ");")
 
