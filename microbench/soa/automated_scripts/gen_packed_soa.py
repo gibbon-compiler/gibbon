@@ -500,7 +500,7 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding total instructions event\\n\");")
 
-    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_TCM) != PAPI_OK)")
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_DCM) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 TCM event\\n\");")
 
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L3_TCM) != PAPI_OK)")
