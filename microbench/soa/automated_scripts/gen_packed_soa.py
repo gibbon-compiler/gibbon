@@ -134,25 +134,25 @@ def generate_list_print_function(numFields, code):
     
     addNewLine(code)
     listTypeName = "Cons" + str(numFields) + "FieldList"
-    code.append("void printList(" + listTypeName + " *inList){")
+    code.append("void printList(" + listTypeName + " *inList, FILE *file){")
     code.append("   TagTy tag = *((TagTy*) inList->tagRegion);")
     code.append("   inList->tagRegion = inList->tagRegion + 1;")
     code.append("   switch(tag){")
     code.append("       case '0': ")
-    code.append("           printf(\"(Cons \");")
+    code.append("           fprintf(file, \"(Cons \");")
     
     for i in range(numFields):
             code.append("           IntTy val" + str(i+1) + " = *((IntTy*) inList->k" + str(i+1) +");")
-            code.append("           printf(\"%d \", val" + str(i+1) + ");")
+            code.append("           fprintf(file, \"%d \", val" + str(i+1) + ");")
             code.append("           inList->k" + str(i+1) + " += sizeof(IntTy);")
 
 
     #generate the recursive call
-    code.append("           printList(inList);")
+    code.append("           printList(inList, file);")
     code.append("           break;")
 
     code.append("       case '1': ")
-    code.append("           printf(\"(Nil))\\n\");")
+    code.append("           fprintf(file, \"(Nil))\\n\");")
     code.append("           break;")
     code.append("       default:")
     code.append("           break;")
@@ -411,7 +411,7 @@ def generate_add1_iterative_opt_in_place(numFields, code, useKFields):
     
     addNewLine(code)
     listTypeName = "Cons" + str(numFields) + "FieldList"
-    code.append("void" + " add1IterativeOpt(" + listTypeName + " *inRegion, " +  "IntTy listSize" + ")" + "{")
+    code.append("void" + " add1IterativeOptInPlace(" + listTypeName + " *inRegion, " +  "IntTy listSize" + ")" + "{")
 
     for i in range(useKFields):
         code.append("   " + "CursorTy k" + str(i+1) + " = " + "inRegion->k" + str(i+1) + ";")
@@ -424,6 +424,40 @@ def generate_add1_iterative_opt_in_place(numFields, code, useKFields):
     code.append("   }")
 
     code.append("}")  
+    addNewLine(code)
+
+    return
+
+def generate_add1_iterative_opt_out_of_place(numFields, code, useKFields):
+
+    addNewLine(code)
+    listTypeName = "Cons" + str(numFields) + "FieldList"
+    code.append("void" + " add1IterativeOptOutOfPlace(" + listTypeName + " *inRegion, " + listTypeName + " *outRegion, " +  "IntTy listSize" + ")" + "{")
+
+    code.append("   " + "CursorTy dataConBuffer = " + "inRegion->tagRegion;")
+    code.append("   " + "CursorTy dataConBufferOut = " + "outRegion->tagRegion;")
+
+
+    code.append("   " + "for (int i = 0; i < listSize; i++){")
+    code.append("           " + "*((TagTy*) dataConBufferOut" + ")" + " = " + "*((TagTy*) dataConBuffer" + ");")
+    code.append("           " + "dataConBuffer" +  " += " + "1;")
+    code.append("           " + "dataConBufferOut" + " += " + "1;")
+    code.append("}")
+
+
+    for i in range(useKFields):
+        code.append("   " + "CursorTy kIn" + str(i+1) + " = " + "inRegion->k" + str(i+1) + ";")
+        code.append("   " + "CursorTy kOut" + str(i+1) + " = " + "outRegion->k" + str(i+1) + ";")
+
+    code.append("   " + "for (int i = 0; i < listSize; i++){")
+    for i in range(useKFields):
+        code.append("           " + "*((IntTy*) kOut" + str(i+1) + ")" + " = " + "*((IntTy*) kIn" + str(i+1) +")" + " + 1;")
+        code.append("           " + "kIn" + str(i+1) + " += " + "sizeof(IntTy);")
+        code.append("           " + "kOut" + str(i+1) + " += " + "sizeof(IntTy);")
+
+    code.append("   }")
+
+    code.append("}")
     addNewLine(code)
 
     return
@@ -452,7 +486,7 @@ def generate_papi_init_code(indentation, code):
     #    fprintf(stderr, "Error adding load instructions event\n");
 
     code.append(indentation + "int retval, EventSet = PAPI_NULL;")
-    code.append(indentation + "long long values[2];")
+    code.append(indentation + "long long values[3];")
 
     code.append(indentation + "retval = PAPI_library_init(PAPI_VER_CURRENT);")
     code.append(indentation + "if (retval != PAPI_VER_CURRENT) {")
@@ -466,8 +500,11 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding total instructions event\\n\");")
 
-    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_DCM) != PAPI_OK)")
-    code.append(indentation + "     " + "fprintf(stderr, \"Error adding load instructions event\\n\");")
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_TCM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 TCM event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L3_TCM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L3 TCM event\\n\");")
 
 
 
@@ -494,7 +531,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
     #variableMkListOut = "mkListOut"
     #code.append("   " + listTypeName + " *mkListOut " + "=" + " mkList(" + listInitializeVar + ", listSize, " + "&" + copiedInitList + ");")
     variableMkListOut = generate_call("   ", "mkList", listTypeNameTy, [listInitializeVar, "listSize", "&" + copiedInitList], code)
-
+    
+    code.append("   " + "FILE *file = fopen(\"output.txt\", \"w\");")
 
     #call add1Recursive
     callCode = []
@@ -507,26 +545,29 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableAdd1ListOut + ");")
+            code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1RecursiveInPlace":
         copyVariableMkListOut = generate_copy_variable(numFields, variableMkListOut, code)
         (variableAdd1ListOut, callCode) = generate_call("   ", "add1RecursiveInPlace", listTypeNameTy, [variableMkListOut, "&" + copyVariableMkListOut])
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableAdd1ListOut + ");")
+            code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1IterativeInPlace":
         (_, callCode) = generate_call("   ", "add1IterativeInPlace", "void", [variableMkListOut])
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableMkListOut + ");")
+            code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
     elif gen_function == "add1IterativeOutOfPlace":
         newMemForAdd1 = "add1NewMem"
         allocateList(newMemForAdd1, numFields, listTypeName, code)
@@ -534,20 +575,30 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + newMemForAdd1 + ");")
-    elif gen_function == "add1IterativeOpt":
-        newMemForAdd1 = "add1NewMem"
-        allocateList(newMemForAdd1, numFields, listTypeName, code)
-        newMemForAdd1Copy = generate_copy_variable(numFields, newMemForAdd1, code)
-        (variableAdd1ListOut, callCode) = generate_call("   ", "add1IterativeOpt", "void", [variableMkListOut, "listSize"])
+            code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
+    elif gen_function == "add1IterativeOptInPlace":
+        (_, callCode) = generate_call("   ", "add1IterativeOptInPlace", "void", [variableMkListOut, "listSize"])
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 data cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableMkListOut + ");")
+            code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
+    elif gen_function == "add1IterativeOptOutOfPlace":
+        newMemForAdd1 = "add1NewMem"
+        allocateList(newMemForAdd1, numFields, listTypeName, code)
+        (_, callCode) = generate_call("   ", "add1IterativeOptOutOfPlace", "void", [variableMkListOut, newMemForAdd1, "listSize"])
+        time_used_var = time_call("   ", callCode, code)
+        code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
+        code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        if printList:
+            code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
 
 
 
@@ -563,7 +614,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, help='The number of fields to generate in a Cons list.', required=True)
     parser.add_argument('--l', type=int, help='The number of fields to traverse.', required=True)
     parser.add_argument('--outFile', type=str, help='The name of the file to store the output to.', required=True)
-    parser.add_argument('--function', type=str, choices=['add1RecursiveInPlace', 'add1RecursiveOutOfPlace', 'add1IterativeInPlace', 'add1IterativeOutOfPlace', 'add1IterativeOpt'], help='The name of the function to generate code for.', required=True)
+    parser.add_argument('--function', type=str, choices=['add1RecursiveInPlace', 'add1RecursiveOutOfPlace', 'add1IterativeInPlace', 'add1IterativeOutOfPlace', 'add1IterativeOptInPlace', 'add1IterativeOptOutOfPlace'], help='The name of the function to generate code for.', required=True)
     parser.add_argument('--listSize', type=int, help='The size of the cons list.', required=True)
     parser.add_argument('--printList', type=bool, default=False, help='Print the final cons list.')
 
@@ -584,6 +635,7 @@ if __name__ == "__main__":
     generate_add1_recursive_in_place(numFields, code, numUsedFields)
     generate_add1_iterative_in_place(numFields, code, numUsedFields)
     generate_add1_iterative_opt_in_place(numFields, code, numUsedFields)
+    generate_add1_iterative_opt_out_of_place(numFields, code, numUsedFields)
 
     generate_add1_recursive_out_of_place(numFields, code, numUsedFields)
     generate_add1_iterative_out_of_place(numFields, code, numUsedFields)
