@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # Define the parameters
 k = 1
 l = 1
-list_size = 30
+list_size = 300000000
 functions = ["add1RecursiveInPlace", "add1IterativeInPlace", "add1RecursiveOutOfPlace", "add1IterativeOutOfPlace"]
 out_file_template = "generated_code_{}.c"
 exec_file_template_gcc = "executable_gcc_{}"
@@ -17,7 +17,7 @@ def generate_and_compile_gcc(function):
     exec_file = exec_file_template_gcc.format(function)
     
     # Run the python script to generate the .c file
-    subprocess.run(["python3", "gen_packed_aos.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size)])
+    subprocess.run(["python3", "gen_packed_aos.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size), "--printList", "True"])
     
     # Compile the .c file to an executable with optimization level O3 using GCC
     subprocess.run(["gcc", "-O3", out_file, "-o", exec_file, "-lpapi"])
@@ -28,7 +28,7 @@ def generate_and_compile_clang(function):
     exec_file = exec_file_template_clang.format(function)
     
     # Run the python script to generate the .c file
-    subprocess.run(["python3", "gen_packed_aos.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size)])
+    subprocess.run(["python3", "gen_packed_aos.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size), "--printList", "True"])
     
     # Compile the .c file to an executable with optimization level O3 using Clang
     subprocess.run(["clang", "-O3", out_file, "-o", exec_file, "-lpapi"])

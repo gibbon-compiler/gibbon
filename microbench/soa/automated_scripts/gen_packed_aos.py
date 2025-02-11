@@ -72,25 +72,25 @@ def generate_list_print_function(numFields, code):
     
     addNewLine(code)
     listTypeName = "CursorTy"
-    code.append("void printList(" + listTypeName + " inList){")
+    code.append("void printList(" + listTypeName + " inList, " + "FILE *file" + "){")
     code.append("   TagTy tag = *((TagTy*) inList);")
     code.append("   inList = inList + 1;")
     code.append("   switch(tag){")
     code.append("       case '0': ")
-    code.append("           printf(\"(Cons \");")
+    code.append("           fprintf(file, \"(Cons \");")
     
     for i in range(numFields):
             code.append("           IntTy val" + str(i+1) + " = *((IntTy*) inList" + ");")
-            code.append("           printf(\"%d \", val" + str(i+1) + ");")
+            code.append("           fprintf(file, \"%d \", val" + str(i+1) + ");")
             code.append("           inList += sizeof(IntTy);")
 
 
     #generate the recursive call
-    code.append("           printList(inList);")
+    code.append("           printList(inList, file);")
     code.append("           break;")
 
     code.append("       case '1': ")
-    code.append("           printf(\"(Nil))\\n\");")
+    code.append("           fprintf(file, \"(Nil))\\n\");")
     code.append("           break;")
     code.append("       default:")
     code.append("           break;")
@@ -405,6 +405,8 @@ def generate_main(numFields, gen_function, listSize, printList, code):
     #generate copy for add1NewMem
     #newMemForAdd1Copy = generate_copy_variable(newMemForAdd1, code)
 
+    code.append("   " + "FILE *file = fopen(\"output.txt\", \"w\");")
+
     #call add1Recursive
     callCode = []
     variableAdd1ListOut = "" 
@@ -417,7 +419,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableAdd1ListOut + ");")
+            code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1IterativeInPlace":
         (_, callCode) = generate_call("   ", "add1IterativeInPlace", "void", [variableMkListOut])
         time_used_var = time_call("   ", callCode, code)
@@ -426,7 +428,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableMkListOut + ");")
+            code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
     elif gen_function == "add1IterativeOutOfPlace":
         newMemForAdd1 = "add1NewMem"
         allocateList(newMemForAdd1, numFields, listTypeName, code)
@@ -437,7 +439,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + newMemForAdd1 + ");")
+            code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
     elif gen_function == "add1RecursiveOutOfPlace":
         newMemForAdd1 = "add1NewMem"
         allocateList(newMemForAdd1, numFields, listTypeName, code)
@@ -450,7 +452,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
         if printList:
-            code.append("   " + "printList(" + variableAdd1ListOut + ");")
+            code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
 
     code.append("}")
 
