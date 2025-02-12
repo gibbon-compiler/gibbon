@@ -2,11 +2,12 @@ import subprocess
 import statistics
 import matplotlib.pyplot as plt
 import os
+import numpy as np 
 
 # Define the parameters
 k = 1
 l = 1
-list_size = 3000
+list_size = 300000000
 functions_soa = ["add1RecursiveInPlace", "add1RecursiveOutOfPlace", "add1IterativeInPlace", "add1IterativeOutOfPlace", 
         "add1IterativeOptInPlace", "add1IterativeOptOutOfPlace"]
 out_file_template_soa = "generated_code_soa_{}.c"
@@ -30,10 +31,14 @@ def generate_and_compile_clang_soa(function):
     exec_file = exec_file_template_clang_soa.format(function)
     
     # Run the python script to generate the .c file
-    subprocess.run(["python3", "gen_packed_soa.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size), "--printList", "True"])
+    subprocess.run(["python3", "gen_packed_soa.py", "--k", str(k), "--l", str(l), "--outFile", out_file, "--function", function, "--listSize", str(list_size)])
     
     # Compile the .c file to an executable with optimization level O3 using Clang
     subprocess.run(["clang", "-O3", out_file, "-o", exec_file, "-lpapi"])
+
+
+def format_scientific(number):
+    return np.format_float_scientific(number, precision=2) if number is not None else "N/A"
 
 # Function to run the executable 31 times and collect the data for SOA
 def run_executable(exec_file_template, function):
@@ -45,6 +50,8 @@ def run_executable(exec_file_template, function):
     instructions = []
     l2_misses = []
     l3_misses = []
+    prefetch_data_misses = []
+    l1_instruction_cache_misses = []
     
     for _ in range(31):
         result = subprocess.run(["./" + exec_file], capture_output=True, text=True)
@@ -55,13 +62,17 @@ def run_executable(exec_file_template, function):
         total_instructions = int(output.split("Total Instructions:")[1].split("\n")[0].strip())
         l2_total_cache_misses = int(output.split("L2 total cache misses:")[1].split("\n")[0].strip())
         l3_total_cache_misses = int(output.split("L3 total cache misses:")[1].split("\n")[0].strip())
+        data_prefetch_cache_misses = int(output.split("Data prefetch cache misses:")[1].split("\n")[0].strip())
+        l1_instruction_cache_misses_value = int(output.split("L1 instruction cache misses:")[1].split("\n")[0].strip())
         
         times.append(time_taken)
         instructions.append(total_instructions)
         l2_misses.append(l2_total_cache_misses)
         l3_misses.append(l3_total_cache_misses)
+        prefetch_data_misses.append(data_prefetch_cache_misses)
+        l1_instruction_cache_misses.append(l1_instruction_cache_misses_value)
     
-    return times, instructions, l2_misses, l3_misses
+    return times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses
 
 # Generate and compile the .c files for each function using GCC and Clang for SOA
 for function in functions_soa:
@@ -72,28 +83,36 @@ for function in functions_soa:
 data_gcc_soa = {}
 data_clang_soa = {}
 for function in functions_soa:
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_template_gcc_soa, function)
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_template_gcc_soa, function)
     data_gcc_soa[function] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses)
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.mean(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses))
     }
     
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_template_clang_soa, function)
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_template_clang_soa, function)
     data_clang_soa[function] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses)
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.mean(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses))
     }
 
 # Special compilation options for 'add1IterativeOpt'
@@ -166,75 +185,90 @@ for i, options in enumerate(special_options_gcc):
     exec_file_gcc_out_of_place = f"executable_gcc_special_out_of_place{i}"
     exec_file_clang_out_of_place = f"executable_clang_special_out_of_place{i}"
     
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_gcc_in_place, "add1IterativeOptInPlace")
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_gcc_in_place, "add1IterativeOptInPlace")
     data_special_gcc["add1IterOptInPlace" + "-" + special_options_keys[i]] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses),
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.mean(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses)),
         "compile_command": "gcc " + " ".join(options)
     }
 
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_gcc_out_of_place, "add1IterativeOptOutOfPlace")
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_gcc_out_of_place, "add1IterativeOptOutOfPlace")
     data_special_gcc["add1IterOptOutOfPlace" + "-" + special_options_keys[i]] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses),
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.mean(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses)),
         "compile_command": "gcc " + " ".join(options)
     }
     
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_clang_in_place, "add1IterativeOptInPlace")
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_clang_in_place, "add1IterativeOptInPlace")
     data_special_clang["add1IterOptInPlace" + "-" + special_options_keys[i]] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses),
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.median(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses)),
         "compile_command": "clang " + " ".join(options)
     }
 
-    times, instructions, l2_misses, l3_misses = run_executable(exec_file_clang_out_of_place, "add1IterativeOptOutOfPlace")
+    times, instructions, l2_misses, l3_misses, prefetch_data_misses, l1_instruction_cache_misses = run_executable(exec_file_clang_out_of_place, "add1IterativeOptOutOfPlace")
     data_special_clang["add1IterOptOutOfPlace" + "-" + special_options_keys[i]] = {
         "times": times,
         "instructions": instructions,
         "l2_misses": l2_misses,
         "l3_misses": l3_misses,
-        "median_time": statistics.median(times),
-        "median_instructions": statistics.median(instructions),
-        "median_l2_misses": statistics.median(l2_misses),
-        "median_l3_misses": statistics.median(l3_misses),
+        "prefetch_data_misses": prefetch_data_misses,
+        "l1_instruction_cache_misses": l1_instruction_cache_misses,
+        "median_time": format_scientific(statistics.mean(times)),
+        "median_instructions": format_scientific(statistics.mean(instructions)),
+        "median_l2_misses": format_scientific(statistics.mean(l2_misses)),
+        "median_l3_misses": format_scientific(statistics.mean(l3_misses)),
+        "median_prefetch_data_misses": format_scientific(statistics.mean(prefetch_data_misses)),
+        "median_l1_instruction_cache_misses": format_scientific(statistics.mean(l1_instruction_cache_misses)),
         "compile_command": "clang " + " ".join(options)
     }
 
 # Plot the data in a table with increased font size, table size, and column heights
-fig, ax = plt.subplots(figsize=(16, 12))  # Increase figure size
+fig, ax = plt.subplots(figsize=(20, 14))  # Increase figure size
 ax.axis('tight')
 ax.axis('off')
 
-#ax.set_title("Performance Data for SOA Functions (GCC and Clang)", fontsize=16, pad=20)
 fig.suptitle("Performance Data for SOA Functions (GCC and Clang)", fontsize=16, y=0.95)
 
 # Adjust the layout to create space for the title
 plt.subplots_adjust(top=0.85)
 
 table_data_gcc_soa = [
-    ["Function (GCC)", "Median Time (s)", "Median Instructions", "Median L2 Misses", "Median L3 Misses"]
+    ["Function (GCC)", "Time (s)", "Instructions", "L2 Misses", "L3 Misses", "Prefetch D-Misses", "L1 I-Misses"]
 ]
 
 table_data_clang_soa = [
-    ["Function (Clang)", "Median Time (s)", "Median Instructions", "Median L2 Misses", "Median L3 Misses"]
+    ["Function (Clang)", "Time (s)", "Instructions", "L2 Misses", "L3 Misses", "Prefetch D-Misses", "L1 I-Misses"]
 ]
 
 for function in functions_soa:
@@ -243,7 +277,9 @@ for function in functions_soa:
         data_gcc_soa[function]["median_time"],
         data_gcc_soa[function]["median_instructions"],
         data_gcc_soa[function]["median_l2_misses"],
-        data_gcc_soa[function]["median_l3_misses"]
+        data_gcc_soa[function]["median_l3_misses"],
+        data_gcc_soa[function]["median_prefetch_data_misses"],
+        data_gcc_soa[function]["median_l1_instruction_cache_misses"]
     ])
 
     table_data_clang_soa.append([
@@ -251,7 +287,9 @@ for function in functions_soa:
         data_clang_soa[function]["median_time"],
         data_clang_soa[function]["median_instructions"],
         data_clang_soa[function]["median_l2_misses"],
-        data_clang_soa[function]["median_l3_misses"]
+        data_clang_soa[function]["median_l3_misses"],
+        data_clang_soa[function]["median_prefetch_data_misses"],
+        data_clang_soa[function]["median_l1_instruction_cache_misses"]
     ])
 
 for function in special_options_keys:
@@ -264,7 +302,9 @@ for function in special_options_keys:
             data_special_gcc[function_new]["median_time"],
             data_special_gcc[function_new]["median_instructions"],
             data_special_gcc[function_new]["median_l2_misses"],
-            data_special_gcc[function_new]["median_l3_misses"]
+            data_special_gcc[function_new]["median_l3_misses"],
+            data_special_gcc[function_new]["median_prefetch_data_misses"],
+            data_special_gcc[function_new]["median_l1_instruction_cache_misses"]
         ])
 
         table_data_clang_soa.append([
@@ -272,15 +312,16 @@ for function in special_options_keys:
             data_special_clang[function_new]["median_time"],
             data_special_clang[function_new]["median_instructions"],
             data_special_clang[function_new]["median_l2_misses"],
-            data_special_clang[function_new]["median_l3_misses"]
+            data_special_clang[function_new]["median_l3_misses"],
+            data_special_clang[function_new]["median_prefetch_data_misses"],
+            data_special_clang[function_new]["median_l1_instruction_cache_misses"]
         ])
 
-
 # Ensure all rows have the same number of columns
-empty_row = [""] * 5
+empty_row = [""] * 7
 table_data_combined = table_data_gcc_soa + [empty_row] + table_data_clang_soa
 
-table = ax.table(cellText=table_data_combined, loc='center', cellLoc='center', colWidths=[0.22]*5)  # Increase column width
+table = ax.table(cellText=table_data_combined, loc='center', cellLoc='center', colWidths=[0.25] + [0.14]*6)  # Increase column width
 table.auto_set_font_size(False)
 table.set_fontsize(12)  # Increase font size
 
@@ -289,4 +330,3 @@ for key, cell in table.get_celld().items():
     cell.set_height(0.05)  # Increase row height
 
 plt.show()
-
