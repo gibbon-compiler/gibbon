@@ -318,10 +318,17 @@ def generate_add1_iterative_out_of_place(numFields, code, useKFields):
         code.append("       " + "outCursor" + " += sizeof(IntTy);")
 
     
-    numFieldsLeft = numFields - useKFields
+    #numFieldsLeft = numFields - useKFields
 
-    code.append("       " + "cursor += " + str(numFieldsLeft) + " * " + "sizeof(IntTy);")
-    code.append("       " + "outCursor += " + str(numFieldsLeft) + " * " + "sizeof(IntTy);")
+    #code.append("       " + "cursor += " + str(numFieldsLeft) + " * " + "sizeof(IntTy);")
+    #code.append("       " + "outCursor += " + str(numFieldsLeft) + " * " + "sizeof(IntTy);")
+
+    for i in range(useKFields, numFields):
+        code.append("                   " + "IntTy val" + str(i+1) + " = " + "*((IntTy*) cursor" + ");")
+        code.append("                   " + "cursor" + " += " + "sizeof(IntTy);")
+        code.append("                   " + "*((IntTy*) outCursor" + ")" + " = " + "val" + str(i+1) + ";")
+        code.append("                   " + "outCursor" + " += " + "sizeof(IntTy);")
+
    
     code.append("       " + "tag = *((TagTy*) cursor);") 
     code.append("       " + "*((TagTy*) outCursor) = tag;")
@@ -414,7 +421,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         copyMkListOut = generate_copy_variable(variableMkListOut, code)
         (variableAdd1ListOut, callCode) = generate_call("   ", "add1RecursiveInPlace", listTypeName, [variableMkListOut, copyMkListOut])
         time_used_var = time_call("   ", callCode, code)
-        code.append("   " + "printf(\"The time taken by add1RecursiveInPlace was %f seconds.\\n\", " + time_used_var + ");")
+        code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
@@ -423,7 +430,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
     elif gen_function == "add1IterativeInPlace":
         (_, callCode) = generate_call("   ", "add1IterativeInPlace", "void", [variableMkListOut])
         time_used_var = time_call("   ", callCode, code)
-        code.append("   " + "printf(\"The time taken by add1IterativeInPlace was %f seconds.\\n\", " + time_used_var + ");")
+        code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
@@ -434,7 +441,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         allocateList(newMemForAdd1, numFields, listTypeName, code)
         (_, callCode) = generate_call("   ", "add1IterativeOutOfPlace", "void", [variableMkListOut, newMemForAdd1])
         time_used_var = time_call("   ", callCode, code)
-        code.append("   " + "printf(\"The time taken by add1IterativeOutOfPlace was %f seconds.\\n\", " + time_used_var + ");")
+        code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
@@ -447,7 +454,7 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         copyNewMemForAdd1Copy = generate_copy_variable(newMemForAdd1Copy, code)
         (variableAdd1ListOut, callCode) = generate_call("   ", "add1RecursiveOutOfPlace", listTypeName, [variableMkListOut, newMemForAdd1Copy, copyNewMemForAdd1Copy])
         time_used_var = time_call("   ", callCode, code)
-        code.append("   " + "printf(\"The time taken by add1RecursiveOutOfPlace was %f seconds.\\n\", " + time_used_var + ");")
+        code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
