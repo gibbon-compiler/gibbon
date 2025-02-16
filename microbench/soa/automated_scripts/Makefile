@@ -1,2 +1,2 @@
 clean: 
-	rm *.exe *.c *.png  
+	rm *.exe *.c *.s executable_*  

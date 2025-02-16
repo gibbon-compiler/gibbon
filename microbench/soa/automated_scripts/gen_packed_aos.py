@@ -362,7 +362,7 @@ def generate_papi_init_code(indentation, code):
     #    fprintf(stderr, "Error adding load instructions event\n");
 
     code.append(indentation + "int retval, EventSet = PAPI_NULL;")
-    code.append(indentation + "long long values[5];")
+    code.append(indentation + "long long values[14];")
 
     code.append(indentation + "retval = PAPI_library_init(PAPI_VER_CURRENT);")
     code.append(indentation + "if (retval != PAPI_VER_CURRENT) {")
@@ -394,6 +394,9 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding total instructions event\\n\");")
 
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_CYC) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding PAPI_TOT_CYC event\\n\");")
+
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_TCM) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 TCM event\\n\");")
 
@@ -404,7 +407,32 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding data prefetch misses event\\n\");")
 
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L1_ICM) != PAPI_OK)")
-    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L1 ICM event\\n\");")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L1_ICM event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_ICM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2_ICM event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_RES_STL) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding PAPI_RES_STL event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_LD_INS) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding load instructions\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_SR_INS) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding store instructions\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_LDM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 load misses event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L2_STM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L2 store misses event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_STL_CCY) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding STL_CCY event\\n\");")
+
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_STL_ICY) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding PAPI_STL_ICY event\\n\");")
+
 
 
 def generate_main(numFields, gen_function, listSize, printList, code):
@@ -447,10 +475,19 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
-        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
-        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
-        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"Total Cycles: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[5]);")
+        code.append("   " + "printf(\"L2 instruction cache misses: %lld\\n\", values[6]);")
+        code.append("   " + "printf(\"Cycles waiting on any resource: %lld\\n\", values[7]);")
+        code.append("   " + "printf(\"Load instructions: %lld\\n\", values[8]);")
+        code.append("   " + "printf(\"Store instructions: %lld\\n\", values[9]);")
+        code.append("   " + "printf(\"L2 load misses: %lld\\n\", values[10]);")
+        code.append("   " + "printf(\"L2 store misses: %lld\\n\", values[11]);")
+        code.append("   " + "printf(\"Cycles with no instructions completed: %lld\\n\", values[12]);")
+        code.append("   " + "printf(\"Cycles with no instruction issue: %lld\\n\", values[13]);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1IterativeInPlace":
@@ -458,10 +495,19 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
-        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
-        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
-        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"Total Cycles: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[5]);")
+        code.append("   " + "printf(\"L2 instruction cache misses: %lld\\n\", values[6]);")
+        code.append("   " + "printf(\"Cycles waiting on any resource: %lld\\n\", values[7]);")
+        code.append("   " + "printf(\"Load instructions: %lld\\n\", values[8]);")
+        code.append("   " + "printf(\"Store instructions: %lld\\n\", values[9]);")
+        code.append("   " + "printf(\"L2 load misses: %lld\\n\", values[10]);")
+        code.append("   " + "printf(\"L2 store misses: %lld\\n\", values[11]);")
+        code.append("   " + "printf(\"Cycles with no instructions completed: %lld\\n\", values[12]);")
+        code.append("   " + "printf(\"Cycles with no instruction issue: %lld\\n\", values[13]);")
         if printList:
             code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
     elif gen_function == "add1IterativeOutOfPlace":
@@ -471,10 +517,19 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
-        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
-        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
-        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"Total Cycles: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[5]);")
+        code.append("   " + "printf(\"L2 instruction cache misses: %lld\\n\", values[6]);")
+        code.append("   " + "printf(\"Cycles waiting on any resource: %lld\\n\", values[7]);")
+        code.append("   " + "printf(\"Load instructions: %lld\\n\", values[8]);")
+        code.append("   " + "printf(\"Store instructions: %lld\\n\", values[9]);")
+        code.append("   " + "printf(\"L2 load misses: %lld\\n\", values[10]);")
+        code.append("   " + "printf(\"L2 store misses: %lld\\n\", values[11]);")
+        code.append("   " + "printf(\"Cycles with no instructions completed: %lld\\n\", values[12]);")
+        code.append("   " + "printf(\"Cycles with no instruction issue: %lld\\n\", values[13]);")
         if printList:
             code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
     elif gen_function == "add1RecursiveOutOfPlace":
@@ -486,10 +541,19 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         time_used_var = time_call("   ", callCode, code)
         code.append("   " + "printf(\"The time taken by add1 was %f seconds.\\n\", " + time_used_var + ");")
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
-        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
-        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
-        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
-        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"Total Cycles: %lld\\n\", values[1]);")
+        code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[5]);")
+        code.append("   " + "printf(\"L2 instruction cache misses: %lld\\n\", values[6]);")
+        code.append("   " + "printf(\"Cycles waiting on any resource: %lld\\n\", values[7]);")
+        code.append("   " + "printf(\"Load instructions: %lld\\n\", values[8]);")
+        code.append("   " + "printf(\"Store instructions: %lld\\n\", values[9]);")
+        code.append("   " + "printf(\"L2 load misses: %lld\\n\", values[10]);")
+        code.append("   " + "printf(\"L2 store misses: %lld\\n\", values[11]);")
+        code.append("   " + "printf(\"Cycles with no instructions completed: %lld\\n\", values[12]);")
+        code.append("   " + "printf(\"Cycles with no instruction issue: %lld\\n\", values[13]);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
 
