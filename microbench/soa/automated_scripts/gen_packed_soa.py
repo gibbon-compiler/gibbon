@@ -428,6 +428,31 @@ def generate_add1_iterative_opt_in_place(numFields, code, useKFields):
 
     return
 
+
+def generate_sum_iterative_opt_in_place(numFields, code, useKFields):
+
+    addNewLine(code)
+    listTypeName = "Cons" + str(numFields) + "FieldList"
+    code.append("IntTy" + " sum(" + listTypeName + " *inRegion, " +  "IntTy listSize" + ")" + "{")
+
+    for i in range(useKFields):
+        code.append("   " + "CursorTy k" + str(i+1) + " = " + "inRegion->k" + str(i+1) + ";")
+    
+    code.append("   " + "IntTy sum = 0;")
+    code.append("   " + "for (int i = 0; i < listSize; i++){")
+    for i in range(useKFields):
+        #code.append("           " + "*((IntTy*) k" + str(i+1) + ")" + " = " + "*((IntTy*) k" + str(i+1) +")" + " + 1;")
+        code.append("           " + "sum += " + "*((IntTy*) k" + str(i+1) + ");")
+        code.append("           " + "k" + str(i+1) + " += " + "sizeof(IntTy);")
+
+    code.append("   }")
+
+    code.append("return sum;")
+    code.append("}")
+    addNewLine(code)
+
+    return
+
 def generate_add1_iterative_opt_out_of_place(numFields, code, useKFields):
 
     addNewLine(code)
@@ -486,7 +511,7 @@ def generate_papi_init_code(indentation, code):
     #    fprintf(stderr, "Error adding load instructions event\n");
 
     code.append(indentation + "int retval, EventSet = PAPI_NULL;")
-    code.append(indentation + "long long values[3];")
+    code.append(indentation + "long long values[5];")
 
     code.append(indentation + "retval = PAPI_library_init(PAPI_VER_CURRENT);")
     code.append(indentation + "if (retval != PAPI_VER_CURRENT) {")
@@ -497,6 +522,24 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_create_eventset(&EventSet) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error creating event set\\n\");")
 
+    #// Assign the event set to the CPU component (usually component 0)
+    #if ((retval = PAPI_assign_eventset_component(EventSet, 0)) != PAPI_OK) {
+    #    fprintf(stderr, "Error assigning component: %s\n", PAPI_strerror(retval));
+    #    return 1;
+    #}
+
+    code.append(indentation + "if ((retval = PAPI_assign_eventset_component(EventSet, 0)) != PAPI_OK){")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error assigning component: %s\\n\", PAPI_strerror(retval));")
+    code.append(indentation + "     " + "return 1;")
+    code.append(indentation + "}")
+
+    #// Enable multiplexing if supported
+    #if ((retval = PAPI_set_multiplex(EventSet)) != PAPI_OK)
+    #    fprintf(stderr, "Error enabling multiplexing: %s\n", PAPI_strerror(retval));
+
+    code.append(indentation + "if ((retval = PAPI_set_multiplex(EventSet)) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error enabling multiplexing: %s\\n\", PAPI_strerror(retval));")
+
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding total instructions event\\n\");")
 
@@ -506,7 +549,11 @@ def generate_papi_init_code(indentation, code):
     code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L3_TCM) != PAPI_OK)")
     code.append(indentation + "     " + "fprintf(stderr, \"Error adding L3 TCM event\\n\");")
 
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_PRF_DM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding data prefetch misses event\\n\");")
 
+    code.append(indentation + "if (PAPI_add_event(EventSet, PAPI_L1_ICM) != PAPI_OK)")
+    code.append(indentation + "     " + "fprintf(stderr, \"Error adding L1 ICM event\\n\");")
 
 
 def generate_main(numFields, gen_function, listSize, printList, code):
@@ -547,6 +594,10 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + variableAdd1ListOut + ", listSize" + ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1RecursiveInPlace":
@@ -557,6 +608,10 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + variableAdd1ListOut + ", listSize" + ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + variableAdd1ListOut + ", file" + ");")
     elif gen_function == "add1IterativeInPlace":
@@ -566,6 +621,10 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + variableMkListOut + ", listSize" + ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
     elif gen_function == "add1IterativeOutOfPlace":
@@ -577,6 +636,10 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + newMemForAdd1 + ", listSize" +  ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
     elif gen_function == "add1IterativeOptInPlace":
@@ -586,6 +649,10 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + variableMkListOut + ", listSize" +  ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + variableMkListOut + ", file" + ");")
     elif gen_function == "add1IterativeOptOutOfPlace":
@@ -597,10 +664,12 @@ def generate_main(numFields, gen_function, listSize, printList, code):
         code.append("   " + "printf(\"Total Instructions: %lld\\n\", values[0]);")
         code.append("   " + "printf(\"L2 total cache misses: %lld\\n\", values[1]);")
         code.append("   " + "printf(\"L3 total cache misses: %lld\\n\", values[2]);")
+        code.append("   " + "printf(\"Data prefetch cache misses: %lld\\n\", values[3]);")
+        code.append("   " + "printf(\"L1 instruction cache misses: %lld\\n\", values[4]);")
+        code.append("   " + "IntTy s = sum(" + newMemForAdd1 + ", listSize" + ");")
+        code.append("   " + "printf(\"The sum of the list was %d.\\n\", s);")
         if printList:
             code.append("   " + "printList(" + newMemForAdd1 + ", file" + ");")
-
-
 
     code.append("}")
 
@@ -636,7 +705,7 @@ if __name__ == "__main__":
     generate_add1_iterative_in_place(numFields, code, numUsedFields)
     generate_add1_iterative_opt_in_place(numFields, code, numUsedFields)
     generate_add1_iterative_opt_out_of_place(numFields, code, numUsedFields)
-
+    generate_sum_iterative_opt_in_place(numFields, code, numUsedFields)
     generate_add1_recursive_out_of_place(numFields, code, numUsedFields)
     generate_add1_iterative_out_of_place(numFields, code, numUsedFields)
 
