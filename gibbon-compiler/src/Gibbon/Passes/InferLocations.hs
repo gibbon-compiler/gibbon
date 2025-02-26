@@ -110,6 +110,7 @@ import Gibbon.DynFlags
 --------------------------------------------------------------------------------
 
 -- | Combine the different kinds of contextual information in-scope.
+-- | Also the Typing environment from the PLDI paper
 data FullEnv = FullEnv
     { dataDefs :: DDefs Ty2 -- ^ Data type definitions
     , valEnv :: TyEnv Var Ty2   -- ^ Type env for local bindings
@@ -197,8 +198,6 @@ convertTyHelperSoAParent tycon ddefs dcons = do
                                                     out <- convertTyHelperSoAChild tycon ddefs d 
                                                     outRst <- convertTyHelperSoAParent tycon ddefs rst
                                                     return $ out ++ outRst
-
-
 
 
 convertTyHelperSoAChild :: TyCon -> DDefs1 -> DataCon -> PassM [((DataCon, Int), Var)]
@@ -296,6 +295,7 @@ instance Out Constraint
 
 -- | The result type for this pass.  Return a new expression and its
 -- type, which includes/implies its location.
+-- | Similar to the Constraint Env in the PLDI paper.
 type Result = (Exp2, Ty2, [Constraint])
 
 data DCArg = ArgFixed Int
@@ -2595,10 +2595,6 @@ removeAliasesForCopyCalls prg@(Prog ddfs fndefs mnExp) = do
         Ext _ -> pure exp
         MapE{} ->  error "removeAliasesForCopyCalls: todo MapE"
         FoldE{} -> error "removeAliasesForCopyCalls: todo FoldE"
-
-
-
-  
 
 {--
 
