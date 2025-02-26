@@ -1,0 +1,67 @@
+Specific to InferLocations.hs
+
+data List = Cons Int List | Nil
+
+Constraints for Cons data constructor case:
+
+NOTE: d1 and i1 are all starts locations!
+current_loc s1 = SoA d1 [(Cons, 0), i1]
+
+ls_types = [Int, List]
+
+-- Bound start locations for each data type definition
+locs_ls = [inew@Single int_loc, s1@(SoA d2 [(("Cons", 0), i2)])]
+
+1.) t1@AfterTagL d2 d1
+2.) c1@AfterConstantL inew 0 i1
+3.) AfterSoAL s2 t1 [c1, c2] s1
+
+View of the buffers before the current Cons tag is written
+
+                         (d1)
+                          |
+datacon buffer = [...Cons]
+
+                         (i1)
+                          |
+integer buffer =  [...Int]
+
+View of the buffers after the current Cons tag is written
+
+1.) t1@AfterTagL d2 d1 =>                       (d1)  (d2)
+                                                 |     |
+                        datacon buffer = [...Cons|Cons]
+
+2.) c1@AfterConstantL inew 0 i1 =>
+                                               (i1, inew) i1 == inew
+                                                |
+                        integer buffer = [...Int|Int]
+
+3.) c2@AfterConstantL i2 32 i1                  i1 == inew
+                                                (i1, inew)
+                                                |
+                                                |
+                        integer buffer = [...Int|Int]
+
+Question1 : Are these SoA constraints correct for this List data ls_types
+
+mkList :: Int -> List @ s1@(SoA tagloc [(("Cons", 0), intloc)])
+mkList [s1] n =
+    if n == 0
+    then Nil s1
+    else
+        letloc intloc = getFieldLoc ("Cons", 0) s1
+        let val : Int @ intloc = n
+        letloc s1' = SoA (tagloc + 1) [(("Cons", 0), (intloc + 8))] <-- This probably requires breaking down to more operations
+        let rst : List @ s1' = mkList [s1'] (n - 1)
+         in Cons s1 val rst
+
+add1 :: List @ s1@(SoA d1 [(("Cons", 0), i1)]) -> List @ s2@(SoA d2 [(("Cons", 0), i2)])
+add1 [s1, s2] lst = case lst of
+                          Nil -> Nil s2
+                          Cons (val : Int @ i1) (rst : List @ s1') -> letloc i2 = getFieldLoc (Cons, 0) s2
+                                                                      let (val' : Int @ i2) = (val : Int @ i1) + 1
+                                                                      letloc s2' = SoA (d2 + 1) [(("Cons", 0), (i2 + 8))]
+                                                                      let (rst' : List @ s2') = add1 [s2'] rst
+                                                                       in Cons s2 val' rst'
+

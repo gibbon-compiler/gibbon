@@ -1,0 +1,106 @@
+Specific to Inferlocations.hs
+
+data Tree = Node Int Tree Tree | Leaf Int
+
+Constraints for Node data constructor case:
+
+current_loc s1 = SoA d1 [(("Node", 0), i1), (("Leaf", 0), i2)]
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+Case : Node data constructor
+
+    ls_types = [Int, Tree, Tree]
+    ls_locs  = [inew@Single int_loc, s1'@(SoA d1' [(("Node", 0), i1'), (("Leaf", 0), i2')]), s1''@(SoA d1'' [(("Node", 0), i1''), (("Leaf", 0, i2''))])]
+
+    1.) t1@(AfterTagL d1' d1)
+    2.) c1@(AfterConstantL inew 0 i1)
+    3.) AfterSoAL s1' t1 [c1] s1
+    4.) AfterVarL s1'' leftSubTree
+
+   View before the current tag is written
+
+                           (d1)
+                            |
+    datConBuffer = [...Node]
+
+                               (i1)
+                                |
+    integerBufferNode = [...Int]
+
+    View after the current tag is written
+
+    1.) t1@(AfterTagL d1' d1)
+
+                                  (d1)  (d1')
+                                   |     |
+            datConBuffer = [...Node|Node]
+
+
+    2.) c1@(AfterConstantL inew 0 i1)
+
+
+                                      (i1, inew) i1 == inew
+                                       |
+            integerBufferNode = [...Int|Int]
+
+
+Case : Leaf data constructor
+
+    ls_types = [Int]
+    ls_locs = [inew@Single int_loc]
+
+    1.) AfterConstantL inew 0 i2 (where i2 is the location of the leaf int buffer from above)
+
+    View before the Leaf tag is written
+
+                             (d1)
+                             |
+    dataConBuffer = [...Node]
+
+                               (i2)
+                                |
+    integerBufferLeaf = [...Int]
+
+    View after the Leaf tag is written
+
+    1.) AfterConstantL inew 0 i2
+
+                               (d1)
+                                |
+        dataConBuffer = [...Node|Leaf]          -- recursion ends at Leaf
+
+                                  (i2, inew) i2 == inew
+                                   |
+        integerBufferLeaf = [...Int|Int]
+
+
+
+buildTree :: forall s1 . Int -> Tree @ s1@(SoA tagloc [(("Node", 0), i1), (("Leaf", 0), i2)])
+buildTree [s1] n =
+    if n == 0
+    then letloc i2 = getFieldLoc ("Leaf", 0) s1
+         let val : Int @ i2 = 1
+          in Leaf s1 val
+    else
+        letloc i1 = getFieldLoc ("Node", 0) s1
+        let val : Int @ i1 = n
+        letloc s1' = SoA (tagloc + 1) [(("Node", 0), (i1 + 1)), (("Leaf", 0), i2)]
+        let left : Tree @ s1' = buildTree [s1'] (n - 1)
+        letloc s2' = afterSoA(Tree @ s1')
+        let right : Tree @ s2' = buildTree [s2'] (n - 1)
+         in Node s1 left right
+
+
+add1Tree :: for all s1, s2 . Tree @ s1@(SoA tin [(("Node", 0), i1in), (("Leaf", 0), i2in)]) -> Tree @ s2@(SoA tout [(("Node", 0), i1out), (("Leaf", 0), i2out)])
+add1Tree [s1, s2] tree = case tree of
+                              Leaf (val : Int @ i2in) -> letloc i2out = getFieldLoc ("Leaf", 0) s2
+                                                         let (val_new : Int @ i2out) = (val : Int @ i2in) + 1
+                                                          in Leaf s2 val_new
+                              Node (val : Int @ i1in) (left : Tree @ s1') (right : Tree @ s1'')  -> letloc i1out = getFieldLoc ("Node", 0) s2
+                                                                                                    let (val_new : Int @ i1out) = (val : Int @ i1in) + 1
+                                                                                                    letloc s2' = SoA (tout + 1) [(("Node", 0), (i1out + 8)), (("Leaf", 0), i2out)]
+                                                                                                    let (left' : Tree @ s2') = add1Tree [s1', s2'] left
+                                                                                                    letloc s2'' = afterSoA(Tree @ s2')
+                                                                                                    let (right' : Tree @ s2'') = add1Tree [s1'', s2''] right
+                                                                                                     in Node s2'' left' right'
+
