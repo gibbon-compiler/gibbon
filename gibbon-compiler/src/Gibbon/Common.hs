@@ -148,6 +148,15 @@ type DataCon = String
 --        The list includes locations for each field and a tuple storing 
 --        information about which data constructor and corresponding index the field 
 --        comes from. 
+-- TODO: I think the type for an SoA location is not right here 
+-- A Location should work for a data constructor buffer 
+-- However, imagine if we have a data type definition of 
+-- data Foo = A Int List Tree Tree | Leaf
+-- here the List would be in its own buffer potentially
+-- so we have nesting of SoA locations 
+-- Possibly need to change Location in SoA to LocVar, a recursive data type 
+-- But for simple data types like data List = Cons Int List | Nil 
+-- this should work just fine. 
 data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
