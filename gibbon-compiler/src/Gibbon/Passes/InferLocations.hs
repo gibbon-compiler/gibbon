@@ -399,6 +399,12 @@ fixType_ ty =
       ProdTy tys -> mapM_ fixType_ tys
       _ -> return ()
 
+-- | get the data constructor location from an SoA loc
+getDconLoc :: LocVar -> LocVar 
+getDconLoc loc = case loc of 
+                    SoA dcon fieldLocs -> Single dcon 
+                    Single lc -> loc 
+
 -- | Wrap the inferExp procedure, and consume all remaining constraints
 inferExp' :: DDefs1 -> FullEnv -> Exp1 -> [LocVar] -> Dest -> TiM (L2.Exp2, L2.Ty2)
 inferExp' ddefs env exp bound dest=
@@ -975,18 +981,29 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       --     env' = addCopyVarToEnv ls' env
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
+                      let tyConOfDataCon = getTyOfDataCon ddefs k
                       argLs <- dbgTraceIt "inferExp SoA case: " dbgTraceIt (sdoc ((ls, locs, ls'))) dbgTraceIt "End SoA ls'.\n" forM [a | (a,_,_) <- ls'] $ \arg ->
                         case arg of
                           (VarE v) -> case lookupVEnv v env of
-                                               CursorTy -> return $ ArgFixed 8
-                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                               _ -> return $ ArgVar v
+                                                 CursorTy -> return $ ArgFixed 0
+                                               --CursorTy -> return $ ArgFixed 8
+                                                 IntTy -> return $ ArgFixed 0
+                                               --IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                                 FloatTy -> return $ ArgFixed 0
+                                               --FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                                 SymTy -> return $ ArgFixed 0
+                                               --SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                                 BoolTy -> return $ ArgFixed 0
+                                               --BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                 CharTy -> return $ ArgFixed 0
+                                               --CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                               --VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                               --ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                                 PackedTy tycon loc -> if tycon == tyConOfDataCon
+                                                                       then return $ ArgVar v
+                                                                       else return $ ArgFixed 0
+                                                 _ -> error "inferExp: DataConE SoA: offset for type not implemented!"
+                          -- TODO: fix these to get the correct offset for an SoA loc.
                           (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                           (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                           (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
@@ -1009,14 +1026,13 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
                           -- the same datatype. 
-                          tyConOfDataCon = getTyOfDataCon ddefs k
                           (idxsWriteDconBuf, idxsFields) = L.foldr (\res@(_, ty, _) (w, f) -> case ty of 
                                                                       PackedTy tycon _ -> if tycon == tyConOfDataCon
                                                                                           then (w ++ [L.elemIndex res ls'], f)
                                                                                           else (w, f ++ [L.elemIndex res ls'])
                                                                       _ -> (w, f ++ [L.elemIndex res ls'])
                                                                    ) ([], []) ls'
-                          idxsWriteDconBuf' = L.reverse idxsWriteDconBuf  
+                          idxsWriteDconBuf' = dbgTraceIt "Print tuple line: 1023" dbgTraceIt (sdoc (idxsWriteDconBuf, idxsFields)) dbgTraceIt "End line 1023\n" L.reverse idxsWriteDconBuf  
                           idxsFields' = L.reverse idxsFields                                       
                           argsLsDconBuf = L.map (\(Just idx) -> ls' !! idx) idxsWriteDconBuf'
                           dcArgDconBuf = L.map (\(Just idx) -> argLs !! idx) idxsWriteDconBuf'
@@ -1027,48 +1043,58 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           locsFields = L.map (\(Just idx) -> locs !! idx) idxsFields' 
                           -- Generate the constraints around the data constructor buffer.
                           -- Generate the constraint right after the DataConstructor Tag.
-                          dataBufferConstraints = case locsDconBuf of 
-                                                        [] -> []
-                                                        _ -> let afterTagConstraint = AfterTagL (Sf.headErr locsDconBuf) dataBufferLoc
-                                                                 afterTagConstrsTmp = (mapMaybe afterVar $ zip3
-                                                                                        dcArgDconBuf
-                                                                                        ((map Just $ Sf.tailErr locsDconBuf) ++ [Nothing])
-                                                                                        (map Just locsDconBuf)
-                                                                                      )
-                                                               in [afterTagConstraint] ++ afterTagConstrsTmp
-                          fieldLocVars = P.concatMap (\( (dk, _), locVar) -> if dk == k 
-                                                                       then [Single locVar]
-                                                                       else []
-                                               ) fieldLocs
+                          -- dataBufferConstraints = case locsDconBuf of 
+                          --                               [] -> []
+                          --                               _ -> let afterTagConstraint = AfterTagL (Sf.headErr locsDconBuf) dataBufferLoc
+                          --                                        afterTagConstrsTmp = (mapMaybe afterVar $ zip3
+                          --                                                               dcArgDconBuf
+                          --                                                               ((map Just $ Sf.tailErr locsDconBuf) ++ [Nothing])
+                          --                                                               (map Just locsDconBuf)
+                          --                                                             )
+                          --                                      in [afterTagConstraint] ++ afterTagConstrsTmp
+                          fieldLocVars = dbgTraceIt "Print tuple line: 1040" dbgTraceIt (sdoc (argsLsDconBuf, dcArgDconBuf, locsDconBuf, argsLsFields, dcArgFields, locsFields)) dbgTraceIt "End line 1040\n" P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
+                                                                 in case fldloc of 
+                                                                           Just location -> Just (Single location)
+                                                                           Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                     ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
-                                                dcArgFields 
-                                                (map Just locsFields)
-                                                (map Just fieldLocVars)
+                                                dcArgFields
+                                                ((map Just locsFields))
+                                                (fieldLocVars)
                                              )
+                          -- AfterTagConstraints
+                          afterTagConstrs = AfterTagL (getDconLoc (Sf.headErr locsDconBuf)) (getDconLoc d)
+                          soa_constraint = AfterSoAL (Sf.headErr locsDconBuf) afterTagConstrs fieldConstraints d
+                          afterVariableConstraints =  (mapMaybe afterVar $ zip3 
+                                                        dcArgDconBuf 
+                                                        ((map Just $ Sf.tailErr locsDconBuf) ++ [Nothing])
+                                                        (map Just locsDconBuf)
+                                                      )
                           -- Generate the constraints around the field buffers. 
-                          constrs = concat $ [c | (_,_,c) <- ls']
-                          out = case dataBufferConstraints of 
-                            [dc] -> case dc of 
-                                      AfterTagL loc_new loc_old -> let newFieldLocs = case d of 
-                                                                                          SoA dataConLocOld fieldLocsOld -> 
-                                                                                            P.concatMap (\e@((dcon, findex), locationVar) -> P.concatMap (\cons -> case cons of 
-                                                                                                                                              AfterConstantL nl _ ol -> if (ol == singleLocVar locationVar)
-                                                                                                                                                                        then [((dcon, findex), unwrapLocVar nl)]
-                                                                                                                                                                        else []
-                                                                                                                                              _ -> error "inferExp: TODO constraint not implemented!" 
+                          constrs = dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n" concat $ [c | (_,_,c) <- ls']
+                          -- out = case dataBufferConstraints of 
+                          --   [dc] -> case dc of 
+                          --             AfterTagL loc_new loc_old -> let newFieldLocs = case d of 
+                          --                                                                 SoA dataConLocOld fieldLocsOld -> 
+                          --                                                                   P.concatMap (\e@((dcon, findex), locationVar) -> P.concatMap (\cons -> case cons of 
+                          --                                                                                                                     AfterConstantL nl _ ol -> if (ol == singleLocVar locationVar)
+                          --                                                                                                                                               then [((dcon, findex), unwrapLocVar nl)]
+                          --                                                                                                                                               else []
+                          --                                                                                                                     _ -> error "inferExp: TODO constraint not implemented!" 
                                                                                                         
-                                                                                                                                 ) fieldConstraints
-                                                                                                  ) fieldLocsOld 
-                                                                       newLoc = SoA (unwrapLocVar loc_new) newFieldLocs
-                                                                       soa_constraint = AfterSoAL newLoc dc fieldConstraints d                                                                     
-                                                                     in dbgTraceIt "Print loc afterTag: " dbgTraceIt (sdoc (loc_new)) dbgTraceIt "End loc_new.\n" soa_constraint
-                                      _ -> error "TODO: InferExp SoA, other than AfterTag constraint not expected."
+                          --                                                                                                        ) fieldConstraints
+                          --                                                                         ) fieldLocsOld 
+                          --                                              newLoc = SoA (unwrapLocVar loc_new) newFieldLocs
+                          --                                              soa_constraint = AfterSoAL newLoc dc fieldConstraints d                                                                     
+                          --                                            in dbgTraceIt "Print loc afterTag: " dbgTraceIt (sdoc (loc_new)) dbgTraceIt "End loc_new.\n" soa_constraint
+                          --             _ -> error "TODO: InferExp SoA, other than AfterTag constraint not expected."
 
-                            _ -> error "TODO: InferExp SoA, more that one data constructor constraint not handled."
+                          --   _ -> error "TODO: InferExp SoA, more that one data constructor constraint not handled."
                           --newLocVar = 
                           -- SoAConstraints = AfterSoAL LocVar Constraint [Constraint] LocVar
                           -- dataBufferConstraints ++ fieldConstraints
-                          constrs' = dbgTraceIt "Print dconConstrs" dbgTraceIt (sdoc (d, dataBufferConstraints, fieldConstraints, constrs, out)) dbgTraceIt "End Constraints.\n" [out] ++ constrs
+                          --constrs' = dbgTraceIt "Print dconConstrs" dbgTraceIt (sdoc (d, dataBufferConstraints, fieldConstraints, constrs, out)) dbgTraceIt "End Constraints.\n" [out] ++ constrs
+                          constrs' = constrs ++ [soa_constraint] ++ afterVariableConstraints
                       -- traceShow k $ traceShow locs $
                       --let newe = buildLets bnds $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       -- case d of
@@ -1097,7 +1123,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      dbgTraceIt "Print contrs'" dbgTraceIt (sdoc constrs') dbgTraceIt "\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     IfE a b c@ce -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
