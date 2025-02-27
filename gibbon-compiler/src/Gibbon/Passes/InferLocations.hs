@@ -426,6 +426,8 @@ inferExp' ddefs env exp bound dest=
                 addLetLoc i a =
                     case i of
                       -- AfterSoALE (PreLocExp loc) [PreLocExp loc] loc
+                      -- TODO: This might need to better capture the handling of SoA location. 
+                      -- For instance, introducing new functions to handle SoA locations etc.
                       AfterSoAL lv1 dconConstr fieldConstrs lv2 -> let dataConExpression = case dconConstr of 
                                                                                                 AfterTagL lv1 lv2 -> AfterConstantLE 1 lv2
                                                                                                 _ -> error "bindAllLocations case not handled!"
@@ -704,9 +706,18 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
              -> (DataCon, [(Var,())], Exp1) ->
              TiM ((DataCon, [(Var,LocVar)], L2.Exp2), Ty2, [Constraint])
       doCase ddfs env src dst (con,vars,rhs) = do
-        vars' <- forM vars $ \(v,_) -> do lv <- lift $ lift $ freshLocVar "case"
-                                          _ <- fixLoc lv
-                                          return (v,lv)
+        let (tyc, (don, flds)) = lkp ddfs con
+        let zippedVars = zip vars flds
+        vars' <- forM zippedVars $ \((v,_), (_, t)) -> do 
+                                       case t of 
+                                          PackedTy ty _ -> do 
+                                              lv <- freshSoALoc2 ddfs con
+                                              _ <- fixLoc lv
+                                              return (v,lv)
+                                          _ -> do
+                                                lv <- lift $ lift $ freshLocVar "case"
+                                                _ <- fixLoc lv
+                                                return (v,lv)
         let contys = lookupDataCon ddfs con
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
@@ -2017,6 +2028,40 @@ freshSoALoc lc = do
                                      rst' <- freshTyLocsSoA rst
                                      let newSoALoc = SoA (unwrapLocVar dbuf') rst'
                                      return newSoALoc
+
+
+freshSoALocHelper :: Var -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), Var)]
+freshSoALocHelper tyvar lst = do 
+                        case lst of
+                          [] -> do 
+                                 pure []
+                          (a, flds):rst -> do
+                                            fieldLocs <- fmap concat $ mapM (\e@(_, ty) -> do 
+                                                                              case ty of 
+                                                                                PackedTy tyc _ -> do
+                                                                                                if (fromVar tyvar) == tyc 
+                                                                                                then return []
+                                                                                                else do 
+                                                                                                  newLoc <- fresh 
+                                                                                                  let Just idx = L.elemIndex e flds
+                                                                                                  return $ [((a, idx), unwrapLocVar newLoc)]
+                                                                                _ -> do
+                                                                                     newLoc <- fresh
+                                                                                     let Just idx = L.elemIndex e flds
+                                                                                     return $ [((a, idx), unwrapLocVar newLoc)]
+                                                             ) flds
+                                            rst' <- freshSoALocHelper tyvar rst
+                                            return $ fieldLocs ++ rst'
+
+freshSoALoc2 :: DDefs Ty2 -> DataCon -> TiM LocVar 
+freshSoALoc2 ddfs con = do
+                       let (tyc, (don, flds)) = lkp ddfs con
+                       let DDef{dataCons} = lookupDDef ddfs (fromVar tyc)
+                       fields <- freshSoALocHelper tyc dataCons
+                       newdcLoc <- fresh
+                       return $ SoA (unwrapLocVar newdcLoc) fields
+
+
                     
 
 lookupUnifyLoc :: LocVar -> TiM UnifyLoc
