@@ -157,6 +157,9 @@ type DataCon = String
 -- Possibly need to change Location in SoA to LocVar, a recursive data type 
 -- But for simple data types like data List = Cons Int List | Nil 
 -- this should work just fine. 
+-- One reason I don't want to make an SoA location recursive is that you might 
+-- want to make the level of factoring limited to only depth = 1
+-- more factoring than a depth of level one might slow down too much
 data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 

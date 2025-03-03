@@ -150,6 +150,7 @@ data E2Ext loc dec
   = LetRegionE    Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE LocVar (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
+  | LetSoALocE LocVar (E2 loc dec) -- ^ Bind a new SoA loc
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
   | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
   | BoundsCheck Int -- Bytes required
@@ -196,8 +197,13 @@ data PreLocExp loc = StartOfRegionLE Region
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
-
-                   | AfterSoALE (PreLocExp loc) [PreLocExp loc] loc  -- Compute new SoA location from an old SoA location 
+                   -- Helpers for SoA that may be required
+                   | GenSoALoc loc [((DataCon, FieldIndex), loc)]
+                   | GetDataConLocSoA loc -- Get the data constructor location from an SoA loc
+                   | GetFieldLocSoA (DataCon, FieldIndex) loc -- Get the field location from the SoA loc
+                   | AfterVectorLE (PreLocExp loc) [PreLocExp loc] loc
+                     -- Compute new SoA location from an old SoA location
+                     -- Not sure this is fully needed 
 								     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer 
 								     -- [PreLocExp loc] -> expressions for arithmetic on each field location 
 								     -- loc, store the old loc, why? -- capture more metadata, also style

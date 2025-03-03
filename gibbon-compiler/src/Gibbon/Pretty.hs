@@ -435,14 +435,18 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
           StartOfRegionLE r -> lparen <> text "startOfRegion" <+> text (sdoc r) <> rparen
-          AfterSoALE dexp fexps s -> lparen <> text "afterSoALoc(" <+> pprint dexp <+> "," <+> (brackets $ hcat (punctuate "," (map pprint fexps))) <+> ")" <+> pprint s <> rparen  
+          GenSoALoc loc flocs -> lparen <> text "genSoALoc" <+> pprint loc <+> (brackets $ hcat (punctuate "," (map (\((dc, x), l) -> text dc <+> int x <+> pprint l) flocs))) <> rparen 
+	  GetDataConLocSoA loc -> lparen <> text "genDconLocSoA" <+> pprint loc <> rparen
+	  GetFieldLocSoA (dcon, idx) loc -> lparen <> text "genFieldLocSoA" <+> lparen <> text dcon <+> "," <+> int idx <> rparen <+> pprint loc <> rparen
+          AfterVectorLE dexp fexps s -> lparen <> text "afterVectorOfLocs(" <+> pprint dexp <+> "," <+> (brackets $ hcat (punctuate "," (map pprint fexps))) <+> ")" <+> pprint s <> rparen  
 	  AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
 	  AfterVariableLE v loc b -> if b
 				     then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
 				     else parens $ pprint loc <+> text "+" <+> doc v
           InRegionLE r  -> lparen <> text "inRegion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromEnd" <+> pprint loc <> rparen
-          FreeLE -> lparen <> text "free" <> rparen
+          FreeLE -> lparen <> text "free" <> rparen 
+		
 
 instance Pretty RegionSize where
     pprintWithStyle _ (BoundedSize x) = parens $ text "Bounded" <+> int x
@@ -459,7 +463,9 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                                  doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
                                 pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
-          L2.RetE ls v -> text "return" <+>
+          LetSoALocE loc e -> text "letSoAloc" <+>
+                                pprint loc <+> text "in" $+$ pprint e
+	  L2.RetE ls v -> text "return" <+>
                             lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
           FromEndE loc -> text "fromende" <+> pprint loc

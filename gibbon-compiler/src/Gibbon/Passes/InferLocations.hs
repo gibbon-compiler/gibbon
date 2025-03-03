@@ -405,6 +405,12 @@ getDconLoc loc = case loc of
                     SoA dcon fieldLocs -> Single dcon 
                     Single lc -> loc 
 
+-- | get the field locs from the SoA locs
+getFieldLocs :: LocVar -> [((DataCon, FieldIndex), Var)]
+getFieldLocs loc = case loc of 
+                    SoA dcon fieldLocs -> fieldLocs
+                    Single lc -> error "getFieldLocs : Did not expect a non SoA location!"
+
 -- | Wrap the inferExp procedure, and consume all remaining constraints
 inferExp' :: DDefs1 -> FullEnv -> Exp1 -> [LocVar] -> Dest -> TiM (L2.Exp2, L2.Ty2)
 inferExp' ddefs env exp bound dest=
@@ -428,14 +434,60 @@ inferExp' ddefs env exp bound dest=
                       -- AfterSoALE (PreLocExp loc) [PreLocExp loc] loc
                       -- TODO: This might need to better capture the handling of SoA location. 
                       -- For instance, introducing new functions to handle SoA locations etc.
-                      AfterSoAL lv1 dconConstr fieldConstrs lv2 -> let dataConExpression = case dconConstr of 
-                                                                                                AfterTagL lv1 lv2 -> AfterConstantLE 1 lv2
-                                                                                                _ -> error "bindAllLocations case not handled!"
-                                                                       fieldLocExprs = P.map (\c -> case c of 
-                                                                                                      AfterConstantL lv1 v lv2 -> AfterConstantLE v lv2
-                                                                                                      AfterVariableL lv1 v lv2 -> AfterVariableLE v lv2 True
-                                                                                             ) fieldConstrs
-                                                                    in Ext (LetLocE lv1 (AfterSoALE dataConExpression fieldLocExprs lv2) a)                                              
+                      -- AfterSoAL lv1 dconConstr fieldConstrs lv2 -> let dataConExpression = case dconConstr of 
+                      --                                                                           AfterTagL lv1 lv2 -> AfterConstantLE 1 lv2
+                      --                                                                           _ -> error "bindAllLocations case not handled!"
+                      --                                                  fieldLocExprs = P.map (\c -> case c of 
+                      --                                                                                 AfterConstantL lv1 v lv2 -> AfterConstantLE v lv2
+                      --                                                                                 AfterVariableL lv1 v lv2 -> AfterVariableLE v lv2 True
+                      --                                                                        ) fieldConstrs
+                      --                                               in Ext (LetLocE lv1 (AfterVectorLE dataConExpression fieldLocExprs lv2) a)    
+                      AfterSoAL slv1 dconConstr fieldConstrs slv2 -> case (dconConstr, fieldConstrs) of 
+                                                                          (AfterTagL lv1 lv2, flst) -> -- First let use get all the locations from the fieldConstrs
+                                                                                                     let used_field_locs = P.map (\c -> case c of 
+                                                                                                                                          AfterConstantL lv1 v lv2 -> lv2  
+                                                                                                                                          AfterVariableL lv1 v lv2 -> lv2
+                                                                                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
+                                                                                                                                 ) flst 
+                                                                                                         get_loc_keys = P.concatMap (\((dcon, idx), lc) -> if elem (Single lc) used_field_locs 
+                                                                                                                                                     then [((dcon, idx), lc)]
+                                                                                                                                                     else []
+                                                                                                                              ) (getFieldLocs slv2)
+                                                                                                         exprs = P.map (\(key, l) -> LetLocE (Single l) (GetFieldLocSoA key slv2)
+                                                                                                                       ) get_loc_keys
+                                                                                                         dconLoc = LetLocE lv1 (AfterConstantLE 1 lv2)
+                                                                                                         exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++exprs ++ [dconLoc]
+                                                                                                         fieldLocExps = P.map (\c -> case c of 
+                                                                                                                                AfterConstantL lv1 v lv2 -> LetLocE lv1 (AfterConstantLE v lv2)
+                                                                                                                                AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)  
+                                                                                                                                _ -> error "bindAllLocations : AfterSoALE: unexpected locatin constraint."
+                                                                                                                              ) flst
+                                                                                                         new_field_locs = P.foldr (\c accum -> case c of 
+                                                                                                                                          AfterConstantL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
+                                                                                                                                                                           in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
+                                                                                                                                                                                                                then [((d, id), lv1)]
+                                                                                                                                                                                                                else []
+                                                                                                                                                                                                   ) flcs
+                                                                                                                                                                          
+                                                                                                                                                                         
+                                                                                                                                          AfterVariableL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
+                                                                                                                                                                       in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
+                                                                                                                                                                                                                then [((d, id), lv1)]
+                                                                                                                                                                                                                else []
+                                                                                                                                                                                                   ) flcs 
+                                                                                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
+                                                                                                                                 ) [] flst
+                                                                                                         exprs'' = exprs' ++ fieldLocExps ++ [LetSoALocE slv1]  --[LetLocE slv1 (GenSoALoc lv1 new_field_locs)]
+                                                                                                         lambda  = (\lst base -> case lst of 
+                                                                                                                                       [] -> base 
+                                                                                                                                       x:rst -> let rst' = lambda rst base
+                                                                                                                                                 in Ext (x rst')
+                                                                                                         
+                                                                                                                   )
+                                                                                                            
+                                                                                                         returned = lambda exprs'' a
+                                                                                                      in returned
+                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected tag constraint."                                       
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
                       StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
@@ -458,7 +510,7 @@ inferExp' ddefs env exp bound dest=
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         e''' <- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n" bindAllUnbound e'' (S.toList unbound)
-        return (e''',ty)
+        return (e',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -711,7 +763,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         vars' <- forM zippedVars $ \((v,_), (_, t)) -> do 
                                        case t of 
                                           PackedTy ty _ -> do 
-                                              lv <- freshSoALoc2 ddfs con
+                                              dflags <- getDynFlags
+                                              let useSoA = gopt Opt_Packed_SoA dflags
+                                              lv <- if useSoA
+                                                    then freshSoALoc2 ddfs con
+                                                    else lift $ lift $ freshLocVar "case"
                                               _ <- fixLoc lv
                                               return (v,lv)
                                           _ -> do
@@ -1074,15 +1130,52 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                 (fieldLocVars)
                                              )
                           -- AfterTagConstraints
-                          afterTagConstrs = AfterTagL (getDconLoc (Sf.headErr locsDconBuf)) (getDconLoc d)
-                          soa_constraint = AfterSoAL (Sf.headErr locsDconBuf) afterTagConstrs fieldConstraints d
-                          afterVariableConstraints =  (mapMaybe afterVar $ zip3 
-                                                        dcArgDconBuf 
-                                                        ((map Just $ Sf.tailErr locsDconBuf) ++ [Nothing])
-                                                        (map Just locsDconBuf)
-                                                      )
+                      (aftagc, sc, aftvarc) <- case locsDconBuf of
+                                                        -- No recursion in the data type
+                                                        [] -> return ([], [], [])
+                                                        hloc:rstlocs -> do
+                                                                        let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
+                                                                        let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
+                                                                                                                        in case fldloc of 
+                                                                                                                            Just location -> Just (Single location)
+                                                                                                                            Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                                                                      ) idxsFields'
+                                                                        argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
+                                                                                  case arg of
+                                                                                      (VarE v) -> case lookupVEnv v env of
+                                                                                                        CursorTy -> return $ ArgFixed 8
+                                                                                                        IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                                                                                        FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                                                                                        SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                                                                                        BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                                        CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                                                                                        VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                                                                                        ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                                                                                        _ -> error "inferExp: DataConE SoA: offset for type not implemented!"
+                                                                                      -- TODO: fix these to get the correct offset for an SoA loc.
+                                                                                      (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                                                                      (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                                                                      (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                                                                      (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                      (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                      (AppE f lvs [(VarE v)]) -> do 
+                                                                                                v' <- lift $ lift $ freshLocVar "cpy"
+                                                                                                return $ ArgCopy v (unwrapLocVar v') f lvs
+                                                                                      _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                                                                        let fieldConstraints' = (mapMaybe afterVar $ zip3 
+                                                                                                  argLsAfterSoALoc
+                                                                                                  ((fieldLocVarsAfter))
+                                                                                                  (map Just locsFields)
+                                                                                                )
+                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints') d
+                                                                        let afvarc = (mapMaybe afterVar $ zip3 
+                                                                                                    dcArgDconBuf 
+                                                                                                    ((map Just rstlocs) ++ [Nothing])
+                                                                                                    (map Just locsDconBuf)
+                                                                                     )
+                                                                        dbgTraceIt "Print tuple line: 1171" dbgTraceIt (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTraceIt "End line 1171\n" return ([tagc], [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
-                          constrs = dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n" concat $ [c | (_,_,c) <- ls']
+                      let constrs = dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n" concat $ [c | (_,_,c) <- ls']
                           -- out = case dataBufferConstraints of 
                           --   [dc] -> case dc of 
                           --             AfterTagL loc_new loc_old -> let newFieldLocs = case d of 
@@ -1105,7 +1198,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- SoAConstraints = AfterSoAL LocVar Constraint [Constraint] LocVar
                           -- dataBufferConstraints ++ fieldConstraints
                           --constrs' = dbgTraceIt "Print dconConstrs" dbgTraceIt (sdoc (d, dataBufferConstraints, fieldConstraints, constrs, out)) dbgTraceIt "End Constraints.\n" [out] ++ constrs
-                          constrs' = constrs ++ [soa_constraint] ++ afterVariableConstraints
+                          constrs' = constrs ++ sc ++ aftvarc
                       -- traceShow k $ traceShow locs $
                       --let newe = buildLets bnds $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       -- case d of
@@ -1623,6 +1716,10 @@ finishExp e =
                                     return $ AfterVariableLE v lv' b
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
+      Ext (LetSoALocE loc e1) -> do
+             e1' <- finishExp e1
+             loc' <- finalLocVar loc
+             return $ Ext (LetSoALocE loc' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
       Ext (L2.StartOfPkdCursor cur) -> pure $ Ext (L2.StartOfPkdCursor cur)
       Ext (L2.TagCursor a b) -> pure $ Ext (L2.TagCursor a b)
@@ -1742,6 +1839,8 @@ cleanExp e =
                                          in (Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
+      Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
+                                 in (Ext $ LetSoALocE loc e',s')
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.empty)
       Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.empty)
       Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.empty)
