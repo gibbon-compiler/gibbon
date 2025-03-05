@@ -44,6 +44,11 @@ data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of t
                                     LocVar  -- Location which is before
                                     LocVar  -- Location which is after
                    | InRegionC LocVar Region -- Location is somewher within this region.
+                   -- New constraints here for the SoA backend.
+                   | GenSoALocC LocVar [((DataCon, FieldIndex), LocVar)]
+                   | GetDataConLocSoAC LocVar 
+                   | GetFieldLocSoAC (DataCon, FieldIndex) LocVar
+
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 
@@ -769,6 +774,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                regs' <- regionInsert exp r regs
                (ty,tstate) <- tcExp ddfs env funs constrs regs' tstatein e
                return (ty,tstate)
+      Ext (LetSoALocE loc e) -> do
+        -- TODO: check why a ty of CursorTy is added, this type should change??
+        let env' = extendVEnvLocVar loc CursorTy env
+        let tstate1 = extendTS loc (Output, True) tstatein
+        (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
+        tstate3 <- removeLoc exp tstate2 loc
+        return (ty,tstate3)
       Ext (LetLocE (Single loc) c e) -> do
               let env' = extendVEnvLocVar (Single loc) CursorTy env
               case c of
@@ -809,6 +821,33 @@ tcExp ddfs env funs constrs regs tstatein exp =
                        return (ty,tstate1)
 
                 InRegionLE{} -> throwError $ GenericTC ("InRegionLE not handled.")  exp
+                -- Gen SoA Loc constratins is not used in the IR atm. 
+                -- GenSoALoc dcloc field_locs -> throwError $ GenericTC ("GenSoALoc not handled.") exp
+                GetDataConLocSoA soa_loc -> do 
+                                        r <- getRegion exp constrs soa_loc
+                                        -- get region for the data constructor buffer
+                                        let r' = case r of 
+                                                    SoAR dreg _ -> dreg
+                                        -- LetLocE dconLoc = getDataConLocSoA soa_loc
+                                        -- dbgTraceIt "print reg: " dbgTraceIt (sdoc r') dbgTraceIt "end print reg.\n" 
+                                        let tstate1 = extendTS (Single loc) (Output,True) $ tstatein
+                                        let constrs1 = extendConstrs (InRegionC (Single loc) r') $ constrs
+                                        (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                                        tstate3 <- removeLoc exp tstate2 (Single loc)
+                                        return (ty,tstate3)
+                GetFieldLocSoA key soa_loc -> do
+                                              -- get the region of the SoA loc. 
+                                              r <- getRegion exp constrs soa_loc
+                                              -- get the region of the field location 
+                                              let Just r' = case r of 
+                                                             SoAR dreg fieldRegions -> lookup key fieldRegions
+                                              let tstate1 = extendTS (Single loc) (Output, True) $ tstatein 
+                                              let constrs1 = extendConstrs (InRegionC (Single loc) r') $ constrs
+                                              (ty, tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                                              tstate3 <- removeLoc exp tstate2 (Single loc)
+                                              return (ty, tstate3)
+                                              --throwError $ GenericTC ("GetFieldLocSoA not handled.") exp  
+                AfterVectorLE dexp rstExprs soa_loc -> throwError $ GenericTC ("AfterVectorLE not handled.") exp
 
       Ext (StartOfPkdCursor cur) -> do
         case M.lookup (Single cur) (vEnv env) of

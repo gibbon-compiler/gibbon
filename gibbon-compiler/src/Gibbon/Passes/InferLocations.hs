@@ -510,7 +510,7 @@ inferExp' ddefs env exp bound dest=
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         e''' <- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n" bindAllUnbound e'' (S.toList unbound)
-        return (e',ty) -- (e''', ty)
+        return (e''',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -1757,6 +1757,14 @@ finishPr pr =
       DictHasKeyP bty -> finishTy bty >>= return . DictHasKeyP
       _ -> return pr
 
+
+ -- | get the free locations inside a LocVar 
+getAllLocations :: LocVar -> S.Set LocVar -> S.Set LocVar
+getAllLocations loc locs = case loc of
+                                SoA dcloc fieldLocs -> let addDcon = S.insert (Single dcloc) locs 
+                                                        in P.foldr (\(_, l) a -> S.insert (Single l) a) addDcon fieldLocs 
+                                _ -> S.insert loc locs
+
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
 -- TODO: avoid generating location bindings for immediate values
@@ -1769,7 +1777,7 @@ cleanExp e =
       FloatE v -> (FloatE v, S.empty)
       LitSymE v -> (LitSymE v, S.empty)
       AppE v ls e -> let (e',s') = unzip $ map cleanExp e
-                     in (AppE v ls e', (S.unions s') `S.union` (S.fromList ls))
+                     in (AppE v ls e', (S.unions s') `S.union` (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --(S.fromList ls)
       PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (PrimAppE (DictInsertP ty) es',
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))
@@ -1789,13 +1797,13 @@ cleanExp e =
       LetE (v,ls,t,e1@(Ext (L2.StartOfPkdCursor _cur))) e2 ->
                         let (e1', s1') = cleanExp e1
                             (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1') e2', S.delete (Single v) (S.unions [s1',s2',S.fromList ls]))
+                        in (LetE (v,ls,t,e1') e2', S.delete (Single v) (S.unions [s1',s2', (P.foldr (\l a -> getAllLocations l a) S.empty ls )])) --S.fromList ls
       LetE (v,ls,t,e1@(Ext (L2.AddFixed _cur _i))) e2 ->
                         let (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2',S.fromList ls]))
+                        in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2',(P.foldr (\l a -> getAllLocations l a) S.empty ls )])) --S.fromList ls
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
                                  (e2', s2') = cleanExp e2
-                             in (LetE (v,ls,t,e1') e2', S.unions [s1',s2',S.fromList ls])
+                             in (LetE (v,ls,t,e1') e2', S.unions [s1',s2',(P.foldr (\l a -> getAllLocations l a) S.empty ls )]) --S.fromList ls
       IfE e1 e2 e3 -> let (e1',s1') = cleanExp e1
                           (e2',s2') = cleanExp e2
                           (e3',s3') = cleanExp e3
@@ -1807,37 +1815,33 @@ cleanExp e =
       CaseE e1 prs -> let (e1',s1') = cleanExp e1
                           (prs', ls2') = unzip $ L.map
                                          (\(dc,lvs,e2) -> let (e2', s2) = cleanExp e2
-                                                          in ((dc,lvs,e2'), s2 S.\\ S.fromList (map snd lvs))) prs
+                                                          in ((dc,lvs,e2'), s2 S.\\ (P.foldr (\l a -> getAllLocations l a) S.empty ((map snd lvs))) )) prs   --S.fromList (map snd lvs)
                       in (CaseE e1' prs', S.union s1' $ S.unions ls2')
       DataConE lv dc es -> let (es',ls') = unzip $ L.map cleanExp es
-                           in (DataConE lv dc es', S.union (S.singleton lv) $ S.unions ls')
+                           in (DataConE lv dc es', S.union (getAllLocations lv S.empty) $ S.unions ls')
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (TimeIt e' d b, s')
-
       SpawnE v ls e -> let (e',s') = unzip $ map cleanExp e
-                       in (SpawnE v ls e', (S.unions s') `S.union` (S.fromList ls))
-
+                       in (SpawnE v ls e', (S.unions s') `S.union` (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --S.fromList ls
       SyncE -> (SyncE, S.empty)
-
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
-
       Ext (LetRegionE r sz ty e) -> let (e',s') = cleanExp e
                               in (Ext (LetRegionE r sz ty e'), s')
       Ext (LetParRegionE r sz ty e) -> let (e',s') = cleanExp e
                                  in (Ext (LetParRegionE r sz ty e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
-                                    in if S.member loc s'
-                                       then (Ext (LetLocE loc FreeLE e'), S.delete loc s')
+                                    in if (getAllLocations loc S.empty) `S.isSubsetOf` s'
+                                       then (Ext (LetLocE loc FreeLE e'), S.difference s' (getAllLocations loc S.empty)) --S.delete loc s'
                                        else (e',s')
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
-                                 in if S.member loc s'
+                                 in if (getAllLocations loc S.empty) `S.isSubsetOf` s' --S.member loc s'
                                     then let ls = case lex of
                                                     AfterConstantLE _i lv   -> [lv]
                                                     AfterVariableLE _v lv _ -> [lv]
                                                     oth -> []
                                          in (Ext (LetLocE loc lex e'),
-                                              S.delete loc $ S.union s' $ S.fromList ls)
+                                              S.difference (S.union s' $ S.fromList ls) (getAllLocations loc S.empty))
                                     else (e',s')
       Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
                                  in (Ext $ LetSoALocE loc e',s')
