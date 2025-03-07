@@ -399,12 +399,6 @@ fixType_ ty =
       ProdTy tys -> mapM_ fixType_ tys
       _ -> return ()
 
--- | get the data constructor location from an SoA loc
-getDconLoc :: LocVar -> LocVar 
-getDconLoc loc = case loc of 
-                    SoA dcon fieldLocs -> Single dcon 
-                    Single lc -> loc 
-
 -- | get the field locs from the SoA locs
 getFieldLocs :: LocVar -> [((DataCon, FieldIndex), Var)]
 getFieldLocs loc = case loc of 
