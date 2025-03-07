@@ -1193,7 +1193,9 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                go _ _ [] = return ()
                                                go _ _ _  = internalError "Unxpected case reached: L2:ensureDataCon"
 
- 
+                                       -- This checking should be fine for a Flat list data type
+                                       -- data List = Cons Int List | Nil
+                                       -- TODO: Extend for a Tree data type
                                        SoA dcloc fieldLocs -> do 
                                               let unself_idxs = L.concatMap 
                                                                       (\ty -> case ty of 
@@ -1218,7 +1220,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                               let selfTys = L.foldr (\idx a -> a ++ [tys !! idx]
                                                                                     ) [] self_idxs
 
-                                              let unselfWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs ) unself_idxs
+                                              let unselfWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs) unself_idxs
                                               -- ensure after Constant with head of selfTys
                                               _ <- do 
                                                   case selfTys of 
@@ -1228,8 +1230,23 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                              _ -> error "Did not expected unpacked type!"
                                               -- TODO: ensure after constant for all scalar not self recursive fields, with offset 0
                                               -- TODO: ensure after constant for all locs in dest with the next self recursive field. 
-
-                                              dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n" return ()
+                                              _ <- do 
+                                                  case selfTys of 
+                                                    [] -> return () 
+                                                    x:rst -> case x of 
+                                                               PackedTy _ l@(SoA dcloc' fieldLocs') -> do
+                                                                                                        --let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
+                                                                                                        let aliasLocs = L.map (\idx -> case (lookup (dc, idx) fieldLocs) of 
+                                                                                                                                                          Just l -> getAfterConstantAlias cs (Single l)
+                                                                                                                                    ) unself_idxs
+                                                                                                        let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
+                                                                                                        -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (aliasLocs)) dbgTraceIt "End\n"
+                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs (Single l1) l2) (zip unselfWriteAtLocs aliasLocs)
+                                                                                                        -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (nextWriteAtLocs)) dbgTraceIt "End\n"
+                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 (Single l2)) (zip aliasLocs nextWriteAtLocs)
+                                                                                                        return ()
+                                              -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
+                                              return ()
 
 
 -- | Ensure that one location is +c after another location in the constraint set.
@@ -1260,6 +1277,18 @@ getAfterConstant (ConstraintSet cs) l0 =
   in case mb_cs of
        Just (AfterConstantC _i _l1 l2) -> Just l2
        _ -> Nothing
+
+
+-- dbgTraceIt "Print in after alias:" dbgTraceIt (sdoc (c)) dbgTraceIt "End\n"
+getAfterConstantAlias :: ConstraintSet -> LocVar -> Maybe LocVar 
+getAfterConstantAlias (ConstraintSet cs) l0 = 
+  let mb_cs = L.find (\c -> case c of
+                         AfterConstantC i l1 _l2 | (l1 == l0 && i == 0) -> True
+                         _ -> False)
+              cs
+   in case mb_cs of 
+        Just (AfterConstantC _i _l1 l2) -> Just l2
+        _ -> Nothing  
 
 
 extendTS
