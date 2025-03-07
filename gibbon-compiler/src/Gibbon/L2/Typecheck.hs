@@ -775,16 +775,22 @@ tcExp ddfs env funs constrs regs tstatein exp =
                (ty,tstate) <- tcExp ddfs env funs constrs regs' tstatein e
                return (ty,tstate)
       -- REMOVE THIS IDEALLY, we should not use this and there should be a polymorphic let Loc 
-      Ext (LetSoALocE loc e) -> do
-        -- TODO: check why a ty of CursorTy is added, this type should change??
-        let env' = extendVEnvLocVar loc CursorTy env
-        let tstate1 = extendTS loc (Output, True) tstatein
-        (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
-        tstate3 <- removeLoc exp tstate2 loc
-        return (ty,tstate3)
+      --Ext (LetSoALocE loc e) -> do
+      --  -- TODO: check why a ty of CursorTy is added, this type should change??
+      --  let env' = extendVEnvLocVar loc CursorTy env
+      --  let tstate1 = extendTS loc (Output, True) tstatein
+      --  (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
+      --  tstate3 <- removeLoc exp tstate2 loc
+      --  return (ty,tstate3)
       Ext (LetLocE loc c e) -> do
               let env' = extendVEnvLocVar loc CursorTy env
               case c of
+                GenSoALoc dcloc fieldLocs -> do
+                  let env' = extendVEnvLocVar loc CursorTy env
+                  let tstate1 = extendTS loc (Output, True) tstatein
+                  (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
+                  tstate3 <- removeLoc exp tstate2 loc
+                  return (ty,tstate3)
                 StartOfRegionLE r ->
                     do ensureRegion exp r regs
                        absentStart exp constrs r
@@ -848,7 +854,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                               tstate3 <- removeLoc exp tstate2 loc
                                               return (ty, tstate3)
                                               --throwError $ GenericTC ("GetFieldLocSoA not handled.") exp  
-                AfterVectorLE dexp rstExprs soa_loc -> throwError $ GenericTC ("AfterVectorLE not handled.") exp
+                -- AfterVectorLE dexp rstExprs soa_loc -> throwError $ GenericTC ("AfterVectorLE not handled.") exp
 
       Ext (StartOfPkdCursor cur) -> do
         case M.lookup (Single cur) (vEnv env) of

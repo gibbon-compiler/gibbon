@@ -150,7 +150,8 @@ data E2Ext loc dec
   = LetRegionE    Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE LocVar (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
-  | LetSoALocE LocVar (E2 loc dec) -- ^ Bind a new SoA loc
+  -- Commented this out since it is not very ideal. 
+  -- | LetSoALocE LocVar (E2 loc dec) -- ^ Bind a new SoA loc
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
   | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
   | BoundsCheck Int -- Bytes required
@@ -201,7 +202,8 @@ data PreLocExp loc = StartOfRegionLE Region
                    | GenSoALoc loc [((DataCon, FieldIndex), loc)]
                    | GetDataConLocSoA loc -- Get the data constructor location from an SoA loc
                    | GetFieldLocSoA (DataCon, FieldIndex) loc -- Get the field location from the SoA loc
-                   | AfterVectorLE (PreLocExp loc) [PreLocExp loc] loc
+                   -- Although this is available in infer locations constraints, i don't think its required in L2 AST.
+                   -- | AfterVectorLE (PreLocExp loc) [PreLocExp loc] loc
                      -- Compute new SoA location from an old SoA location
                      -- Not sure this is fully needed 
 								     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer 

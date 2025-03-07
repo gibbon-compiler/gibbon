@@ -456,22 +456,24 @@ inferExp' ddefs env exp bound dest=
                                                                                                                                 AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)  
                                                                                                                                 _ -> error "bindAllLocations : AfterSoALE: unexpected locatin constraint."
                                                                                                                               ) flst
-                                                                                                         new_field_locs = P.foldr (\c accum -> case c of 
-                                                                                                                                          AfterConstantL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
-                                                                                                                                                                           in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
-                                                                                                                                                                                                                then [((d, id), lv1)]
-                                                                                                                                                                                                                else []
-                                                                                                                                                                                                   ) flcs
-                                                                                                                                                                          
-                                                                                                                                                                         
-                                                                                                                                          AfterVariableL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
-                                                                                                                                                                       in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
-                                                                                                                                                                                                                then [((d, id), lv1)]
-                                                                                                                                                                                                                else []
-                                                                                                                                                                                                   ) flcs 
-                                                                                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
-                                                                                                                                 ) [] flst
-                                                                                                         exprs'' = exprs' ++ fieldLocExps ++ [LetSoALocE slv1]  --[LetLocE slv1 (GenSoALoc lv1 new_field_locs)]
+                                                                                                         --new_field_locs = P.foldr (\c accum -> case c of 
+                                                                                                         --                                 AfterConstantL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
+                                                                                                         --                                                                  -- This is wrong!!
+                                                                                                         --                                                                  in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
+                                                                                                         --                                                                                                       then [((d, id), lv1)]
+                                                                                                         --                                                                                                       else []
+                                                                                                         --                                                                                          ) flcs
+                                                                                                         --                                                                 
+                                                                                                         --                                                                
+                                                                                                         --                                 AfterVariableL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
+                                                                                                         --                                                              in accum ++ P.concatMap (\((d, id), lc) -> if (Single lc) == lv2
+                                                                                                         --                                                                                                       then [((d, id), lv1)]
+                                                                                                         --                                                                                                       else []
+                                                                                                         --                                                                                          ) flcs 
+                                                                                                         --                                 _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
+                                                                                                         --                        ) [] flst
+                                                                                                         flcs' = P.map (\(a, b) -> (a, Single b) ) (getFieldLocs slv1)
+                                                                                                         exprs'' = exprs' ++ fieldLocExps ++ [LetLocE slv1 (GenSoALoc lv1 flcs')] -- [LetSoALocE slv1]
                                                                                                          lambda  = (\lst base -> case lst of 
                                                                                                                                        [] -> base 
                                                                                                                                        x:rst -> let rst' = lambda rst base
@@ -504,7 +506,7 @@ inferExp' ddefs env exp bound dest=
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         e''' <- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n" bindAllUnbound e'' (S.toList unbound)
-        return (e''',ty) -- (e''', ty)
+        return (e'',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -1710,10 +1712,10 @@ finishExp e =
                                     return $ AfterVariableLE v lv' b
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
-      Ext (LetSoALocE loc e1) -> do
-             e1' <- finishExp e1
-             loc' <- finalLocVar loc
-             return $ Ext (LetSoALocE loc' e1')
+      --Ext (LetSoALocE loc e1) -> do
+      --       e1' <- finishExp e1
+      --       loc' <- finalLocVar loc
+      --       return $ Ext (LetSoALocE loc' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
       Ext (L2.StartOfPkdCursor cur) -> pure $ Ext (L2.StartOfPkdCursor cur)
       Ext (L2.TagCursor a b) -> pure $ Ext (L2.TagCursor a b)
@@ -1828,7 +1830,7 @@ cleanExp e =
                                     in if (getAllLocations loc S.empty) `S.isSubsetOf` s'
                                        then (Ext (LetLocE loc FreeLE e'), S.difference s' (getAllLocations loc S.empty)) --S.delete loc s'
                                        else (e',s')
-      Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
+      Ext (LetLocE loc@(Single l) lex e) -> let (e',s') = cleanExp e
                                  in if (getAllLocations loc S.empty) `S.isSubsetOf` s' --S.member loc s'
                                     then let ls = case lex of
                                                     AfterConstantLE _i lv   -> [lv]
@@ -1837,8 +1839,22 @@ cleanExp e =
                                          in (Ext (LetLocE loc lex e'),
                                               S.difference (S.union s' $ S.fromList ls) (getAllLocations loc S.empty))
                                     else (e',s')
-      Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
-                                 in (Ext $ LetSoALocE loc e',s')
+      Ext (LetLocE s@(SoA dloc flcs) lex@(GenSoALoc _ _) e) -> let (e',s') = cleanExp e
+                                              in if (getAllLocations s S.empty) `S.isSubsetOf` s' --S.member loc s'
+                                                 then let ls = case lex of
+                                                                  GenSoALoc dcloc flocs -> [dcloc] ++ P.map (\(_, ll) -> ll) flocs
+                                                                  oth -> []
+                                                       in (Ext (LetLocE s lex e'), (S.union s' $ S.fromList ls))
+                                                 else (e',s')
+      Ext (LetLocE s@(SoA dloc flcs) lex e) -> let (e',s') = cleanExp e
+                                              in if (getAllLocations s S.empty) `S.isSubsetOf` s' --S.member loc s'
+                                                 then let ls = case lex of
+                                                                  oth -> []
+                                                       in (Ext (LetLocE s lex e'), 
+                                                              S.difference (S.union s' $ S.fromList ls) (getAllLocations s S.empty))
+                                                 else (e',s')
+      --Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
+      --                           in (Ext $ LetSoALocE loc e',s')
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.empty)
       Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.empty)
       Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.empty)

@@ -696,8 +696,8 @@ passes config@Config{dynflags} l0 = do
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              l2 <- go "regionsInwards"    regionsInwards l2
-              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              --l2 <- go "regionsInwards"    regionsInwards l2
+              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -757,8 +757,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
-                  l2 <- go "regionsInwards" regionsInwards l2
-                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
+                  --l2 <- go "regionsInwards" regionsInwards l2
+                  --l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
