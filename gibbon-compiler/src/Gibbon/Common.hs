@@ -30,7 +30,7 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc
 
 
          -- * Establish conventions for the output of #lang gibbon:
@@ -542,5 +542,12 @@ getDconLoc loc = case loc of
                     SoA dcon fieldLocs -> Single dcon 
                     Single lc -> loc 
                             
+getFieldLoc :: (DataCon, FieldIndex) -> LocVar -> LocVar
+getFieldLoc (dcon, idx) loc = case loc of 
+                                SoA _ fieldLocs -> case Prelude.lookup (dcon, idx) fieldLocs of 
+                                                          Just loc -> Single loc
+                                                          Nothing -> error "getFieldLoc : Field location not found!"
+                                Single lc -> error "getFieldLoc : Did not expect a non SoA location!"
+
 singleLocVar :: Location -> LocVar 
 singleLocVar loc = Single loc 

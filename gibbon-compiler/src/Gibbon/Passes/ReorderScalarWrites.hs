@@ -39,14 +39,13 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
         let (reg_env, alloc_env) =
               foldr (\(L2.LRM loc reg mode) (renv,aenv) ->
                             case reg of
-                                L2.SoAR _ _ -> error "TODO: writeOrderMarkers structure of arrays not implemented yet." 
-                                _ -> let renv' = M.insert loc reg renv
-                                         aenv' = case mode of
+                              _ -> let renv' = M.insert loc reg renv
+                                       aenv' = case mode of
                                                     L2.Output ->
                                                       let reg_locs = RegionLocs [loc] S.empty
                                                         in M.insert reg reg_locs aenv
                                                     L2.Input -> aenv
-                                              in (renv',aenv') 
+                                     in (renv',aenv')
                     )
                     (M.empty,M.empty)
                     (L2.locVars funTy)
@@ -61,7 +60,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
         LetE (v,locs,ty,rhs) bod -> do
           let env2' = extendVEnv v ty env2
           case (L2.locsInTy ty) of
-            [] -> (LetE (v,locs,ty,rhs)) <$> (go reg_env alloc_env store_env env2' bod)
+            [] -> (LetE (v,locs,ty,rhs)) <$> (go reg_env alloc_env store_env env2' bod) -- simple recursion on let body
             [one] -> let (is_ok, locs_before, reg, (RegionLocs rlocs allocated)) = isAllocationOk one rhs bod
                          reg_env' = foldr (\loc acc -> M.insert loc reg acc) reg_env locs
                          alloc_env' =
@@ -105,18 +104,34 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.StartOfPkdCursor cur -> pure $ Ext $ L2.StartOfPkdCursor cur
             L2.TagCursor a b -> pure $ Ext $ L2.TagCursor a b
             L2.LetLocE loc rhs bod -> do
-              let reg = case rhs of
-                      L2.StartOfRegionLE r  -> r
-                      L2.InRegionLE r -> r
-                      L2.AfterConstantLE _ lc   -> reg_env # lc
-                      L2.AfterVariableLE _ lc _ -> reg_env # lc
-                      L2.FromEndLE lc           -> reg_env # lc
+              let (reg, reg_env') = case rhs of
+                      L2.StartOfRegionLE r  -> (r, M.insert loc r reg_env)
+                      L2.InRegionLE r -> (r, M.insert loc r reg_env)
+                      L2.AfterConstantLE _ lc   -> let r = reg_env # lc
+                                                    in (r, M.insert loc r reg_env)
+                      L2.AfterVariableLE _ lc _ -> let r = reg_env # lc
+                                                    in (r, M.insert loc r reg_env)
+                      L2.FromEndLE lc           -> let r = reg_env # lc
+                                                     in (r, M.insert loc r reg_env)
                       -- TODO: VS we should not use unwrap LocVar, LocVar should be recursive
-                      L2.GenSoALoc dlc flocs -> let soa_loc = SoA (unwrapLocVar dlc) (map (\(d, flc) -> (d, unwrapLocVar flc)) flocs)
-                                                in reg_env # soa_loc
-                      L2.GetDataConLocSoA lc -> reg_env # lc
-                      L2.GetFieldLocSoA (dcon, idx) lc -> reg_env # lc
-                  reg_env' = M.insert loc reg reg_env
+                      L2.GenSoALoc dlc flocs -> let dlcr = reg_env # dlc
+                                                    fieldRegs = map (\(d, flc) -> let flcr = reg_env # flc
+                                                                                   in (d, flcr)
+                                                                    ) flocs
+                                                    soa_loc = SoA (unwrapLocVar dlc) (map (\(d, flc) -> (d, unwrapLocVar flc)) flocs)
+                                                    soa_reg = L2.SoAR dlcr fieldRegs
+                                                  in (soa_reg, M.insert soa_loc soa_reg reg_env)
+                      L2.GetDataConLocSoA lc -> let soa_reg = reg_env # lc 
+                                                    dcon_reg = case soa_reg of 
+                                                                    L2.SoAR dreg _ -> dreg
+                                                  in (dcon_reg, M.insert (getDconLoc lc) dcon_reg reg_env)
+                      L2.GetFieldLocSoA (dcon, idx) lc -> let soa_reg = reg_env # lc 
+                                                              field_reg = case soa_reg of 
+                                                                                L2.SoAR _ fregs -> case lookup (dcon, idx) fregs of 
+                                                                                                    Just freg -> freg
+                                                                                                    Nothing -> error "writeOrderMarkers: GetFieldLocSoA: data constructor not found!"
+                                                            in (field_reg, M.insert (getFieldLoc (dcon, idx) lc) field_reg reg_env)
+                  --reg_env' = M.insert loc reg reg_env
               case M.lookup reg alloc_env of
                 Nothing ->
                   Ext <$> (L2.LetLocE loc rhs) <$> (go reg_env' alloc_env store_env env2 bod)
