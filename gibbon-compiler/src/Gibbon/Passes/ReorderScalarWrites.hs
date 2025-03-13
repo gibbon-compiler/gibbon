@@ -111,6 +111,11 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                       L2.AfterConstantLE _ lc   -> reg_env # lc
                       L2.AfterVariableLE _ lc _ -> reg_env # lc
                       L2.FromEndLE lc           -> reg_env # lc
+                      -- TODO: VS we should not use unwrap LocVar, LocVar should be recursive
+                      L2.GenSoALoc dlc flocs -> let soa_loc = SoA (unwrapLocVar dlc) (map (\(d, flc) -> (d, unwrapLocVar flc)) flocs)
+                                                in reg_env # soa_loc
+                      L2.GetDataConLocSoA lc -> reg_env # lc
+                      L2.GetFieldLocSoA (dcon, idx) lc -> reg_env # lc
                   reg_env' = M.insert loc reg reg_env
               case M.lookup reg alloc_env of
                 Nothing ->
