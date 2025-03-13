@@ -63,6 +63,70 @@ In fnB, there's no path from `rb` to 1.
 
 -}
 
+
+inferRegScopeExpHelper :: Exp2 -> Exp2 -> Region -> M.Map Region Region -> PassM Exp2 
+inferRegScopeExpHelper ex rhs r env = 
+  let deps = depList ex
+    in case deps of
+      ((retVar,_,_):_) ->
+        let (g,_,vtxF) = graphFromEdges deps
+          in case r of 
+            -- VS: TODO: Handle case then field Regions also contain more factored out SoA regions.
+            SoAR dcr fieldRegs -> let regVLoc = DReg r 
+                                      regVertex = case vtxF regVLoc of
+                                        Just x  -> x
+                                        Nothing -> error $ "No vertex for:" ++ sdoc r
+                                      retVertex = case vtxF retVar of
+                                        Just x  -> x
+                                        Nothing -> error $ "No vertex for:" ++ sdoc retVar
+                                      -- The value in the region  escapes the current scope if there's
+                                      -- a path between the region variable and the thing returned.
+                                    in do dflags <- getDynFlags 
+                                          let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
+                                                       (gopt Opt_Gibbon1 dflags)
+                                                    then BigInfinite
+                                                    else Infinite
+                                          let isPath = path g retVertex regVertex
+                                          -- Not handling recursive SoA Regions
+                                          let scopedDcr = case dcr of 
+                                                              VarR dcrVar -> GlobR dcrVar defaultMul
+                                                              _ -> error "Did not handle SoAR in inferRegScopeExp."
+                                          let scopedFieldRegs = map (\(t, r) -> case r of 
+                                                                                    VarR fvar -> (t, GlobR fvar defaultMul)
+                                                                                    _ -> error "Did not handle SoAR in inferRegScopeExp."
+                                                                
+                                                                      ) fieldRegs
+                                          let scoped_reg = SoAR scopedDcr scopedFieldRegs
+                                          Ext <$> LetRegionE scoped_reg Undefined Nothing <$> inferRegScopeExp (M.insert r scoped_reg env) rhs 
+            _ -> let regV = regionToVar r
+                     regVLoc = DReg r
+                     -- Vertex of the region variable
+                     regVertex = case vtxF regVLoc of
+                        Just x  -> x
+                        Nothing -> error $ "No vertex for:" ++ sdoc r
+                     -- Vertex of the return value
+                     retVertex = case vtxF retVar of
+                        Just x  -> x
+                        Nothing -> error $ "No vertex for:" ++ sdoc retVar
+                     -- The value in the region  escapes the current scope if there's
+                     -- a path between the region variable and the thing returned.
+                     -- TODO: Warn the user when this happens in a fn ?
+                  in do dflags <- getDynFlags
+                        let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
+                                     (gopt Opt_Gibbon1 dflags)
+                                  then BigInfinite
+                                  else Infinite
+                        let scoped_reg = if path g retVertex regVertex
+                                  then (GlobR regV defaultMul)
+                                  -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                                  -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                                  -- else (DynR regV mul)
+                                  else (GlobR regV defaultMul)
+                        Ext <$>
+                             LetRegionE scoped_reg Undefined Nothing <$>
+                             inferRegScopeExp (M.insert r scoped_reg env) rhs
+      [] -> return ex
+
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
@@ -74,45 +138,13 @@ inferRegScopeExp env ex =
         AddFixed{} -> return ex
         LetRegionE r sz ty rhs ->
           case r of
+            -- SoAR dcr fieldRegs -> reti
             MMapR{} -> Ext . LetRegionE r sz ty <$> go rhs
-            _ ->
-              let deps = depList ex
-              in case deps of
-                   ((retVar,_,_):_) ->
-                     let (g,_,vtxF) = graphFromEdges deps
-                         regV = regionToVar r
-                         regVLoc = singleLocVar regV
-                         -- Vertex of the region variable
-                         regVertex =
-                           case vtxF regVLoc of
-                             Just x  -> x
-                             Nothing -> error $ "No vertex for:" ++ sdoc r
-                         -- Vertex of the return value
-                         retVertex =
-                           case vtxF retVar of
-                             Just x  -> x
-                             Nothing -> error $ "No vertex for:" ++ sdoc retVar
-                         -- The value in the region  escapes the current scope if there's
-                         -- a path between the region variable and the thing returned.
-                         -- TODO: Warn the user when this happens in a fn ?
-                     in do dflags <- getDynFlags
-                           let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
-                                               (gopt Opt_Gibbon1 dflags)
-                                            then BigInfinite
-                                            else Infinite
-                           let scoped_reg = if path g retVertex regVertex
-                                            then (GlobR regV defaultMul)
-                                            -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                                            -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                                            -- else (DynR regV mul)
-                                            else (GlobR regV defaultMul)
-                           Ext <$>
-                             LetRegionE scoped_reg Undefined Nothing <$>
-                             inferRegScopeExp (M.insert r scoped_reg env) rhs
-                   [] -> return ex
+            _ -> inferRegScopeExpHelper ex rhs r env
 
         LetParRegionE r sz ty rhs ->
           case r of
+            SoAR dcr fieldRegs -> error "Did not handle SoAR in inferRegScopeExp."
             MMapR{} -> Ext . LetParRegionE r sz ty <$> go rhs
             _ ->
               let deps = depList ex
@@ -120,7 +152,7 @@ inferRegScopeExp env ex =
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps
                          regV = regionToVar r
-                         regVLoc = singleLocVar regV
+                         regVLoc = DReg r
                          -- Vertex of the region variable
                          regVertex =
                            case vtxF regVLoc of

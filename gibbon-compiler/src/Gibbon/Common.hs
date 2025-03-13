@@ -160,6 +160,8 @@ type DataCon = String
 -- One reason I don't want to make an SoA location recursive is that you might 
 -- want to make the level of factoring limited to only depth = 1
 -- more factoring than a depth of level one might slow down too much
+-- data List2 = Cons2 Int List List2 | Nil2
+
 data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 

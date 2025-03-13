@@ -775,9 +775,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "parAlloc"   parAlloc  l2
-              lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
-              l2 <- go "L2.typecheck" L2.tcProg l2
+              --l2 <- goE2 "parAlloc"   parAlloc  l2
+              --lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
+              --l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2

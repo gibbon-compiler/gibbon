@@ -31,6 +31,7 @@ module Gibbon.L2.Syntax
 
 -- * Regions and locations
   , LocVar
+  , RegOrLoc(..)
   , Region(..)
   --, ExtendedRegion(..)
   , Modality(..)
@@ -40,6 +41,7 @@ module Gibbon.L2.Syntax
   , RegionSize(..)
   , RegionType(..)
   , regionToVar
+  , getAllRegions
 
 -- * Operations on types
   , allLocVars
@@ -577,7 +579,12 @@ regionToVar r = case r of
                   DynR  v _ -> v
                   VarR  v   -> v
                   MMapR v   -> v
+                  _ -> error "L2/Syntax.hs: regionToVar: unexpected case."
 
+getAllRegions :: Region -> [Region]
+getAllRegions r = case r of 
+                    SoAR reg fieldRegs -> [reg] ++ L.map (\(_, freg) -> freg) fieldRegs
+                    _ -> [r]
 
 -- | The 'gRecoverType' instance defined in Language.Syntax is incorrect for L2.
 -- For the AppE case, it'll just return the type with with the function was
@@ -709,28 +716,28 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 outRegVars :: ArrowTy2 ty2 -> [LocVar]
-outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of 
-                                          _ -> [(singleLocVar (regionToVar r))] 
+outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
                                           SoAR rr fieldRegions -> 
                                             let 
                                               regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
                                              in L.map singleLocVar regVars
+                                          _ -> [(singleLocVar (regionToVar r))] 
                       ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [LocVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                _ -> [singleLocVar $ regionToVar r] 
                                                 SoAR rr fieldRegions -> 
                                                   let 
                                                     regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
                                                    in L.map singleLocVar regVars
+                                                _ -> [singleLocVar $ regionToVar r]
                       ) $ L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 allRegVars :: ArrowTy2 ty2 -> [LocVar]
-allRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                _ -> [singleLocVar $ regionToVar r]
+allRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of
                                                 SoAR rr fieldRegions -> [singleLocVar $ regionToVar rr] 
                                                                     ++ L.map (\(_, freg) -> singleLocVar $ regionToVar freg) fieldRegions
+                                                _ -> [singleLocVar $ regionToVar r]
                                     ) (locVars ty)
 
 -- | Apply a location substitution to a type.
@@ -1000,18 +1007,31 @@ constPacked c t =
     SymHashTy-> SymHashTy
     IntHashTy-> IntHashTy
 
+
+data RegOrLoc = DReg Region | DLoc LocVar
+  deriving (Read,Show,Eq,Ord, Generic, NFData, Out)
+
+varToRegOrLoc :: Var -> RegOrLoc
+varToRegOrLoc v = DLoc $ singleLocVar v
+
+regionToRegOrLoc :: Region -> RegOrLoc
+regionToRegOrLoc r = DReg r
+
+locToRegOrLoc :: LocVar -> RegOrLoc
+locToRegOrLoc l = DLoc l
+
 -- | Build a dependency list which can be later converted to a graph
-depList :: Exp2 -> [(LocVar, LocVar, [LocVar])]
+depList :: Exp2 -> [(RegOrLoc, RegOrLoc, [RegOrLoc])]
 -- The helper function, go, works with a map rather than list so that all
 -- dependencies are properly grouped, without any duplicate keys. But we
 -- convert it back to a list so that we can hand it off to 'graphFromEdges'.
 -- Reversing the list makes it easy to peek at the return value of this AST later.
 depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
     where
-      go :: M.Map LocVar [LocVar] -> Exp2 -> M.Map LocVar [LocVar]
+      go :: M.Map RegOrLoc [RegOrLoc] -> Exp2 -> M.Map RegOrLoc [RegOrLoc]
       go acc ex =
         case ex of
-          VarE v    -> M.insertWith (++) (singleLocVar v) [(singleLocVar v)] acc
+          VarE v    -> M.insertWith (++) (varToRegOrLoc v) [(varToRegOrLoc v)] acc
           LitE{}    -> acc
           CharE{}   -> acc
           FloatE{}  -> acc
@@ -1020,17 +1040,17 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
             let acc_rhs = go acc rhs
-            in go (M.insertWith (++) (singleLocVar v) (S.toList $ allFreeVars rhs) acc_rhs) bod
+            in go (M.insertWith (++) (varToRegOrLoc v) (L.map locToRegOrLoc $ S.toList $ allFreeVars rhs) acc_rhs) bod
           IfE _ b c  -> go (go acc b) c
           MkProdE ls -> foldl go acc ls
           ProjE _ e  -> go acc e
           CaseE (VarE v) mp ->
             L.foldr (\(_,vlocs,e) acc' ->
                        let (vars,locs) = unzip vlocs
-                           vars' = L.map Single vars
-                           acc'' = L.foldr (\w acc''' -> M.insertWith (++) (singleLocVar v) [w] acc''')
+                           vars' = L.map varToRegOrLoc vars
+                           acc'' = L.foldr (\w acc''' -> M.insertWith (++) (varToRegOrLoc v) [w] acc''')
                                            acc'
-                                           (vars' ++ locs)
+                                           (vars' ++ (L.map locToRegOrLoc locs))
                        in go acc'' e)
                     acc
                     mp
@@ -1045,18 +1065,18 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           Ext ext ->
             case ext of
               LetRegionE r _ _ rhs ->
-                go (M.insertWith (++) (singleLocVar (regionToVar r)) (S.toList $ allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (regionToRegOrLoc r) (L.map locToRegOrLoc $ S.toList $ allFreeVars rhs) acc) rhs
               LetParRegionE r _ _ rhs ->
-                go (M.insertWith (++) (singleLocVar (regionToVar r)) (S.toList $ allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (regionToRegOrLoc r) (L.map locToRegOrLoc $ S.toList $ allFreeVars rhs) acc) rhs
               LetLocE loc phs rhs  ->
                 -- Assumption that the loc for the data constructor buffer is passed in case 
                 -- of SoA. If in SoA, ignoring the locs of the fields atm. 
-                go (M.insertWith (++) loc (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
+                go (M.insertWith (++) (locToRegOrLoc loc) (dep phs ++ L.map locToRegOrLoc (S.toList $ allFreeVars rhs)) acc) rhs
               RetE{}         -> acc
               FromEndE{}     -> acc
               BoundsCheck{}  -> acc
               IndirectionE{} -> acc
-              AddFixed v _   -> M.insertWith (++) (singleLocVar v) [singleLocVar v] acc
+              AddFixed v _   -> M.insertWith (++) (varToRegOrLoc v) [varToRegOrLoc v] acc
               GetCilkWorkerNum -> acc
               LetAvail _ bod -> go acc bod
               AllocateTagHere{} -> acc
@@ -1066,14 +1086,14 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               StartOfPkdCursor w -> go acc (VarE w)
               TagCursor a b -> go (go acc (VarE a)) (VarE b)
 
-      dep :: PreLocExp LocVar -> [LocVar]
+      dep :: PreLocExp LocVar -> [RegOrLoc]
       dep ex =
         case ex of
-          StartOfRegionLE r -> [singleLocVar $ regionToVar r]
-          AfterConstantLE _ loc -> [loc]
-          AfterVariableLE v loc _ -> [singleLocVar v,loc]
-          InRegionLE r  -> [singleLocVar $ regionToVar r]
-          FromEndLE loc -> [loc]
+          StartOfRegionLE r -> [regionToRegOrLoc r]
+          AfterConstantLE _ loc -> [locToRegOrLoc loc]
+          AfterVariableLE v loc _ -> [varToRegOrLoc v, locToRegOrLoc loc]
+          InRegionLE r  -> [regionToRegOrLoc r]
+          FromEndLE loc -> [locToRegOrLoc loc]
           FreeLE -> []
 
 -- gFreeVars ++ locations ++ region variables
