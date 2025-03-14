@@ -30,7 +30,7 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
 
 
          -- * Establish conventions for the output of #lang gibbon:
@@ -548,6 +548,45 @@ getFieldLoc (dcon, idx) loc = case loc of
                                                           Just loc -> Single loc
                                                           Nothing -> error "getFieldLoc : Field location not found!"
                                 Single lc -> error "getFieldLoc : Did not expect a non SoA location!"
+
+getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), Var)]
+getAllFieldLocsSoA loc = case loc of 
+                    SoA dcon fieldLocs -> fieldLocs
+                    Single lc -> error "getFieldLocs : Did not expect a non SoA location!"
+
+freshSingleLocVar :: String -> PassM LocVar
+freshSingleLocVar m = do v <- gensym (toVar m)
+                         return $ Single v                          
+
+-- | VS: ideally we should get rid of unwrapLocVar. We should make LocVar a recursive datatype
+freshFieldLocsSoA :: [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Var)]
+freshFieldLocsSoA lst = do 
+                     case lst of
+                          [] -> return [] 
+                          (a, b):rst -> do 
+                                        newLoc <- freshSingleLocVar "floc"
+                                        rst' <- freshFieldLocsSoA rst
+                                        return $ [(a, unwrapLocVar newLoc)] ++ rst'
+
+freshSoALoc :: String -> LocVar -> PassM LocVar 
+freshSoALoc pfix lc = do
+                 case lc of 
+                     Single _ -> do 
+                                  l' <- freshSingleLocVar (pfix ++"_loc")
+                                  return l'
+                     SoA dbuf rst -> do 
+                                     dbuf' <- freshSingleLocVar (pfix ++ "dloc")
+                                     rst' <- freshFieldLocsSoA rst
+                                     let newSoALoc = SoA (unwrapLocVar dbuf') rst'
+                                     return newSoALoc
+
+freshCommonLoc :: String -> LocVar -> PassM LocVar 
+freshCommonLoc pfix lc = do
+                 case lc of 
+                     Single _ -> do 
+                                  l' <- freshSingleLocVar (pfix ++"_loc")
+                                  return l'
+                     soa@SoA{} -> freshSoALoc pfix lc
 
 singleLocVar :: Location -> LocVar 
 singleLocVar loc = Single loc 

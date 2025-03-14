@@ -323,47 +323,63 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                          [] ->
                            case (M.lookup (singleLocVar x) lenv) of
                              Just l1 -> do
-                               l2 <- gensym "jump"
-                               let l2loc = singleLocVar l2
+                               l2 <- freshCommonLoc "jump" l1
+                               let l2loc = l2
                                    eor' = mkEnd l1 l2loc eor
-                                   e' = Ext $ LetLocE l2loc (AfterConstantLE 1 l1) e
+                                   e' = case l1 of 
+                                            Single _ -> Ext $ LetLocE l2loc (AfterConstantLE 1 l1) e
+                                            SoA in_dbuf_loc in_flocs -> let in_dcon_lete = LetLocE (getDconLoc l1) (GetDataConLocSoA l1)
+                                                                            end_con_lete = LetLocE (getDconLoc l2loc) (AfterConstantLE 1 ((getDconLoc l1)))
+                                                                            -- generate all alias to field constraints 
+                                                                            field_letes = L.map (\(key, lv) -> case L.lookup key (getAllFieldLocsSoA l2loc) of 
+                                                                                                                            Nothing -> error "routeEnds: expected location for field."
+                                                                                                                            Just ofl -> LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))
+                                                                                 ) in_flocs
+                                                                            new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) (L.map (\(key, lv) -> (key, singleLocVar lv)) (getAllFieldLocsSoA l2loc)))
+                                                                            all_letes = [in_dcon_lete, end_con_lete] ++ field_letes ++ [new_soa_loc]  
+                                                                            new_exp = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
+                                                                          in new_exp
                                e'' <- exp fns retlocs eor' lenv (M.insert l1 l2loc lenv) env2 e'
                                return (dc, vls, e'')
                              Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
                          _ -> do
-                           let need = snd $ last vls
-                               argtys = lookupDataCon ddefs dc
-                               lx = case M.lookup (singleLocVar x) lenv of
-                                      Nothing -> error $ "Failed to find " ++ (show x)
-                                      Just l -> l
-                               -- we know lx and need have the same end, since
-                               -- lx is the whole packed thing and need is its
-                               -- last field, so when we look up the end of lx
-                               -- what we really want is the end of need.
-                               eor' = mkEqual lx need eor
-                               f (l1,l2) env = M.insert l1 l2 env
-                               afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (Sf.tailErr $ L.map snd vls)
-                               -- two cases here for handing bound parameters:
-                               -- we have a packed type:
-                               handleLoc (eor,e) (_,(PackedTy _ _)) = return (eor,e)
-                               -- or we have a non-packed type, and we need to "jump" over it and
-                               -- bind a location to after it
-                               handleLoc (eor,e) (l1,ty) = do
-                                    l2 <- gensym "jump"
-                                    let l2loc = singleLocVar l2
-                                        eor' = mkEnd l1 l2loc eor
-                                        (Just jump) = L1.sizeOfTy ty
-                                        e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
-                                    return (eor', e')
-                               vars = L.map fst vls
-                               varsToLocs = L.map singleLocVar vars 
-                               locs = L.map snd vls
-                               vls' = L.map (\(v, l) -> (singleLocVar v, l)) vls
-                               env2' = extendsVEnvLocVar (M.fromList (zip locs argtys ++ zip varsToLocs argtys)) env2
-                               lenv' = M.union lenv $ M.fromList vls'
-                           (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
-                           e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
-                           return (dc, vls, e'')
+                          case (M.lookup (singleLocVar x) lenv) of
+                            Just l1@(Single _) -> do
+                              let need = snd $ last vls
+                                  argtys = lookupDataCon ddefs dc
+                                  lx = case M.lookup (singleLocVar x) lenv of
+                                          Nothing -> error $ "Failed to find " ++ (show x)
+                                          Just l -> l
+                                  -- we know lx and need have the same end, since
+                                  -- lx is the whole packed thing and need is its
+                                  -- last field, so when we look up the end of lx
+                                  -- what we really want is the end of need.
+                                  eor' = mkEqual lx need eor
+                                  f (l1,l2) env = M.insert l1 l2 env
+                                  afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (Sf.tailErr $ L.map snd vls)
+                                  -- two cases here for handing bound parameters:
+                                  -- we have a packed type:
+                                  handleLoc (eor,e) (_,(PackedTy _ _)) = return (eor,e)
+                                  -- or we have a non-packed type, and we need to "jump" over it and
+                                  -- bind a location to after it
+                                  handleLoc (eor,e) (l1,ty) = do
+                                        l2 <- gensym "jump"
+                                        let l2loc = singleLocVar l2
+                                            eor' = mkEnd l1 l2loc eor
+                                            (Just jump) = L1.sizeOfTy ty
+                                            e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
+                                        return (eor', e')
+                                  vars = L.map fst vls
+                                  varsToLocs = L.map singleLocVar vars 
+                                  locs = L.map snd vls
+                                  vls' = L.map (\(v, l) -> (singleLocVar v, l)) vls
+                                  env2' = extendsVEnvLocVar (M.fromList (zip locs argtys ++ zip varsToLocs argtys)) env2
+                                  lenv' = M.union lenv $ M.fromList vls'
+                              (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
+                              e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
+                              return (dc, vls, e'')
+                            Just l1@(SoA _ _) -> error "routeEnds: SoA case not implemented yet."
+                            Nothing -> error $ "Failed to find " ++ (show x)
                  return $ CaseE (VarE x) brs'
 
 
@@ -499,6 +515,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
               AfterVariableLE{} -> only_recur bod
               InRegionLE{} -> only_recur bod
               FreeLE{} -> only_recur bod
+              FromEndLE{} -> only_recur bod
+              GetDataConLocSoA{} -> only_recur bod 
+              GetFieldLocSoA{} -> only_recur bod
+              GenSoALoc{} -> only_recur bod
               _ -> error $ "RouteEnds: todo" ++ sdoc e
 
           Ext (L2.StartOfPkdCursor{})-> pure e
