@@ -344,7 +344,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                              Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
                          _ -> do
                           case (M.lookup (singleLocVar x) lenv) of
-                            Just l1@(Single _) -> do
+                            Just scrutloc -> do
                               let need = snd $ last vls
                                   argtys = lookupDataCon ddefs dc
                                   lx = case M.lookup (singleLocVar x) lenv of
@@ -359,26 +359,46 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                   afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (Sf.tailErr $ L.map snd vls)
                                   -- two cases here for handing bound parameters:
                                   -- we have a packed type:
-                                  handleLoc (eor,e) (_,(PackedTy _ _)) = return (eor,e)
+                                  handleLoc (eor,e) (_,(PackedTy _ _), _) = return (eor,e)
                                   -- or we have a non-packed type, and we need to "jump" over it and
                                   -- bind a location to after it
-                                  handleLoc (eor,e) (l1,ty) = do
-                                        l2 <- gensym "jump"
-                                        let l2loc = singleLocVar l2
-                                            eor' = mkEnd l1 l2loc eor
-                                            (Just jump) = L1.sizeOfTy ty
-                                            e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
-                                        return (eor', e')
+                                  handleLoc (eor,e) (l1,ty, idx) = do
+                                        case scrutloc of 
+                                          Single _ -> do 
+                                            l2 <- gensym "jump"
+                                            let l2loc = singleLocVar l2
+                                            let eor' = mkEnd l1 l2loc eor
+                                            let (Just jump) = L1.sizeOfTy ty
+                                            let e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
+                                            return (eor', e')
+                                          -- We need to return endof locations for each non packed field
+                                          -- Hence, in an SoA case, the data con location stays the same
+                                          -- We just need to produce new locations for each field. 
+                                          SoA dloc flocs -> do 
+                                            let jump_dloc = dloc 
+                                            l2 <- gensym "jumpf"
+                                            let l2loc = singleLocVar l2
+                                            let eor' = mkEnd l1 l2loc eor
+                                            let (Just jump) = L1.sizeOfTy ty
+                                            let get_dcon_let = LetLocE (singleLocVar jump_dloc) (GetDataConLocSoA scrutloc)
+                                            let after_let = LetLocE l2loc (AfterConstantLE jump l1)
+                                            let new_field_locs = L.map (\(k, l) -> if k == (dc, idx)
+                                                                                 then (k, l2)
+                                                                                 else (k, l)
+                                                                     ) flocs 
+                                            let new_field_locs' = L.map (\(k, l) -> (k, singleLocVar l)) new_field_locs
+                                            let new_soa_loc = LetLocE (SoA jump_dloc new_field_locs) (GenSoALoc (singleLocVar jump_dloc) new_field_locs')
+                                            let e' = Ext $ get_dcon_let $ Ext $ after_let $ Ext $ new_soa_loc e
+                                            return (eor', e')
                                   vars = L.map fst vls
                                   varsToLocs = L.map singleLocVar vars 
                                   locs = L.map snd vls
                                   vls' = L.map (\(v, l) -> (singleLocVar v, l)) vls
                                   env2' = extendsVEnvLocVar (M.fromList (zip locs argtys ++ zip varsToLocs argtys)) env2
                                   lenv' = M.union lenv $ M.fromList vls'
-                              (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
+                              (eor'',e') <- foldM handleLoc (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
                               e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
                               return (dc, vls, e'')
-                            Just l1@(SoA _ _) -> error "routeEnds: SoA case not implemented yet."
                             Nothing -> error $ "Failed to find " ++ (show x)
                  return $ CaseE (VarE x) brs'
 
@@ -585,7 +605,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  -- For each traversed location, gensym a new variable for its end,
                  -- and generate a list of (location, endof location) pairs.
                  let handleTravList lst (_l,False) = return lst
-                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l, (singleLocVar l')):lst
+                     handleTravList lst (l,True) = (freshCommonLoc "endof" l) >>= \l' -> return $ (l, l'):lst
 
                  -- Walk through our pairs of (location, endof location) and update the
                  -- endof relation.

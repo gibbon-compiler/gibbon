@@ -559,13 +559,13 @@ freshSingleLocVar m = do v <- gensym (toVar m)
                          return $ Single v                          
 
 -- | VS: ideally we should get rid of unwrapLocVar. We should make LocVar a recursive datatype
-freshFieldLocsSoA :: [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Var)]
-freshFieldLocsSoA lst = do 
+freshFieldLocsSoA :: String -> [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Var)]
+freshFieldLocsSoA pfix lst = do 
                      case lst of
                           [] -> return [] 
                           (a, b):rst -> do 
-                                        newLoc <- freshSingleLocVar "floc"
-                                        rst' <- freshFieldLocsSoA rst
+                                        newLoc <- freshSingleLocVar (pfix ++ "_floc")
+                                        rst' <- freshFieldLocsSoA pfix rst
                                         return $ [(a, unwrapLocVar newLoc)] ++ rst'
 
 freshSoALoc :: String -> LocVar -> PassM LocVar 
@@ -575,8 +575,8 @@ freshSoALoc pfix lc = do
                                   l' <- freshSingleLocVar (pfix ++"_loc")
                                   return l'
                      SoA dbuf rst -> do 
-                                     dbuf' <- freshSingleLocVar (pfix ++ "dloc")
-                                     rst' <- freshFieldLocsSoA rst
+                                     dbuf' <- freshSingleLocVar (pfix ++ "_dloc")
+                                     rst' <- freshFieldLocsSoA pfix rst
                                      let newSoALoc = SoA (unwrapLocVar dbuf') rst'
                                      return newSoALoc
 

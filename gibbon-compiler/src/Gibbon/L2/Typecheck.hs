@@ -1071,8 +1071,15 @@ globalReg = GlobR "GLOBAL" BigInfinite
 -- | Get the constraints from the location bindings in a function type.
 funConstrs :: [LRM] -> ConstraintSet
 funConstrs ((LRM l r _m):lrms) = case r of 
+                                    SoAR dclreg fieldRegs -> case l of 
+                                                                Single _ -> error "funConstrs: expected SoA location in LRM."
+                                                                SoA dloc flocs -> let nconstrs = extendConstrs (InRegionC (singleLocVar dloc) dclreg) $ funConstrs lrms
+                                                                                      nconstrs' = extendConstrs (InRegionC l r) $ nconstrs
+                                                                                     in L.foldr (\(k, freg) acc -> case lookup k flocs of
+                                                                                                                        Nothing -> error "funConstrs: expected a field location for corresponding key in SoAR."
+                                                                                                                        Just loc -> extendConstrs (InRegionC (singleLocVar loc) freg) acc
+                                                                                                ) nconstrs' fieldRegs
                                     _ -> extendConstrs (InRegionC l r) $ funConstrs lrms
-                                    SoAR _ _ -> error "TODO: funConstrs: SoAR case not implemented!"
 funConstrs [] = ConstraintSet $ S.empty
 
 -- | Get the type state implied by the location bindings in a function type.
