@@ -454,7 +454,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                          fieldLocExps = P.map (\c -> case c of 
                                                                                                                                 AfterConstantL lv1 v lv2 -> LetLocE lv1 (AfterConstantLE v lv2)
                                                                                                                                 AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)  
-                                                                                                                                _ -> error "bindAllLocations : AfterSoALE: unexpected locatin constraint."
+                                                                                                                                _ -> error "InferLocations : bindAllLocations : AfterSoALE: unexpected locatin constraint."
                                                                                                                               ) flst
                                                                                                          --new_field_locs = P.foldr (\c accum -> case c of 
                                                                                                          --                                 AfterConstantL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
