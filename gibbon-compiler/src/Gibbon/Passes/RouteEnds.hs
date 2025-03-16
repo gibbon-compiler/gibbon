@@ -331,9 +331,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             SoA in_dbuf_loc in_flocs -> let in_dcon_lete = LetLocE (getDconLoc l1) (GetDataConLocSoA l1)
                                                                             end_con_lete = LetLocE (getDconLoc l2loc) (AfterConstantLE 1 ((getDconLoc l1)))
                                                                             -- generate all alias to field constraints 
-                                                                            field_letes = L.map (\(key, lv) -> case L.lookup key (getAllFieldLocsSoA l2loc) of 
+                                                                            field_letes = L.concatMap (\(key, lv) -> case L.lookup key (getAllFieldLocsSoA l2loc) of 
                                                                                                                             Nothing -> error "routeEnds: expected location for field."
-                                                                                                                            Just ofl -> LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))
+                                                                                                                            Just ofl -> [LetLocE (singleLocVar lv) (GetFieldLocSoA key l1)]  ++ [LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))] 
                                                                                  ) in_flocs
                                                                             new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) (L.map (\(key, lv) -> (key, singleLocVar lv)) (getAllFieldLocsSoA l2loc)))
                                                                             all_letes = [in_dcon_lete, end_con_lete] ++ field_letes ++ [new_soa_loc]  

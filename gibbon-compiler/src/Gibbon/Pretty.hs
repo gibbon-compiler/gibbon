@@ -436,7 +436,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
         case le of
           StartOfRegionLE r -> lparen <> text "startOfRegion" <+> text (sdoc r) <> rparen
           GenSoALoc loc flocs -> lparen <> text "genSoALoc" <+> pprint loc <+> (brackets $ hcat (punctuate "," (map (\((dc, x), l) -> lparen <> lparen <> text dc <+> "," <+> int x <> rparen <+> "," <+> pprint l <> rparen) flocs))) <> rparen 
-	  GetDataConLocSoA loc -> lparen <> text "genDataConLocSoA" <+> pprint loc <> rparen
+	  GetDataConLocSoA loc -> lparen <> text "getDataConLocSoA" <+> pprint loc <> rparen
 	  GetFieldLocSoA (dcon, idx) loc -> lparen <> text "getFieldLocSoA" <+> lparen <> text dcon <+> "," <+> int idx <> rparen <+> pprint loc <> rparen
           --AfterVectorLE dexp fexps s -> lparen <> text "afterVectorOfLocs(" <+> pprint dexp <+> "," <+> (brackets $ hcat (punctuate "," (map pprint fexps))) <+> ")" <+> pprint s <> rparen
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen

@@ -30,7 +30,7 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA, varsInLocVar
 
 
          -- * Establish conventions for the output of #lang gibbon:
@@ -534,6 +534,11 @@ falsePrinted = "#f"
 unwrapLocVar :: LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
+
+varsInLocVar :: LocVar -> [Var]
+varsInLocVar loc = case loc of 
+                        Single loc -> [loc]
+                        SoA dcon fieldLocs -> dcon : L.map snd fieldLocs
 
 -- | get the data constructor location from an SoA loc
 -- | Ideally we should not need this

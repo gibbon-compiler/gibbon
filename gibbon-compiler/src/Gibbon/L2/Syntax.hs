@@ -249,6 +249,10 @@ instance FreeVars LocExp where
     case e of
       AfterConstantLE _ loc   -> S.singleton $ unwrapLocVar loc
       AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar loc]
+      -- All the locations inside an SoA loc are also free. 
+      GetDataConLocSoA loc -> S.fromList $ varsInLocVar loc
+      GetFieldLocSoA _ loc -> S.fromList $ varsInLocVar loc
+      GenSoALoc loc flocs -> S.fromList (varsInLocVar loc) `S.union` (S.fromList $ L.concatMap (\(_, loc) -> varsInLocVar loc) flocs)
       _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -1100,24 +1104,29 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
 allFreeVars :: Exp2 -> S.Set LocVar
 allFreeVars ex =
   case ex of
-    AppE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args))
+    AppE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args)) --`S.union` (S.fromList $ L.concatMap (\l -> map singleLocVar $ varsInLocVar l) locs)
     PrimAppE _ args -> (S.unions (map allFreeVars args))
-    LetE (v,locs,_,rhs) bod -> (S.fromList locs `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
+    LetE (v,locs,_,rhs) bod -> (S.fromList locs `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod) {-`S.union` (S.fromList $ L.concatMap (\l -> map singleLocVar $ varsInLocVar l) locs)-})
                                `S.difference` S.singleton (singleLocVar v)
     IfE a b c -> allFreeVars a `S.union` allFreeVars b `S.union` allFreeVars c
     MkProdE args -> (S.unions (map allFreeVars args))
     ProjE _ bod -> allFreeVars bod
     CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars c `S.difference`
                                                                                    S.fromList (map (singleLocVar . fst) vlocs) `S.difference`
-                                                                                   S.fromList (map snd vlocs))
+                                                                                   (S.fromList (map snd vlocs) {-`S.union` S.fromList (L.concatMap (\l -> map singleLocVar $ varsInLocVar l) (map snd vlocs) )-})  )
                                                                   brs))
-    DataConE locvar _ args -> S.singleton locvar `S.union` (S.unions (map allFreeVars args))
+    DataConE locvar _ args -> S.singleton locvar `S.union` (S.unions (map allFreeVars args)) --`S.union` (S.fromList $ L.map singleLocVar $ varsInLocVar locvar)
     TimeIt e _ _ -> allFreeVars e
     WithArenaE _ e -> allFreeVars e
-    SpawnE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args))
+    SpawnE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args)) ---`S.union` (S.fromList $ L.map singleLocVar $ varsInLocVar locvar)
     Ext ext ->
       case ext of
-        LetRegionE r _ _ bod -> S.delete (singleLocVar $ regionToVar r) (allFreeVars bod)
+        LetRegionE r _ _ bod -> let freeVarsInRegion = case r of 
+                                                         SoAR rr fieldRegs -> let regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> (regionToVar fregs)) fieldRegs
+                                                                               in S.fromList $ L.map singleLocVar regVars
+                                                         _ -> S.singleton (singleLocVar $ regionToVar r) 
+                                  in S.difference (allFreeVars bod) freeVarsInRegion
+                    -- S.delete (singleLocVar $ regionToVar r) (allFreeVars bod)
         LetParRegionE r _ _ bod -> S.delete (singleLocVar $ regionToVar r) (allFreeVars bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` (S.map singleLocVar (gFreeVars locexp)))
         StartOfPkdCursor cur -> S.singleton (singleLocVar cur)

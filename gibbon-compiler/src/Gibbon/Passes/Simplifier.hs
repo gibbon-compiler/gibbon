@@ -173,7 +173,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
               in
                 if (loc `elem` free_vars)
                 then Ext (LetLocE loc rhs bod')
-                else bod'
+                else dbgTraceIt "Print freeVars: " dbgTraceIt (sdoc (rhs, free_vars))  dbgTraceIt "End\n"  bod'
             LetAvail vars bod -> Ext (LetAvail vars (go2 bod))
             _ -> Ext ext
         _ -> ex
