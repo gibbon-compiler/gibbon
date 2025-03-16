@@ -403,7 +403,7 @@ fixType_ ty =
 getFieldLocs :: LocVar -> [((DataCon, FieldIndex), Var)]
 getFieldLocs loc = case loc of 
                     SoA dcon fieldLocs -> fieldLocs
-                    Single lc -> error "getFieldLocs : Did not expect a non SoA location!"
+                    Single lc -> error "InferLocations : getFieldLocs : Did not expect a non SoA location!"
 
 -- | Wrap the inferExp procedure, and consume all remaining constraints
 inferExp' :: DDefs1 -> FullEnv -> Exp1 -> [LocVar] -> Dest -> TiM (L2.Exp2, L2.Ty2)
