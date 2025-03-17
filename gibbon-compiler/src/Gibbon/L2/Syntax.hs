@@ -59,6 +59,7 @@ module Gibbon.L2.Syntax
   , locsInTy
   , dummyTyLocs
   , allFreeVars
+  , allFreeVars'
   , freeLocVars
   , singleLocVar
   , freeVars
@@ -249,12 +250,13 @@ instance FreeVars (E2Ext l d) where
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      AfterConstantLE _ loc   -> S.singleton $ unwrapLocVar loc
-      AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar loc]
+      --AfterConstantLE _ loc   -> S.singleton $ unwrapLocVar loc
+      --AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar loc]
       -- All the locations inside an SoA loc are also free. 
-      GetDataConLocSoA loc -> S.fromList $ varsInLocVar loc
-      GetFieldLocSoA _ loc -> S.fromList $ varsInLocVar loc
-      GenSoALoc loc flocs -> S.fromList (varsInLocVar loc) `S.union` (S.fromList $ L.concatMap (\(_, loc) -> varsInLocVar loc) flocs)
+      --GetDataConLocSoA loc -> S.fromList $ varsInLocVar loc
+      --GetFieldLocSoA _ loc -> S.fromList $ varsInLocVar loc
+      --GenSoALoc loc flocs -> S.fromList (varsInLocVar loc) `S.union` (S.fromList $ L.concatMap (\(_, loc) -> varsInLocVar loc) flocs)
+      AfterVariableLE v loc _ -> S.fromList [v]
       _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -1126,7 +1128,17 @@ allFreeVars ex =
         LetRegionE r _ _ bod -> let regVar = regionToVar r
                                   in S.delete (R regVar) (allFreeVars bod)
         LetParRegionE r _ _ bod -> S.delete (R $ regionToVar r) (allFreeVars bod)
-        LetLocE loc locexp bod -> S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars bod `S.union` (S.map V (gFreeVars locexp)))
+        LetLocE loc locexp bod -> let locs_locexp = case locexp of 
+                                                      AfterConstantLE _ loc   -> S.singleton $ fromLocVarToFreeVarsTy loc
+                                                      AfterVariableLE v loc _ -> S.fromList [fromLocVarToFreeVarsTy loc]
+                                                      -- All the locations inside an SoA loc are also free. 
+                                                      -- TODO this works since locvar is not recursive but this needs to change
+                                                      GetDataConLocSoA loc -> S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)
+                                                      GetFieldLocSoA _ loc -> S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)
+                                                      GenSoALoc loc flocs -> S.fromList (L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)) `S.union` (S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (L.concatMap (\(_, loc) -> varsInLocVar loc) flocs))
+                                                      _ -> S.empty
+                                      vars_locexp = S.map fromVarToFreeVarsTy (gFreeVars locexp)
+                                    in S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars bod `S.union` locs_locexp `S.union` vars_locexp)
         StartOfPkdCursor cur -> S.singleton (V cur)
         TagCursor a b -> S.fromList [V a, V b]
         RetE locs v     -> S.insert (V v) (S.fromList (map fromLocVarToFreeVarsTy locs))
@@ -1141,6 +1153,14 @@ allFreeVars ex =
         SSPush _ a b _ -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
         SSPop _ a b -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
     _ -> S.map V (gFreeVars ex)
+
+allFreeVars' :: Exp2 -> S.Set Var 
+allFreeVars' ex = let freeVars = allFreeVars ex 
+                   in S.fromList $ L.concatMap (\fv -> case fv of 
+                                      V v -> [v] 
+                                      FL l -> varsInLocVar l
+                                      R r -> varsInRegVar r
+                            ) (S.toList freeVars)
 
 freeLocVars :: Exp2 -> [LocVar]
 freeLocVars ex = L.map getLocVarFromFreeVarsTy $ S.toList (allFreeVars ex)
