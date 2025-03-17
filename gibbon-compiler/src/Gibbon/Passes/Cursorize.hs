@@ -116,7 +116,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
       -- intuitive and can be improved.
 
       -- Input & output regions are always inserted before all other arguments.
-      regBinds = map toEndVLoc (inRegs ++ outRegs)
+      regBinds = map toEndVRegVar (inRegs ++ outRegs)
 
       -- Output cursors after that.
       outCurBinds = outLocs
@@ -132,7 +132,11 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
       initTyEnv = M.fromList $ (map (\(a,b) -> (a,MkTy2 (cursorizeInTy (unTy2 b)))) $ zip funArgs in_tys) ++
                                [(unwrapLocVar a, MkTy2 CursorTy) | (LRM a _ _) <- locVars funTy]
 
-      funargs = (L.map unwrapLocVar regBinds) ++ (L.map unwrapLocVar outCurBinds) ++ funArgs
+      funargs = (L.map (\r -> case r of
+                                  SingleR v -> v
+                                  SoARv v _ -> error "cursorizeFunDef: unexpected SoARv"
+                       ) regBinds
+                ) ++ (L.map unwrapLocVar outCurBinds) ++ funArgs
 
   bod <- if hasPacked (unTy2 out_ty)
          then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv M.empty funBody
@@ -814,9 +818,12 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
       asserts <- foldrM (\loc acc ->
                            case loc of
                              Loc LREM{lremEndReg,lremLoc} -> do
+                               let lremEndRegToVar = case lremEndReg of 
+                                                            SingleR v -> v
+                                                            SoARv _ _ -> error "TODO: cursorizeAppE: unexpected SoARv"
                                chk <- gensym "chk"
                                pure $
-                                 LetE (chk,[],BoolTy,PrimAppE LtP [VarE (unwrapLocVar lremLoc), VarE lremEndReg]) $
+                                 LetE (chk,[],BoolTy,PrimAppE LtP [VarE (unwrapLocVar lremLoc), VarE lremEndRegToVar]) $
                                  LetE ("_",[],ProdTy [], Ext $ Assert (VarE chk)) $
                                  acc
                              _ -> pure acc)

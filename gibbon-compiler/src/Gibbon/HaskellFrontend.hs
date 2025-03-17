@@ -1202,7 +1202,7 @@ fixupSpawn ex =
     Ext (PrintPacked ty arg) -> Ext (PrintPacked ty (go arg))
     Ext (CopyPacked ty arg) -> Ext (CopyPacked ty (go arg))
     Ext (TravPacked ty arg) -> Ext (TravPacked ty (go arg))
-    Ext (L p e)    -> Ext (L p (go e))
+    Ext (L0.L p e)    -> Ext (L0.L p (go e))
     Ext (LinearExt ext) ->
       case ext of
         ReverseAppE fn arg -> Ext (LinearExt (ReverseAppE (go fn) (go arg)))
@@ -1252,7 +1252,7 @@ verifyBenchEAssumptions bench_allowed ex =
     Ext (PrintPacked ty arg) -> Ext (PrintPacked ty (not_allowed arg))
     Ext (CopyPacked ty arg) -> Ext (CopyPacked ty (not_allowed arg))
     Ext (TravPacked ty arg) -> Ext (TravPacked ty (not_allowed arg))
-    Ext (L p e)    -> Ext (L p (go e))
+    Ext (L0.L p e)    -> Ext (L0.L p (go e))
     Ext (LinearExt{}) -> error "verifyBenchEAssumptions: LinearExt not handled."
     -- Straightforward recursion ...
     VarE{}     -> ex
@@ -1373,8 +1373,8 @@ desugarLinearExts (Prog ddefs fundefs main) = do
                                     pure (Ext (CopyPacked ty arg'))
             TravPacked ty arg -> do arg' <- go arg
                                     pure (Ext (TravPacked ty arg'))
-            L p e -> do e' <- go e
-                        pure (Ext (L p e'))
+            L0.L p e -> do e' <- go e
+                           pure (Ext (L0.L p e'))
             LinearExt lin ->
               case lin of
                 ReverseAppE fn (Ext (LinearExt (AliasE e))) -> do

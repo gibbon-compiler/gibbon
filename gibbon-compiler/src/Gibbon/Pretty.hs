@@ -492,6 +492,10 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
 instance Pretty L2.LocVar where 
   pprintWithStyle _ loc = parens $ text $ sdoc loc
 
+instance Pretty L2.RegVar where
+  pprintWithStyle _ loc = parens $ text $ sdoc loc
+
+
 instance Pretty L2.Region where
   pprintWithStyle _ reg = parens $ text $ sdoc reg
 

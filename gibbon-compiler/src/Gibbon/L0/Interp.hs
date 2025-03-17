@@ -30,7 +30,7 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) Var where
         PrintPacked _ty _arg -> pure $ VProd []
         CopyPacked _ty arg -> gInterpExp rc valenv ddefs fundefs arg
         TravPacked _ty _arg -> pure $ VProd []
-        L _ e -> gInterpExp rc valenv ddefs fundefs e
+        Gibbon.L0.Syntax.L _ e -> gInterpExp rc valenv ddefs fundefs e
         PolyAppE{} -> error "L0.Interp: PolyAppE not handled."
         LinearExt{} -> error $ "L0.Interp: a linear types extension wasn't desugared: " ++ sdoc ex
 

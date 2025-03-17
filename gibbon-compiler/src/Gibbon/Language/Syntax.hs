@@ -219,8 +219,8 @@ insertFD d = M.insertWith err' (funName d) d
   where
    err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
 
-insertFD' :: FunDef LocVar ex -> FunDefs LocVar ex -> FunDefs LocVar ex
-insertFD' d = M.insertWith err' (Single $ funName d) d
+insertFD' :: FunDef FreeVarsTy ex -> FunDefs FreeVarsTy ex -> FunDefs FreeVarsTy ex
+insertFD' d = M.insertWith err' (fromVarToFreeVarsTy $ funName d) d
   where
    err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
 
@@ -232,9 +232,9 @@ fromListFD = L.foldr insertFD M.empty
 initFunEnv :: FunDefs Var a -> TyEnv Var (ArrowTy (TyOf a))
 initFunEnv fds = M.map funTy fds
 
-initFunEnv' :: FunDefs Var a -> TyEnv LocVar (ArrowTy (TyOf a))
+initFunEnv' :: FunDefs Var a -> TyEnv FreeVarsTy (ArrowTy (TyOf a))
 initFunEnv' fds = let m = M.map funTy fds
-                      m' = M.mapKeys Single m 
+                      m' = M.mapKeys fromVarToFreeVarsTy m 
                     in m'
 
 --------------------------------------------------------------------------------
@@ -269,7 +269,7 @@ deriving instance (NFData (TyOf ex), NFData (ArrowTy (TyOf ex)), NFData ex, Gene
 progToEnv :: Prog Var a -> Env2 Var (TyOf a)
 progToEnv Prog{fundefs} = Env2 M.empty (initFunEnv fundefs)
 
-progToEnv' :: Prog Var a -> Env2 LocVar (TyOf a)
+progToEnv' :: Prog Var a -> Env2 FreeVarsTy (TyOf a)
 progToEnv' Prog{fundefs} = Env2 M.empty (initFunEnv' fundefs)
 
 -- | Look up the input/output type of a top-level function binding.
@@ -312,20 +312,20 @@ emptyEnv2 = Env2 { vEnv = emptyTyEnv
 extendVEnv :: Var -> a -> Env2 Var a -> Env2 Var a
 extendVEnv v t (Env2 ve fe) = Env2 (M.insert v t ve) fe
 
-extendVEnvLocVar :: LocVar -> a -> Env2 LocVar a -> Env2 LocVar a
+extendVEnvLocVar :: FreeVarsTy -> a -> Env2 FreeVarsTy a -> Env2 FreeVarsTy a
 extendVEnvLocVar v t (Env2 ve fe) = Env2 (M.insert v t ve) fe
 
 -- | Extend multiple times in one go.
 extendsVEnv :: M.Map Var a -> Env2 Var a -> Env2 Var a
 extendsVEnv mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 
-extendsVEnvLocVar :: M.Map LocVar a -> Env2 LocVar a -> Env2 LocVar a 
+extendsVEnvLocVar :: M.Map FreeVarsTy a -> Env2 FreeVarsTy a -> Env2 FreeVarsTy a 
 extendsVEnvLocVar mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 
 lookupVEnv :: Out a => Var -> Env2 Var a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
-lookupVEnvLocVar :: Out a => LocVar -> Env2 LocVar a -> a 
+lookupVEnvLocVar :: Out a => FreeVarsTy -> Env2 FreeVarsTy a -> a 
 lookupVEnvLocVar v env2 = (vEnv env2) # v
 
 mblookupVEnv :: Var -> Env2 Var a -> Maybe a
@@ -341,7 +341,7 @@ extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
 lookupFEnv :: Out (ArrowTy a) => Var -> Env2 Var a -> ArrowTy a
 lookupFEnv v env2 = (fEnv env2) # v
 
-lookupFEnvLocVar :: Out (ArrowTy a) => LocVar -> Env2 LocVar a -> ArrowTy a 
+lookupFEnvLocVar :: Out (ArrowTy a) => FreeVarsTy -> Env2 FreeVarsTy a -> ArrowTy a 
 lookupFEnvLocVar loc env2 = (fEnv env2) # loc
 
 
@@ -660,7 +660,7 @@ type HasSimplifiableExt e l d = ( Show l, Out l, Show d, Out d
 -- bind it with a LetE.
 class Expression e => Typeable e where
   gRecoverType :: DDefs (TyOf e) -> Env2 Var (TyOf e) -> e -> TyOf e
-  gRecoverTypeLoc :: DDefs (TyOf e) -> Env2 LocVar (TyOf e) -> e -> TyOf e
+  gRecoverTypeLoc :: DDefs (TyOf e) -> Env2 FreeVarsTy (TyOf e) -> e -> TyOf e
 
 -- | Generic substitution over expressions.
 class Expression e => Substitutable e where

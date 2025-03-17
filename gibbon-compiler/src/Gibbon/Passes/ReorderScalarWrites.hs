@@ -196,7 +196,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                                         in ret
                                 _  ->
                                   let freev = L2.allFreeVars rhs `S.union` L2.allFreeVars bod
-                                      locs_before' = filter (\x -> S.member x freev) locs_before
+                                      locs_before' = filter (\x -> S.member (fromLocVarToFreeVarsTy x) freev) locs_before
                                   in (S.isProperSubsetOf (S.fromList locs_before') allocated_to, locs_before', reg, rloc)
 
         findTyCon :: LocVar -> L2.Exp2 -> TyCon

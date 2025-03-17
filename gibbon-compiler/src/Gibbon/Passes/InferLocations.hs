@@ -1941,9 +1941,9 @@ fixProj renam pvar proj e =
 -- Runs after projTups in the SpawnE case in inferExp.
 moveProjsAfterSync :: LocVar -> Exp2 -> Exp2
 moveProjsAfterSync sv ex = case sv of 
-                                l@(Single loc) -> go [] (S.singleton l) ex
+                                l@(Single loc) -> go [] (S.singleton $ fromLocVarToFreeVarsTy l) ex
   where
-    go :: [Binds (Exp2)] -> S.Set LocVar -> Exp2 -> Exp2
+    go :: [Binds (Exp2)] -> S.Set FreeVarsTy -> Exp2 -> Exp2
     go acc1 pending ex =
       case ex of
         VarE{}    -> ex
@@ -1960,7 +1960,7 @@ moveProjsAfterSync sv ex = case sv of
           let vars = allFreeVars rhs
           in if S.null (S.intersection vars pending)
              then LetE (v, locs, ty, rhs) (go acc1 pending bod)
-             else go ((v, locs, ty, rhs):acc1) (S.insert (singleLocVar v) pending) bod
+             else go ((v, locs, ty, rhs):acc1) (S.insert (fromVarToFreeVarsTy v) pending) bod
         IfE a b c   -> IfE (go acc1 pending a) (go acc1 pending b) (go acc1 pending c)
         MkProdE ls  -> MkProdE $ L.map (go acc1 pending) ls
         ProjE i arg -> ProjE i $ go acc1 pending arg

@@ -116,12 +116,12 @@ instance Typeable (E1Ext () (UrTy ())) where
 
   gRecoverTypeLoc _ddefs env2 ext =
     case ext of
-      BenchE fn _ _ _ -> outTy $ fEnv env2 # (singleLocVar fn)
-      AddFixed v _i   -> if M.member (singleLocVar v) (vEnv env2)
+      BenchE fn _ _ _ -> outTy $ fEnv env2 # (fromVarToFreeVarsTy fn)
+      AddFixed v _i   -> if M.member (fromVarToFreeVarsTy v) (vEnv env2)
                          then CursorTy
                          else error $ "AddFixed: unbound variable " ++ show v
       StartOfPkdCursor cur ->
-                         case M.lookup (singleLocVar cur) (vEnv env2) of
+                         case M.lookup (fromVarToFreeVarsTy cur) (vEnv env2) of
                            Just (PackedTy{}) -> CursorTy
                            ty -> error $ "StartOfPkdCursor: got " ++ show ty
 

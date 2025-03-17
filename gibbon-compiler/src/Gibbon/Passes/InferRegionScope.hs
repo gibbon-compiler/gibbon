@@ -72,7 +72,7 @@ inferRegScopeExpHelper ex rhs r env =
         let (g,_,vtxF) = graphFromEdges deps
           in case r of 
             -- VS: TODO: Handle case then field Regions also contain more factored out SoA regions.
-            SoAR dcr fieldRegs -> let regVLoc = DReg r 
+            SoAR dcr fieldRegs -> let regVLoc = R $ regionToVar r 
                                       regVertex = case vtxF regVLoc of
                                         Just x  -> x
                                         Nothing -> error $ "No vertex for:" ++ sdoc r
@@ -99,7 +99,10 @@ inferRegScopeExpHelper ex rhs r env =
                                           let scoped_reg = SoAR scopedDcr scopedFieldRegs
                                           Ext <$> LetRegionE scoped_reg Undefined Nothing <$> inferRegScopeExp (M.insert r scoped_reg env) rhs 
             _ -> let regV = regionToVar r
-                     regVLoc = DReg r
+                     regVToVar = case regV of
+                        SingleR v -> v
+                        SoARv _ _ -> error "inferRegScopeExp: did not expect an SoA region!"
+                     regVLoc = R $ regionToVar r
                      -- Vertex of the region variable
                      regVertex = case vtxF regVLoc of
                         Just x  -> x
@@ -117,11 +120,11 @@ inferRegScopeExpHelper ex rhs r env =
                                   then BigInfinite
                                   else Infinite
                         let scoped_reg = if path g retVertex regVertex
-                                  then (GlobR regV defaultMul)
+                                  then (GlobR regVToVar defaultMul)
                                   -- [2018.03.30] - TEMP: Turning off scoped buffers.
                                   -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
                                   -- else (DynR regV mul)
-                                  else (GlobR regV defaultMul)
+                                  else (GlobR regVToVar defaultMul)
                         Ext <$>
                              LetRegionE scoped_reg Undefined Nothing <$>
                              inferRegScopeExp (M.insert r scoped_reg env) rhs
@@ -152,7 +155,10 @@ inferRegScopeExp env ex =
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps
                          regV = regionToVar r
-                         regVLoc = DReg r
+                         regVtoVar = case regV of
+                           SingleR v -> v
+                           SoARv _ _ -> error "inferRegScopeExp: did not expect an SoA region!"
+                         regVLoc = R $ regionToVar r
                          -- Vertex of the region variable
                          regVertex =
                            case vtxF regVLoc of
@@ -172,12 +178,12 @@ inferRegScopeExp env ex =
                                             then BigInfinite
                                             else Infinite
                            let scoped_reg = if path g retVertex regVertex
-                                            then (GlobR regV defaultMul)
+                                            then (GlobR regVtoVar defaultMul)
                                             -- [2018.03.30] - TEMP: Turning off scoped buffers.
                                             -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
                                             -- else (DynR regV mul)
-                                            else (GlobR regV defaultMul)
-                           Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$>
+                                            else (GlobR regVtoVar defaultMul)
+                           Ext <$> LetParRegionE (GlobR regVtoVar defaultMul) Undefined Nothing <$>
                                    (inferRegScopeExp (M.insert r scoped_reg env) rhs)
                    [] -> return ex
 

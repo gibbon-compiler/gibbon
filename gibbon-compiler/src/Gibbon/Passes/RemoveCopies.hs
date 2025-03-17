@@ -9,7 +9,7 @@ import Gibbon.L2.Syntax
 --------------------------------------------------------------------------------
 
 -- Maps a location to a region
-type LocEnv = M.Map LocVar Var
+type LocEnv = M.Map LocVar RegVar
 
 removeCopies :: Prog2 -> PassM Prog2
 removeCopies Prog{ddefs,fundefs,mainExp} = do
@@ -58,9 +58,15 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
+          let reg_lout = case (lenv # lout) of 
+                                  SingleR v -> v
+                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+          let reg_lin = case (lenv # lin) of 
+                                  SingleR v -> v
+                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
           return $
             mkLets ([(indirection,[],PackedTy tycon lout,
-                      Ext $ IndirectionE tycon dcon (lout , singleLocVar $ lenv # lout) (lin, singleLocVar $ lenv # lin) arg)])
+                      Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg)])
             (VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
@@ -70,7 +76,13 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
-          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ lenv # lout) (lin, singleLocVar $ lenv # lin) arg) <$>
+          let reg_lout = case (lenv # lout) of 
+                                  SingleR v -> v
+                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+          let reg_lin = case (lenv # lin) of 
+                                  SingleR v -> v
+                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 

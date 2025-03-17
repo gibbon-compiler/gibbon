@@ -343,7 +343,7 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
   in S.union funs mn
 
 -- Maps a location to a region
-type RegEnv = M.Map LocVar Var
+type RegEnv = M.Map LocVar RegVar
 type TyConEnv = M.Map LocVar TyCon
 
 needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Var Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> Exp2 -> S.Set TyCon

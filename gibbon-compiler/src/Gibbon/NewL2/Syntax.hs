@@ -22,11 +22,11 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM
+    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
-    , toEndFromTaggedV, toTagV
+    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar
 
     , module Gibbon.Language
     )
@@ -94,11 +94,11 @@ instance NFData LREM where
 
 fromLRM :: Old.LRM -> LREM
 fromLRM (Old.LRM loc reg mode) = case reg of 
-  _ -> LREM loc (Old.regionToVar reg) (toEndV (Old.regionToVar reg)) mode
+  _ -> LREM loc (Old.regionToVar reg) (toEndVRegVar (Old.regionToVar reg)) mode
   Old.SoAR _ _ -> error "TODO: NewL2/Syntax.hs, fromLRM, implement SoA region."
 
 data LocArg = Loc LREM
-            | EndWitness LREM Var
+            | EndWitness LREM LocVar
             | Reg RegVar Old.Modality
             | EndOfReg RegVar Old.Modality RegVar
             | EndOfReg_Tagged RegVar
@@ -107,24 +107,52 @@ data LocArg = Loc LREM
 instance Out LocArg
 instance NFData LocArg
 
+toRegVar :: LocArg -> RegVar
+toRegVar arg =
+  case arg of
+    Loc lrm        -> lremReg lrm
+    Reg v _        -> v
+    EndOfReg _ _ v -> v
+    EndOfReg_Tagged v -> v
+
+fromLocVarToRegVar :: LocVar -> RegVar
+fromLocVarToRegVar loc = case loc of 
+  Single v -> SingleR v
+  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, SingleR floc)) fieldLocs)
+
+fromVarToSingleRegVar :: Var -> RegVar
+fromVarToSingleRegVar v = SingleR v
+
+fromSingleRegVarToVar :: RegVar -> Var
+fromSingleRegVarToVar (SingleR v) = v
+fromSingleRegVarToVar _ = error "fromSingleRegVarToVar: unexpected case."
+
+fromRegVarToLocVar :: RegVar -> LocVar
+fromRegVarToLocVar reg = case reg of 
+  SingleR v -> Single v
+  SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromSingleRegVarToVar freg)) fieldRegs)
+
 toLocVar :: LocArg -> LocVar
 toLocVar arg =
   case arg of
     Loc lrm        -> lremLoc lrm
-    EndWitness _ v -> Single v 
-    Reg v _        -> Single v
-    EndOfReg _ _ v -> Single v 
-    EndOfReg_Tagged v -> Single (toEndFromTaggedV v)
+    EndWitness _ v -> v
+    Loc lrm        -> fromRegVarToLocVar $ lremReg lrm
+    Reg v _        -> fromRegVarToLocVar v
+    EndOfReg _ _ v -> fromRegVarToLocVar v
+    EndOfReg_Tagged v -> fromRegVarToLocVar v
+    _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
+
 
 -- Returns the data constructor 
-fromLocArgToVar :: LocArg -> Var 
-fromLocArgToVar arg =
-  case arg of
-    Loc lrm        -> unwrapLocVar $ lremLoc lrm
-    EndWitness _ v -> v
-    Reg v _        -> v
-    EndOfReg _ _ v -> v
-    EndOfReg_Tagged v -> toEndFromTaggedV v
+-- fromLocArgToVar :: LocArg -> Var 
+-- fromLocArgToVar arg =
+--   case arg of
+--     Loc lrm        -> unwrapLocVar $ lremLoc lrm
+--     EndWitness _ v -> v
+--     Reg v _        -> v
+--     EndOfReg _ _ v -> v
+--     EndOfReg_Tagged v -> toEndFromTaggedV v
 
 instance Out (Old.ArrowTy2 Ty2)
 
@@ -133,6 +161,11 @@ toTagV v = (toVar "tag_") `varAppend` v
 
 toEndFromTaggedV :: Var -> Var
 toEndFromTaggedV v = (toVar "end_from_tagged_") `varAppend` v
+
+toEndFromTaggedRegVar :: RegVar -> RegVar
+toEndFromTaggedRegVar r = case r of 
+                            SingleR v -> SingleR (toEndFromTaggedV v)
+                            SoARv regvar fieldRegs -> SoARv (toEndFromTaggedRegVar regvar) (L.map (\(k, freg) -> (k, toEndFromTaggedRegVar freg)) fieldRegs) 
 
 --------------------------------------------------------------------------------
 
@@ -173,7 +206,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.StartOfPkdCursor{}       -> MkTy2 $ CursorTy
       Old.TagCursor{}      -> MkTy2 $ CursorTy
       Old.LetLocE _l _rhs bod -> gRecoverTypeLoc ddfs env2 bod
-      Old.RetE _loc var       -> case M.lookup (singleLocVar var) (vEnv env2) of
+      Old.RetE _loc var       -> case M.lookup (fromVarToFreeVarsTy var) (vEnv env2) of
                                    Just ty -> ty
                                    Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
       Old.FromEndE _loc       -> error "Shouldn't enconter FromEndE in tail position"
@@ -252,13 +285,13 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
-      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) (singleLocVar v) (vEnv env2)
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) (fromVarToFreeVarsTy v) (vEnv env2)
       LitE _       -> MkTy2 $ IntTy
       CharE _      -> MkTy2 $ CharTy
       FloatE{}     -> MkTy2 $ FloatTy
       LitSymE _    -> MkTy2 $ SymTy
       AppE v locargs _ ->
-                       let fnty  = fEnv env2 # (singleLocVar v)
+                       let fnty  = fEnv env2 # (fromVarToFreeVarsTy v)
                            outty = Old.arrOut fnty
                            mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
                        in substLoc mp outty
@@ -267,7 +300,7 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> MkTy2 $ SymDictTy (Just v) $ stripTyLocs (unTy2 ty)
       PrimAppE p _ -> MkTy2 $ primRetTy (fmap unTy2 p)
 
-      LetE (v,_,t,_) e -> gRecoverTypeLoc ddfs (extendVEnvLocVar (singleLocVar v) t env2) e
+      LetE (v,_,t,_) e -> gRecoverTypeLoc ddfs (extendVEnvLocVar (fromVarToFreeVarsTy v) t env2) e
       IfE _ e _        -> gRecoverTypeLoc ddfs env2 e
       MkProdE es       -> MkTy2 $ ProdTy $ L.map (unTy2 . gRecoverTypeLoc ddfs env2) es
       DataConE loc c _ -> MkTy2 $ PackedTy (getTyOfDataCon ddfs c) (toLocVar loc)
@@ -282,7 +315,7 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
       SpawnE v locargs _ ->
-                         let fnty  = fEnv env2 # (singleLocVar v)
+                         let fnty  = fEnv env2 # (fromVarToFreeVarsTy v)
                              outty = Old.arrOut fnty
                              mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
                          in substLoc mp outty
@@ -338,7 +371,7 @@ extendPatternMatchEnv dcon ddefs vars locs env2 =
   in extendsVEnv (M.fromList $ fragileZip vars tys') env2
 
 extendPatternMatchEnvLocVar :: HasCallStack => DataCon -> DDefs Ty2 -> [Var] -> [LocVar]
-                      -> Env2 LocVar Ty2 -> Env2 LocVar Ty2
+                      -> Env2 FreeVarsTy Ty2 -> Env2 FreeVarsTy Ty2
 extendPatternMatchEnvLocVar dcon ddefs vars locs env2 =
   let tys  = lookupDataCon ddefs dcon
       tys' = foldr
@@ -349,7 +382,7 @@ extendPatternMatchEnvLocVar dcon ddefs vars locs env2 =
                     _  -> error $ "extendPatternMatchEnv': Found more than 1 location in type: " ++ sdoc ty)
                []
                (fragileZip locs tys)
-      vars' = L.map Single vars
+      vars' = L.map fromVarToFreeVarsTy vars
   in extendsVEnvLocVar (M.fromList $ fragileZip vars' tys') env2
 
 -- | Collect all the locations mentioned in a type.
@@ -444,17 +477,17 @@ revertExp ex =
 
 
 -- | Build a dependency list which can be later converted to a graph
-depList :: Exp2 -> [(Var, Var, [Var])]
+depList :: Exp2 -> [(FreeVarsTy, FreeVarsTy, [FreeVarsTy])]
 -- The helper function, go, works with a map rather than list so that all
 -- dependencies are properly grouped, without any duplicate keys. But we
 -- convert it back to a list so that we can hand it off to 'graphFromEdges'.
 -- Reversing the list makes it easy to peek at the return value of this AST later.
 depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
     where
-      go :: M.Map Var [Var] -> Exp2 -> M.Map Var [Var]
+      go :: M.Map FreeVarsTy [FreeVarsTy] -> Exp2 -> M.Map FreeVarsTy [FreeVarsTy]
       go acc ex =
         case ex of
-          VarE v    -> M.insertWith (++) v [v] acc
+          VarE v    -> M.insertWith (++) (fromVarToFreeVarsTy v) [(fromVarToFreeVarsTy v)] acc
           LitE{}    -> acc
           CharE{}  -> acc
           FloatE{}  -> acc
@@ -463,16 +496,16 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
             let acc_rhs = go acc rhs
-            in go (M.insertWith (++) v (S.toList $ allFreeVars rhs) acc_rhs) bod
+            in go (M.insertWith (++) (fromVarToFreeVarsTy v) (S.toList $ allFreeVars rhs) acc_rhs) bod
           IfE _ b c  -> go (go acc b) c
           MkProdE ls -> foldl go acc ls
           ProjE _ e  -> go acc e
           CaseE (VarE v) mp ->
             L.foldr (\(_,vlocs,e) acc' ->
                        let (vars,locs) = unzip vlocs
-                           acc'' = L.foldr (\w acc''' -> M.insertWith (++) v [w] acc''')
+                           acc'' = L.foldr (\w acc''' -> M.insertWith (++) (fromVarToFreeVarsTy v) [w] acc''')
                                            acc'
-                                           (vars ++ (map (unwrapLocVar . toLocVar) locs))
+                                           ((map fromVarToFreeVarsTy vars) ++ (map (fromLocVarToFreeVarsTy . toLocVar) locs))
                        in go acc'' e)
                     acc
                     mp
@@ -487,73 +520,73 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           Ext ext ->
             case ext of
               Old.LetRegionE r _ _ rhs ->
-                go (M.insertWith (++) (Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetParRegionE r _ _ rhs ->
-                go (M.insertWith (++) (Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetLocE loc phs rhs  ->
-                go (M.insertWith (++) (unwrapLocVar loc) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
+                go (M.insertWith (++) (fromLocVarToFreeVarsTy loc) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
               Old.RetE{}         -> acc
               Old.FromEndE{}     -> acc
               Old.BoundsCheck{}  -> acc
               Old.IndirectionE{} -> acc
-              Old.AddFixed v _   -> M.insertWith (++) v [v] acc
+              Old.AddFixed v _   -> M.insertWith (++) (fromVarToFreeVarsTy v) [(fromVarToFreeVarsTy v)] acc
               Old.GetCilkWorkerNum -> acc
               Old.LetAvail _ bod -> go acc bod
               Old.AllocateTagHere{} -> acc
               Old.AllocateScalarsHere{} -> acc
               Old.SSPush{} -> acc
               Old.SSPop{} -> acc
-              Old.StartOfPkdCursor cur -> M.insertWith (++) cur [cur] acc
-              Old.TagCursor a b -> M.insertWith (++) b [b] (M.insertWith (++) a [a] acc)
+              Old.StartOfPkdCursor cur -> M.insertWith (++) (fromVarToFreeVarsTy cur) [(fromVarToFreeVarsTy cur)] acc
+              Old.TagCursor a b -> M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
 
-      dep :: Old.PreLocExp LocArg -> [Var]
+      dep :: Old.PreLocExp LocArg -> [FreeVarsTy]
       dep ex =
         case ex of
-          Old.StartOfRegionLE r -> [Old.regionToVar r]
-          Old.AfterConstantLE _ loc   -> [unwrapLocVar $ toLocVar loc]
-          Old.AfterVariableLE v loc _ -> [v, unwrapLocVar $ toLocVar loc]
-          Old.InRegionLE r  -> [Old.regionToVar r]
-          Old.FromEndLE loc -> [unwrapLocVar $ toLocVar loc]
+          Old.StartOfRegionLE r -> [fromRegVarToFreeVarsTy $ Old.regionToVar r]
+          Old.AfterConstantLE _ loc   -> [fromLocVarToFreeVarsTy $ toLocVar loc]
+          Old.AfterVariableLE v loc _ -> [fromVarToFreeVarsTy v, fromLocVarToFreeVarsTy $ toLocVar loc]
+          Old.InRegionLE r  -> [fromRegVarToFreeVarsTy $ Old.regionToVar r]
+          Old.FromEndLE loc -> [fromLocVarToFreeVarsTy $ toLocVar loc]
           Old.FreeLE -> []
 
 -- gFreeVars ++ locations ++ region variables
-allFreeVars :: Exp2 -> S.Set Var
+allFreeVars :: Exp2 -> S.Set FreeVarsTy
 allFreeVars ex =
   case ex of
-    AppE _ locs args -> S.fromList (map (unwrapLocVar . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
+    AppE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
     PrimAppE _ args -> (S.unions (map allFreeVars args))
-    LetE (v,locs,_,rhs) bod -> (S.fromList (map (unwrapLocVar . toLocVar) locs) `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
-                               `S.difference` S.singleton v
+    LetE (v,locs,_,rhs) bod -> (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
+                               `S.difference` S.singleton (fromVarToFreeVarsTy v)
     IfE a b c -> allFreeVars a `S.union` allFreeVars b `S.union` allFreeVars c
     MkProdE args -> (S.unions (map allFreeVars args))
     ProjE _ bod -> allFreeVars bod
     CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars c `S.difference`
-                                                                                   S.fromList (map fst vlocs) `S.difference`
-                                                                                   S.fromList (map (unwrapLocVar . toLocVar . snd) vlocs))
+                                                                                   S.fromList (map (fromVarToFreeVarsTy . fst) vlocs) `S.difference`
+                                                                                   S.fromList (map (fromLocVarToFreeVarsTy . toLocVar . snd) vlocs))
                                                                   brs))
-    DataConE loc _ args -> S.singleton ((unwrapLocVar . toLocVar) loc) `S.union` (S.unions (map allFreeVars args))
+    DataConE loc _ args -> S.singleton ((fromLocVarToFreeVarsTy . toLocVar) loc) `S.union` (S.unions (map allFreeVars args))
     TimeIt e _ _ -> allFreeVars e
     WithArenaE _ e -> allFreeVars e
-    SpawnE _ locs args -> S.fromList (map (unwrapLocVar . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
+    SpawnE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        Old.LetRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
-        Old.LetParRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
-        Old.LetLocE loc locexp bod -> S.difference ((S.singleton . unwrapLocVar) loc) (allFreeVars bod `S.union` gFreeVars locexp)
-        Old.StartOfPkdCursor v -> S.singleton v
-        Old.TagCursor a b-> S.fromList [a,b]
-        Old.RetE locs v     -> S.insert v (S.fromList (map (unwrapLocVar . toLocVar) locs))
-        Old.FromEndE loc    -> S.singleton ((unwrapLocVar . toLocVar) loc)
-        Old.BoundsCheck _ reg cur -> S.fromList (map (unwrapLocVar . toLocVar) [reg, cur])
-        Old.IndirectionE _ _ (a,b) (c,d) _ -> S.fromList (map (unwrapLocVar . toLocVar) [a, b, c, d])
-        Old.AddFixed v _    -> S.singleton v
+        Old.LetRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
+        Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
+        Old.LetLocE loc locexp bod -> S.difference ((S.singleton . fromLocVarToFreeVarsTy) loc) (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
+        Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)
+        Old.TagCursor a b-> S.fromList [(fromVarToFreeVarsTy a),(fromVarToFreeVarsTy b)]
+        Old.RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
+        Old.FromEndE loc    -> S.singleton ((fromLocVarToFreeVarsTy . toLocVar) loc)
+        Old.BoundsCheck _ reg cur -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) [reg, cur])
+        Old.IndirectionE _ _ (a,b) (c,d) _ -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) [a, b, c, d])
+        Old.AddFixed v _    -> S.singleton (fromVarToFreeVarsTy v)
         Old.GetCilkWorkerNum-> S.empty
-        Old.LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
-        Old.AllocateTagHere loc _ -> S.singleton $ unwrapLocVar loc
-        Old.AllocateScalarsHere loc -> S.singleton $ unwrapLocVar loc
-        Old.SSPush _ a b _ -> S.fromList (map unwrapLocVar [a,b])
-        Old.SSPop _ a b -> S.fromList (map unwrapLocVar [a,b])
-    _ -> gFreeVars ex
+        Old.LetAvail vs bod -> S.fromList (L.map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
+        Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy loc
+        Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy loc
+        Old.SSPush _ a b _ -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
+        Old.SSPop _ a b -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
+    _ -> (S.map fromVarToFreeVarsTy $ gFreeVars ex)
 
-freeLocVars :: Exp2 -> [Var]
-freeLocVars ex = S.toList $ (allFreeVars ex) `S.difference` (gFreeVars ex)
+freeLocVars :: Exp2 -> [LocVar]
+freeLocVars ex = L.map getLocVarFromFreeVarsTy (S.toList $ (allFreeVars ex))

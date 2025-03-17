@@ -8,12 +8,12 @@ import qualified Data.List as L
 import           Debug.Trace
 import           Control.Monad
 
-type LocationRegionMapping = M.Map LocVar Var
+type LocationRegionMapping = M.Map LocVar RegVar
 type LocationOffsetMapping = M.Map LocVar RegionSize
 type VarSizeMapping = M.Map Var RegionSize
 type VarLocMapping = M.Map Var LocVar
-type RegionSizeMapping = M.Map Var RegionSize
-type RegionTypeMapping = M.Map Var RegionType
+type RegionSizeMapping = M.Map RegVar RegionSize
+type RegionTypeMapping = M.Map RegVar RegionType
 
 inferRegSize :: Old.Prog2 -> PassM Old.Prog2
 inferRegSize = calculateBounds

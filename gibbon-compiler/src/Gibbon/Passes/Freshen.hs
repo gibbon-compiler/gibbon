@@ -282,7 +282,7 @@ freshExp venv tvenv exp =
           pure $ Ext (BenchE (cleanFunName fn) tyapps args' b)
 
         ParE0 ls -> Ext <$> ParE0 <$> mapM go ls
-        L p e    -> Ext <$> (L p) <$> go e
+        Gibbon.L0.Syntax.L p e    -> Ext <$> (Gibbon.L0.Syntax.L p) <$> go e
         PrintPacked ty arg -> do
           (tvenv', ty') <- freshTy tvenv ty
           arg' <- freshExp venv tvenv' arg

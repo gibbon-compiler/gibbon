@@ -125,7 +125,7 @@ type TcM a = (Except TCError) a
 -- | Check an expression. Given the data definitions, an general type environment, a function map,
 --   a constraint set, a region set, an (input) location state map, and the expression, this function
 --   will either throw an error, or return a pair of expression type and new location state map.
-tcExp :: DDefs Ty2 -> Env2 LocVar Ty2 -> FunDefs2
+tcExp :: DDefs Ty2 -> Env2 FreeVarsTy Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
 tcExp ddfs env funs constrs regs tstatein exp =
@@ -134,7 +134,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       VarE v ->
           -- Look up a variable in the environment
-          do ty <- lookupVar env (Single v) exp
+          do ty <- lookupVar env (fromVarToFreeVarsTy v) exp
              return (ty, tstatein)
 
       LitE _i -> return (IntTy, tstatein)
@@ -459,7 +459,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      VarE f -> do
                        len2
                        let [ls]   = tys
-                           fn_ty  = lookupFEnvLocVar (Single f) env
+                           fn_ty  = lookupFEnvLocVar (fromVarToFreeVarsTy f) env
                            in_tys = inTys fn_ty
                            ret_ty = outTy fn_ty
                            err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
@@ -686,7 +686,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                -- We get the type and new location state from e1
                (ty1,tstate1) <- recur tstatein e1
                ensureEqualTyNoLoc exp ty1 ty
-               let env' = extendVEnvLocVar (Single v) ty env
+               let env' = extendVEnvLocVar (fromVarToFreeVarsTy v) ty env
 
                -- Then we check e1 with that location state
                tcExp ddfs env' funs constrs regs tstate1 e2
@@ -758,7 +758,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
       SyncE -> pure (ProdTy [], tstatein)
 
       WithArenaE v e -> do
-              let env' = extendVEnvLocVar (Single v) ArenaTy env
+              let env' = extendVEnvLocVar (fromVarToFreeVarsTy v) ArenaTy env
               tcExp ddfs env' funs constrs regs tstatein e
 
       MapE _ _ -> throwError $ UnsupportedExpTC exp
@@ -783,10 +783,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
       --  tstate3 <- removeLoc exp tstate2 loc
       --  return (ty,tstate3)
       Ext (LetLocE loc c e) -> do
-              let env' = extendVEnvLocVar loc CursorTy env
+              let env' = extendVEnvLocVar (fromLocVarToFreeVarsTy loc) CursorTy env
               case c of
                 GenSoALoc dcloc fieldLocs -> do
-                  let env' = extendVEnvLocVar loc CursorTy env
+                  let env' = extendVEnvLocVar (fromLocVarToFreeVarsTy loc) CursorTy env
                   let tstate1 = extendTS loc (Output, True) tstatein
                   (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
                   tstate3 <- removeLoc exp tstate2 loc
@@ -857,12 +857,12 @@ tcExp ddfs env funs constrs regs tstatein exp =
                 -- AfterVectorLE dexp rstExprs soa_loc -> throwError $ GenericTC ("AfterVectorLE not handled.") exp
 
       Ext (StartOfPkdCursor cur) -> do
-        case M.lookup (Single cur) (vEnv env) of
+        case M.lookup (fromVarToFreeVarsTy cur) (vEnv env) of
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
       Ext (TagCursor a _b) -> do
-        case M.lookup (Single a) (vEnv env) of
+        case M.lookup (fromVarToFreeVarsTy a) (vEnv env) of
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
@@ -913,14 +913,14 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
 
 -- | Helper function to check case branches.
-tcCases :: DDefs Ty2 -> Env2 LocVar Ty2 -> FunDefs2
+tcCases :: DDefs Ty2 -> Env2 FreeVarsTy Ty2 -> FunDefs2
         -> ConstraintSet -> RegionSet -> LocationTypeState -> LocVar
         -> Region -> [(DataCon, [(Var,LocVar)], Exp)]
         -> TcM ([Ty2], LocationTypeState)
 tcCases ddfs env funs constrs regs tstatein lin reg ((dc, vs, e):cases) = do
 
   let argtys = zip vs $ lookupDataCon ddfs dc
-      argtys' = L.map (\((v, locvar), arg2) -> ((Single v, locvar), arg2)) argtys
+      argtys' = L.map (\((v, locvar), arg2) -> ((fromVarToFreeVarsTy v, locvar), arg2)) argtys
       pairwise = zip argtys $ Nothing : (L.map Just argtys)
 
       -- Generate the new constraints to check this branch
@@ -969,7 +969,7 @@ tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (s
 -- the order matters because the location state map is threaded through,
 -- so this is assuming the list of expressions would have been evaluated
 -- in first-to-last order.
-tcExps :: DDefs Ty2 -> Env2 LocVar Ty2 -> FunDefs2
+tcExps :: DDefs Ty2 -> Env2 FreeVarsTy Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> [Exp]
       -> TcM ([Ty2], LocationTypeState)
 tcExps ddfs env funs constrs regs tstatein (exp:exps) =
@@ -1008,7 +1008,7 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
     fd :: FunDef2 -> PassM ()
     fd func@FunDef{funTy,funArgs,funBody} = do
         let init_env = progToEnv' prg0
-            env = extendsVEnvLocVar (M.fromList $ zip (L.map Single funArgs) (arrIns funTy)) init_env
+            env = extendsVEnvLocVar (M.fromList $ zip (L.map fromVarToFreeVarsTy funArgs) (arrIns funTy)) init_env
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)
             tstate = funTState (locVars funTy)
@@ -1090,10 +1090,10 @@ funTState [] = LocationTypeState $ M.empty
 
 -- | Look up the type of a variable from the environment
 -- Includes an expression for error reporting.
-lookupVar :: Env2 LocVar Ty2 -> LocVar -> Exp -> TcM Ty2
-lookupVar env l@(Single var) exp =
+lookupVar :: Env2 FreeVarsTy Ty2 -> FreeVarsTy -> Exp -> TcM Ty2
+lookupVar env l exp =
     case M.lookup l $ vEnv env of
-      Nothing -> throwError $ VarNotFoundTC var exp
+      Nothing -> error $ "L2/Typecheck.hs: lookupVar: Variable not found in env."++ sdoc l
       Just ty -> return ty
 
 -- | Combine two location state maps.
@@ -1355,9 +1355,9 @@ removeLoc exp (LocationTypeState ls) l =
     then return $ LocationTypeState $ M.delete l ls
     else throwError $ GenericTC ("Cannot remove location " ++ (show l)) exp
 
-ensureArenaScope :: MonadError TCError m => Exp -> Env2 LocVar a -> Maybe Var -> m ()
+ensureArenaScope :: MonadError TCError m => Exp -> Env2 FreeVarsTy a -> Maybe Var -> m ()
 ensureArenaScope exp env ar =
     case ar of
       Nothing -> throwError $ GenericTC "Expected arena annotation" exp
-      Just var -> unless (S.member (Single var) . M.keysSet . vEnv $ env) $
+      Just var -> unless (S.member (fromVarToFreeVarsTy var) . M.keysSet . vEnv $ env) $
                   throwError $ GenericTC ("Expected arena in scope: " ++ sdoc var) exp

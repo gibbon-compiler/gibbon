@@ -153,17 +153,17 @@ instance (Show (), Out (),
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
-      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) (singleLocVar v) (vEnv env2)
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) (fromVarToFreeVarsTy v) (vEnv env2)
       LitE _       -> IntTy
       CharE _      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
-      AppE v _ _   -> outTy $ fEnv env2 # (singleLocVar v)
+      AppE v _ _   -> outTy $ fEnv env2 # (fromVarToFreeVarsTy v)
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
 
-      LetE (v,_,t,_) e -> gRecoverTypeLoc ddfs (extendVEnvLocVar (singleLocVar v) t env2) e
+      LetE (v,_,t,_) e -> gRecoverTypeLoc ddfs (extendVEnvLocVar (fromVarToFreeVarsTy v) t env2) e
       IfE _ e _        -> gRecoverTypeLoc ddfs env2 e
       MkProdE es       -> ProdTy $ L.map (gRecoverTypeLoc ddfs env2) es
       DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) loc
@@ -178,13 +178,13 @@ instance (Show (), Out (),
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
       WithArenaE _v e -> gRecoverTypeLoc ddfs env2 e
-      SpawnE v _ _    -> outTy $ fEnv env2 # (singleLocVar v)
+      SpawnE v _ _    -> outTy $ fEnv env2 # (fromVarToFreeVarsTy v)
       SyncE           -> voidTy
       CaseE _ mp ->
         let 
           
             (c,args,e) = Sf.headErr mp
-            args' = L.map (singleLocVar . fst) args
+            args' = L.map (fromVarToFreeVarsTy . fst) args
         in gRecoverTypeLoc ddfs (extendsVEnvLocVar (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
 
 

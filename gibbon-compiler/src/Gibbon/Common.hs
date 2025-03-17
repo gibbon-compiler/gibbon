@@ -8,8 +8,8 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar(..), Location, FieldIndex, DataCon
-       , RegVar, fromVar, toVar, varAppend, toEndV, toEndVLoc, toSeqV, cleanFunName
+         Var(..), LocVar(..), FreeVarsTy(..), Location, FieldIndex, DataCon
+       , RegVar(..), fromVar, toVar, varAppend, toEndV, toEndVLoc, toEndVRegVar, toSeqV, cleanFunName
        , TyVar(..), isUserTv
        , Symbol, intern, unintern, isSoALoc
 
@@ -35,6 +35,9 @@ module Gibbon.Common
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
+
+       , getLocVarFromFreeVarsTy, getRegVarFromFreeVarsTy, getVarFromFreeVarsTy, fromVarToFreeVarsTy, fromLocVarToFreeVarsTy, fromRegVarToFreeVarsTy
+       --, fromLocVarToRegVar
        )
 where
 
@@ -125,12 +128,18 @@ cleanFunName f =
           else '_'
         | c <- fromVar f ]
 
+
 toEndV :: Var -> Var
 toEndV = varAppend "end_"
+
+toEndVRegVar :: RegVar -> RegVar 
+toEndVRegVar (SingleR v) = SingleR (toEndV v)
+toEndVRegVar (SoARv regvar fieldRegs) = SoARv (toEndVRegVar regvar) (L.map (\(k, freg) -> (k, toEndVRegVar freg)) fieldRegs)
 
 toEndVLoc :: LocVar -> LocVar 
 toEndVLoc loc = case loc of 
                     Single v -> Single (toEndV v)
+                    SoA dcon fieldLocs -> SoA (toEndV dcon) (L.map (\(k, floc) -> (k, toEndV floc)) fieldLocs)
 
 toSeqV :: Var -> Var
 toSeqV v = varAppend v (toVar "_seq")
@@ -166,7 +175,14 @@ data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.
-type RegVar = Var
+-- type RegVar = Var
+data RegVar = SingleR Var | SoARv RegVar [((DataCon, FieldIndex), RegVar)]
+                deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
+
+
+-- gFreeVars ++ locations ++ region variables
+data FreeVarsTy = V Var | FL LocVar | R RegVar
+        deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 -- | Type variables that enable polymorphism.
 data TyVar = BoundTv Var         -- Type variable bound by a ForAll.
@@ -534,6 +550,7 @@ falsePrinted = "#f"
 unwrapLocVar :: LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
+                            SoA dcon fieldLocs -> error "unwrapLocVar : Did not expect an SoA location!"
 
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
@@ -595,3 +612,29 @@ freshCommonLoc pfix lc = do
 
 singleLocVar :: Location -> LocVar 
 singleLocVar loc = Single loc 
+
+getLocVarFromFreeVarsTy :: FreeVarsTy -> LocVar
+getLocVarFromFreeVarsTy (FL loc) = loc
+getLocVarFromFreeVarsTy _ = error "getLocVarFromFreeVarsTy: unexpected case."
+
+getRegVarFromFreeVarsTy :: FreeVarsTy -> RegVar
+getRegVarFromFreeVarsTy (R reg) = reg
+getRegVarFromFreeVarsTy _ = error "getRegVarFromFreeVarsTy: unexpected case."
+
+getVarFromFreeVarsTy :: FreeVarsTy -> Var
+getVarFromFreeVarsTy (V var) = var
+getVarFromFreeVarsTy _ = error "getVarFromFreeVarsTy: unexpected case."
+
+fromVarToFreeVarsTy :: Var -> FreeVarsTy
+fromVarToFreeVarsTy v = V v
+
+fromLocVarToFreeVarsTy :: LocVar -> FreeVarsTy
+fromLocVarToFreeVarsTy loc = FL loc
+
+fromRegVarToFreeVarsTy :: RegVar -> FreeVarsTy
+fromRegVarToFreeVarsTy reg = R reg
+
+-- fromLocVarToRegVar :: LocVar -> RegVar
+-- fromLocVarToRegVar loc = case loc of 
+--   Single v -> SingleR v
+--   SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, SingleR floc)) fieldLocs)

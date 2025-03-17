@@ -333,7 +333,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             (VarE var) ->
                 pure (s1 <> s2, SymDictTy (Just var) ty,
                          PrimAppE pr args_tc)
-            Ext (L _ (VarE var)) ->
+            Ext (L0.L _ (VarE var)) ->
                 pure (s1 <> s2, SymDictTy (Just var) ty,
                          PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
@@ -349,7 +349,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
                                        SymDictTy (Just var) ty,
                                        PrimAppE pr args_tc)
-            Ext (L _ (VarE var)) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+            Ext (L0.L _ (VarE var)) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
                                        SymDictTy (Just var) ty,
                                        PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
@@ -725,7 +725,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             s2 <- unify arg ty ty'
             pure (s1 <> s2, ProdTy [], Ext (TravPacked ty arg'))
 
-    Ext (L _ e) -> go e
+    Ext (L0.L _ e) -> go e
 
     Ext (LinearExt{}) -> err $ text "a linear types extension wasn't desugared: " <+> exp_doc
 
@@ -987,7 +987,7 @@ zonkExp s ex =
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (zonkTy s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
-    Ext (L p e)    -> Ext $ L p (go e)
+    Ext (L0.L p e)    -> Ext $ L0.L p (go e)
     Ext (PrintPacked ty arg) -> Ext $ PrintPacked (zonkTy s ty) (go arg)
     Ext (CopyPacked ty arg) -> Ext $ CopyPacked (zonkTy s ty) (go arg)
     Ext (TravPacked ty arg) -> Ext $ TravPacked (zonkTy s ty) (go arg)
@@ -1055,7 +1055,7 @@ substTyVarExp s ex =
     Ext (PrintPacked ty arg) -> Ext $ PrintPacked (substTyVar s ty) (go arg)
     Ext (CopyPacked ty arg) -> Ext $ CopyPacked (substTyVar s ty) (go arg)
     Ext (TravPacked ty arg) -> Ext $ TravPacked (substTyVar s ty) (go arg)
-    Ext (L p e)    -> Ext $ L p (go e)
+    Ext (L0.L p e)    -> Ext $ L0.L p (go e)
     Ext (LinearExt{}) -> error $ "substTyVarExp: a linear types extension wasn't desugared: " ++ sdoc ex
     WithArenaE{} -> error "substTyVarExp: WithArenaE not handled."
     SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps

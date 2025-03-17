@@ -293,7 +293,10 @@ interpExt :: SizeEnv -> RunConfig -> ValEnv Var Exp2 -> DDefs Ty2 -> M.Map Var (
 interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
     LetRegionE reg _ _ bod -> do
-      insertIntoStore (regionToVar reg) emptyBuffer
+      let regVar = case (regionToVar reg) of 
+                             SingleR v -> v
+                             SoARv _ _ -> error "interpExt: did not expect an SoA region!"
+      insertIntoStore regVar emptyBuffer
       go env sizeEnv bod
 
     LetParRegionE reg sz ty bod ->
@@ -302,11 +305,14 @@ interpExt sizeEnv rc env ddefs fenv ext =
     LetLocE loc locexp bod ->
       case locexp of
         StartOfRegionLE reg -> do
-          buf_maybe <- lookupInStore (regionToVar reg)
+          let regVar = case (regionToVar reg) of 
+                             SingleR v -> v
+                             SoARv _ _ -> error "interpExt: did not expect an SoA region!"
+          buf_maybe <- lookupInStore regVar
           case buf_maybe of
             Nothing -> error $ "L2.Interp: Unbound region: " ++ sdoc reg
             Just _ ->
-              go (M.insert (unwrapLocVar loc) (VLoc (regionToVar reg) 0) env) sizeEnv bod
+              go (M.insert (unwrapLocVar loc) (VLoc regVar 0) env) sizeEnv bod
 
         AfterConstantLE i loc2 -> do
           case M.lookup (unwrapLocVar loc2) env of

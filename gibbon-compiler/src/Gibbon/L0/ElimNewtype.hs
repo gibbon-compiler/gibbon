@@ -90,7 +90,7 @@ elimExt cns tns dds ext0 = case ext0 of
   PrintPacked dec preexp -> PrintPacked (g dec) (f preexp)
   CopyPacked dec preexp -> CopyPacked (g dec) (f preexp)
   TravPacked dec preexp -> TravPacked (g dec) (f preexp)
-  L loc preexp -> L loc (f preexp)
+  Gibbon.L0.Syntax.L loc preexp -> Gibbon.L0.Syntax.L loc (f preexp)
   LinearExt (ReverseAppE pe1 pe2) -> LinearExt (ReverseAppE (f pe1) (f pe2))
   LinearExt (LseqE pe1 pe2) -> LinearExt (LseqE (f pe1) (f pe2))
   LinearExt (AliasE pe) -> LinearExt (AliasE (f pe))

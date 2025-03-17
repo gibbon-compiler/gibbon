@@ -24,7 +24,7 @@ import Gibbon.L2.Syntax as L2
 type Deps = M.Map LocVar LocVar
 
 -- Maps a location to a region
-type RegEnv = M.Map LocVar Var
+type RegEnv = M.Map LocVar RegVar
 
 addTraversals :: Prog2 -> PassM Prog2
 addTraversals prg@Prog{ddefs,fundefs,mainExp} = do
