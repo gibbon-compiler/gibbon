@@ -36,7 +36,8 @@ module Gibbon.Common
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
 
-       , getLocVarFromFreeVarsTy, getRegVarFromFreeVarsTy, getVarFromFreeVarsTy, fromVarToFreeVarsTy, fromLocVarToFreeVarsTy, fromRegVarToFreeVarsTy
+       , getLocVarFromFreeVarsTy, getRegVarFromFreeVarsTy, getVarFromFreeVarsTy, fromVarToFreeVarsTy, fromLocVarToFreeVarsTy
+       , fromRegVarToFreeVarsTy, getDataConRegFromRegVar, getFieldRegFromRegVar
        --, fromLocVarToRegVar
        )
 where
@@ -638,6 +639,18 @@ fromLocVarToFreeVarsTy loc = FL loc
 
 fromRegVarToFreeVarsTy :: RegVar -> FreeVarsTy
 fromRegVarToFreeVarsTy reg = R reg
+
+getDataConRegFromRegVar :: RegVar -> RegVar
+getDataConRegFromRegVar reg = case reg of 
+                            SingleR v -> error "Common.hs: getDataConRegFromRegVar: unexpected case."
+                            SoARv regvar fieldRegs -> regvar
+
+getFieldRegFromRegVar :: (DataCon, Int) -> RegVar -> RegVar
+getFieldRegFromRegVar (dcon, idx) reg = case reg of 
+                            SingleR v -> error "Common.hs: getFieldRegFromRegVar: unexpected case."
+                            SoARv regvar fieldRegs -> case L.lookup (dcon, idx) fieldRegs of 
+                                                        Just freg -> freg
+                                                        Nothing -> error "getFieldRegFromRegVar: Field location not found!"
 
 -- fromLocVarToRegVar :: LocVar -> RegVar
 -- fromLocVarToRegVar loc = case loc of 

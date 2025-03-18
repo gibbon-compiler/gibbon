@@ -252,6 +252,40 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           New.Loc lrem -> New.Loc (lrem { New.lremLoc = loc })
           New.EndWitness lrem _ -> New.Loc ( lrem { New.lremLoc = loc } )
           oth -> error $ "toLocArg: got" ++ sdoc oth
+      GetDataConLocSoA loc2 -> 
+        let (New.Loc lrem) = locenv0 # loc2
+            regVar = New.lremReg lrem
+            endRegVar = New.lremEndReg lrem 
+            modality = New.lremMode lrem
+            dcRegVar = getDataConRegFromRegVar regVar
+            dcEndRegVar = getDataConRegFromRegVar endRegVar
+          in New.Loc (New.LREM loc dcRegVar dcEndRegVar modality)
+      GetFieldLocSoA (dcon, idx) loc2 ->
+        let (New.Loc lrem) = locenv0 # loc2
+            regVar = New.lremReg lrem
+            endRegVar = New.lremEndReg lrem 
+            modality = New.lremMode lrem
+            fieldRegVar = getFieldRegFromRegVar (dcon, idx) regVar
+            fieldEndRegVar = getFieldRegFromRegVar (dcon, idx) endRegVar
+        in New.Loc (New.LREM loc fieldRegVar fieldEndRegVar modality)
+      GenSoALoc dloc fieldsLocs ->
+        -- Get the single locs and build this part
+        let soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, unwrapLocVar flc)) fieldsLocs)  
+            (New.Loc dlrem) = locenv0 # dloc
+            dloc_reg = New.lremReg dlrem 
+            dloc_end_reg = New.lremEndReg dlrem
+            field_regs = map (\(k, flc) -> let (New.Loc flrem) = locenv0 # flc
+                                              in (k, New.lremReg flrem)
+                             ) fieldsLocs
+            field_end_regs = map (\(k, flc) -> let (New.Loc flrem) = locenv0 # flc
+                                                  in (k, New.lremEndReg flrem)
+                             ) fieldsLocs
+            soa_reg = SoARv dloc_reg field_regs
+            soa_end_reg = SoARv dloc_end_reg field_end_regs
+            -- modality of all regions should be same
+            modality = New.lremMode dlrem
+            lrem = New.LREM loc soa_reg soa_end_reg modality
+         in New.Loc lrem
 
 
   updModality :: Ty2 -> LocEnv -> LocEnv
