@@ -41,6 +41,8 @@ packed context, we return dilated values.
 
 
 E.g.
+   
+    type Tree = Leaf Int | Node Tree Tree
 
     add1 :: Tree -> Tree
     add1 tr =
@@ -68,6 +70,26 @@ for every packed type in the return value. Every packed return value becomes a
 (Cursor,Cursor) i.e (start,end). And it returns additional end_of_read cursors
 if the functions "traverses" it's input (more details in the paer).
 
+    [VS]
+    -- SoA representation 
+    -- char*
+    type Cursor = Ptr Char
+    type CursorArray_${Int} = Cursor[Int] 
+
+    CursorArray_2 = {Cursor, Cursor}
+      where: 
+        CursorArray_2[0] = tag buffer cursor
+        CursorArray_2[1] = integer buffer cursor (Leaf)
+
+    add1 :: CursorArray_2 -> CursorArray_2 -> (CursorArray_2, (CursorArray_2, CursorArray_2))
+    add1 lout lin =
+      let tag = readTag lin[0]
+      in case tag of
+           Leaf -> let n  = readInt lin[1]
+                       wt = writeTag lout[0] Leaf
+                       wi = writeInt lout[1] (n+1)
+                   in ({lin[0] + 1, lin[1] + 8}, (lout, {lout[0] + 1, lout[1] + 8}))
+           Node -> ...
 -}
 
 
@@ -606,7 +628,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                     -- Discharge bindings that were waiting on 'loc'.
                   else onDi (mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds)) <$>
                          go (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv') senv' bod
-                -- Discharge bindings that were waiting on 'loc'.
+                -- Discharge bindings that were waiting on 'loc'. 
                 _ -> onDi (mkLets (bnds' ++ [((unwrapLocVar loc),[],CursorTy,rhs')] ++ bnds)) <$>
                        go (M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>

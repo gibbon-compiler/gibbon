@@ -20,7 +20,7 @@ module Gibbon.NewL2.Syntax
 
     -- * Operations on types
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
-    , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv
+    , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
     , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar
 

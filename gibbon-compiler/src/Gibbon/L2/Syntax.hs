@@ -162,6 +162,7 @@ data E2Ext loc dec
   | BoundsCheck Int -- Bytes required
                 loc -- Region
                 loc -- Write cursor
+  -- | BoundsCheckVector [Int] [loc] [loc] -- BoundsCheck on vector of regions/loc Probably not needed yet. 
   | AddFixed Var Int
   | IndirectionE TyCon     -- Type of the data pointed to by this indirection.
                  DataCon   -- Constructor for an indirection in this type.
