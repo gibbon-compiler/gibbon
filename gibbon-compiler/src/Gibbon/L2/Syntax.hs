@@ -28,6 +28,7 @@ module Gibbon.L2.Syntax
   , LocRet(..)
   , LocExp
   , PreLocExp(..)
+  , PreRegExp(..)
 
 -- * Regions and locations
   , LocVar
@@ -155,6 +156,7 @@ data E2Ext loc dec
   = LetRegionE    Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE LocVar (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
+  | LetRegE RegVar (PreRegExp loc) (E2 loc dec) -- ^ Bind a new region.
   -- Commented this out since it is not very ideal. 
   -- | LetSoALocE LocVar (E2 loc dec) -- ^ Bind a new SoA loc
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
@@ -215,10 +217,16 @@ data PreLocExp loc = StartOfRegionLE Region
 								     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer 
 								     -- [PreLocExp loc] -> expressions for arithmetic on each field location 
 								     -- loc, store the old loc, why? -- capture more metadata, also style
-
   deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 
+
+data PreRegExp loc = GetDataConRegSoA loc
+                  |  GetFieldRegSoA (DataCon, FieldIndex) loc
+  deriving (Read, Show, Eq, Ord, Functor, Generic, NFData) 
+
 type LocExp = PreLocExp LocVar
+
+type RegExp = PreRegExp LocVar
 
 -- | Locations (end-witnesses) returned from functions after RouteEnds.
 data LocRet = EndOf LRM
@@ -709,6 +717,7 @@ instance Out a => Out (S.Set a) where
   doc x = doc (S.toList x)
 instance (Out l, Out d) => Out (E2Ext l d)
 instance Out l => Out (PreLocExp l)
+instance Out l => Out (PreRegExp l)
 instance Out LocRet
 
 -------------------------------------------------------------------------------
