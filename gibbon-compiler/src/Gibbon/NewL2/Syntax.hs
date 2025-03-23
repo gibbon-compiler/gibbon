@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar
+    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar, fromSingleRegVarToVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn

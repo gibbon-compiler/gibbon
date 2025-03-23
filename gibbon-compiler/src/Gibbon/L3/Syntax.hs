@@ -66,6 +66,8 @@ data E3Ext loc dec =
   | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
   | ReadVector Var dec                             -- ^ Read a pointer to a vector
   | WriteVector Var (PreExp E3Ext loc dec) dec     -- ^ Write a pointer to a vector
+  | MakeCursorArray Int [Var] -- ^ Make a Cursor Array from a list of Cursors. Returns a new variable for Cursor Array.
+  | IndexCursorArray Var Int                       -- ^ Index into a Cursor Array 
   | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
   | SubPtr Var Var                                 -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor

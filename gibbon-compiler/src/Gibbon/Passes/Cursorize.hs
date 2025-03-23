@@ -141,14 +141,14 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
       regBinds = map toEndVRegVar (inRegs ++ outRegs)
 
       -- Output cursors after that.
-      outCurBinds = outLocs
+      outCurBinds = dbgTraceIt "Print (inLocs, Projs) "  outLocs
 
       -- Then the input cursors. Bind an input cursor for every packed argument.
       inCurBinds = case inLocs of
                      [] -> mkLets []
                      _  ->
                            let projs = concatMap (\(e,t) -> mkInProjs e t) (zip (map VarE funArgs) in_tys)
-                               bnds  = [((unwrapLocVar loc),[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
+                               bnds  = dbgTraceIt "Print (inLocs, Projs) " dbgTraceIt (sdoc (inLocs, projs)) dbgTraceIt "End cursorizeFunDef\n" [((unwrapLocVar loc),[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
                            in mkLets bnds
 
       initTyEnv = M.fromList $ (map (\(a,b) -> (a,MkTy2 (cursorizeInTy (unTy2 b)))) $ zip funArgs in_tys) ++
@@ -165,7 +165,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMeta} = do
          else cursorizeExp ddefs fundefs M.empty initTyEnv M.empty funBody
   let bod' = inCurBinds bod
       fn = FunDef funName funargs funTy' bod' funMeta
-  return fn
+  dbgTraceIt "Print in cursorizeFunDef: " dbgTraceIt (sdoc (inLocs, outLocs, outRegs, inRegs, in_tys, out_ty)) dbgTraceIt "End cursorizeFunDef\n" return fn
 
   where
     -- | The only difference between this and L3.cursorizeTy is that here,
@@ -634,6 +634,11 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
 
+        {-VS: TODO: This needs to be fixed to produce the correct L3 expression. See above. -}      
+        {- Right now i just skip the let region, just recurse on the body-}              
+        LetRegE reg_var reg_rhs_exp bod ->  case reg_var of
+          SingleR v -> cursorizePackedExp ddfs fundefs denv tenv senv bod
+          SoARv dv _ -> cursorizePackedExp ddfs fundefs denv tenv senv bod
 
         StartOfPkdCursor cur -> return $ dl $ VarE cur
 
@@ -725,7 +730,6 @@ cursorizeLocExp denv tenv senv lvar locExp =
       in if isBound ((toLocVar) loc) tenv
          then Right (rhs, [], tenv, senv)
          else Left$ M.insertWith (++) ((toLocVar) loc) [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
-
     -- TODO: handle product types here
 
 {- [2018.03.07]:
@@ -801,11 +805,45 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        DynR v _  -> Right (VarE v, [], tenv, senv)
                        -- TODO: docs
                        MMapR _v   -> Left denv
+                       {- VS: TODO: This needs to be fixed. There should be an env. for tracking complex regions liks SoA regs-}
+                       SoAR dr fregs -> Right (VarE (fromSingleRegVarToVar $ regionToVar dr), [], tenv, senv)
 
 
     FreeLE -> Left denv -- AUDIT: should we just throw away this information?
 
     InRegionLE{}  -> error $ "cursorizeExp: TODO InRegionLE"
+    GetDataConLocSoA loc -> 
+      {- VS: TODO: instead of using unwrap loc var, we should keep an env mapping a SoA loc to a L3 variable -}
+      let loc_from_logarg = toLocVar loc
+          loc_var = unwrapLocVar loc_from_logarg 
+          rhs = Ext $ IndexCursorArray loc_var 0
+       in if isBound loc_from_logarg tenv
+          then Right (rhs, [], tenv, senv)
+          else Left$ M.insertWith (++) loc_from_logarg [((unwrapLocVar lvar),[],CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg)),rhs)] denv
+    GetFieldLocSoA i loc -> 
+      {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
+      let loc_from_locarg = toLocVar loc
+          field_locs = getAllFieldLocsSoA loc_from_locarg 
+          loc_var = unwrapLocVar loc_from_locarg
+          field_loc = case L.lookup i field_locs of 
+                        Just loc -> loc
+                        Nothing -> error "cursorizeLocExp: GetFieldLocSoA: field location not found!"
+          field_loc_elem = (i, field_loc)
+          elem_idx = case (L.elemIndex field_loc_elem field_locs) of 
+                        Just idx -> idx
+                        Nothing -> error "cursorizeLocExp: GetFieldLocSoA: field location not found!"
+          rhs = Ext $ IndexCursorArray loc_var elem_idx
+       in if isBound loc_from_locarg tenv
+          then Right (rhs, [], tenv, senv)
+          else Left$ M.insertWith (++) loc_from_locarg [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
+    GenSoALoc dloc flocs ->
+        {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}   
+        let dcloc_var = unwrapLocVar $ toLocVar dloc 
+            field_vars = map (\(_, loc) -> unwrapLocVar $ toLocVar loc) flocs
+            rhs = Ext $ MakeCursorArray (1 + length flocs) ([dcloc_var] ++ field_vars)
+         in Right (rhs, [], tenv, senv)
+    
+    _ -> error $ "cursorizeLocExp: Unexpected locExp: " ++ sdoc locExp
 
 
 -- ASSUMPTIONS:
@@ -1614,6 +1652,9 @@ regionToBinds for_parallel_allocs r sz =
                         , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
     -- TODO: docs
     MMapR _v    -> []
+    
+    -- TODO: SoA Region
+    SoAR{} -> []
 
  where
   go mul =
@@ -1626,6 +1667,7 @@ regionToBinds for_parallel_allocs r sz =
 isBound :: LocVar -> TyEnv Var Ty2 -> Bool
 isBound l m = case l of 
                Single v -> M.member v m 
+               SoA d _ -> M.member d m {- VS: TODO This should be fixed. we should have an env that maps a SoA loc to a L3 variable-}
                
 -- ================================================================================
 --                         Dilation Conventions
