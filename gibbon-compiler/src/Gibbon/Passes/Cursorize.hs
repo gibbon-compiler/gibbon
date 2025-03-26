@@ -108,6 +108,8 @@ type SyncEnv = M.Map Var [(Var,[()],Ty3,Ty2,Exp3)]
 
 type OldTy2 = UrTy LocVar
 
+data WindowIntoCursor = AoSWin Var | SoAWin Var [((DataCon, Int), Var)]
+
 -- |
 cursorize :: Prog2 -> PassM Prog3
 cursorize Prog{ddefs,fundefs,mainExp} = do
@@ -688,10 +690,12 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg sz _ bod -> do
-          mkLets (regionToBinds False reg sz) <$> go bod
+          (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False reg sz
+          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' ddfs fundefs denv tenv senv bod
 
         LetParRegionE reg sz _ bod -> do
-          mkLets (regionToBinds True reg sz) <$> go bod
+          (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True reg sz
+          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' ddfs fundefs denv tenv senv bod
         
         {- VS: TODO: variables are not in env-}
         {- TODO: End of reg needs fixing is broken -}
@@ -721,9 +725,17 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
 
         LetAvail vs bod  -> Ext <$> L3.LetAvail vs <$> go bod
 
-        AllocateTagHere v tycon -> pure $ Ext $ L3.AllocateTagHere (unwrapLocVar v) tycon
+        AllocateTagHere v tycon -> do 
+                                   let variable_name = case (M.lookup (fromLocVarToFreeVarsTy v) freeVarToVarEnv) of 
+                                                            Just v -> v 
+                                                            Nothing -> error "cursorizeExp: AllocateTagHere: unexpected location variable"
+                                   pure $ Ext $ L3.AllocateTagHere (variable_name) tycon
 
-        AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere (unwrapLocVar v)
+        AllocateScalarsHere v -> do 
+                                 let variable_name = case (M.lookup (fromLocVarToFreeVarsTy v) freeVarToVarEnv) of 
+                                                            Just v -> v 
+                                                            Nothing -> error "cursorizeExp: AllocateTagHere: unexpected location variable"
+                                 pure $ Ext $ L3.AllocateScalarsHere (variable_name)
 
         SSPush a b c d -> pure $ Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d
         SSPop a b c -> pure $ Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c)
@@ -1235,10 +1247,12 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                     ) [fromDi v'] locs
 
         LetRegionE r sz _ bod -> do
-          onDi (mkLets (regionToBinds False r sz)) <$> go freeVarToVarEnv tenv senv bod
+          (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False r sz
+          onDi (mkLets (region_lets)) <$> go freeVarToVarEnv' tenv senv bod
 
         LetParRegionE r sz _ bod -> do
-          onDi (mkLets (regionToBinds True r sz)) <$> go freeVarToVarEnv tenv senv bod
+          (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True r sz
+          onDi (mkLets (region_lets)) <$> go freeVarToVarEnv' tenv senv bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
@@ -1402,7 +1416,12 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        -- TODO: docs
                        MMapR _v   -> Left denv
                        {- VS: TODO: This needs to be fixed. There should be an env. for tracking complex regions liks SoA regs-}
-                       SoAR dr fregs -> Right (VarE (fromSingleRegVarToVar $ regionToVar dr), [], tenv, senv)
+                       SoAR dr fregs ->
+                          let regions_var = case (M.lookup (fromRegVarToFreeVarsTy (regionToVar r)) freeVarToVarEnv) of 
+                                                Just v -> v 
+                                                Nothing -> error "cursorizeLocExp: StartOfRegionLE: unexpected location variable" 
+                        
+                           in Right (VarE (regions_var), [], tenv, senv)
 
 
     FreeLE -> Left denv -- AUDIT: should we just throw away this information?
@@ -2032,25 +2051,34 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
                      then unpackWithAbsRAN field_cur
                      else if isRelRANDataCon dcon
                      then unpackWithRelRAN field_cur
-                     else unpackRegularDataCon field_cur)
-    CursorArrayTy size -> (dcon, [],)
-                          -- Advance the cursor by 1 byte so that it points to the first field
-                          <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
-                          <$> (if isAbsRANDataCon dcon
-                               then unpackWithAbsRAN field_cur
-                               else if isRelRANDataCon dcon
-                               then unpackWithRelRAN field_cur
-                               else unpackRegularDataCon field_cur)
-  
-  -- do 
-  --                         let (fv, farg) = head vlocs1
-  --                         let first_field = 
-
+                     else unpackRegularDataCon (AoSWin field_cur) freeVarToVarEnv)
+    CursorArrayTy size -> do
+                          dcon_var <- gensym "dcon" 
+                          let first_var = field_cur
+                          let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
+                          (field_lets, field_v_lst) <- foldrM (\idx (acc1, acc2) -> do
+                                                                       field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx)
+                                                                       let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx))]
+                                                                       let curr_window = [((dcon, idx), field_var)]
+                                                                       return (acc1 ++ field_let , acc2 ++ curr_window)
+                                                              ) ([], []) [0..(size-2)]
+                          bod <- (if isAbsRANDataCon dcon
+                                then unpackWithAbsRAN field_cur
+                                else if isRelRANDataCon dcon
+                                then unpackWithRelRAN field_cur
+                                else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv)
+                          let lets = mkLets (dcon_let ++ field_lets) bod
+                          return (dcon, [], lets)
   where
     tys1 = lookupDataCon ddfs dcon
     processRhs denv env = if isPacked
                           then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv env senv rhs
                           else cursorizeExp freeVarToVarEnv ddfs fundefs denv env senv rhs
+
+    lookupVariable :: FreeVarsTy -> M.Map FreeVarsTy Var -> PassM Var
+    lookupVariable loc fenv = case (M.lookup loc fenv) of 
+                                  Just v -> return v
+                                  Nothing -> error "lookupVariable: unexpected location variable"    
 
     -- Since this constructor does not have random access nodes, we may not be able
     -- to unpack all the fields. Basically, anything after the first packed
@@ -2064,125 +2092,313 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
     -- Otherwise, we add things to the dependency environment. `canBind` is set
     -- to true initially, and we flip it as soon as we see a packed value.
     --
-    unpackRegularDataCon :: Var -> PassM Exp3
-    unpackRegularDataCon field_cur = go field_cur vlocs1 tys1 True denv1 (M.insert field_cur (MkTy2 CursorTy) tenv1)
+    unpackRegularDataCon :: WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
+    unpackRegularDataCon field_cur freeVarToVarEnv = do 
+      let tenv1' = case field_cur of 
+                        AoSWin cf -> (M.insert cf (MkTy2 CursorTy) tenv1)
+                        SoAWin dcf fieldfvs -> let tenv1'' = M.insert dcf (MkTy2 CursorTy) tenv1 
+                                                 in foldr (\(x,y) acc -> M.insert y (MkTy2 CursorTy) acc) tenv1'' fieldfvs
+      exp <- go field_cur freeVarToVarEnv vlocs1 tys1 True denv1 tenv1'
+      return exp
       where
-        go :: Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
-        go cur vlocs tys canBind denv tenv =
-          case (vlocs, tys) of
-            ([],[]) -> processRhs denv tenv
-            ((v,locarg):rst_vlocs, (MkTy2 ty):rst_tys) ->
-              let loc = toLocVar locarg in
-              case ty of
-                -- Int, Float, Sym, or Bool
-                _ | isScalarTy ty -> do
-                  (tenv', binds) <- scalarBinds ty v loc tenv
-                  if canBind
-                  then do
-                    -- If the location exists in the environment, it indicates that the
-                    -- corresponding variable was also bound and we shouldn't create duplicate
-                    -- bindings (checked in the LetLocE cases).
-                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
-                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
-                    return $ mkLets binds' bod
-                  else do
-                    -- Cannot read this int. Instead, we add it to DepEnv.
-                    let denv' = M.insertWith (++) (fromLocVarToFreeVarsTy loc) binds denv
-                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+        go :: WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
+        go curw fenv vlocs tys canBind denv tenv = do 
+          case curw of
+            AoSWin cur -> do 
+              case (vlocs, tys) of
+                ([],[]) -> processRhs denv tenv
+                ((v,locarg):rst_vlocs, (MkTy2 ty):rst_tys) ->
+                  let loc = fromLocArgToFreeVarsTy locarg
+                    in case ty of
+                    -- Int, Float, Sym, or Bool
+                    _ | isScalarTy ty -> do
+                      loc_var <- lookupVariable loc fenv
+                      (tenv', binds) <- scalarBinds ty v loc_var tenv
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
 
-                -- An indirection or redirection pointer.
-                -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
-                CursorTy -> do
-                  tmp <- gensym "readcursor_indir"
-                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
-                                                   ((unwrapLocVar loc)     , MkTy2 CursorTy),
-                                                   (v       , MkTy2 CursorTy),
-                                                   (toEndV v, MkTy2 CursorTy),
-                                                   (toTagV v, MkTy2 IntTy),
-                                                   (toEndFromTaggedV v, MkTy2 CursorTy)])
-                              tenv
-                      read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
-                                    then Ext (ReadTaggedCursor cur)
-                                    else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                               ((unwrapLocVar loc)     , [], CursorTy, VarE cur),
-                               (v       , [], CursorTy, ProjE 0 (VarE tmp)),
-                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
-                               (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
-                               (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
-                  bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv'
-                  return $ mkLets binds bod
-
-
-                VectorTy el_ty -> do
-                  tmp <- gensym "read_vec_tuple"
-                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [VectorTy el_ty, CursorTy])),
-                                                   (v       , MkTy2 (VectorTy el_ty)),
-                                                   (toEndV v, MkTy2 CursorTy)])
-                              tenv
-                      ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector (unwrapLocVar loc) (stripTyLocs el_ty)),
-                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
-                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
-                  if canBind
-                  then do
-                    -- If the location exists in the environment, it indicates that the
-                    -- corresponding variable was also bound and we shouldn't create duplicate
-                    -- bindings (checked in the LetLocE cases).
-                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
-                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
-                    return $ mkLets binds' bod
-                  else do
-                    -- Cannot read this int. Instead, we add it to DepEnv.
-                    let denv' = M.insertWith (++) (fromLocVarToFreeVarsTy loc) binds denv
-                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+                    -- An indirection or redirection pointer.
+                    -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
+                    CursorTy -> do
+                      tmp <- gensym "readcursor_indir"
+                      loc_var <- lookupVariable loc fenv
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                                                      ((loc_var)     , MkTy2 CursorTy),
+                                                       (v       , MkTy2 CursorTy),
+                                                      (toEndV v, MkTy2 CursorTy),
+                                                       (toTagV v, MkTy2 IntTy),
+                                                       (toEndFromTaggedV v, MkTy2 CursorTy)])
+                                  tenv
+                          read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
+                                        then Ext (ReadTaggedCursor cur)
+                                        else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                          binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                   ((loc_var)     , [], CursorTy, VarE cur),
+                                   (v       , [], CursorTy, ProjE 0 (VarE tmp)),
+                                   (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                   (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
+                      bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'
+                      return $ mkLets binds bod
 
 
-                ListTy el_ty -> do
-                  tmp <- gensym "read_list_tuple"
-                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [ListTy el_ty, CursorTy])),
-                                                   (v       , MkTy2 (ListTy el_ty)),
-                                                   (toEndV v, MkTy2 CursorTy)])
-                              tenv
-                      ty'   = stripTyLocs ty
-                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList (unwrapLocVar loc) (stripTyLocs el_ty)),
-                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
-                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
-                  if canBind
-                  then do
-                    -- If the location exists in the environment, it indicates that the
-                    -- corresponding variable was also bound and we shouldn't create duplicate
-                    -- bindings (checked in the LetLocE cases).
-                    let binds' = ((unwrapLocVar loc),[],CursorTy, VarE cur):binds
-                        tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
-                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
-                    return $ mkLets binds' bod
-                  else do
-                    -- Cannot read this int. Instead, we add it to DepEnv.
-                    let denv' = M.insertWith (++) (fromLocVarToFreeVarsTy loc) binds denv
-                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+                    VectorTy el_ty -> do
+                      tmp <- gensym "read_vec_tuple"
+                      loc_var <- lookupVariable loc fenv
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [VectorTy el_ty, CursorTy])),
+                                                       (v       , MkTy2 (VectorTy el_ty)),
+                                                       (toEndV v, MkTy2 CursorTy)])
+                                 tenv
+                          ty'   = stripTyLocs ty
+                          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector (loc_var) (stripTyLocs el_ty)),
+                                   (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                                   (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
 
-                PackedTy{} -> do
-                  let tenv' = M.insert v (MkTy2 CursorTy) tenv
-                  if canBind
-                  then do
-                    let tenv'' = M.insert (unwrapLocVar loc) (MkTy2 CursorTy) tenv'
-                    -- Flip canBind to indicate that the subsequent fields
-                    -- should be added to the dependency environment.
-                    bod <- go (toEndV v) rst_vlocs rst_tys False denv tenv''
-                    return $ mkLets [((unwrapLocVar loc), [], CursorTy, VarE cur)
-                                    ,(v  , [], CursorTy, VarE (unwrapLocVar loc))]
-                             bod
-                  else do
-                    -- Cannot read this. Instead, we add it to DepEnv.
-                    let denv' = M.insertWith (++) (fromLocVarToFreeVarsTy loc) [(v,[],CursorTy,VarE (unwrapLocVar loc))] denv
-                    go (toEndV v) rst_vlocs rst_tys False denv' tenv'
 
-                _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+                    ListTy el_ty -> do
+                      tmp <- gensym "read_list_tuple"
+                      loc_var <- lookupVariable loc fenv
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [ListTy el_ty, CursorTy])),
+                                                       (v       , MkTy2 (ListTy el_ty)),
+                                                       (toEndV v, MkTy2 CursorTy)])
+                                 tenv
+                          ty'   = stripTyLocs ty
+                          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList (loc_var) (stripTyLocs el_ty)),
+                                   (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                                  (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
 
-            _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+                    PackedTy _ ploc -> do
+                      let tenv' = M.insert v (MkTy2 CursorTy) tenv
+                      loc_var <- lookupVariable loc fenv
+                      if canBind
+                      then do
+                        let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        -- Flip canBind to indicate that the subsequent fields
+                        -- should be added to the dependency environment.
+                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys False denv tenv''
+                        return $ mkLets [((loc_var), [], CursorTy, VarE cur)
+                                        ,(v  , [], CursorTy, VarE (loc_var))]
+                                 bod
+                      else do
+                        -- Cannot read this. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
+                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys False denv' tenv'
+
+                    _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+
+                _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+
+            SoAWin dcur field_cur -> do 
+              case (vlocs, tys) of
+                ([],[]) -> processRhs denv tenv
+                ((v,locarg):rst_vlocs, (MkTy2 ty):rst_tys) ->
+                  let loc = fromLocArgToFreeVarsTy locarg
+                    in case ty of
+                    -- Int, Float, Sym, or Bool
+                    _ | isScalarTy ty -> do
+                      loc_var <- lookupVariable loc fenv
+                      (tenv', binds) <- scalarBinds ty v loc_var tenv
+                      let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                      let field_cur' = map (\(k@(d, idx), var) -> if idx == field_idx then (k, (toEndV v)) else (k, var)) field_cur
+                      let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        
+                        bod <- go (SoAWin dcur field_cur') freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go (SoAWin dcur field_cur') freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
+
+                    -- An indirection or redirection pointer.
+                    -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
+                    CursorTy -> do
+                      tmp <- gensym "readcursor_indir"
+                      loc_var <- lookupVariable loc fenv
+                      let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                      let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                                                      ((loc_var)     , MkTy2 CursorTy),
+                                                       (v       , MkTy2 CursorTy),
+                                                      (toEndV v, MkTy2 CursorTy),
+                                                       (toTagV v, MkTy2 IntTy),
+                                                       (toEndFromTaggedV v, MkTy2 CursorTy)])
+                                  tenv
+                          read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
+                                        then Ext (ReadTaggedCursor cur)
+                                        else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                          binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                   ((loc_var)     , [], CursorTy, VarE cur),
+                                   (v       , [], CursorTy, ProjE 0 (VarE tmp)),
+                                   (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                   (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
+                      bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
+                      return $ mkLets binds bod
+
+
+                    VectorTy el_ty -> do
+                      tmp <- gensym "read_vec_tuple"
+                      loc_var <- lookupVariable loc fenv
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [VectorTy el_ty, CursorTy])),
+                                                       (v       , MkTy2 (VectorTy el_ty)),
+                                                       (toEndV v, MkTy2 CursorTy)])
+                                 tenv
+                          ty'   = stripTyLocs ty
+                          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector (loc_var) (stripTyLocs el_ty)),
+                                   (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                                   (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                      let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
+
+
+                    ListTy el_ty -> do
+                      tmp <- gensym "read_list_tuple"
+                      loc_var <- lookupVariable loc fenv
+                      let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                      let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [ListTy el_ty, CursorTy])),
+                                                       (v       , MkTy2 (ListTy el_ty)),
+                                                       (toEndV v, MkTy2 CursorTy)])
+                                 tenv
+                          ty'   = stripTyLocs ty
+                          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList (loc_var) (stripTyLocs el_ty)),
+                                   (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                                  (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      if canBind
+                      then do
+                        -- If the location exists in the environment, it indicates that the
+                        -- corresponding variable was also bound and we shouldn't create duplicate
+                        -- bindings (checked in the LetLocE cases).
+                        loc_var <- lookupVariable loc fenv
+                        let binds' = ((loc_var),[],CursorTy, VarE cur):binds
+                            tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                        bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
+                        return $ mkLets binds' bod
+                      else do
+                        -- Cannot read this int. Instead, we add it to DepEnv.
+                        let denv' = M.insertWith (++) (loc) binds denv
+                        go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
+
+                    PackedTy tycon ploc -> do
+                      -- Two cases 
+                      -- If the PackedTy is the same tycon then
+                      -- If the PackedTy is not the same tycon
+                      let datacons = getConOrdering ddfs tycon 
+                      let isSameTycon = if (elem dcon datacons) then True else False
+                      case isSameTycon of 
+                        True -> do 
+                          let tenv' = M.insert v (MkTy2 CursorTy) tenv
+                          let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                          -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                          let cur = dcur
+                          loc_var <- lookupVariable loc fenv
+                          if canBind
+                          then do
+                            let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                            -- Flip canBind to indicate that the subsequent fields
+                            -- should be added to the dependency environment.
+                            dcon_next <- gensym $ toVar $ (fromVar dcur) ++ "_next"
+                            let end_fields = map (\(key, varr) -> varr ) field_cur
+                            let makeCurArr = Ext $ MakeCursorArray (1 + length (end_fields)) ([dcon_next] ++ end_fields)
+                            let let_mk_cur_arr = (loc_var, [], CursorArrayTy (1 + length (end_fields)), makeCurArr)
+                            let dcon_nxt = [(dcon_next,[],CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr,(v  , [], CursorTy, VarE (loc_var))]
+                            -- make the new curw type 
+                            -- this consists of incrementing the data constructor buffer by one and all the rest of the fields 
+                            let curw' = SoAWin dcon_next field_cur
+                            bod <- go curw' freeVarToVarEnv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
+                            return $ mkLets dcon_nxt bod
+                          else do
+                            -- Cannot read this. Instead, we add it to DepEnv.
+                            let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
+                            go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
+                        False -> do 
+                          let tenv' = M.insert v (MkTy2 CursorTy) tenv
+                          let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                          -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                          let cur = dcur
+                          loc_var <- lookupVariable loc fenv
+                          if canBind
+                          then do
+                            let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                            -- Flip canBind to indicate that the subsequent fields
+                            -- should be added to the dependency environment.
+                            bod <- go curw freeVarToVarEnv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
+                            return $ mkLets [((loc_var), [], CursorTy, VarE cur)
+                                        ,(v  , [], CursorTy, VarE (loc_var))]
+                                     bod
+                          else do
+                            -- Cannot read this. Instead, we add it to DepEnv.
+                            let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
+                            go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
+                    _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+
+                _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+
+
+          
+      
 
     -- We have access to all fields in this constructor, and can create
     -- bindings for everything. We begin by unpacking the random access nodes.
@@ -2257,7 +2473,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
 
                 -- Int, Sym, or Bool
                 _ | isScalarTy ty -> do
-                  (tenv', binds) <- scalarBinds ty v loc tenv
+                  (tenv', binds) <- scalarBinds ty v (unwrapLocVar loc) tenv
                   let loc_bind = case M.lookup v indirections_env of
                                    Nothing ->
                                      ((unwrapLocVar loc),[],CursorTy, VarE cur)
@@ -2361,7 +2577,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
               case ty of
                 -- Int, Sym, or Bool
                 _ | isScalarTy ty -> do
-                  (tenv', binds) <- scalarBinds ty v loc tenv
+                  (tenv', binds) <- scalarBinds ty v (unwrapLocVar loc) tenv
                   let loc_bind = case M.lookup v indirections_env of
                                    -- This appears before the first packed field. Unpack it
                                    -- in the usual way.
@@ -2396,7 +2612,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
             _ -> error $ "unpackWithRelRAN: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
     -- Generate bindings for unpacking int fields. A convenient
-    scalarBinds :: OldTy2 -> Var -> LocVar -> TyEnv Var Ty2 -> PassM (TyEnv Var Ty2, [(Var, [()], Ty3, Exp3)])
+    scalarBinds :: OldTy2 -> Var -> Var -> TyEnv Var Ty2 -> PassM (TyEnv Var Ty2, [(Var, [()], Ty3, Exp3)])
     scalarBinds ty v loc tenv = do
       tmp <- gensym "read_scalar_tuple"
       -- Note that the location is not added to the type environment here.
@@ -2410,7 +2626,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
 
           ty'   = stripTyLocs ty
 
-          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadScalar s (unwrapLocVar loc)),
+          binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadScalar s loc),
                    (v       , [], ty'     , ProjE 0 (VarE tmp)),
                    (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
       return (tenv', binds)
@@ -2431,28 +2647,211 @@ projEndsTy :: (Out a) => UrTy a -> UrTy a
 projEndsTy = projTy 1
 
 
--- | Bindings for a letregion
-regionToBinds :: Bool -> Region -> RegionSize -> [(Var, [()], Ty3, Exp3)]
-regionToBinds for_parallel_allocs r sz =
+-- -- | Bindings for a letregion
+-- regionToBinds :: M.Map FreeVarsTy Var -> Bool -> Region -> RegionSize -> PassM [(Var, [()], Ty3, Exp3)]
+-- regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
+--   case r of
+--     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
+--     GlobR v mul -> do 
+--                    let mul' = go mul
+--                    let endv = toEndV v
+--                    if for_parallel_allocs
+--                    then return $ [ (v       , [], CursorTy, Ext (NewParBuffer mul')) , ((endv), [], CursorTy, Ext (EndOfBuffer mul'))]
+--                    else return $ [ (v       , [], CursorTy, Ext (NewBuffer mul'))
+--                                  , (endv, [], CursorTy, Ext (EndOfBuffer mul'))]
+--     DynR v mul  -> do 
+--                    let mul' = go mul
+--                    if for_parallel_allocs
+--                    then return $ [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul')
+--                                  , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+--                    else return $ [ (v       , [], CursorTy, Ext$ ScopedBuffer mul')
+--                                  , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+--     -- TODO: docs
+--     MMapR _v    -> return $ []
+    
+--     -- TODO: SoA Region
+--     SoAR dcreg fieldRegs -> do 
+--                             dcreg_binds <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
+--                             field_binds <- concatMapM (\(key, field_reg) -> regionToBinds freeVarToVarEnv for_parallel_allocs field_reg sz) fieldRegs
+--                             -- Make the cursor array
+--                             let reg_to_reg_var = regionToVar r
+--                             regions_var <- case (M.lookup (fromRegVarToFreeVarsTy reg_to_reg_var) freeVarToVarEnv) of 
+--                                                 Just v -> return $ v
+--                                                 Nothing -> gensym "reg_ptr"
+--                             field_reg_vars <- mapM (\(key, field_reg) -> case (M.lookup (fromRegVarToFreeVarsTy (regionToVar field_reg)) freeVarToVarEnv) of 
+--                                                                                       Just v -> v
+--                                                                                       Nothing -> case field_reg of 
+--                                                                                                     VarR v -> return $ v
+--                                                                                                     GlobR v _ -> return $ v
+--                                                                                                     DynR v _ -> return $ v
+--                                                                                                     MMapR v -> return $ v
+--                                                                                                     SoAR _ _ -> gensym "reg_ptr"
+--                                                    ) fieldRegs
+--                               dc_reg_var <- case (M.lookup (fromRegVarToFreeVarsTy (regionToVar dcreg)) freeVarToVarEnv) of 
+--                                                 Just v -> return $ v
+--                                                 Nothing -> case dcreg of 
+--                                                                  VarR v -> return $ v
+--                                                                  GlobR v _ -> return $ v
+--                                                                  DynR v _ -> return $ v
+--                                                                  MMapR v -> return $ v
+--                                                                  SoAR _ _ -> error "data constructor region cannot be SoA."
+--                               let make_cur_array_bind = (regions_var, [], CursorArrayTy (1 + length (field_reg_vars)), Ext $ MakeCursorArray (1 + length (field_reg_vars)) ([dc_reg_var] ++ field_reg_vars))
+--                              in return $ dcreg_binds ++ field_binds ++ [make_cur_array_bind]
+
+--  where
+--   go mul =
+--     case sz of
+--       BoundedSize 0 -> mul
+--       BoundedSize x -> Bounded x
+--       Undefined     -> mul
+
+-- regionToBinds :: M.Map FreeVarsTy Var -> Bool -> Region -> RegionSize -> PassM ([(Var, [()], Ty3, Exp3)], M.Map FreeVarsTy Var)
+-- regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
+--   case r of
+--     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
+--     GlobR v mul -> do 
+--                    let mul' = go mul
+--                    let endv = toEndV v
+--                    let bnds = if for_parallel_allocs
+--                               then [ (v       , [], CursorTy, Ext (NewParBuffer mul')) , (endv, [], CursorTy, Ext (EndOfBuffer mul'))]
+--                               else [ (v       , [], CursorTy, Ext (NewBuffer mul'))
+--                                  , (endv, [], CursorTy, Ext (EndOfBuffer mul'))]
+--                    return (bnds, freeVarToVarEnv)
+--     DynR v mul  -> do 
+--                    let mul' = go mul
+--                    let bnds = if for_parallel_allocs
+--                               then [ (v       , [], CursorTy, Ext (ScopedParBuffer mul'))
+--                                  , (toEndV v, [], CursorTy, Ext (EndOfBuffer mul'))]
+--                               else [ (v       , [], CursorTy, Ext (ScopedBuffer mul'))
+--                                  , (toEndV v, [], CursorTy, Ext (EndOfBuffer mul'))]
+--                    return (bnds, freeVarToVarEnv)
+--     -- TODO: docs
+--     MMapR _v    -> return ([], freeVarToVarEnv)
+    
+--     -- TODO: SoA Region
+--     SoAR dcreg fieldRegs -> do 
+--                             (dcreg_binds, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
+--                             field_binds_pairs <- fmap concat $ mapM (\(key, field_reg) -> regionToBinds freeVarToVarEnv for_parallel_allocs field_reg sz) fieldRegs
+--                             let field_binds = map fst field_binds_pairs
+--                             let field_new_maps = map snd field_binds_pairs 
+--                             -- Make the cursor array
+--                             let reg_to_reg_var = regionToVar r
+--                             regions_var <- case M.lookup (fromRegVarToFreeVarsTy reg_to_reg_var) freeVarToVarEnv of 
+--                                                 Just v -> return v
+--                                                 Nothing -> gensym "reg_ptr"
+--                             let freeVarToVarEnv'' = M.insert (fromRegVarToFreeVarsTy reg_to_reg_var) regions_var freeVarToVarEnv'
+--                             field_reg_keys_vars <- mapM (\(key, field_reg) -> do 
+--                                                                               case M.lookup (fromRegVarToFreeVarsTy (regionToVar field_reg)) freeVarToVarEnv of 
+--                                                                                       Just v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+--                                                                                       Nothing -> case field_reg of 
+--                                                                                                     VarR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+--                                                                                                     GlobR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+--                                                                                                     DynR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+--                                                                                                     MMapR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+--                                                                                                      SoAR _ _ -> do 
+--                                                                                                                  new_name <- gensym "reg_ptr" 
+--                                                                                                                  return (fromRegVarToFreeVarsTy (regionToVar field_reg), new_name)
+--                                                    ) fieldRegs
+--                             let field_reg_keys = map fst field_reg_keys_vars
+--                             let field_reg_vars = map snd field_reg_keys_vars
+--                             let freeVarToVarEnv''' = foldr (\(key, var) acc -> M.insert key var acc) freeVarToVarEnv'' field_reg_keys_vars
+--                             dc_reg_var <- case M.lookup (fromRegVarToFreeVarsTy (regionToVar dcreg)) freeVarToVarEnv of 
+--                                                 Just v -> return v
+--                                                 Nothing -> case dcreg of 
+--                                                                  VarR v -> return v
+--                                                                  GlobR v _ -> return v
+--                                                                  DynR v _ -> return v
+--                                                                  MMapR v -> return v
+--                                                                  SoAR _ _ -> error "data constructor region cannot be SoA."
+--                             let freeVarToVarEnv'''' = M.insert (fromRegVarToFreeVarsTy (regionToVar dcreg)) dc_reg_var freeVarToVarEnv'''
+--                             let make_cur_array_bind = (regions_var, [], CursorArrayTy (1 + length field_reg_vars), Ext $ MakeCursorArray (1 + length field_reg_vars) ([dc_reg_var] ++ field_reg_vars))
+--                             return (dcreg_binds ++ field_binds ++ [make_cur_array_bind], freeVarToVarEnv'''')
+
+--  where
+--   go mul =
+--     case sz of
+--       BoundedSize 0 -> mul
+--       BoundedSize x -> Bounded x
+--       Undefined     -> mul
+
+regionToBinds :: M.Map FreeVarsTy Var -> Bool -> Region -> RegionSize -> PassM ([(Var, [()], Ty3, Exp3)], M.Map FreeVarsTy Var)
+regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
   case r of
     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
-    GlobR v mul -> let mul' = go mul in
-                   if for_parallel_allocs
-                   then [ (v       , [], CursorTy, Ext$ NewParBuffer mul')
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
-                   else [ (v       , [], CursorTy, Ext$ NewBuffer mul')
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
-    DynR v mul  -> let mul' = go mul in
-                   if for_parallel_allocs
-                   then [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul')
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
-                   else [ (v       , [], CursorTy, Ext$ ScopedBuffer mul')
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+    GlobR v mul -> do 
+                   let mul' = go mul
+                   let endv = toEndV v
+                   let bnds = if for_parallel_allocs
+                              then [ (v       , [], CursorTy, Ext (NewParBuffer mul')) , (endv, [], CursorTy, Ext (EndOfBuffer mul'))]
+                              else [ (v       , [], CursorTy, Ext (NewBuffer mul'))
+                                 , (endv, [], CursorTy, Ext (EndOfBuffer mul'))]
+                   return (bnds, freeVarToVarEnv)
+    DynR v mul  -> do 
+                   let mul' = go mul
+                   let bnds = if for_parallel_allocs
+                              then [ (v       , [], CursorTy, Ext (ScopedParBuffer mul'))
+                                 , (toEndV v, [], CursorTy, Ext (EndOfBuffer mul'))]
+                              else [ (v       , [], CursorTy, Ext (ScopedBuffer mul'))
+                                 , (toEndV v, [], CursorTy, Ext (EndOfBuffer mul'))]
+                   return (bnds, freeVarToVarEnv)
     -- TODO: docs
-    MMapR _v    -> []
+    MMapR _v    -> return ([], freeVarToVarEnv)
     
     -- TODO: SoA Region
-    SoAR{} -> []
+    SoAR dcreg fieldRegs -> do 
+                            (dcreg_binds, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
+                            field_binds_pairs <- mapM (\(key, field_reg) -> regionToBinds freeVarToVarEnv' for_parallel_allocs field_reg sz) fieldRegs
+                            let field_binds = concatMap fst field_binds_pairs
+                            let field_new_maps = map snd field_binds_pairs 
+                            -- Make the cursor array
+                            let reg_to_reg_var = regionToVar r
+                            regions_var <- case M.lookup (fromRegVarToFreeVarsTy reg_to_reg_var) freeVarToVarEnv' of 
+                                                Just v -> return v
+                                                Nothing -> gensym "reg_ptr"
+                            let freeVarToVarEnv'' = M.insert (fromRegVarToFreeVarsTy reg_to_reg_var) regions_var freeVarToVarEnv'
+                            field_reg_keys_vars <- mapM (\(key, field_reg) -> do 
+                                                                              case M.lookup (fromRegVarToFreeVarsTy (regionToVar field_reg)) freeVarToVarEnv'' of 
+                                                                                      Just v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                                                                                      Nothing -> case field_reg of 
+                                                                                                    VarR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                                                                                                    GlobR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                                                                                                    DynR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                                                                                                    MMapR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                                                                                                    SoAR _ _ -> do 
+                                                                                                                 new_name <- gensym "reg_ptr" 
+                                                                                                                 return (fromRegVarToFreeVarsTy (regionToVar field_reg), new_name)
+                                                   ) fieldRegs
+                            let field_reg_keys = map fst field_reg_keys_vars
+                            let field_reg_vars = map snd field_reg_keys_vars
+                            let field_end_reg_keys = map (\(R r) -> toEndVRegVar r) field_reg_keys
+                            freeVarToVarEnv''' <- foldrM (\key acc -> insertRegInVarEnv key acc) freeVarToVarEnv'' field_end_reg_keys 
+                            let field_end_reg_vars = map (\key -> case (M.lookup (fromRegVarToFreeVarsTy key) freeVarToVarEnv''') of 
+                                                                    Just v -> v
+                                                                    Nothing -> error "cursorizeExp: regionToBinds: SoAR: unexpected end of region variable"
+                                                         ) field_end_reg_keys
+                            let freeVarToVarEnv'''' = foldr (\(key, var) acc -> M.insert key var acc) freeVarToVarEnv''' field_reg_keys_vars
+                            dc_reg_var <- case M.lookup (fromRegVarToFreeVarsTy (regionToVar dcreg)) freeVarToVarEnv'''' of 
+                                                Just v -> return v
+                                                Nothing -> case dcreg of 
+                                                                 VarR v -> return v
+                                                                 GlobR v _ -> return v
+                                                                 DynR v _ -> return v
+                                                                 MMapR v -> return v
+                                                                 SoAR _ _ -> error "data constructor region cannot be SoA."
+                            let freeVarToVarEnv''''' = M.insert (fromRegVarToFreeVarsTy (regionToVar dcreg)) dc_reg_var freeVarToVarEnv''''
+                            let dc_reg_end_var = toEndVRegVar (regionToVar dcreg)
+                            freeVarToVarEnv'''''' <- insertRegInVarEnv dc_reg_end_var freeVarToVarEnv'''''
+                            let dc_reg_end_var_name = case (M.lookup (fromRegVarToFreeVarsTy dc_reg_end_var) freeVarToVarEnv'''''') of 
+                                                            Just v -> v
+                                                            Nothing -> error "cursorizeExp: regionToBinds: SoAR: unexpected end of region variable"
+                            let end_soa_reg = toEndVRegVar (regionToVar r)
+                            freeVarToVarEnv''''''' <- insertRegInVarEnv end_soa_reg freeVarToVarEnv''''''
+                            let end_soa_reg_name = case (M.lookup (fromRegVarToFreeVarsTy end_soa_reg) freeVarToVarEnv''''''') of 
+                                                            Just v -> v
+                                                            Nothing -> error "cursorizeExp: regionToBinds: SoAR: unexpected end of region variable"
+                            let make_cur_array_bind = (regions_var, [], CursorArrayTy (1 + length field_reg_vars), Ext $ MakeCursorArray (1 + length field_reg_vars) ([dc_reg_var] ++ field_reg_vars))
+                            let make_end_cur_array_bind = (end_soa_reg_name, [], CursorArrayTy (1 + length field_end_reg_vars), Ext $ MakeCursorArray (1 + length field_end_reg_vars) ([dc_reg_end_var_name] ++ field_end_reg_vars))
+                            return (dcreg_binds ++ field_binds ++ [make_cur_array_bind] ++ [make_end_cur_array_bind], freeVarToVarEnv''''''')
 
  where
   go mul =
