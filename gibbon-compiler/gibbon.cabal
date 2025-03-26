@@ -72,7 +72,7 @@ library
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals
                        Gibbon.Passes.InferLocations
-                       --Gibbon.Passes.RegionsInwards
+                       Gibbon.Passes.RegionsInwards
                        Gibbon.Passes.RemoveCopies
                        Gibbon.Passes.InferEffects
                        Gibbon.Passes.ParAlloc
@@ -91,6 +91,7 @@ library
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
                        Gibbon.Passes.CalculateBounds
+                       Gibbon.Passes.CorrectLocExprs
 
   other-extensions:    DeriveDataTypeable CPP
 

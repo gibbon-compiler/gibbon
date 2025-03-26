@@ -69,7 +69,7 @@ import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simpl
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs, fixRANs, removeAliasesForCopyCalls)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
--- import           Gibbon.Passes.RegionsInwards (regionsInwards)
+import           Gibbon.Passes.RegionsInwards (regionsInwards)
 -- import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.AddRAN         (addRAN,needsRAN)
 import           Gibbon.Passes.AddTraversals  (addTraversals)
@@ -92,6 +92,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
+import           Gibbon.Passes.CorrectLocExprs (delayExpr)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
 -- Configuring and launching the compiler.
@@ -803,6 +804,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2' <- go "threadRegions"    threadRegions l2'
+              l2' <- go "delayExprs"  delayExpr l2'
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)

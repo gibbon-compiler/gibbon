@@ -27,6 +27,7 @@ module Gibbon.L2.Syntax
   , ArrowTy2(..)
   , LocRet(..)
   , LocExp
+  , RegExp
   , PreLocExp(..)
   , PreRegExp(..)
 
@@ -736,27 +737,18 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
 
 outRegVars :: ArrowTy2 ty2 -> [RegVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
-                                          SoAR rr fieldRegions -> 
-                                            let 
-                                              regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
-                                             in regVars
+                                          SoAR rr fieldRegions -> [regionToVar r]
                                           _ -> [regionToVar r] 
                       ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [RegVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                SoAR rr fieldRegions -> 
-                                                  let 
-                                                    regVars = [regionToVar rr] ++ L.map (\(_, fregs) -> regionToVar fregs) fieldRegions
-                                                   in regVars
+                                                SoAR rr fieldRegions -> [regionToVar r]
                                                 _ -> [regionToVar r]
                       ) $ L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 allRegVars :: ArrowTy2 ty2 -> [RegVar]
-allRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of
-                                                SoAR rr fieldRegions -> [regionToVar rr] 
-                                                                    ++ L.map (\(_, freg) -> regionToVar freg) fieldRegions
-                                                _ -> [regionToVar r]
+allRegVars ty = L.nub $ L.concatMap (\ (LRM _ r _) -> [regionToVar r]
                                     ) (locVars ty)
 
 -- | Apply a location substitution to a type.
@@ -998,6 +990,7 @@ mapPacked fn t =
     PackedTy k l  -> fn (toVar k) l
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    CursorArrayTy size -> CursorArrayTy size
     ArenaTy  -> ArenaTy
     VectorTy elty -> VectorTy elty
     ListTy elty   -> ListTy elty
@@ -1019,6 +1012,7 @@ constPacked c t =
     PackedTy _k _l  -> c
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    CursorArrayTy size -> CursorArrayTy size
     ArenaTy  -> ArenaTy
     VectorTy el_ty -> VectorTy (constPacked c el_ty)
     ListTy el_ty -> ListTy (constPacked c el_ty)

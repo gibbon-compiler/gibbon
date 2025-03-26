@@ -12,7 +12,7 @@ module Gibbon.NewL2.Syntax
     -- * Extended language L2 with location types.
       Old.E2Ext(..)
     , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, Ty2(..)
-    , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, Old.PreLocExp(..)
+    , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, RegExp, Old.PreLocExp(..), Old.PreRegExp(..)
 
     -- * Regions and locations
     , LocVar, Old.Region(..), Old.Modality(..),  Old.LRM(..), LREM(..)
@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar, fromSingleRegVarToVar
+    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar, fromSingleRegVarToVar, fromLocArgToFreeVarsTy
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -69,6 +69,7 @@ instance FunctionTy Ty2 where
 --   applications, and bindings gain a location annotation.
 type Exp2   = PreExp Old.E2Ext LocArg Ty2
 type LocExp = Old.PreLocExp LocArg
+type RegExp = Old.PreRegExp LocArg
 
 -- We need a newtype here to avoid overlapping type family instance for FunctionTy
 -- | L1 Types extended with abstract Locations.
@@ -132,6 +133,7 @@ fromRegVarToLocVar reg = case reg of
   SingleR v -> Single v
   SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromSingleRegVarToVar freg)) fieldRegs)
 
+{- VS: TODO: this should return either LocVar or RegVar -}
 toLocVar :: LocArg -> LocVar
 toLocVar arg =
   case arg of
@@ -141,6 +143,18 @@ toLocVar arg =
     Reg v _        -> fromRegVarToLocVar v
     EndOfReg _ _ v -> fromRegVarToLocVar v
     EndOfReg_Tagged v -> fromRegVarToLocVar v
+    _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
+
+
+fromLocArgToFreeVarsTy :: LocArg -> FreeVarsTy
+fromLocArgToFreeVarsTy arg =
+  case arg of
+    Loc lrm        -> fromLocVarToFreeVarsTy $ lremLoc lrm
+    EndWitness _ v -> fromLocVarToFreeVarsTy v
+    Loc lrm        -> fromRegVarToFreeVarsTy $ lremReg lrm
+    Reg v _        -> fromRegVarToFreeVarsTy v
+    EndOfReg _ _ v -> fromRegVarToFreeVarsTy v
+    EndOfReg_Tagged v -> fromRegVarToFreeVarsTy v
     _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
 
 

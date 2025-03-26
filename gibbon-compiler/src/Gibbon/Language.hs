@@ -786,6 +786,7 @@ stripTyLocs ty =
     ListTy ty' -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    CursorArrayTy size -> CursorArrayTy size
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy
     IntHashTy -> IntHashTy

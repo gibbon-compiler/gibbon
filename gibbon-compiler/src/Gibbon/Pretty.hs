@@ -300,6 +300,7 @@ instance (Pretty l) => Pretty (UrTy l) where
           ListTy el_ty1 -> text "List" <+> pprintWithStyle sty el_ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
+          CursorArrayTy size -> text "CursorArray[" <> int size <> text "]"
           ArenaTy   -> case sty of
                          PPHaskell  -> text "()"
                          PPInternal -> text "Arena"

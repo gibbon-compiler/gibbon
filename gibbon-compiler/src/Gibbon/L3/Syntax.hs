@@ -273,7 +273,7 @@ eraseLocMarkers (DDef tyargs tyname ls) = DDef tyargs tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs (L2.unTy2 ty))) ls')
 
-cursorizeTy :: UrTy a -> UrTy b
+cursorizeTy :: UrTy LocVar -> UrTy b
 cursorizeTy ty =
   case ty of
     IntTy     -> IntTy
@@ -284,7 +284,9 @@ cursorizeTy ty =
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
     SymDictTy v _ -> SymDictTy v CursorTy
     PDictTy k v   -> PDictTy (cursorizeTy k) (cursorizeTy v)
-    PackedTy{}    -> ProdTy [CursorTy, CursorTy]
+    PackedTy _ l    -> case l of 
+                           Single _ -> ProdTy [CursorTy, CursorTy]
+			   SoA _ flds -> ProdTy [CursorArrayTy (1 + length flds), CursorArrayTy (1 + length flds)]
     VectorTy el_ty' -> VectorTy $ cursorizeTy el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy

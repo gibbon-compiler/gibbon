@@ -147,8 +147,6 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               dcEndReg = toEndVRegVar dcreg
                                                                               fieldRegs' = map (\(_, freg) -> regionToVar freg) fieldRegs
                                                                               dcLoc = getDconLoc loc
-                                                                              regInst = [LetRegE dcreg (GetDataConRegSoA (NewL2.Reg (regionToVar reg) Output))]
-                                                                              regInst' = concatMap (\(d, freg) -> [LetRegE (regionToVar freg) (GetFieldRegSoA d (NewL2.Reg (regionToVar reg) Output))]) fieldRegs
                                                                               fieldLocs = getAllFieldLocsSoA loc 
                                                                               fieldLocs' = map (\(_, floc) -> (singleLocVar floc)) fieldLocs
                                                                               dcLocArg = NewL2.Loc (LREM dcLoc dcreg dcEndReg mode)
@@ -156,6 +154,8 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               {- VS: TODO: I need to get find the correct integer for bounds check-}
                                                                               boundsCheckDcon = [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 dcRegArg dcLocArg)] 
                                                                               boundsCheckFields = concatMap (\(floc, freg) -> [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] ) $ zip fieldLocs' fieldRegs'
+                                                                              regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                                                              regInst' = concatMap (\(d, freg) -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]) fieldRegs
                                                                            in (boundsCheckDcon ++ boundsCheckFields, regInst ++ regInst')
                                                                         else ([], [])
                                                 _ -> if mode == Output
