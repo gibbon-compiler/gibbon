@@ -551,9 +551,7 @@ falsePrinted = "#f"
 unwrapLocVar :: LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
-                            SoA dcon fieldLocs -> dcon 
-                              
-                              -- error $  "unwrapLocVar : Did not expect an SoA location! " ++ (show locvar)
+                            SoA dcon fieldLocs -> error $  "unwrapLocVar : Did not expect an SoA location! " ++ (show locvar)
 
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 

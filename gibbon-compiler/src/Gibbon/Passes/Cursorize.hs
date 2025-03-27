@@ -2227,7 +2227,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
                     _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
                 _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
-
+            {- VS: TODO: handle other cases. Right now, it is only scalar and packed -}
             SoAWin dcur field_cur -> do 
               case (vlocs, tys) of
                 ([],[]) -> processRhs denv tenv
