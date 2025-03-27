@@ -639,6 +639,12 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
         -- is expressed in terms of corresponding cursor operations.
         -- See `cursorizeLocExp`
         LetLocE loc rhs bod -> do
+          let ty2_of_loc = case loc of 
+                             Single l -> CursorTy
+                             SoA _ fields -> CursorArrayTy (1 + length fields)
+          let ty3_of_loc :: Ty3 = case loc of 
+                                    Single l -> CursorTy
+                                    SoA _ fields -> CursorArrayTy (1 + length fields) 
           freeVarToVarEnv' <- do 
                               case loc of 
                                     Single l -> if M.member (fromLocVarToFreeVarsTy loc) freeVarToVarEnv
@@ -679,13 +685,13 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
               case rhs of
                 FromEndLE{} ->
                   if isBound locs_var tenv
-                  then cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
+                  then cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                   -- Discharge bindings that were waiting on 'loc'.
-                  else mkLets (bnds' ++ [(locs_var,[],CursorTy,rhs')] ++ bnds) <$>
-                         cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
+                  else mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
+                         cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
-                _ -> mkLets (bnds' ++ [(locs_var,[],CursorTy,rhs')] ++ bnds) <$>
-                       cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 CursorTy) tenv''') senv bod
+                _ -> mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
+                       cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
             Left denv' -> cursorizeExp freeVarToVarEnv' ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
@@ -2363,7 +2369,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
                             let end_fields = map (\(key, varr) -> varr ) field_cur
                             let makeCurArr = Ext $ MakeCursorArray (1 + length (end_fields)) ([dcon_next] ++ end_fields)
                             let let_mk_cur_arr = (loc_var, [], CursorArrayTy (1 + length (end_fields)), makeCurArr)
-                            let dcon_nxt = [(dcon_next,[],CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr,(v  , [], CursorTy, VarE (loc_var))]
+                            let dcon_nxt = [(dcon_next,[],CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr,(v  , [], CursorArrayTy (1 + length (end_fields)), VarE (loc_var))]
                             -- make the new curw type 
                             -- this consists of incrementing the data constructor buffer by one and all the rest of the fields 
                             let curw' = SoAWin dcon_next field_cur

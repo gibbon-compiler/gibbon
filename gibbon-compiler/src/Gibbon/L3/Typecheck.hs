@@ -19,110 +19,111 @@ import Prelude hiding (exp)
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
 import Gibbon.L3.Syntax
+import Gibbon.DynFlags
 
 -- | Typecheck a L1 expression
 --
-tcExp :: Bool -> DDefs3 -> Env2 Var Ty3 -> Exp3 -> TcM Ty3 Exp3
-tcExp isPacked ddfs env exp =
+tcExp :: Bool -> Bool -> DDefs3 -> Env2 Var Ty3 -> Exp3 -> TcM Ty3 Exp3
+tcExp isSoA isPacked ddfs env exp = do
   case exp of
     Ext ext ->
       case ext of
         -- One cursor in, (int, cursor') out
         ReadScalar s v -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [scalarToTy s, CursorTy]
 
         -- Write int at cursor, and return a cursor
         WriteScalar s v rhs -> do
           vty  <- lookupVar env v exp
           vrhs <- go rhs
-          ensureEqualTyModCursor exp vty CursorTy
-          ensureEqualTyModCursor exp vrhs (scalarToTy s)
+          ensureEqualTyModCursor isSoA exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vrhs (scalarToTy s)
           return CursorTy
 
         -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
         ReadTag v -> do
           vty  <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
         -- Write Tag at Cursor, and return a cursor
         WriteTag _dcon v -> do
           vty  <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return CursorTy
 
         TagCursor a b -> do
           aty <- lookupVar env a exp
-          ensureEqualTyModCursor exp aty CursorTy
+          ensureEqualTyModCursor isSoA exp aty CursorTy
           bty <- lookupVar env b exp
-          ensureEqualTyModCursor exp bty CursorTy
+          ensureEqualTyModCursor isSoA exp bty CursorTy
           return CursorTy
 
         ReadTaggedCursor v -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [CursorTy, CursorTy, IntTy]
 
         WriteTaggedCursor v val -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           valty <- go val
-          ensureEqualTyModCursor exp valty CursorTy
+          ensureEqualTyModCursor isSoA exp valty CursorTy
           return CursorTy
 
         ReadCursor v -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [CursorTy, CursorTy]
 
         WriteCursor cur val -> do
           curty  <- lookupVar env cur exp
-          ensureEqualTyModCursor exp curty CursorTy
+          ensureEqualTyModCursor isSoA exp curty CursorTy
           valty <- go val
-          ensureEqualTyModCursor exp valty CursorTy
+          ensureEqualTyModCursor isSoA exp valty CursorTy
           return CursorTy
 
         ReadList v ty -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [ListTy ty, CursorTy]
 
         WriteList cur val el_ty -> do
           curty  <- lookupVar env cur exp
-          ensureEqualTyModCursor exp curty CursorTy
+          ensureEqualTyModCursor isSoA exp curty CursorTy
           valty <- go val
-          ensureEqualTyModCursor exp valty (ListTy el_ty)
+          ensureEqualTyModCursor isSoA exp valty (ListTy el_ty)
           return CursorTy
 
         ReadVector v ty -> do
           vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           return $ ProdTy [VectorTy ty, CursorTy]
 
         WriteVector cur val el_ty -> do
           curty  <- lookupVar env cur exp
-          ensureEqualTyModCursor exp curty CursorTy
+          ensureEqualTyModCursor isSoA exp curty CursorTy
           valty <- go val
-          ensureEqualTyModCursor exp valty (VectorTy el_ty)
+          ensureEqualTyModCursor isSoA exp valty (VectorTy el_ty)
           return CursorTy
 
         -- Add a constant offset to a cursor variable
         AddCursor v rhs -> do
           vty  <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           vrhs <- go rhs
-          ensureEqualTyModCursor exp vrhs IntTy
+          ensureEqualTyModCursor isSoA exp vrhs IntTy
           return CursorTy
 
         -- Subtract something from a cursor variable
         SubPtr v w -> do
           vty  <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor isSoA exp vty CursorTy
           wty  <- lookupVar env w exp
-          ensureEqualTyModCursor exp wty CursorTy
+          ensureEqualTyModCursor isSoA exp wty CursorTy
           return IntTy
 
         -- Create a new buffer, and return a cursor
@@ -140,9 +141,9 @@ tcExp isPacked ddfs env exp =
         -- Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
           sty  <- lookupVar env start exp
-          ensureEqualTyModCursor exp sty CursorTy
+          ensureEqualTyModCursor isSoA exp sty CursorTy
           ety  <- lookupVar env end exp
-          ensureEqualTyModCursor exp ety CursorTy
+          ensureEqualTyModCursor isSoA exp ety CursorTy
           return IntTy
 
         -- Takes in a variable, and returns an Int
@@ -155,20 +156,20 @@ tcExp isPacked ddfs env exp =
         -- The IntTy is just a placeholder. BoundsCheck is a side-effect
         BoundsCheck _ bound cur -> do
           rty <- lookupVar env bound exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           cty <- lookupVar env cur exp
-          ensureEqualTyModCursor exp cty CursorTy
+          ensureEqualTyModCursor isSoA exp cty CursorTy
           return IntTy
 
         IndirectionBarrier _tycon (l1, end_r1, l2, end_r2) -> do
           l1_ty  <- lookupVar env l1 exp
-          ensureEqualTyModCursor exp l1_ty CursorTy
+          ensureEqualTyModCursor isSoA exp l1_ty CursorTy
           end_r1_ty  <- lookupVar env end_r1 exp
-          ensureEqualTyModCursor exp end_r1_ty CursorTy
+          ensureEqualTyModCursor isSoA exp end_r1_ty CursorTy
           l2_ty  <- lookupVar env l2 exp
-          ensureEqualTyModCursor exp l2_ty CursorTy
+          ensureEqualTyModCursor isSoA exp l2_ty CursorTy
           end_r2_ty  <- lookupVar env end_r2 exp
-          ensureEqualTyModCursor exp end_r2_ty CursorTy
+          ensureEqualTyModCursor isSoA exp end_r2_ty CursorTy
           return (ProdTy [])
 
         BumpArenaRefCount{} ->
@@ -186,52 +187,63 @@ tcExp isPacked ddfs env exp =
 
         AllocateTagHere v _ -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         AllocateScalarsHere v -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         StartTagAllocation v -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         EndTagAllocation v -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         EndScalarsAllocation v -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         StartScalarsAllocation v -> do
           rty <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty CursorTy
+          ensureEqualTyModCursor isSoA exp rty CursorTy
           return (ProdTy [])
 
         SSPush _ v w _ -> do
           rty1 <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty1 CursorTy
+          ensureEqualTyModCursor isSoA exp rty1 CursorTy
           rty2 <- lookupVar env w exp
-          ensureEqualTyModCursor exp rty2 CursorTy
+          ensureEqualTyModCursor isSoA exp rty2 CursorTy
           return (ProdTy [])
 
         SSPop _ v w -> do
           rty1 <- lookupVar env v exp
-          ensureEqualTyModCursor exp rty1 CursorTy
+          ensureEqualTyModCursor isSoA exp rty1 CursorTy
           rty2 <- lookupVar env w exp
-          ensureEqualTyModCursor exp rty2 CursorTy
+          ensureEqualTyModCursor isSoA exp rty2 CursorTy
           return (ProdTy [])
 
         Assert rhs -> do
           ety <- go rhs
-          ensureEqualTyModCursor rhs ety BoolTy
+          ensureEqualTyModCursor isSoA rhs ety BoolTy
           return (ProdTy [])
+        
+        {- VS: TODO: we should check the bounds of index cursory array -}
+        IndexCursorArray v _ -> do
+          vty <- lookupVar env v exp
+          ensureEqualTyModCursor isSoA exp vty vty
+          return CursorTy
+
+        MakeCursorArray _ vars -> do 
+          tys <- mapM (\v -> lookupVar env v exp) vars
+          unless (all (== CursorTy) tys) $ throwError $ GenericTC ("Expected all vars to be of type CursorTy. Got: " ++ sdoc tys) exp
+          return $ CursorArrayTy (length vars)
 
     -- All the other cases are exactly same as L1.Typecheck
 
@@ -278,7 +290,7 @@ tcExp isPacked ddfs env exp =
 
           subFunInTys = L.map (subDictTy arMap) funInTys
           subFunOutTy = subDictTy arMap funRetTy
-      _ <- mapM (\(a,b) -> ensureEqualTyModCursor exp a b) (zip subFunInTys argTys)
+      _ <- mapM (\(a,b) -> ensureEqualTyModCursor isSoA exp a b) (zip subFunInTys argTys)
       return subFunOutTy
 
     PrimAppE pr es -> do
@@ -300,14 +312,14 @@ tcExp isPacked ddfs env exp =
 
           bool_ops = do
             len2
-            _ <- ensureEqualTyModCursor (es !! 0) BoolTy (tys !! 0)
-            _ <- ensureEqualTyModCursor (es !! 1) BoolTy (tys !! 1)
+            _ <- ensureEqualTyModCursor isSoA (es !! 0) BoolTy (tys !! 0)
+            _ <- ensureEqualTyModCursor isSoA (es !! 1) BoolTy (tys !! 1)
             pure BoolTy
 
           int_ops = do
             len2
-            _ <- ensureEqualTyModCursor (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTyModCursor isSoA (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTyModCursor isSoA (es !! 1) IntTy (tys !! 1)
             pure IntTy
 
           float_ops = do
@@ -318,8 +330,8 @@ tcExp isPacked ddfs env exp =
 
           int_cmps = do
             len2
-            _ <- ensureEqualTyModCursor (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTyModCursor isSoA (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTyModCursor isSoA (es !! 1) IntTy (tys !! 1)
             pure BoolTy
 
           float_cmps = do
@@ -366,8 +378,8 @@ tcExp isPacked ddfs env exp =
 
         EqSymP -> do
           len2
-          _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTyModCursor (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTyModCursor isSoA (es !! 0) SymTy (tys !! 0)
+          _ <- ensureEqualTyModCursor isSoA (es !! 1) SymTy (tys !! 1)
           return BoolTy
 
         EqBenchProgP _ -> do
@@ -478,7 +490,7 @@ tcExp isPacked ddfs env exp =
         DictEmptyP _ty -> do
           len1
           let [a] = tys
-          _ <- ensureEqualTyModCursor exp ArenaTy a
+          _ <- ensureEqualTyModCursor isSoA exp ArenaTy a
           let (VarE var) = es !! 0
           return $ SymDictTy (Just var) CursorTy
 
@@ -486,22 +498,22 @@ tcExp isPacked ddfs env exp =
           len4
           let [a,_d,k,v] = tys
           let (VarE var) = es !! 0
-          _ <- ensureEqualTyModCursor exp ArenaTy a
-          _ <- ensureEqualTyModCursor exp SymTy k
-          _ <- ensureEqualTyModCursor exp CursorTy v
+          _ <- ensureEqualTyModCursor isSoA exp ArenaTy a
+          _ <- ensureEqualTyModCursor isSoA exp SymTy k
+          _ <- ensureEqualTyModCursor isSoA exp CursorTy v
           return $ SymDictTy (Just var) CursorTy
 
         DictLookupP _ty -> do
           len2
           let [_d,k] = tys
-          _ <- ensureEqualTyModCursor exp SymTy k
+          _ <- ensureEqualTyModCursor isSoA exp SymTy k
           return CursorTy
 
         DictHasKeyP _ty -> do
           len2
           let [_d,k] = tys
           -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
-          _ <- ensureEqualTyModCursor exp SymTy k
+          _ <- ensureEqualTyModCursor isSoA exp SymTy k
           return BoolTy
 
         ErrorP _str ty -> do
@@ -518,7 +530,7 @@ tcExp isPacked ddfs env exp =
            | PackedTy{} <- ty  -> do
              len1
              let [packed_ty] = tys
-             _ <- ensureEqualTyModCursor exp packed_ty ty
+             _ <- ensureEqualTyModCursor isSoA exp packed_ty ty
              pure (ProdTy [])
            | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
 
@@ -759,7 +771,7 @@ tcExp isPacked ddfs env exp =
         SymDictTy ar _ ->
             do  unless (isJust ar) $ throwError $ GenericTC "Expected arena variable annotation" rhs
                 let env' = extendEnv env [(v,SymDictTy ar CursorTy)]
-                tcExp isPacked ddfs env' e
+                tcExp isSoA isPacked ddfs env' e
         _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     LetE (v,locs,ty,rhs) e -> do
@@ -771,15 +783,15 @@ tcExp isPacked ddfs env exp =
                            exp
       -- Check RHS
       tyRhs <- go rhs
-      _ <- ensureEqualTyModCursor exp tyRhs ty
+      _ <- ensureEqualTyModCursor isSoA exp tyRhs ty
       let env' = extendEnv env [(v,ty)]
       -- Check body
-      tcExp isPacked ddfs env' e
+      tcExp isSoA isPacked ddfs env' e
 
     IfE tst consq alt -> do
       -- Check if the test is a boolean
       tyTst <- go tst
-      _ <- ensureEqualTyModCursor exp tyTst BoolTy
+      _ <- ensureEqualTyModCursor isSoA exp tyTst BoolTy
 
       -- Check if both branches match
       tyConsq <- go consq
@@ -790,7 +802,7 @@ tcExp isPacked ddfs env exp =
       -- then return tyConsq
       -- else throwError $ GenericTC ("If branches have mismatched types:"
       --                              ++ sdoc tyConsq ++ ", " ++ sdoc tyAlt) exp
-      ensureEqualTyModCursor exp tyConsq tyAlt
+      ensureEqualTyModCursor isSoA exp tyConsq tyAlt
 
     MkProdE [] -> return $ ProdTy []
 
@@ -808,10 +820,16 @@ tcExp isPacked ddfs env exp =
       let tycons = L.map (getTyOfDataCon ddfs . (\(a,_,_) -> a)) cs
       case L.nub tycons of
         [_one] -> do
-          when (tye /= CursorTy && not (isPackedTy tye)) $
-            throwError $ GenericTC ("Case scrutinee should be packed, or have a cursor type. Got"
+          case tye of 
+            CursorTy -> do  when (tye /= CursorTy &&  not (isPackedTy tye)) $
+                              throwError $ GenericTC ("Case scrutinee should be packed, or have a cursor type. Got"
                                     ++ sdoc tye) e
-          tcCases isPacked ddfs env cs
+                            tcCases isSoA isPacked ddfs env cs
+            CursorArrayTy size -> do when (tye /= (CursorArrayTy size) && not (isPackedTy tye)) $
+                                      throwError $ GenericTC ("Case scrutinee should be packed, or have a cursor type. Got"
+                                        ++ sdoc tye ++ sdoc e) e
+                                     tcCases isSoA isPacked ddfs env cs
+            _ -> tcCases isSoA isPacked ddfs env cs
         oth   -> throwError $ GenericTC ("Case branches have mismatched types: " ++ sdoc oth
                                          ++" , in " ++ sdoc exp) exp
 
@@ -823,7 +841,7 @@ tcExp isPacked ddfs env exp =
       then throwError $ GenericTC ("Invalid argument length: " ++ sdoc es) exp
       else do
         -- Check if arguments match with expected datacon types
-        sequence_ [ ensureEqualTyModCursor e ty1 ty2
+        sequence_ [ ensureEqualTyModCursor isSoA e ty1 ty2
                   | (ty1,ty2,e) <- zip3 args tys es]
         return $ PackedTy dcTy loc
 
@@ -838,7 +856,7 @@ tcExp isPacked ddfs env exp =
 
     WithArenaE v e -> do
       let env' = extendVEnv v ArenaTy env
-      tcExp isPacked ddfs env' e
+      tcExp isSoA isPacked ddfs env' e
 
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp
@@ -846,7 +864,7 @@ tcExp isPacked ddfs env exp =
     -- oth -> error $ "L1.tcExp : TODO " ++ sdoc oth
 
   where
-    go = tcExp isPacked ddfs env
+    go = tcExp isSoA isPacked ddfs env
     checkListElemTy el_ty =
       if isValidListElemTy el_ty
       then pure ()
@@ -857,9 +875,19 @@ tcExp isPacked ddfs env exp =
 --
 tcProg :: Bool -> Prog3 -> PassM Prog3
 tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
-
+  
+  -- VS
+  {- As of the moment, this uses the dynflags to get if we are using SoA -}
+  {- In the future it is also possible to assign seperate memoery layout per 
+     type and have them co-exist in the same program. For instance, one packed
+     type can be SoA and another can be AoS.
+     Hence we should not reply on the use of the dynflags to determine the 
+     memory layout of the packed types.
+  -}
+  dflags <- getDynFlags
+  let useSoA = gopt Opt_Packed_SoA dflags
   -- Handle functions
-  mapM_ fd $ M.elems fundefs
+  mapM_ (fd useSoA) $ M.elems fundefs
 
   -- Handle main expression
   -- We don't change the type of mainExp to have cursors. So if it's type was `Packed`,
@@ -868,7 +896,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
   case mainExp of
     Nothing -> return ()
     Just (e,ty)  ->
-      let res = runExcept $ tcExp isPacked ddefs env e
+      let res = runExcept $ tcExp useSoA isPacked ddefs env e
       in case res of
         Left err -> error $ sdoc err
         Right ty' -> if tyEq ty ty'
@@ -882,19 +910,22 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
     env = progToEnv prg
     tyEq CursorTy PackedTy{} = True
     tyEq PackedTy{} CursorTy = True
+    -- TODO: Is this correct? 
+    tyEq PackedTy{} CursorArrayTy{} = True
+    tyEq CursorArrayTy{} PackedTy{} = True
     tyEq ty1 ty2 =
       case ty1 of
-        PackedTy{}  -> ty2 == ProdTy [CursorTy,CursorTy] || ty1 == ty2
+        PackedTy{}  -> ty2 == ProdTy [CursorTy,CursorTy] || ty2 == ProdTy [CursorArrayTy{}, CursorArrayTy{}] || ty1 == ty2
         ProdTy tys2 -> let ProdTy tys1 = ty1
                        in  all (\(a,b) -> tyEq a b) (zip tys1 tys2)
         _ -> ty1 == ty2
 
     -- fd :: forall e l . FunDef Ty1 Exp -> PassM ()
-    fd FunDef{funArgs,funTy,funBody} = do
+    fd useSoA FunDef{funArgs,funTy,funBody} = do
       let (intys, outty) = funTy
           venv = M.fromList (zip funArgs intys)
           env' = Env2 venv (fEnv env)
-          res = runExcept $ tcExp isPacked ddefs env' funBody
+          res = runExcept $ tcExp useSoA isPacked ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
         Right ty -> if ty `compareModCursor` outty
@@ -905,14 +936,14 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: Bool -> DDefs3 -> Env2 Var Ty3 -> [(DataCon, [(Var, ())], Exp3)] -> TcM Ty3 (Exp3)
-tcCases isPacked ddfs env cs = do
+tcCases :: Bool -> Bool -> DDefs3 -> Env2 Var Ty3 -> [(DataCon, [(Var, ())], Exp3)] -> TcM Ty3 (Exp3)
+tcCases isSoA isPacked  ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
-               targs = map packedToCursor $ lookupDataCon ddfs c
+               targs = map (packedToCursor isSoA) $ lookupDataCon ddfs c
                env'  = extendEnv env (zip args targs)
-           tcExp isPacked ddfs env' rhs
-  foldM_ (\acc (ex,ty) -> ensureEqualTyModCursor ex ty acc)
+           tcExp isSoA isPacked ddfs env' rhs
+  foldM_ (\acc (ex,ty) -> ensureEqualTyModCursor isSoA ex ty acc)
             -- if ty == acc
             -- then return acc
             -- else throwError $ GenericTC ("Case branches have mismatched types: "
@@ -938,19 +969,34 @@ ensureEqualTy :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ " <> " ++ (sdoc b)) a b
 
-ensureEqualTyModCursor :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
-ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy
-ensureEqualTyModCursor _exp (PackedTy _ _) CursorTy = return CursorTy
-ensureEqualTyModCursor _exp IntTy CursorTy = return CursorTy
-ensureEqualTyModCursor _exp CursorTy IntTy = return CursorTy
-ensureEqualTyModCursor exp (ProdTy ls1) (ProdTy ls2) =
-  sequence_ [ ensureEqualTyModCursor exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor (ProdTy ls1))
-ensureEqualTyModCursor exp a b = ensureEqualTy exp a b
+{- VS: First bool is wheather to use an SoA cursor or not to -}
+ensureEqualTyModCursor :: Bool -> Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
+ensureEqualTyModCursor False _exp CursorTy (PackedTy _ _) = return CursorTy
+ensureEqualTyModCursor False _exp (PackedTy _ _) CursorTy = return CursorTy
+ensureEqualTyModCursor False _exp IntTy CursorTy = return CursorTy
+ensureEqualTyModCursor False _exp CursorTy IntTy = return CursorTy
+ensureEqualTyModCursor False exp (ProdTy ls1) (ProdTy ls2) =
+  sequence_ [ ensureEqualTyModCursor False exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor False (ProdTy ls1))
+ensureEqualTyModCursor s exp a b = ensureEqualTy exp a b
 
-packedToCursor :: Ty3 -> Ty3
-packedToCursor (PackedTy _ _) = CursorTy
-packedToCursor (ProdTy tys) = ProdTy $ map packedToCursor tys
-packedToCursor ty = ty
+
+ensureEqualTyModCursor True _exp (CursorArrayTy sz) (PackedTy _ _) = return (CursorArrayTy sz)
+ensureEqualTyModCursor True _exp (PackedTy _ _) (CursorArrayTy sz) = return (CursorArrayTy sz)
+ensureEqualTyModCursor True _exp IntTy (CursorArrayTy sz) = return (CursorArrayTy sz)
+ensureEqualTyModCursor True _exp (CursorArrayTy sz) IntTy = return (CursorArrayTy sz)
+ensureEqualTyModCursor True exp (ProdTy ls1) (ProdTy ls2) =
+  sequence_ [ ensureEqualTyModCursor True exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor True (ProdTy ls1))
+ensureEqualTyModCursor s exp a b = ensureEqualTy exp a b
+
+{- This assumes that The CursorArrayTy always has size 2 -}
+{- VS: we should ideally update the PackedTy type to have more information on its layout -}
+packedToCursor :: Bool -> Ty3 -> Ty3
+packedToCursor False (PackedTy _ _) = CursorTy
+packedToCursor False (PackedTy _ _) = CursorTy
+packedToCursor True  (PackedTy _ _) = CursorArrayTy 2
+packedToCursor True  (PackedTy _ _) = CursorArrayTy 2
+packedToCursor s (ProdTy tys) = ProdTy $ map (\ty -> packedToCursor s ty) tys
+packedToCursor s ty = ty
 
 compareModCursor :: Ty3 -> Ty3 -> Bool
 compareModCursor CursorTy (PackedTy _ _) = True
