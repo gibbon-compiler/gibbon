@@ -524,6 +524,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SSPush{} -> syms
               SSPop{} -> syms
               Assert ex -> go ex
+              MakeCursorArray len vars -> syms
+              IndexCursorArray var idx -> syms
+              _ -> error $ "Unexpected Ext: " ++ sdoc ex
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -753,6 +756,20 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
                                              , triv sym_tbl "addCursor offset" e] <$>
          tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (IndexCursorArray cur idx))) bod ->
+      T.LetPrimCallT [(v, T.CursorTy)] T.IndexCursorArray [ triv sym_tbl "base pointer" (VarE cur)  
+                                                          , triv sym_tbl "index_into_base_pointer" (LitE idx)] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, (Ext (MakeCursorArray size vars))) bod ->
+      T.LetPrimCallT [(v, T.CursorArrayTy size)] T.MakeCursorArray [triv sym_tbl ("MakeCursorArray arg" ++ (show $ fromJust $ L.elemIndex var vars)) (VarE var) | var <- vars] <$>
+        tail free_reg sym_tbl bod
+    
+    --LetE(_,_,_,  (Ext (BoundsCheck i bound cur))) bod -> do
+    --  let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
+    --  T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
+
 
     LetE (v,_, _,  (Ext (SubPtr a b))) bod ->
       T.LetPrimCallT [(v,T.IntTy)] T.SubP [ triv sym_tbl "subCursor base" (VarE a)
@@ -1001,9 +1018,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
              let bod'' = updateAvailVars [v] tmps bod'
              T.LetIfT (zip tmps (L.map typ ls)) (a', b', c') <$> tail free_reg sym_tbl bod''
         _ -> T.LetIfT [(v, typ t)] (a', b', c') <$> tail free_reg sym_tbl bod
+    
 
-
-    _ -> error$ "lower: unexpected expression in tail position:\n  "++sdoc ex0
+    
+    _ -> error$ "lower: unexpected expression in tail position:\n  "++ sdoc ex0
 
 
 -- Helpers
@@ -1084,6 +1102,7 @@ typ t =
     -- t | isCursorTy t -> T.CursorTy
     PackedTy{} -> T.CursorTy
     CursorTy -> T.CursorTy -- Audit me
+    CursorArrayTy size -> T.CursorArrayTy size
     PtrTy -> T.PtrTy
     ArenaTy   -> T.ArenaTy
     SymSetTy  -> T.SymSetTy

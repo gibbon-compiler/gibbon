@@ -20,6 +20,7 @@ import qualified Data.Set as S
 import           Language.C.Quote.C (cdecl, cedecl, cexp, cfun, cparam, csdecl, cstm, cty)
 import qualified Language.C.Quote.C as C
 import qualified Language.C.Syntax as C
+
 import qualified Safe as Sf
 import           Prelude hiding (init)
 import           Text.PrettyPrint.Mainland
@@ -863,7 +864,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  -- DictHasKeyP PtrTy -> let [(outV,IntTy)] = bnds
                  --                          [(VarTriv dict)] = rnds in pure
                  --    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
-                 DictHasKeyP _ -> error $ "codegen: " ++ show prm ++ "unhandled."
+                 DictHasKeyP _ -> error $ "codegen: " ++ show prm ++ " unhandled."
 
                  SymSetEmpty -> let [(outV,outT)] = bnds
                                 in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = gib_empty_set(); |] ]
@@ -1526,6 +1527,25 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."
+                 
+                 MakeCursorArray -> do 
+                                    let [(outV, outT)] = bnds
+                                    let args = rnds
+                                    let size = length args
+                                    let initList = map (\exp -> C.ExpInitializer exp (noLoc)) (map (codegenTriv venv) args)
+                                    let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outV[$int:size] = { $inits:initList }; |]
+                                    pure [C.BlockDecl arrayInit]
+
+                 IndexCursorArray -> do 
+                                    let [(outV, outT)] = bnds
+                                    let [ptr, idx] = rnds
+                                    pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $exp:(codegenTriv venv ptr)[$exp:(codegenTriv venv idx)]; |] ]
+
+                 --AddP -> let [(outV,outT)] = bnds
+                 --            [pleft,pright] = rnds in pure
+                 --        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
+
+                 _ -> error $ "codegen: " ++ show prm ++ "unhandled."
 
        return $ pre ++ bod'
 
@@ -1605,6 +1625,7 @@ codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
+codegenTy (CursorArrayTy size) = [cty|typename GibCursor* |]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
@@ -1629,6 +1650,7 @@ makeName' FloatTy     = "GibFloat"
 makeName' SymTy       = "GibSym"
 makeName' BoolTy      = "GibBool"
 makeName' CursorTy    = "GibCursor"
+makeName' (CursorArrayTy{}) = "GibCursorPtr"
 makeName' TagTyPacked = "GibPackedTag"
 makeName' TagTyBoxed  = "GibBoxedTag"
 makeName' PtrTy       = "GibPtr"

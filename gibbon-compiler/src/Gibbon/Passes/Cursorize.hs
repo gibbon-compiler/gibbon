@@ -4,7 +4,7 @@ module Gibbon.Passes.Cursorize
 import           Control.Monad (forM)
 import qualified Data.List as L
 import qualified Data.Map as M
-import           Data.Maybe (fromJust)
+import           Data.Maybe (fromJust, listToMaybe)
 import           Text.PrettyPrint.GenericPretty
 import           Data.Foldable ( foldrM )
 
@@ -603,8 +603,18 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
 
                                  ) freeVarToVarEnv brs
       let (VarE  v) = scrt
-      CaseE (VarE $ v) <$>
-        mapM (unpackDataCon freeVarToVarEnv' ddfs fundefs denv tenv senv False v) brs
+      let ty_of_scrut = case (M.lookup v tenv) of 
+                            Just (MkTy2 ty) -> ty
+                            Nothing -> error "unpackDataCon: unexpected location variable"
+      dcon_var <- gensym "dcon"
+      let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+      let dcon_let_bind = mkLets dcon_let
+      case ty_of_scrut of 
+            CursorTy -> CaseE (VarE $ v) <$>
+                            mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv False v) brs
+            CursorArrayTy{} -> dcon_let_bind <$> CaseE (VarE $ dcon_var) <$>
+                                  mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv False v) brs
+      
 
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: "++ndoc ex
 
@@ -907,6 +917,7 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     CaseE scrt brs -> do
       -- ASSUMPTION: scrutinee is always flat
       let (VarE v) = scrt
+      
       freeVarToVarEnv' <- foldrM (\(dcon,vlocs,rhs) acc -> do
                                                            case vlocs of
                                                              [] -> return acc
@@ -925,9 +936,20 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
 
 
                                  ) freeVarToVarEnv brs
-      dl <$>
-        CaseE (VarE $ v) <$>
-          mapM (unpackDataCon freeVarToVarEnv' ddfs fundefs denv tenv senv True v) brs
+      let ty_of_scrut = case (M.lookup v tenv) of 
+                            Just (MkTy2 ty) -> ty
+                            Nothing -> error "unpackDataCon: unexpected location variable"
+      dcon_var <- gensym "dcon"
+      let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+      let dcon_let_bind = mkLets dcon_let 
+      case ty_of_scrut of 
+        CursorTy -> dl <$>
+                      CaseE (VarE $ v) <$>
+                        mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv True v) brs
+        CursorArrayTy{} ->  dl <$> dcon_let_bind <$>
+                              CaseE (VarE $ dcon_var) <$>
+                                mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv True v) brs                     
+      
 
     DataConE slocarg dcon args -> do
       if (not (isSoALoc (toLocVar slocarg)))
@@ -2041,9 +2063,9 @@ Consider an example of unpacking of a Node^ pattern:
 ..TODO..
 
 -}
-unpackDataCon :: M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
+unpackDataCon :: Var -> M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
               -> (DataCon, [(Var, LocArg)], Exp2) -> PassM (DataCon, [t], Exp3)
-unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) = do
+unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) = do
   field_cur <- gensym "field_cur"
   let ty_of_scrut = case (M.lookup scrtCur tenv1) of 
                             Just (MkTy2 ty) -> ty
@@ -2059,9 +2081,9 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
                      then unpackWithRelRAN field_cur
                      else unpackRegularDataCon (AoSWin field_cur) freeVarToVarEnv)
     CursorArrayTy size -> do
-                          dcon_var <- gensym "dcon" 
+                          -- dcon_var <- gensym "dcon" 
                           let first_var = field_cur
-                          let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
+                          -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
                           (field_lets, field_v_lst) <- foldrM (\idx (acc1, acc2) -> do
                                                                        field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx)
                                                                        let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx))]
@@ -2073,7 +2095,7 @@ unpackDataCon freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dc
                                 else if isRelRANDataCon dcon
                                 then unpackWithRelRAN field_cur
                                 else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv)
-                          let lets = mkLets (dcon_let ++ field_lets) bod
+                          let lets = mkLets (field_lets) bod
                           return (dcon, [], lets)
   where
     tys1 = lookupDataCon ddfs dcon
