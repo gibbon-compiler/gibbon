@@ -2,18 +2,19 @@ module Main where
 
 {- Defining List type. -}
 
-data List = Nil | Cons Int (List) | Snoc (List) Int deriving (Show)
+data List = Nil | Cons Int (List) -- | Snoc (List) Int deriving (Show)
 
 
 randomizeList :: List -> List
 randomizeList list = case list of
                       Nil-> Nil
-                      Cons a rst -> if (mod rand 2 == 0)
-                                       then Cons a (randomizeList rst) 
-                                       else Snoc (randomizeList rst) a
-                      Snoc rst a -> if (mod rand 2 == 0)
-                                       then Cons a (randomizeList rst)
-                                       else Snoc (randomizeList rst) a
+                      Cons a rst -> Cons a (randomizeList rst)
+ 				       --if (mod rand 2 == 0)
+                                       --then Cons a (randomizeList rst) 
+                                       --else Snoc (randomizeList rst) a
+                      --Snoc rst a -> if (mod rand 2 == 0)
+                      --                 then Cons a (randomizeList rst)
+                      --                 else Snoc (randomizeList rst) a
 
 mkList :: Int -> List
 mkList len = 
@@ -27,7 +28,7 @@ sumList :: List -> Int
 sumList list = case list of 
                     Nil -> 0
                     Cons a rst -> a + (sumList rst)
-                    Snoc rst a -> (sumList rst) + a
+                    --Snoc rst a -> (sumList rst) + a
                     
 printSyms :: List -> ()
 printSyms lst =
@@ -44,14 +45,14 @@ printSyms lst =
           _ = printsym (quote ")")
           _ = printsym (quote "SPACE")
       in ()
-    Snoc rst a -> 
-        let _ = printsym (quote "(Snoc ")
-            _ = printSyms rst
-            _ = printint a
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
+    --Snoc rst a -> 
+    --    let _ = printsym (quote "(Snoc ")
+    --        _ = printSyms rst
+    --        _ = printint a
+    --        _ = printsym (quote "SPACE")
+    --        _ = printsym (quote ")")
+    --        _ = printsym (quote "SPACE")
+    --    in ()
                     
 gibbon_main = 
     let step1 = printsym (quote "--- Start of Program ---\n")

@@ -148,12 +148,17 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               fieldRegs' = map (\(_, freg) -> regionToVar freg) fieldRegs
                                                                               dcLoc = getDconLoc loc
                                                                               fieldLocs = getAllFieldLocsSoA loc 
-                                                                              fieldLocs' = map (\(_, floc) -> (singleLocVar floc)) fieldLocs
+                                                                              fieldLocs' = map (\(k, floc) -> (k, (singleLocVar floc))) fieldLocs
                                                                               dcLocArg = NewL2.Loc (LREM dcLoc dcreg dcEndReg mode)
                                                                               dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
                                                                               {- VS: TODO: I need to get find the correct integer for bounds check-}
+                                                                              {- VS: New: each scalar field get a bound check size equal to the size of the field -}
                                                                               boundsCheckDcon = [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 dcRegArg dcLocArg)] 
-                                                                              boundsCheckFields = concatMap (\(floc, freg) -> [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] ) $ zip fieldLocs' fieldRegs'
+                                                                              boundsCheckFields = concatMap (\(((dcon, idx), floc), freg) -> let ty = (lookupDataCon ddefs dcon) !! idx
+                                                                                                                                                 size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
+                                                                                                                                                in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
+                                                                                                          
+                                                                                                          ) $ zip fieldLocs' fieldRegs'
                                                                               regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
                                                                               regInst' = concatMap (\(d, freg) -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]) fieldRegs
                                                                            in (boundsCheckDcon ++ boundsCheckFields, regInst ++ regInst')
@@ -440,8 +445,8 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           -- TagCursor's type is TagCuror Var Var 
           -- This is too narrow to represent a SoA region at the moment.
           -- I also don't think this is used in the L2 IR atm. 
-          -- I but in case it is, then its type needs to be changed. 
-          return $ Ext $ TagCursor (unwrapLocVar loc) (toEndV reg')
+          -- I but in case it is, then its type needs to be changed.
+          dbgTraceIt "Print TagCursor: " dbgTraceIt (sdoc(loc)) dbgTraceIt "End TagCursor\n" return $ Ext $ TagCursor (unwrapLocVar loc) (toEndV reg')
 
         Nothing -> error $ "threadRegionsExp: unbound " ++ sdoc (loc, pkd_env)
 

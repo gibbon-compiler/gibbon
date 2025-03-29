@@ -1013,7 +1013,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                   _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      dbgTraceIt "Print constrs Aos: " dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
                     SoA dataBufferVar fieldLocs -> do 
                       {-
                         VS: Here we assign new locations for each argument 
@@ -1029,7 +1029,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       locs <- mapM (\exp -> case exp of 
                                                   VarE v -> case lookupVEnv v env of 
                                                                 PackedTy tycon loc -> freshSoALoc loc 
-                                                                _ -> fresh  
+                                                                _ -> fresh
+                                                  LitE l -> fresh
+                                                  FloatE f -> fresh
+                                                  _ -> error $ "DataConE: SoA: expected exp, got " ++ (show exp)  
                                    ) ls
                       mapM_ fixLoc locs -- Don't allow argument locations to freely unify
                       ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> 
@@ -1067,11 +1070,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                        else return $ ArgFixed 0
                                                  _ -> error "inferExp: DataConE SoA: offset for type not implemented!"
                           -- TODO: fix these to get the correct offset for an SoA loc.
-                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                          (LitE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy IntTy)
+                          (FloatE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy FloatTy)
+                          (LitSymE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy SymTy)
+                          (PrimAppE MkTrue []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
+                          (PrimAppE MkFalse []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
                           (AppE f lvs [(VarE v)]) -> do 
                                                   v' <- lift $ lift $ freshLocVar "cpy"
                                                   return $ ArgCopy v (unwrapLocVar v') f lvs
@@ -1128,7 +1131,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- AfterTagConstraints
                       (aftagc, sc, aftvarc) <- case locsDconBuf of
                                                         -- No recursion in the data type
-                                                        [] -> return ([], [], [])
+                                                        [] -> dbgTraceIt "Found a DataConE with no recursion." dbgTraceIt (sdoc (k)) dbgTraceIt "End line 1134.\n"                                                              
+                                                              return ([],fieldConstraints, [])
                                                         hloc:rstlocs -> do
                                                                         let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
                                                                         let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
@@ -1163,7 +1167,21 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                   ((fieldLocVarsAfter))
                                                                                                   (map Just locsFields)
                                                                                                 )
-                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints') d
+                                                                        -- handle field of other data constructors in the final SoA loc passed to the recursive call.
+                                                                        let fields_hloc = getFieldLocs hloc
+                                                                        let fields_d = getFieldLocs d
+                                                                        let pair_new_old = concatMap (\(ks@(dcon, idx), loc1) -> if dcon /= k
+                                                                                                                           then 
+                                                                                                                            let loc2 = case (L.lookup (dcon, idx) fields_d) of 
+                                                                                                                                      Just loc2 -> loc2
+                                                                                                                                      Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                                                                                              in [(ks, loc1, loc2)]
+                                                                                                                           else [] 
+                                                                                               ) fields_hloc
+                                                                        let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> AfterConstantL (singleLocVar loc_new) 0 (singleLocVar loc_old)
+                                                                                                         ) pair_new_old
+
+                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed) d
                                                                         let afvarc = (mapMaybe afterVar $ zip3 
                                                                                                     dcArgDconBuf 
                                                                                                     ((map Just rstlocs) ++ [Nothing])
@@ -1223,7 +1241,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      dbgTraceIt "Print contrs'" dbgTraceIt (sdoc constrs') dbgTraceIt "\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      dbgTraceIt "Print contrs'" dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     IfE a b c@ce -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:

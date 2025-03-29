@@ -20,7 +20,7 @@ module Gibbon.L2.Typecheck
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Except
-import           Data.Foldable ( foldlM )
+import           Data.Foldable ( foldlM, foldrM )
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -783,12 +783,22 @@ tcExp ddfs env funs constrs regs tstatein exp =
       --  tstate3 <- removeLoc exp tstate2 loc
       --  return (ty,tstate3)
       Ext (LetLocE loc c e) -> do
+              {- VS: TODO: bug, why is the type of loc always CursorTy? -}
               let env' = extendVEnvLocVar (fromLocVarToFreeVarsTy loc) CursorTy env
               case c of
                 GenSoALoc dcloc fieldLocs -> do
+                  dcloc_reg <- getRegion exp constrs dcloc
+                  let constrs' = extendConstrs (InRegionC (dcloc) dcloc_reg) constrs
+                  --let nconstrs' = extendConstrs (InRegionC l r) $ nconstrs
+                  (constrs'', fregs) <- foldrM (\(k, floc) (accC, accR) -> do
+                                                                           freg <- getRegion exp accC floc
+                                                                           return $ (extendConstrs (InRegionC (floc) freg) accC , (k, freg):accR)
+                                         ) (constrs', []) fieldLocs
+                  let new_reg = SoAR dcloc_reg fregs
+                  let constrs''' = extendConstrs (InRegionC loc new_reg) $ constrs''
                   let env' = extendVEnvLocVar (fromLocVarToFreeVarsTy loc) CursorTy env
                   let tstate1 = extendTS loc (Output, True) tstatein
-                  (ty,tstate2) <- tcExp ddfs env' funs constrs regs tstate1 e
+                  (ty,tstate2) <- tcExp ddfs env' funs constrs''' regs tstate1 e
                   tstate3 <- removeLoc exp tstate2 loc
                   return (ty,tstate3)
                 StartOfRegionLE r ->
@@ -840,8 +850,9 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                         let tstate1 = extendTS loc (Output,True) $ tstatein
                                         let constrs1 = extendConstrs (InRegionC loc r') $ constrs
                                         (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
-                                        tstate3 <- removeLoc exp tstate2 loc
-                                        return (ty,tstate3)
+                                        -- ?? Why does this not typecheck??
+                                        -- tstate3 <- removeLoc exp tstate2 loc
+                                        return (ty,tstate2)
                 GetFieldLocSoA key soa_loc -> do
                                               -- get the region of the SoA loc. 
                                               r <- getRegion exp constrs soa_loc
@@ -1230,7 +1241,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                               let unselfTys = L.foldr (\idx a -> a ++ [tys !! idx]
                                                                                     ) [] unself_idxs
                                               -- Self recursive fields
-                                              let selfTys = L.foldr (\idx a -> a ++ [tys !! idx]
+                                              let selfTys = L.foldl (\a idx -> a ++ [tys !! idx]
                                                                                     ) [] self_idxs
 
                                               let unselfWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs) unself_idxs
@@ -1353,7 +1364,7 @@ removeLoc :: Exp -> LocationTypeState -> LocVar -> TcM LocationTypeState
 removeLoc exp (LocationTypeState ls) l =
     if M.member l ls
     then return $ LocationTypeState $ M.delete l ls
-    else throwError $ GenericTC ("Cannot remove location " ++ (show l)) exp
+    else throwError $ GenericTC ("Cannot remove location " ++ (show l) ++ (show exp)) exp
 
 ensureArenaScope :: MonadError TCError m => Exp -> Env2 FreeVarsTy a -> Maybe Var -> m ()
 ensureArenaScope exp env ar =

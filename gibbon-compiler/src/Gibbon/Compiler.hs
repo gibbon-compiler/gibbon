@@ -696,18 +696,19 @@ passes config@Config{dynflags} l0 = do
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
-              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               --l2 <- go "regionsInwards"    regionsInwards l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
-              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
-              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else do l2 <- go "removeCopies" removeCopies l2
-                            go "L2.typecheck"       L2.tcProg    l2
+                            l2 <- go "L2.typecheck" L2.tcProg l2
+                            return l2
               l2 <- goE2 "inferEffects" inferEffects  l2
 
 {- Note [Repairing programs]

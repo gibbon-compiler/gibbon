@@ -186,8 +186,10 @@ toEndFromTaggedRegVar r = case r of
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      Old.AfterConstantLE _ loc  -> S.singleton $ unwrapLocVar (toLocVar loc)
-      Old.AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar (toLocVar loc)] 
+      -- Old.AfterConstantLE _ loc  -> S.singleton $ unwrapLocVar (toLocVar loc)
+      -- Old.AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar (toLocVar loc)]
+      Old.AfterConstantLE _ loc  -> S.empty
+      Old.AfterVariableLE v loc _ -> S.fromList [v] 
       _ -> S.empty
 
 

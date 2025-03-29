@@ -6,7 +6,7 @@ import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe (fromJust, listToMaybe)
 import           Text.PrettyPrint.GenericPretty
-import           Data.Foldable ( foldrM )
+import           Data.Foldable ( foldlM, foldrM )
 
 import           Gibbon.DynFlags
 import           Gibbon.Common
@@ -607,6 +607,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                             Just (MkTy2 ty) -> ty
                             Nothing -> error "unpackDataCon: unexpected location variable"
       dcon_var <- gensym "dcon"
+      {-VS: TODO: get location of scrutinee, send it to unpack data con. Get the L2 location!!!-}
       let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
       let dcon_let_bind = mkLets dcon_let
       case ty_of_scrut of 
@@ -1129,8 +1130,15 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                         Nothing -> error "cursorizeExp: DataConE: unexpected location variable"
                   write_scalars_at <- gensym "write_scalars_at"
                   let let_assign_write_cur = LetE (write_scalars_at, [], CursorTy, (VarE floc_var))
+                  {- Update, aft_flocs with the correct location for the scalar field -}
+                  {- TODO: Audit aft_flocs'  and fvarenv'-}
+                  let aft_flocs' = map (\((d, idx'), l) -> if d == dcon && idx' == index
+                                                            then ((d, idx'), d')
+                                                            else ((d, idx'), l)
+                                       ) aft_flocs
+                  let fvarenv' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv
                   let_assign_write_cur <$> LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') <$>
-                    go2 marker_added fvarenv aft_dloc from_rec_end aft_flocs rst
+                    go2 marker_added fvarenv' aft_dloc from_rec_end aft_flocs' rst
 
         writetag <- gensym "writetag"
         after_tag <- gensym "after_tag"
@@ -2084,7 +2092,7 @@ unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked sc
                           -- dcon_var <- gensym "dcon" 
                           let first_var = field_cur
                           -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-                          (field_lets, field_v_lst) <- foldrM (\idx (acc1, acc2) -> do
+                          (field_lets, field_v_lst) <- foldlM (\(acc1, acc2) idx -> do
                                                                        field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx)
                                                                        let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx))]
                                                                        let curr_window = [((dcon, idx), field_var)]
