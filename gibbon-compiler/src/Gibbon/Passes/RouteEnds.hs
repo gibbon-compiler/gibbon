@@ -35,6 +35,8 @@ import Data.Map as M
 import Data.Set as S
 import Control.Monad
 
+import Data.Foldable ( foldrM )
+
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
 import Gibbon.L1.Syntax as L1
@@ -371,32 +373,78 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             let (Just jump) = L1.sizeOfTy ty
                                             let e' = Ext $ LetLocE l2loc (AfterConstantLE jump l1) e
                                             return (eor', e')
+                                          _ -> error "handleLoc: did not expect an SoA location!!"
+                                  
+                                  {-VS: TODO: We need to see if this logic will work for scalars after packed fields.-}
+                                  handleLocSoA :: (EndOfRel, Exp2) -> [(LocVar, Ty2, Int)] -> PassM (EndOfRel, Exp2)
+                                  handleLocSoA (eor, e) [] = return (eor, e)
+                                  handleLocSoA (eor, e) cases = do
+                                    case scrutloc of
                                           -- We need to return endof locations for each non packed field
                                           -- Hence, in an SoA case, the data con location stays the same
                                           -- We just need to produce new locations for each field. 
-                                          SoA dloc flocs -> do 
-                                            let jump_dloc = dloc 
-                                            l2 <- gensym "jumpf"
-                                            let l2loc = singleLocVar l2
-                                            let eor' = mkEnd l1 l2loc eor
-                                            let (Just jump) = L1.sizeOfTy ty
-                                            let get_dcon_let = LetLocE (singleLocVar jump_dloc) (GetDataConLocSoA scrutloc)
-                                            let after_let = LetLocE l2loc (AfterConstantLE jump l1)
-                                            let new_field_locs = L.map (\(k, l) -> if k == (dc, idx)
-                                                                                 then (k, l2)
-                                                                                 else (k, l)
-                                                                     ) flocs 
-                                            let new_field_locs' = L.map (\(k, l) -> (k, singleLocVar l)) new_field_locs
-                                            let new_soa_loc = LetLocE (SoA jump_dloc new_field_locs) (GenSoALoc (singleLocVar jump_dloc) new_field_locs')
-                                            let e' = Ext $ get_dcon_let $ Ext $ after_let $ Ext $ new_soa_loc e
-                                            return (eor', e')
+                                          SoA in_dbuf_loc in_flocs -> do 
+                                            --let jump_dloc = dloc 
+                                            l2 <- freshCommonLoc "jumpf" scrutloc
+                                            let final_soa_loc = l2
+                                            (eor', exprs) <- foldrM (\(l1, ty, idx) (eorr, ee)  -> do
+                                                                                                 case ty of
+                                                                                                    PackedTy _ _ -> return (eorr, ee)
+                                                                                                    _ -> do
+                                                                                                        let jump_loc = getFieldLoc (dc, idx) final_soa_loc
+                                                                                                        -- let l2loc = l2
+                                                                                                        let eorr' = mkEnd l1 jump_loc eorr
+                                                                                                        let (Just jump) = L1.sizeOfTy ty
+                                                                                                        let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
+                                                                                                        return (eorr', [fieldCon] ++ ee)                                            
+                                                                  ) (eor, []) cases
+                                            let in_dcon_lete = LetLocE (singleLocVar in_dbuf_loc) (GetDataConLocSoA scrutloc)
+                                            let end_con_lete = LetLocE (getDconLoc final_soa_loc) (AfterConstantLE 1 (singleLocVar in_dbuf_loc))
+                                            --let (Just jump) = L1.sizeOfTy ty
+                                            --let let_field_after = LetLocE (getFieldLoc (dc, idx) l2loc) (AfterConstantLE jump l1)
+                                            --let new_field_locs = L.map (\(k, l) -> if k == (dc, idx)
+                                            --                                       then (k, (getFieldLoc k l2loc))
+                                            --                                       else (k, l)
+                                            --                           ) $  getAllFieldLocsSoA l2loc
+                                            
+                                            
+                                                -- generate all alias to field constraints 
+                                            let (all_field_gets, unsed_assign) = L.foldr (\(key@(dc', _), lv) (lst1, lst2) -> case L.lookup key (getAllFieldLocsSoA final_soa_loc) of 
+                                                                                                                      Nothing -> error "routeEnds: expected location for field."
+                                                                                                                      Just ofl -> if dc' == dc
+                                                                                                                                  then ([LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ lst1, lst2)  --[LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ [LetLocE (l1) (AfterConstantLE 0 (getFieldLoc (dc, idx) scrutloc))] ++ 
+                                                                                                                                  else ([LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ lst1, [LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))] ++ lst2)
+                                                   ) ([], []) in_flocs
+                                            let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) (L.map (\(key, lv) -> (key, singleLocVar lv)) (getAllFieldLocsSoA final_soa_loc)))
+                                            let all_letes = [in_dcon_lete, end_con_lete] ++ all_field_gets ++ exprs ++ unsed_assign  ++ [new_soa_loc]  
+                                            let e' = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
+                                            --let (Just jump) = L1.sizeOfTy ty
+                                            --let get_dcon_let = LetLocE (singleLocVar jump_dloc) (GetDataConLocSoA scrutloc)
+                                            --let after_let = LetLocE l2loc (AfterConstantLE jump l1)
+                                            --let new_field_locs = L.map (\(k, l) -> if k == (dc, idx)
+                                            --                                     then (k, l2)
+                                            --                                     else (k, l)
+                                            --                         ) flocs 
+                                            --let new_field_locs' = L.map (\(k, l) -> (k, singleLocVar l)) new_field_locs
+                                            --let new_soa_loc = LetLocE (SoA jump_dloc new_field_locs) (GenSoALoc (singleLocVar jump_dloc) new_field_locs')
+                                            --let e' = Ext $ get_dcon_let $ Ext $ after_let $ Ext $ new_soa_loc e
+                                            -- let eor'' = mkEnd scrutloc final_soa_loc eor'
+                                            let eor'' = case (L.last cases) of
+                                                                (l1, ty, idx) -> case ty of 
+                                                                                      PackedTy{} -> eor'
+                                                                                      _  -> mkEnd scrutloc final_soa_loc eor'
+
+                                            return (eor'', e')
+                                          _ -> error "handleLoc: did not expect an AoS location!!"  
                                   vars = L.map fst vls
                                   varsToFreeVarsTy = L.map fromVarToFreeVarsTy vars 
                                   locs = L.map snd vls
                                   vls' = L.map (\(v, l) -> (fromVarToFreeVarsTy v, l)) vls
                                   env2' = extendsVEnvLocVar (M.fromList (zip (L.map fromLocVarToFreeVarsTy locs) argtys ++ zip varsToFreeVarsTy argtys)) env2
                                   lenv' = M.union lenv $ M.fromList vls'
-                              (eor'',e') <- foldM handleLoc (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
+                              (eor'',e') <- case scrutloc of 
+                                                  Single _ -> foldM handleLoc (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
+                                                  _ -> handleLocSoA (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
                               e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
                               return (dc, vls, e'')
                             Nothing -> error $ "Failed to find " ++ (show x)

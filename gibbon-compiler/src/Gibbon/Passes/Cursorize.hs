@@ -16,6 +16,7 @@ import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, 
                                            TagCursor )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
+import Data.Set (Set)
 
 {-
 
@@ -125,9 +126,9 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                 Just (e,ty) -> do
                   if hasPacked (unTy2 ty)
                   then Just . (, stripTyLocs (unTy2 ty)) <$>
-                         fromDi <$> cursorizePackedExp M.empty ddefs fundefs M.empty M.empty M.empty e
+                         fromDi <$> cursorizePackedExp M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
                   else Just . (,stripTyLocs (unTy2 ty)) <$>
-                         cursorizeExp M.empty ddefs fundefs M.empty M.empty M.empty e
+                         cursorizeExp M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
   pure (Prog ddefs' fundefs' mainExp')
 
 mangle :: [Var] -> Var 
@@ -212,7 +213,28 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                                                                reg_entry = (var_for_reg, MkTy2 packed_cursor_ty)                                 
                                                              in [loc_entry, reg_entry] 
                                     ) (locVars funTy)
-                               )      
+                               ) 
+
+      initTyEnvl = M.fromList $ (map (\(a,b) -> case (unTy2 b) of 
+                                                  PackedTy _ l -> (a, Just l)
+                                                  _ -> (a, Nothing)
+      
+                                     ) $ zip funArgs in_tys) ++
+                               (concatMap (\(LRM l r _) -> let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv') of 
+                                                                                                  Just v -> v 
+                                                                                                  Nothing -> error "cursorizeFunDef: unexpected location variable"
+                                                               packed_cursor_ty = case l of 
+                                                                                         Single _ -> Just l 
+                                                                                         SoA _ fields -> Just l
+                                                               loc_entry = (var_for_loc, packed_cursor_ty)
+                                                               var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv') of 
+                                                                                                  Just v -> v 
+                                                                                                  Nothing -> error "cursorizeFunDef: unexpected region variable"
+                                                               reg_entry = (var_for_reg, packed_cursor_ty)                                 
+                                                             in [loc_entry, reg_entry] 
+                                    ) (locVars funTy)
+                               )
+           
 
       funargs = (L.map (\r -> case (M.lookup (fromRegVarToFreeVarsTy r) freeVarToVarEnv') of 
                                             Just v -> v
@@ -227,8 +249,8 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                        ) funArgs)
 
   bod <- if hasPacked (unTy2 out_ty)
-         then fromDi <$> cursorizePackedExp freeVarToVarEnv' ddefs fundefs M.empty initTyEnv M.empty funBody
-         else cursorizeExp freeVarToVarEnv' ddefs fundefs M.empty initTyEnv M.empty funBody
+         then fromDi <$> cursorizePackedExp freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
+         else cursorizeExp freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
   let bod' = inCurBinds bod
       fn = FunDef funName funargs funTy' bod' funMeta
   dbgTraceIt "Print in cursorizeFunDef: " dbgTraceIt (sdoc (initTyEnv, locVars funTy)) dbgTraceIt "End cursorizeFunDef\n" return fn
@@ -360,9 +382,9 @@ This is used to create bindings for input location variables.
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
+cursorizeExp :: M.Map FreeVarsTy Var -> TyEnv Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
              -> PassM Exp3
-cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
+cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     VarE v    -> return $ VarE v
     LitE n    -> return $ LitE n
@@ -370,7 +392,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     FloatE n  -> return $ FloatE n
     LitSymE n -> return $ LitSymE n
 
-    AppE{} -> cursorizeAppE freeVarToVarEnv ddfs fundefs denv tenv senv ex
+    AppE{} -> cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
 
     PrimAppE RequestSizeOf [arg] -> do
       let (VarE v) = arg
@@ -406,7 +428,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs 
-      cursorizeReadPackedFile freeVarToVarEnv' ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
+      cursorizeReadPackedFile freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
 
     LetE (_v,_locs,_ty, (MkProdE _ls)) _bod -> do 
       freeVarToVarEnv' <- foldrM (\loc env -> case loc of 
@@ -432,7 +454,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      cursorizeProd freeVarToVarEnv' False ddfs fundefs denv tenv senv ex
+      cursorizeProd freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
 
     LetE (_v,_locs, ty, ProjE{}) _bod | isPackedTy (unTy2 ty) -> do 
       freeVarToVarEnv' <- foldrM (\loc env -> case loc of 
@@ -458,7 +480,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      cursorizeProj freeVarToVarEnv' False ddfs fundefs denv tenv senv ex
+      cursorizeProj freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
 
     LetE (_v,_locs, _ty, SpawnE{}) _bod -> do
       freeVarToVarEnv' <- foldrM (\loc env -> case loc of 
@@ -484,7 +506,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      cursorizeSpawn freeVarToVarEnv' False ddfs fundefs denv tenv senv ex
+      cursorizeSpawn freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
 
     LetE (_v,_locs, _ty, SyncE) _bod -> do 
       freeVarToVarEnv' <- foldrM (\loc env -> case loc of 
@@ -510,7 +532,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      cursorizeSync freeVarToVarEnv' False ddfs fundefs denv tenv senv ex
+      cursorizeSync freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
 
     LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod -> do 
       case M.lookup (unwrapLocVar start) tenv of
@@ -573,7 +595,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      cursorizeLet freeVarToVarEnv' False ddfs fundefs denv tenv senv bnd bod
+      cursorizeLet freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv bnd bod
 
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
 
@@ -612,9 +634,9 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
       let dcon_let_bind = mkLets dcon_let
       case ty_of_scrut of 
             CursorTy -> CaseE (VarE $ v) <$>
-                            mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv False v) brs
+                            mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
             CursorArrayTy{} -> dcon_let_bind <$> CaseE (VarE $ dcon_var) <$>
-                                  mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv False v) brs
+                                  mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
       
 
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: "++ndoc ex
@@ -622,7 +644,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs (unTy2 ty)) <*> pure b
 
     WithArenaE v e -> do
-      e' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv (M.insert v (MkTy2 ArenaTy) tenv) senv e
+      e' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv (M.insert v (MkTy2 ArenaTy) tenv) senv e
       return $ WithArenaE v e'
 
     SpawnE{} -> error "cursorizeExp: Unbound SpawnE"
@@ -696,23 +718,23 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
               case rhs of
                 FromEndLE{} ->
                   if isBound locs_var tenv
-                  then cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                  then cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                   -- Discharge bindings that were waiting on 'loc'.
                   else mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
-                         cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                         cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
-                       cursorizeExp freeVarToVarEnv' ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
-            Left denv' -> cursorizeExp freeVarToVarEnv' ddfs fundefs denv' tenv' senv bod
+                       cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
+            Left denv' -> cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False reg sz
-          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' ddfs fundefs denv tenv senv bod
+          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' lenv  ddfs fundefs denv tenv senv bod
 
         LetParRegionE reg sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True reg sz
-          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' ddfs fundefs denv tenv senv bod
+          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv bod
         
         {- VS: TODO: variables are not in env-}
         {- TODO: End of reg needs fixing is broken -}
@@ -761,7 +783,7 @@ cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
 
   where
-    go = cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv
+    go = cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv
 
 
 
@@ -790,9 +812,9 @@ insertLocInVarEnv loc env = do
                                                     return $ M.insert (fromLocVarToFreeVarsTy loc) name env
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
+cursorizePackedExp :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2
                    -> PassM (DiExp Exp3)
-cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
+cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     -- Here the allocation has already been performed:
     -- To follow the calling convention, we are reponsible for tagging on the
@@ -810,7 +832,7 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     FloatE{}   -> error $ "Shouldn't encounter FloatE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
 
-    AppE{} -> dl <$> cursorizeAppE freeVarToVarEnv ddfs fundefs denv tenv senv ex
+    AppE{} -> dl <$> cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
 
     -- DictLookup returns a packed value bound to a free location.
     -- PrimAppE (DictLookupP (PackedTy _ ploc)) vs ->
@@ -824,28 +846,28 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     -- it doesn't need memory allocation (NewBuffer/ScopedBuffer).
     -- This is more like the witness case below.
     LetE (v,_locs, _ty, (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
-       Di <$> cursorizeReadPackedFile freeVarToVarEnv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
+       Di <$> cursorizeReadPackedFile freeVarToVarEnv lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
 
     LetE (v,_locs,_ty, (PrimAppE (DictLookupP (MkTy2 (PackedTy _ ploc))) vs)) bod ->
-        do vs' <- forM vs $ \w -> cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv w
+        do vs' <- forM vs $ \w -> cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv w
            let bnd = mkLets [((unwrapLocVar ploc), [], CursorTy, (PrimAppE (DictLookupP CursorTy) vs'))
                             ,(v, [], CursorTy, VarE (unwrapLocVar ploc))]
                tenv' = M.insert (unwrapLocVar ploc) (MkTy2 CursorTy) $ M.insert v (MkTy2 CursorTy) tenv
            onDi bnd <$> go freeVarToVarEnv tenv' senv bod
 
     LetE (_v,_locs,_ty, (MkProdE _ls)) _bod ->
-      dl <$> cursorizeProd freeVarToVarEnv True ddfs fundefs denv tenv senv ex
+      dl <$> cursorizeProd freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
 
     LetE (_v,_locs,ty, ProjE{}) _bod | isPackedTy (unTy2 ty) ->
-      dl <$> cursorizeProj freeVarToVarEnv True ddfs fundefs denv tenv senv ex
+      dl <$> cursorizeProj freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
 
 
     MkProdE ls -> do
       let tys = L.map (gRecoverType ddfs (Env2 tenv M.empty)) ls
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
-                  _ | isPackedTy (unTy2 ty) -> fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv e
-                  _ -> cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv e
+                  _ | isPackedTy (unTy2 ty) -> fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+                  _ -> cursorizeExp  freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
       let rhs' = MkProdE es
       return $ Di rhs'
 
@@ -853,10 +875,10 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     ProjE i e -> dl <$> ProjE i <$> fromDi <$> go freeVarToVarEnv tenv senv e
 
     LetE (_v,_locs, _ty, SpawnE{}) _bod ->
-      dl <$> cursorizeSpawn freeVarToVarEnv True ddfs fundefs denv tenv senv ex
+      dl <$> cursorizeSpawn freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
 
     LetE (_v,_locs, _ty, SyncE) _bod ->
-      dl <$> cursorizeSync freeVarToVarEnv True ddfs fundefs denv tenv senv ex
+      dl <$> cursorizeSync freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
 
     LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod ->
       case M.lookup (unwrapLocVar start) tenv of
@@ -900,14 +922,14 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                                                       env' <- insertRegInVarEnv r env
                                                                       return env'
                                  ) freeVarToVarEnv _locs
-      dl <$> cursorizeLet freeVarToVarEnv' True ddfs fundefs denv tenv senv bnd bod
+      dl <$> cursorizeLet freeVarToVarEnv' lenv True ddfs fundefs denv tenv senv bnd bod
 
     -- Here we route the dest cursor to both braches.  We switch
     -- back to the other mode for the (non-packed) test condition.
     IfE a b c -> do
       Di b' <- go freeVarToVarEnv tenv senv b
       Di c' <- go freeVarToVarEnv tenv senv c
-      a'    <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv a
+      a'    <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv a
       return $ Di $ IfE a' b' c'
 
     -- A case expression is eventually transformed into a ReadTag + switch stmt.
@@ -946,10 +968,10 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
       case ty_of_scrut of 
         CursorTy -> dl <$>
                       CaseE (VarE $ v) <$>
-                        mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv True v) brs
+                        mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
         CursorArrayTy{} ->  dl <$> dcon_let_bind <$>
                               CaseE (VarE $ dcon_var) <$>
-                                mapM (unpackDataCon dcon_var freeVarToVarEnv' ddfs fundefs denv tenv senv True v) brs                     
+                                mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs                     
       
 
     DataConE slocarg dcon args -> do
@@ -985,25 +1007,25 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
 
                 -- Int, Float, Sym, or Bool
                 _ | isScalarTy ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) d rnd') <$>
                     go2 marker_added d' rst
 
                 -- Write a pointer to a vector
                 VectorTy el_ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   LetE (d',[], CursorTy, Ext $ WriteVector d rnd' (stripTyLocs el_ty)) <$>
                     go2 marker_added d' rst
 
                 -- Write a pointer to a vector
                 ListTy el_ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                     go2 marker_added d' rst
 
                 -- shortcut pointer
                 CursorTy -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   LetE (d',[], CursorTy, Ext $ WriteTaggedCursor d rnd') <$>
                     go2 marker_added d' rst
                 _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
@@ -1120,7 +1142,7 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                     go2 True fvarenv aft_dloc (Just d') aft_flocs rst
 
                 _ | isScalarTy ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   -- get the location variable where the scalar must be written
                   let floc_loc = case floc of 
                                        Just l -> singleLocVar l 
@@ -1221,7 +1243,7 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                 _ -> onDi (mkLets (bnds' ++ [(locs_var,[],locs_ty3,rhs')] ++ bnds)) <$>
                        go freeVarToVarEnv' (M.insert locs_var (MkTy2 locs_ty2) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
-                            cursorizePackedExp freeVarToVarEnv' ddfs fundefs denv' tenv' senv bod
+                            cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         {-VS: TODO: This needs to be fixed to produce the correct L3 expression. See above. -}      
         {- Right now i just skip the let region, just recurse on the body-}              
@@ -1253,7 +1275,7 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                 _ -> onDi (mkLets (bnds' ++ [(locs_var,[],CursorTy,rhs')] ++ bnds)) <$>
                        go freeVarToVarEnv' (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
-                            cursorizePackedExp freeVarToVarEnv' ddfs fundefs denv' tenv' senv bod
+                            cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
           -- case reg_var of
           -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
           -- SoARv dv _ -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
@@ -1326,14 +1348,14 @@ cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv ex =
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"
 
-  where go env = cursorizePackedExp env ddfs fundefs denv
+  where go env = cursorizePackedExp env lenv ddfs fundefs denv
         dl = Di
 
 
-cursorizeReadPackedFile :: M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
+cursorizeReadPackedFile :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
                         -> Maybe FilePath -> TyCon -> Maybe Var -> Ty2 -> Exp2
                         -> PassM Exp3
-cursorizeReadPackedFile freeVarToVarEnv ddfs fundefs denv tenv senv isPackedContext v path tyc reg ty2 bod = do
+cursorizeReadPackedFile freeVarToVarEnv lenv ddfs fundefs denv tenv senv isPackedContext v path tyc reg ty2 bod = do
   case reg of
     Nothing -> error $ "cursorizePackedExp: InferLocations did not set the reg for ReadPackedFile."
     Just reg_var ->
@@ -1344,8 +1366,8 @@ cursorizeReadPackedFile freeVarToVarEnv ddfs fundefs denv tenv senv isPackedCont
 
   where
     go t e = if isPackedContext
-             then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t senv e
-             else cursorizeExp freeVarToVarEnv ddfs fundefs denv t senv e
+             then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t senv e
+             else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t senv e
 
 -- We may sometimes encounter a letloc which uses an unbound location.
 --
@@ -1553,8 +1575,8 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
-cursorizeAppE freeVarToVarEnv ddfs fundefs denv tenv senv ex =
+cursorizeAppE :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     AppE f locs args -> do
       let fnTy   = case M.lookup f fundefs of
@@ -1586,8 +1608,8 @@ cursorizeAppE freeVarToVarEnv ddfs fundefs denv tenv senv ex =
                                 ) freeVarToVarEnv locs
       args' <- mapM
                  (\(t,a) -> if hasPacked (unTy2 t)
-                            then fromDi <$> cursorizePackedExp freeVarToVarEnv' ddfs fundefs denv tenv senv a
-                            else cursorizeExp freeVarToVarEnv' ddfs fundefs denv tenv senv a)
+                            then fromDi <$> cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                            else cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a)
                  (zip in_tys args)
       let starts = zipWith giveStarts (map unTy2 argTys) args'
       --let loc_var = toLocVar loc
@@ -1643,8 +1665,8 @@ There are two ways in which projections can be cursorized:
 `cursorizeLet` creates the former, while the special case here outputs the latter.
 Reason: unariser can only eliminate direct projections of this form.
 -}
-cursorizeProj :: M.Map FreeVarsTy Var -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
-cursorizeProj freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex =
+cursorizeProj :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeProj freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v,_locs,ty, rhs@ProjE{}) bod | isPackedTy (unTy2 ty) -> do
       rhs' <- go tenv rhs
@@ -1664,8 +1686,8 @@ cursorizeProj freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex =
 
   where
     go t x = if isPackedContext
-             then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t senv x
-             else cursorizeExp freeVarToVarEnv ddfs fundefs denv t senv x
+             then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
+             else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
 
 
 {-
@@ -1681,15 +1703,15 @@ If it's just `CursorTy`, this packed value doesn't have an end cursor,
 otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
 -}
-cursorizeProd :: M.Map FreeVarsTy Var -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
-cursorizeProd freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex =
+cursorizeProd :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeProd freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v, _locs, MkTy2 (ProdTy tys), rhs@(MkProdE ls)) bod -> do
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
-                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv e
-                  _ | hasPacked ty  -> fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv e
-                  _ -> cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv e
+                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+                  _ | hasPacked ty  -> fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+                  _ -> cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
       let rhs' = MkProdE es
           ty   = gRecoverType ddfs (Env2 tenv M.empty) rhs
           ty'  = cursorizeTy (unTy2 ty)
@@ -1701,8 +1723,8 @@ cursorizeProd freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex =
 
   where
     go t x = if isPackedContext
-             then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t senv x
-             else cursorizeExp freeVarToVarEnv ddfs fundefs denv t senv x
+             then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
+             else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
 
 
 {-
@@ -1715,13 +1737,13 @@ and add fewer things to the type environemnt because we have to wait until the
 join point.
 
 -}
-cursorizeSpawn :: M.Map FreeVarsTy Var -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
-cursorizeSpawn freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = do
+cursorizeSpawn :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeSpawn freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, locs, MkTy2 ty, (SpawnE fn applocs args)) bod
 
       | isPackedTy ty -> do
-          rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv (AppE fn applocs args)
+          rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
           let rhs'' = case rhs' of
                         AppE fn' applocs' args' -> SpawnE fn' applocs' args'
                         _ -> error "cursorizeSpawn"
@@ -1757,7 +1779,7 @@ cursorizeSpawn freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = 
           return $ mkLets bnds bod''
 
       | hasPacked ty -> do
-          rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv (AppE fn applocs args)
+          rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
           let rhs'' = case rhs' of
                         AppE fn' applocs' args' -> SpawnE fn' applocs' args'
                         _ -> error $ "cursorizeSpawn: this should've been an AppE. Got" ++ sdoc rhs'
@@ -1779,7 +1801,7 @@ cursorizeSpawn freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = 
               mkLets bnds <$> go tenv' senv' bod
 
       | otherwise -> do
-          rhs' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv (AppE fn applocs args)
+          rhs' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
           let rhs'' = case rhs' of
                         AppE fn' applocs' args' -> SpawnE fn' applocs' args'
                         _ -> error "cursorizeSpawn"
@@ -1806,11 +1828,11 @@ cursorizeSpawn freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = 
     _ -> error "cursorizeSpawn: Unbound SpawnE"
 
   where go t s x = if isPackedContext
-                   then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t s x
-                   else cursorizeExp freeVarToVarEnv ddfs fundefs denv t s x
+                   then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t s x
+                   else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t s x
 
-cursorizeSync :: M.Map FreeVarsTy Var -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
-cursorizeSync freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = do
+cursorizeSync :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM Exp3
+cursorizeSync freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, _locs, MkTy2 ty, SyncE) bod -> do
       let pending_bnds = concat (M.elems senv)
@@ -1822,8 +1844,8 @@ cursorizeSync freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv ex = d
       return $ mkLets bnds' bod'
     _ -> error "cursorizeSpawn: Unbound SyncE"
   where go t x = if isPackedContext
-                 then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t M.empty x
-                 else cursorizeExp freeVarToVarEnv ddfs fundefs denv t M.empty x
+                 then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
+                 else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
 
 
 {-
@@ -1848,11 +1870,11 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 Other bindings are straightforward projections of the processed RHS.
 
 -}
-cursorizeLet :: M.Map FreeVarsTy Var -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv
+cursorizeLet :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv
              -> (Var, [LocArg], Ty2, Exp2) -> Exp2 -> PassM Exp3
-cursorizeLet freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs) bod
+cursorizeLet freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs) bod
     | isPackedTy ty = do
-        rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv rhs
+        rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
         fresh <- gensym "tup_packed"
         let cursor_ty_locs = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
                                               cursorType = case free_var of 
@@ -1940,7 +1962,7 @@ cursorizeLet freeVarToVarEnv isPackedContext ddfs fundefs denv tenv senv (v,locs
                                                                     SoA _ flds -> CursorArrayTy (1 + length flds)
                                             in cursorType
                                  ) locs
-        rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv rhs
+        rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
         fresh <- gensym "tup_haspacked"
         let ty' = case locs of
                     [] -> cursorizeTy ty
@@ -2018,7 +2040,7 @@ Also, the binding itself now changes to:
                                                                     SoA _ flds -> CursorArrayTy (1 + length flds)
                                             in cursorType
                                  ) locs
-        rhs' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rhs
+        rhs' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
         case locs of
             [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs') <$>
                     go (M.insert v (MkTy2 ty) tenv) bod
@@ -2049,8 +2071,8 @@ Also, the binding itself now changes to:
               return $ mkLets bnds bod'
 
   where go t x = if isPackedContext
-                 then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv t senv x
-                 else cursorizeExp freeVarToVarEnv ddfs fundefs denv t senv x
+                 then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
+                 else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv t senv x
 
 {-
 
@@ -2071,9 +2093,9 @@ Consider an example of unpacking of a Node^ pattern:
 ..TODO..
 
 -}
-unpackDataCon :: Var -> M.Map FreeVarsTy Var -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
+unpackDataCon :: Var -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Bool -> Var
               -> (DataCon, [(Var, LocArg)], Exp2) -> PassM (DataCon, [t], Exp3)
-unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) = do
+unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) = do
   field_cur <- gensym "field_cur"
   let ty_of_scrut = case (M.lookup scrtCur tenv1) of 
                             Just (MkTy2 ty) -> ty
@@ -2091,25 +2113,34 @@ unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked sc
     CursorArrayTy size -> do
                           -- dcon_var <- gensym "dcon" 
                           let first_var = field_cur
+                          let scrut_loc = case (M.lookup scrtCur lenv) of 
+                                                                  Just loc -> case loc of
+                                                                                  Just l -> case l of 
+                                                                                                Single _ -> error "unpackDataCon: Did not expect a single location for a cursor array!"
+                                                                                                SoA _ _ -> l
+                                                                                  Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
+                                                                  Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
+                          
                           -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-                          (field_lets, field_v_lst) <- foldlM (\(acc1, acc2) idx -> do
-                                                                       field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx)
-                                                                       let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx))]
-                                                                       let curr_window = [((dcon, idx), field_var)]
-                                                                       return (acc1 ++ field_let , acc2 ++ curr_window)
-                                                              ) ([], []) [0..(size-2)]
+                          (field_lets, field_v_lst) <- foldlM (\(acc1, acc2) (key@(dcon', idx), loc) -> do
+                                                                        let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
+                                                                        field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
+                                                                        let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
+                                                                        let curr_window = [((dcon', idx), field_var)]
+                                                                        return (acc1 ++ field_let , acc2 ++ curr_window)
+                                                              ) ([], []) (getAllFieldLocsSoA scrut_loc)
                           bod <- (if isAbsRANDataCon dcon
                                 then unpackWithAbsRAN field_cur
                                 else if isRelRANDataCon dcon
                                 then unpackWithRelRAN field_cur
                                 else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv)
                           let lets = mkLets (field_lets) bod
-                          return (dcon, [], lets)
+                          dbgTraceIt "Print scrut loc: " dbgTraceIt (sdoc scrut_loc) dbgTraceIt "End loc\n" return (dcon, [], lets)
   where
     tys1 = lookupDataCon ddfs dcon
     processRhs denv env = if isPacked
-                          then fromDi <$> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv env senv rhs
-                          else cursorizeExp freeVarToVarEnv ddfs fundefs denv env senv rhs
+                          then fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv env senv rhs
+                          else cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv env senv rhs
 
     lookupVariable :: FreeVarsTy -> M.Map FreeVarsTy Var -> PassM Var
     lookupVariable loc fenv = case (M.lookup loc fenv) of 
@@ -2275,7 +2306,7 @@ unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked sc
                       loc_var <- lookupVariable loc fenv
                       (tenv', binds) <- scalarBinds ty v loc_var tenv
                       let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
-                      let field_cur' = map (\(k@(d, idx), var) -> if idx == field_idx then (k, (toEndV v)) else (k, var)) field_cur
+                      let field_cur' = map (\(k@(d, idx), var) -> if (d, idx) == (dcon, field_idx) then (k, (toEndV v)) else (k, var)) field_cur
                       let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
                       if canBind
                       then do
@@ -2385,14 +2416,20 @@ unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked sc
                       let isSameTycon = if (elem dcon datacons) then True else False
                       case isSameTycon of 
                         True -> do 
-                          let tenv' = M.insert v (MkTy2 CursorTy) tenv
+                          let ty3_of_field = case ploc of 
+                                                  Single _ -> CursorTy
+                                                  SoA _ fl -> CursorArrayTy (1 + length fl)
+                          let ty3_of_field2 :: Ty3 = case ploc of 
+                                                        Single _ -> CursorTy
+                                                        SoA _ fl -> CursorArrayTy (1 + length fl)
+                          let tenv' = M.insert v (MkTy2 ty3_of_field) tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                           -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
                           let cur = dcur
                           loc_var <- lookupVariable loc fenv
                           if canBind
                           then do
-                            let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                            let tenv'' = M.insert (loc_var) (MkTy2 ty3_of_field) tenv'
                             -- Flip canBind to indicate that the subsequent fields
                             -- should be added to the dependency environment.
                             dcon_next <- gensym $ toVar $ (fromVar dcur) ++ "_next"
@@ -2407,7 +2444,7 @@ unpackDataCon dcon_var freeVarToVarEnv ddfs fundefs denv1 tenv1 senv isPacked sc
                             return $ mkLets dcon_nxt bod
                           else do
                             -- Cannot read this. Instead, we add it to DepEnv.
-                            let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
+                            let denv' = M.insertWith (++) (loc) [(v,[],ty3_of_field2,VarE (loc_var))] denv
                             go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
                         False -> do 
                           let tenv' = M.insert v (MkTy2 CursorTy) tenv

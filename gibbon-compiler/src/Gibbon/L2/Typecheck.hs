@@ -850,9 +850,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                         let tstate1 = extendTS loc (Output,True) $ tstatein
                                         let constrs1 = extendConstrs (InRegionC loc r') $ constrs
                                         (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
-                                        -- ?? Why does this not typecheck??
-                                        -- tstate3 <- removeLoc exp tstate2 loc
-                                        return (ty,tstate2)
+                                        tstate3 <- removeLoc exp tstate2 loc
+                                        return (ty,tstate3)
                 GetFieldLocSoA key soa_loc -> do
                                               -- get the region of the SoA loc. 
                                               r <- getRegion exp constrs soa_loc
