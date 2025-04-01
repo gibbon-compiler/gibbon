@@ -1528,13 +1528,19 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."
                  
+                 {- VS : TODO: This is very slow!! We should not allocate new arrays everytime.
+                         Instead we should consider adding an extra function argument to each function.
+                         This way, we just allocate once, instead of allocating multiple times.                  
+                  -}
                  MakeCursorArray -> do 
                                     let [(outV, outT)] = bnds
+                                    let outVtmp = toVar $ (fromVar outV) ++ "_tmp"
                                     let args = rnds
                                     let size = length args
                                     let initList = map (\exp -> C.ExpInitializer exp (noLoc)) (map (codegenTriv venv) args)
-                                    let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outV[$int:size] = { $inits:initList }; |]
-                                    pure [C.BlockDecl arrayInit]
+                                    let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outVtmp[$int:size] = { $inits:initList }; |]
+                                    let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
+                                    pure [C.BlockDecl arrayInit, C.BlockDecl arrayMalloc]
 
                  IndexCursorArray -> do 
                                     let [(outV, outT)] = bnds

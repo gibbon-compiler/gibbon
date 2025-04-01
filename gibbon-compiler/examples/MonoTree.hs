@@ -23,7 +23,15 @@ sumTree tr =
     Leaf n   -> n
     Node l r -> (sumTree l) + (sumTree r)
 
-gibbon_main = sumTree (add1Tree (mkTree 10))
+--gibbon_main = iterate (sumTree (add1Tree (mkTree 23)))
 
-main :: IO ()
-main = print gibbon_main
+--main :: IO ()
+--main = print gibbon_main
+
+gibbon_main = 
+	let tree = mkTree 23
+            --_ = printPacked tree 
+            tree' = iterate (add1Tree tree) 
+            sum = sumTree tree' 
+         in sum
+

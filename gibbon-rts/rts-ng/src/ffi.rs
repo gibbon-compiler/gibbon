@@ -26,6 +26,7 @@ pub mod c {
     pub type GibBool = bool;
     pub type GibPtr = *const i8;
     pub type GibCursor = *const i8;
+    pub type GibCursorPtr = *const *const i8;
     pub type GibTaggedPtr = usize;
     pub type GibThreadId = u64;
 
@@ -231,6 +232,7 @@ pub mod c {
 
     extern "C" {
         pub fn gib_vector_alloc(num: GibInt, elt_size: usize) -> *mut GibVector;
+        pub fn gib_array_alloc(arr: GibCursorPtr, size: usize) -> *const GibCursorPtr;
         pub fn gib_vector_length(vec: *mut GibVector) -> GibInt;
         pub fn gib_vector_is_empty(vec: *mut GibVector) -> GibBool;
         pub fn gib_vector_slice(i: GibInt, n: GibInt, vec: *mut GibVector) -> *mut GibVector;

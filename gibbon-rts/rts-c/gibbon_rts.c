@@ -503,6 +503,24 @@ void gib_free_symtable(void)
 }
 
 
+GibCursor *gib_array_alloc(GibCursor *arr, size_t size)
+{
+
+    GibCursor *arr_on_heap = (GibCursor *) malloc(sizeof(GibCursor) * size);
+    if (arr_on_heap == NULL) {
+        fprintf(stderr, "gib_array_alloc: malloc failed: %zu", sizeof(GibCursor) * size);
+        exit(1);
+    }
+
+    #pragma GCC unroll 2
+    for (size_t i = 0; i < size; i++){
+        arr_on_heap[i] = arr[i];
+    }
+
+    return arr_on_heap;
+}
+
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Vectors

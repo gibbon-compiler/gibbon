@@ -295,6 +295,7 @@ typedef struct gib_vector {
 typedef int (*GibCmpFn)(const void *, const void*) ;
 
 GibVector *gib_vector_alloc(GibInt num, size_t elt_size);
+inline __attribute__((always_inline)) GibCursor *gib_array_alloc(GibCursor *data, size_t arr_size);
 GibInt gib_vector_length(GibVector *vec);
 GibBool gib_vector_is_empty(GibVector *vec);
 GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec);
