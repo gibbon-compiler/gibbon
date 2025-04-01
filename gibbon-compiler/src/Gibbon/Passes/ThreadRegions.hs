@@ -153,10 +153,10 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
                                                                               {- VS: TODO: I need to get find the correct integer for bounds check-}
                                                                               {- VS: New: each scalar field get a bound check size equal to the size of the field -}
-                                                                              boundsCheckDcon = [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 5 dcRegArg dcLocArg)] 
+                                                                              boundsCheckDcon = [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 dcRegArg dcLocArg)] 
                                                                               boundsCheckFields = concatMap (\(((dcon, idx), floc), freg) -> let ty = (lookupDataCon ddefs dcon) !! idx
                                                                                                                                                  size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
-                                                                                                                                                in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (2*(size_of_ty)) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
+                                                                                                                                                in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
                                                                                                           
                                                                                                           ) $ zip fieldLocs' fieldRegs'
                                                                               regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
