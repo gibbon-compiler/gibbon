@@ -1087,7 +1087,7 @@ funConstrs ((LRM l r _m):lrms) = case r of
                                                                                       nconstrs' = extendConstrs (InRegionC l r) $ nconstrs
                                                                                      in L.foldr (\(k, freg) acc -> case lookup k flocs of
                                                                                                                         Nothing -> error "funConstrs: expected a field location for corresponding key in SoAR."
-                                                                                                                        Just loc -> extendConstrs (InRegionC (singleLocVar loc) freg) acc
+                                                                                                                        Just loc -> extendConstrs (InRegionC (loc) freg) acc
                                                                                                 ) nconstrs' fieldRegs
                                     _ -> extendConstrs (InRegionC l r) $ funConstrs lrms
 funConstrs [] = ConstraintSet $ S.empty
@@ -1261,13 +1261,13 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                PackedTy _ l@(SoA dcloc' fieldLocs') -> do
                                                                                                         --let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
                                                                                                         let aliasLocs = L.map (\idx -> case (lookup (dc, idx) fieldLocs) of 
-                                                                                                                                                          Just l -> getAfterConstantAlias cs (Single l)
+                                                                                                                                                          Just l -> getAfterConstantAlias cs l
                                                                                                                                     ) unself_idxs
                                                                                                         let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
                                                                                                         -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (aliasLocs)) dbgTraceIt "End\n"
-                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs (Single l1) l2) (zip unselfWriteAtLocs aliasLocs)
+                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 l2) (zip unselfWriteAtLocs aliasLocs)
                                                                                                         -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (nextWriteAtLocs)) dbgTraceIt "End\n"
-                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 (Single l2)) (zip aliasLocs nextWriteAtLocs)
+                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 l2) (zip aliasLocs nextWriteAtLocs)
                                                                                                         return ()
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()

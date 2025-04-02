@@ -335,9 +335,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                             -- generate all alias to field constraints 
                                                                             field_letes = L.concatMap (\(key, lv) -> case L.lookup key (getAllFieldLocsSoA l2loc) of 
                                                                                                                             Nothing -> error "routeEnds: expected location for field."
-                                                                                                                            Just ofl -> [LetLocE (singleLocVar lv) (GetFieldLocSoA key l1)]  ++ [LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))] 
+                                                                                                                            Just ofl -> [LetLocE lv (GetFieldLocSoA key l1)]  ++ [LetLocE ofl (AfterConstantLE 0 lv)] 
                                                                                  ) in_flocs
-                                                                            new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) (L.map (\(key, lv) -> (key, singleLocVar lv)) (getAllFieldLocsSoA l2loc)))
+                                                                            new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) (L.map (\(key, lv) -> (key, lv)) (getAllFieldLocsSoA l2loc)))
                                                                             all_letes = [in_dcon_lete, end_con_lete] ++ field_letes ++ [new_soa_loc]  
                                                                             new_exp = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                                                           in new_exp
@@ -412,10 +412,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             let (all_field_gets, unsed_assign) = L.foldr (\(key@(dc', _), lv) (lst1, lst2) -> case L.lookup key (getAllFieldLocsSoA final_soa_loc) of 
                                                                                                                       Nothing -> error "routeEnds: expected location for field."
                                                                                                                       Just ofl -> if dc' == dc
-                                                                                                                                  then ([LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ lst1, lst2)  --[LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ [LetLocE (l1) (AfterConstantLE 0 (getFieldLoc (dc, idx) scrutloc))] ++ 
-                                                                                                                                  else ([LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ lst1, [LetLocE (singleLocVar ofl) (AfterConstantLE 0 (singleLocVar lv))] ++ lst2)
+                                                                                                                                  then ([LetLocE lv (GetFieldLocSoA key scrutloc)] ++ lst1, lst2)  --[LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ [LetLocE (l1) (AfterConstantLE 0 (getFieldLoc (dc, idx) scrutloc))] ++ 
+                                                                                                                                  else ([LetLocE lv (GetFieldLocSoA key scrutloc)] ++ lst1, [LetLocE ofl (AfterConstantLE 0 lv)] ++ lst2)
                                                    ) ([], []) in_flocs
-                                            let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) (L.map (\(key, lv) -> (key, singleLocVar lv)) (getAllFieldLocsSoA final_soa_loc)))
+                                            let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) (L.map (\(key, lv) -> (key, lv)) (getAllFieldLocsSoA final_soa_loc)))
                                             let all_letes = [in_dcon_lete, end_con_lete] ++ all_field_gets ++ exprs ++ unsed_assign  ++ [new_soa_loc]  
                                             let e' = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                             --let (Just jump) = L1.sizeOfTy ty

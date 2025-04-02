@@ -118,7 +118,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                                                     fieldRegs = map (\(d, flc) -> let flcr = reg_env # flc
                                                                                    in (d, flcr)
                                                                     ) flocs
-                                                    soa_loc = SoA (unwrapLocVar dlc) (map (\(d, flc) -> (d, unwrapLocVar flc)) flocs)
+                                                    soa_loc = SoA (unwrapLocVar dlc) (map (\(d, flc) -> (d, flc)) flocs)
                                                     soa_reg = L2.SoAR dlcr fieldRegs
                                                   in (soa_reg, M.insert soa_loc soa_reg reg_env)
                       L2.GetDataConLocSoA lc -> let soa_reg = reg_env # lc 

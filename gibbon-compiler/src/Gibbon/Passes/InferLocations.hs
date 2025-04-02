@@ -167,15 +167,18 @@ convertFunTy ddefs (from,to,isPar) = do
                           False -> mapM (\v -> do r <- freshLocVar "r"
                                                   return $ LRM v (VarR (unwrapLocVar r)) md) (F.toList ls)
 
-getSoARegionsFromLocs :: [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Region)]
+getSoARegionsFromLocs :: [((DataCon, Int), LocVar)] -> PassM [((DataCon, Int), Region)]
 getSoARegionsFromLocs locs = case locs of 
                                   [] -> return [] 
                                   (a, b):rst -> do 
-                                                regionVariable <- freshLocVar "r"
-                                                let region = VarR (unwrapLocVar regionVariable)
-                                                rst' <- getSoARegionsFromLocs rst
-                                                let elem = (a, region) 
-                                                return $ [elem] ++ rst'
+                                                case b of 
+                                                    Single _ -> do 
+                                                                regionVariable <- gensym "r"
+                                                                let region = VarR (regionVariable)
+                                                                rst' <- getSoARegionsFromLocs rst
+                                                                let elem = (a, region) 
+                                                                return $ [elem] ++ rst'
+                                                    SoA _ _ -> error $ "InferLocations : getSoARegionsFromLocs : SoA not implemented!\n" ++ show (a, b)
 
 
 
@@ -191,7 +194,7 @@ convertTy ddefs useSoA ty = case useSoA of
                                                              return $ PackedTy tycon soaLocation
                                         _ -> traverse (const (freshLocVar "loc")) ty
 
-convertTyHelperSoAParent :: TyCon -> DDefs1 -> [DataCon] -> PassM [((DataCon, Int), Var)]
+convertTyHelperSoAParent :: TyCon -> DDefs1 -> [DataCon] -> PassM [((DataCon, Int), LocVar)]
 convertTyHelperSoAParent tycon ddefs dcons = do 
                                        case dcons of 
                                           [] -> return []
@@ -201,13 +204,13 @@ convertTyHelperSoAParent tycon ddefs dcons = do
                                                     return $ out ++ outRst
 
 
-convertTyHelperSoAChild :: TyCon -> DDefs1 -> DataCon -> PassM [((DataCon, Int), Var)]
+convertTyHelperSoAChild :: TyCon -> DDefs1 -> DataCon -> PassM [((DataCon, Int), LocVar)]
 convertTyHelperSoAChild tycon ddefs dcon = do 
                                 let fields = lookupDataCon ddefs dcon
                                 let fields' = P.concatMap (\f -> case f of 
                                                                     PackedTy tycon' _ -> if tycon == tycon' 
                                                                                        then [] 
-                                                                                       else [f]
+                                                                                       else error "convertTyHelperSoAChild: Not implemented!!"
                                                                     _ -> [f]
                                                         
                                                           ) fields 
@@ -218,7 +221,7 @@ convertTyHelperSoAChild tycon ddefs dcon = do
                                 out <- convertTyHelperGetLocForField dcon zipped
                                 return out
 
-convertTyHelperGetLocForField :: DataCon -> [(String, Int)] -> PassM [((DataCon, Int), Var)]
+convertTyHelperGetLocForField :: DataCon -> [(String, Int)] -> PassM [((DataCon, Int), LocVar)]
 convertTyHelperGetLocForField dcon zipped = do 
                                             case zipped of 
                                                 [] -> return [] 
@@ -227,10 +230,10 @@ convertTyHelperGetLocForField dcon zipped = do
                                                               rst <- convertTyHelperGetLocForField dcon xs 
                                                               return $ [elem] ++ rst  
 
-convertTyHelperGetLocForField' :: DataCon -> Int -> String -> PassM ((DataCon, Int), Var)
+convertTyHelperGetLocForField' :: DataCon -> Int -> String -> PassM ((DataCon, Int), LocVar)
 convertTyHelperGetLocForField' dcon index nameForLoc = do
                                                       loc' <- freshLocVar $ "loc_" ++ nameForLoc 
-                                                      return ((dcon, index), (unwrapLocVar loc'))
+                                                      return ((dcon, index), (loc'))
 
     
 
@@ -387,14 +390,14 @@ freshTyLocs ty = do
       ProdTy tys -> mapM freshTyLocs tys >>= return . ProdTy
       _ -> return ty 
 
-freshTyLocsSoA :: [((DataCon, Int), Var)] -> TiM [((DataCon, Int), Var)]
+freshTyLocsSoA :: [((DataCon, Int), LocVar)] -> TiM [((DataCon, Int), LocVar)]
 freshTyLocsSoA lst = do 
                      case lst of
                           [] -> return [] 
                           (a, b):rst -> do 
                                         newLoc <- fresh
                                         rst' <- freshTyLocsSoA rst
-                                        return $ [(a, unwrapLocVar newLoc)] ++ rst'
+                                        return $ [(a, newLoc)] ++ rst'
 
 fixType_ :: Ty2 -> TiM ()
 fixType_ ty =
@@ -404,7 +407,7 @@ fixType_ ty =
       _ -> return ()
 
 -- | get the field locs from the SoA locs
-getFieldLocs :: LocVar -> [((DataCon, FieldIndex), Var)]
+getFieldLocs :: LocVar -> [((DataCon, FieldIndex), LocVar)]
 getFieldLocs loc = case loc of 
                     SoA dcon fieldLocs -> fieldLocs
                     Single lc -> error "InferLocations : getFieldLocs : Did not expect a non SoA location!"
@@ -447,11 +450,11 @@ inferExp' ddefs env exp bound dest=
                                                                                                                                           AfterVariableL lv1 v lv2 -> lv2
                                                                                                                                           _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
                                                                                                                                  ) flst 
-                                                                                                         get_loc_keys = P.concatMap (\((dcon, idx), lc) -> if elem (Single lc) used_field_locs 
+                                                                                                         get_loc_keys = P.concatMap (\((dcon, idx), lc) -> if elem lc used_field_locs 
                                                                                                                                                      then [((dcon, idx), lc)]
                                                                                                                                                      else []
                                                                                                                               ) (getFieldLocs slv2)
-                                                                                                         exprs = P.map (\(key, l) -> LetLocE (Single l) (GetFieldLocSoA key slv2)
+                                                                                                         exprs = P.map (\(key, l) -> LetLocE l (GetFieldLocSoA key slv2)
                                                                                                                        ) get_loc_keys
                                                                                                          dconLoc = LetLocE lv1 (AfterConstantLE 1 lv2)
                                                                                                          exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++exprs ++ [dconLoc]
@@ -476,7 +479,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                          --                                                                                          ) flcs 
                                                                                                          --                                 _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
                                                                                                          --                        ) [] flst
-                                                                                                         flcs' = P.map (\(a, b) -> (a, Single b) ) (getFieldLocs slv1)
+                                                                                                         flcs' = P.map (\(a, b) -> (a, b) ) (getFieldLocs slv1)
                                                                                                          exprs'' = exprs' ++ fieldLocExps ++ [LetLocE slv1 (GenSoALoc lv1 flcs')] -- [LetSoALocE slv1]
                                                                                                          lambda  = (\lst base -> case lst of 
                                                                                                                                        [] -> base 
@@ -608,11 +611,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                return $ SoAR dbufRegion rstRegions
                                _ -> error "makeSoARegion: did not expect a location other than a SoA location."
 
-      makeSoARFields :: [((DataCon, Int), Var)] -> TiM [((DataCon, Int), Region)]
+      makeSoARFields :: [((DataCon, Int), LocVar)] -> TiM [((DataCon, Int), Region)]
       makeSoARFields lst = do 
                            case lst of 
                                 [] -> return []
                                 ((d, index), loc):rst -> do 
+                                                         {-TODO: if a location is SoA, we need to make an SoAR region-} 
                                                          fieldReg <- lift $ lift $ freshRegVar
                                                          rst' <- makeSoARFields rst
                                                          return $ [((d, index), fieldReg)] ++ rst'
@@ -1132,7 +1136,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- dbgTraceIt "Print tuple line: 1040" dbgTraceIt (sdoc (argsLsDconBuf, dcArgDconBuf, locsDconBuf, argsLsFields, dcArgFields, locsFields)) dbgTraceIt "End line 1040\n"
                           fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
                                                                  in case fldloc of 
-                                                                           Just location -> Just (Single location)
+                                                                           Just location -> Just location
                                                                            Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
                                                      ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
@@ -1150,7 +1154,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                         let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
                                                                         let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
                                                                                                                         in case fldloc of 
-                                                                                                                            Just location -> Just (Single location)
+                                                                                                                            Just location -> Just location
                                                                                                                             Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
                                                                                                       ) idxsFields'
                                                                         argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
@@ -1192,7 +1196,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                               in [(ks, loc1, loc2)]
                                                                                                                            else [] 
                                                                                                ) fields_hloc
-                                                                        let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> AfterConstantL (singleLocVar loc_new) 0 (singleLocVar loc_old)
+                                                                        let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> AfterConstantL loc_new 0 loc_old
                                                                                                          ) pair_new_old
 
                                                                         let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed) d
@@ -1797,7 +1801,7 @@ finishPr pr =
 getAllLocations :: LocVar -> S.Set LocVar -> S.Set LocVar
 getAllLocations loc locs = case loc of
                                 SoA dcloc fieldLocs -> let addDcon = S.insert (Single dcloc) locs 
-                                                        in P.foldr (\(_, l) a -> S.insert (Single l) a) addDcon fieldLocs 
+                                                        in P.foldr (\(_, l) a -> S.insert l a) addDcon fieldLocs 
                                 _ -> S.insert loc locs
 
 -- | Remove unused location bindings
@@ -2194,7 +2198,7 @@ freshSoALoc lc = do
                                      return newSoALoc
 
 
-freshSoALocHelper :: Var -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), Var)]
+freshSoALocHelper :: Var -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
 freshSoALocHelper tyvar lst = do 
                         case lst of
                           [] -> do 
@@ -2206,13 +2210,14 @@ freshSoALocHelper tyvar lst = do
                                                                                                 if (fromVar tyvar) == tyc 
                                                                                                 then return []
                                                                                                 else do 
+                                                                                                  {- TODO: we should return an SoA loc here instead -}
                                                                                                   newLoc <- fresh 
                                                                                                   let Just idx = L.elemIndex e flds
-                                                                                                  return $ [((a, idx), unwrapLocVar newLoc)]
+                                                                                                  return $ [((a, idx), newLoc)]
                                                                                 _ -> do
                                                                                      newLoc <- fresh
                                                                                      let Just idx = L.elemIndex e flds
-                                                                                     return $ [((a, idx), unwrapLocVar newLoc)]
+                                                                                     return $ [((a, idx), newLoc)]
                                                              ) flds
                                             rst' <- freshSoALocHelper tyvar rst
                                             return $ fieldLocs ++ rst'

@@ -148,7 +148,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               fieldRegs' = map (\(_, freg) -> regionToVar freg) fieldRegs
                                                                               dcLoc = getDconLoc loc
                                                                               fieldLocs = getAllFieldLocsSoA loc 
-                                                                              fieldLocs' = map (\(k, floc) -> (k, (singleLocVar floc))) fieldLocs
+                                                                              fieldLocs' = map (\(k, floc) -> (k, floc)) fieldLocs
                                                                               dcLocArg = NewL2.Loc (LREM dcLoc dcreg dcEndReg mode)
                                                                               dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
                                                                               {- VS: TODO: I need to get find the correct integer for bounds check-}
@@ -337,7 +337,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                then let fake_last_loc = case lc of 
                                                             Single locv -> Single $ toVar "fake_" `varAppend` locv
                                                             SoA dcloc fieldLocs -> let dcloc' = toVar "fake_" `varAppend` dcloc 
-                                                                                       fieldLocs' = L.map (\(k, loc) -> (k, toVar "fake_" `varAppend` loc)) fieldLocs
+                                                                                       fieldLocs' = L.map (\(k, loc) -> (k, appendNameToLocVar (toVar "fake_") loc)) fieldLocs
                                                                                      in SoA dcloc' fieldLocs'
                                         -- fake_last_loc = toVar "fake_" `varAppend` (unwrapLocVar lc) {- Probably not good to do this -}
                                         acc1' = M.insert fake_last_loc r' acc1

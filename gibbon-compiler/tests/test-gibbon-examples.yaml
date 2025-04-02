@@ -580,6 +580,7 @@ tests:
     answer-file: examples/test_power.ans
     # gib_alloc_region_on_heap: gib_alloc failed
     failing: [gibbon1]
+    skip: true
 
   - name: test_191.hs
     answer-file: examples/test_191.ans

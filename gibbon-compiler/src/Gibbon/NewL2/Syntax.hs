@@ -119,7 +119,7 @@ toRegVar arg =
 fromLocVarToRegVar :: LocVar -> RegVar
 fromLocVarToRegVar loc = case loc of 
   Single v -> SingleR v
-  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, SingleR floc)) fieldLocs)
+  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)
 
 fromVarToSingleRegVar :: Var -> RegVar
 fromVarToSingleRegVar v = SingleR v
@@ -131,7 +131,7 @@ fromSingleRegVarToVar _ = error "fromSingleRegVarToVar: unexpected case."
 fromRegVarToLocVar :: RegVar -> LocVar
 fromRegVarToLocVar reg = case reg of 
   SingleR v -> Single v
-  SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromSingleRegVarToVar freg)) fieldRegs)
+  SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromRegVarToLocVar freg)) fieldRegs)
 
 {- VS: TODO: this should return either LocVar or RegVar -}
 toLocVar :: LocArg -> LocVar

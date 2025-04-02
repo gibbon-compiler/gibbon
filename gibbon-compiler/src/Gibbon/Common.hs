@@ -31,7 +31,7 @@ module Gibbon.Common
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
        , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA, varsInLocVar, varsInRegVar
-
+       , appendNameToLocVar 
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
@@ -140,7 +140,7 @@ toEndVRegVar (SoARv regvar fieldRegs) = SoARv (toEndVRegVar regvar) (L.map (\(k,
 toEndVLoc :: LocVar -> LocVar 
 toEndVLoc loc = case loc of 
                     Single v -> Single (toEndV v)
-                    SoA dcon fieldLocs -> SoA (toEndV dcon) (L.map (\(k, floc) -> (k, toEndV floc)) fieldLocs)
+                    SoA dcon fieldLocs -> SoA (toEndV dcon) (L.map (\(k, floc) -> (k, toEndVLoc floc)) fieldLocs)
 
 toSeqV :: Var -> Var
 toSeqV v = varAppend v (toVar "_seq")
@@ -171,8 +171,11 @@ type DataCon = String
 -- want to make the level of factoring limited to only depth = 1
 -- more factoring than a depth of level one might slow down too much
 -- data List2 = Cons2 Int List List2 | Nil2
+-- In the SoA representation, it is guaranteed that the data constructors should 
+-- Remain in the same buffer. Hence, its fine to have its type as Location instead 
+-- of LocVar.
 
-data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), Location)]
+data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), LocVar)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.
@@ -558,7 +561,7 @@ unwrapLocVar locvar = case locvar of
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
                         Single loc -> [loc]
-                        SoA dcon fieldLocs -> dcon : L.map snd fieldLocs
+                        SoA dcon fieldLocs -> dcon : L.concatMap (varsInLocVar . snd) fieldLocs
 
 varsInRegVar :: RegVar -> [Var]
 varsInRegVar reg = case reg of 
@@ -575,11 +578,11 @@ getDconLoc loc = case loc of
 getFieldLoc :: (DataCon, FieldIndex) -> LocVar -> LocVar
 getFieldLoc (dcon, idx) loc = case loc of 
                                 SoA _ fieldLocs -> case Prelude.lookup (dcon, idx) fieldLocs of 
-                                                          Just loc -> Single loc
+                                                          Just loc -> loc
                                                           Nothing -> error "getFieldLoc : Field location not found!"
                                 Single lc -> error "getFieldLoc : Did not expect a non SoA location!"
 
-getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), Var)]
+getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), LocVar)]
 getAllFieldLocsSoA loc = case loc of 
                     SoA dcon fieldLocs -> fieldLocs
                     Single lc -> error "getFieldLocs : Did not expect a non SoA location!"
@@ -589,14 +592,14 @@ freshSingleLocVar m = do v <- gensym (toVar m)
                          return $ Single v                          
 
 -- | VS: ideally we should get rid of unwrapLocVar. We should make LocVar a recursive datatype
-freshFieldLocsSoA :: String -> [((DataCon, Int), Var)] -> PassM [((DataCon, Int), Var)]
+freshFieldLocsSoA :: String -> [((DataCon, Int), LocVar)] -> PassM [((DataCon, Int), LocVar)]
 freshFieldLocsSoA pfix lst = do 
                      case lst of
                           [] -> return [] 
                           (a, b):rst -> do 
                                         newLoc <- freshSingleLocVar (pfix ++ "_floc")
                                         rst' <- freshFieldLocsSoA pfix rst
-                                        return $ [(a, unwrapLocVar newLoc)] ++ rst'
+                                        return $ [(a, newLoc)] ++ rst'
 
 freshSoALoc :: String -> LocVar -> PassM LocVar 
 freshSoALoc pfix lc = do
@@ -620,6 +623,11 @@ freshCommonLoc pfix lc = do
 
 singleLocVar :: Location -> LocVar 
 singleLocVar loc = Single loc 
+
+appendNameToLocVar :: Var -> LocVar -> LocVar
+appendNameToLocVar v loc = case loc of 
+                            Single loc -> Single (v `varAppend` loc)
+                            SoA dcon fieldLocs -> SoA (v `varAppend` dcon) fieldLocs
 
 getLocVarFromFreeVarsTy :: FreeVarsTy -> LocVar
 getLocVarFromFreeVarsTy (FL loc) = loc

@@ -1105,13 +1105,13 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
             dummy = return $ VarE (sloc)
 
 
-            go2 :: Bool -> M.Map FreeVarsTy Var -> Var -> Maybe Var -> [((DataCon, Int), Location)] -> [((DataCon, Int), Maybe Location, (Exp2, Ty2))] -> PassM Exp3
+            go2 :: Bool -> M.Map FreeVarsTy Var -> Var -> Maybe Var -> [((DataCon, Int), LocVar)] -> [((DataCon, Int), Maybe LocVar, (Exp2, Ty2))] -> PassM Exp3
             go2 marker_added fvarenv aft_dloc from_rec_end aft_flocs [] = do
               let curr_soa_loc = sloc
               if not (marker_added)
               then do
                 after_soa_loc <- gensym "aft_soa_loc"
-                let after_flocs_to_vars = map (\(_, floc) -> case (M.lookup (fromLocVarToFreeVarsTy $ singleLocVar $ floc) fvarenv) of 
+                let after_flocs_to_vars = map (\(_, floc) -> case (M.lookup (fromLocVarToFreeVarsTy $ floc) fvarenv) of 
                                                                 Just v -> v 
                                                                 Nothing -> error "cursorizeExp: DataConE: unexpected location variable"
                                             ) aft_flocs
@@ -1145,7 +1145,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                   -- get the location variable where the scalar must be written
                   let floc_loc = case floc of 
-                                       Just l -> singleLocVar l 
+                                       Just l -> l 
                                        Nothing -> error "cursorizeExp: DataConE: expected a location for scalar buffer"
                   let floc_var = case (M.lookup (fromLocVarToFreeVarsTy $ floc_loc) fvarenv) of 
                                         Just v -> v 
@@ -1154,8 +1154,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let let_assign_write_cur = LetE (write_scalars_at, [], CursorTy, (VarE floc_var))
                   {- Update, aft_flocs with the correct location for the scalar field -}
                   {- TODO: Audit aft_flocs'  and fvarenv'-}
+                  {- TODO: Check if its fine to use singleLocVar d' here!! -}
                   let aft_flocs' = map (\((d, idx'), l) -> if d == dcon && idx' == index
-                                                            then ((d, idx'), d')
+                                                            then ((d, idx'), singleLocVar d')
                                                             else ((d, idx'), l)
                                        ) aft_flocs
                   let fvarenv' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv

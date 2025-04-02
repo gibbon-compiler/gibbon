@@ -270,7 +270,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
         in New.Loc (New.LREM loc fieldRegVar fieldEndRegVar modality)
       GenSoALoc dloc fieldsLocs ->
         -- Get the single locs and build this part
-        let soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, unwrapLocVar flc)) fieldsLocs)  
+        let soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, flc)) fieldsLocs)  
             (New.Loc dlrem) = locenv0 # dloc
             dloc_reg = New.lremReg dlrem 
             dloc_end_reg = New.lremEndReg dlrem
