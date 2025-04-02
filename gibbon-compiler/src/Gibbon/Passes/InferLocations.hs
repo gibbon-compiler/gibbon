@@ -1068,7 +1068,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                  PackedTy tycon loc -> if tycon == tyConOfDataCon
                                                                        then return $ ArgVar v
                                                                        else return $ ArgFixed 0
-                                                 _ -> error "inferExp: DataConE SoA: offset for type not implemented!"
+                                                 _ -> error $  "inferExp: DataConE SoA: offset for type not implemented! var: " ++ (show v)
                           -- TODO: fix these to get the correct offset for an SoA loc.
                           (LitE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy IntTy)
                           (FloatE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy FloatTy)
@@ -1151,7 +1151,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                         CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
                                                                                                         VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
                                                                                                         ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                                                                                        _ -> error "inferExp: DataConE SoA: offset for type not implemented!"
+                                                                                                        PackedTy{} -> return $ ArgVar v
+                                                                                                        _ -> error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
                                                                                       -- TODO: fix these to get the correct offset for an SoA loc.
                                                                                       (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                                                                                       (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
