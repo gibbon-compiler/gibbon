@@ -145,7 +145,8 @@ convertFunTy ddefs (from,to,isPar) = do
     -- For this simple version, we assume every location is in a separate region:
     lrm1 <- concat <$> mapM (toLRM useSoA Input) from'
     lrm2 <- toLRM useSoA Output to'
-    dbgTraceIt "convertFunTy: " dbgTraceIt (sdoc (from', to', lrm1, lrm2, useSoA)) dbgTraceIt "\n" return $ ArrowTy2 { locVars = lrm1 ++ lrm2
+    -- dbgTraceIt "convertFunTy: " dbgTraceIt (sdoc (from', to', lrm1, lrm2, useSoA)) dbgTraceIt "\n"
+    return $ ArrowTy2 { locVars = lrm1 ++ lrm2
                      , arrIns  = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
@@ -321,7 +322,8 @@ inferLocs initPrg = do
             -- Probably should add a small check here
             Just (me,_ty) -> do
               (me',ty') <- inferExp' dfs fe me [] NoDest
-              dbgTraceIt "Print main expression: " dbgTraceIt (sdoc (me')) dbgTraceIt (show fe) dbgTraceIt "End main\n" return $ Just (me',ty')
+              -- dbgTraceIt "Print main expression: " dbgTraceIt (sdoc (me')) dbgTraceIt (show fe) dbgTraceIt "End main\n"
+              return $ Just (me',ty')
             Nothing -> return Nothing
           fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod meta) -> do
                                    let arrty = lookupFEnv fn fe
@@ -330,7 +332,8 @@ inferLocs initPrg = do
                                    dest <- destFromType (arrOut arrty)
                                    mapM_ fixType_ (arrIns arrty)
                                    (fbod',_) <- inferExp' dfs fe' fbod boundLocs dest
-                                   dbgTraceIt "Print after inferExp': " dbgTraceIt (sdoc (fn, fbod')) dbgTraceIt "End inferExp'\n" return $ FunDef fn fa arrty fbod' meta
+                                   -- dbgTraceIt "Print after inferExp': " dbgTraceIt (sdoc (fn, fbod')) dbgTraceIt "End inferExp'\n"
+                                   return $ FunDef fn fa arrty fbod' meta
           return $ Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of
@@ -355,7 +358,8 @@ locsInDest d = case d of
 destFromType :: Ty2 -> TiM Dest
 destFromType frt =
   case frt of
-    PackedTy _tc lv -> fixLoc lv >> dbgTraceIt "destFromType:: " dbgTraceIt (sdoc (lv)) dbgTraceIt "End destFromType.\n" return (SingleDest lv)
+    -- dbgTraceIt "destFromType:: " dbgTraceIt (sdoc (lv)) dbgTraceIt "End destFromType.\n"
+    PackedTy _tc lv -> fixLoc lv >> return (SingleDest lv)
     ProdTy tys -> mapM destFromType tys >>= return . TupleDest
     _ -> return NoDest
 
@@ -501,11 +505,14 @@ inferExp' ddefs env exp bound dest=
                            Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
 
   in do res <- inferExp ddefs env exp dest
-        (e,ty,cs) <- dbgTraceIt "Print res after inferExp: " dbgTraceIt (sdoc (res)) dbgTraceIt "End inferExp call.\n" bindAllLocations res
-        e' <- dbgTraceIt "Print after bind all locations: " dbgTraceIt (sdoc (e, ty, cs)) dbgTraceIt "End bindAllLocations.\n" finishExp e
+         -- dbgTraceIt "Print res after inferExp: " dbgTraceIt (sdoc (res)) dbgTraceIt "End inferExp call.\n"
+        (e,ty,cs) <- bindAllLocations res
+        -- dbgTraceIt "Print after bind all locations: " dbgTraceIt (sdoc (e, ty, cs)) dbgTraceIt "End bindAllLocations.\n"
+        e' <- finishExp e
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
-        e''' <- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n" bindAllUnbound e'' (S.toList unbound)
+        -- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n"
+        e''' <- bindAllUnbound e'' (S.toList unbound)
         return (e'',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
@@ -553,7 +560,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    b1 <- noBeforeLoc lv2' fcs 
                    b2 <- noRegionStart lv2' fcs 
                    b3 <- notFixedLoc lv2'
-                   b3' <- dbgTraceIt "tryInRegion': " dbgTraceIt (sdoc (b1, b2, b3, lv2')) dbgTraceIt "End tryInRegion' aftersoaloc.\n" notFixedLoc lv2'                    
+                   -- dbgTraceIt "tryInRegion': " dbgTraceIt (sdoc (b1, b2, b3, lv2')) dbgTraceIt "End tryInRegion' aftersoaloc.\n"
+                   b3' <- notFixedLoc lv2'                    
                    if b1 && b2 && b3
                    then do cs' <- tryInRegion' fcs cs 
                            r <- getNewRegion lv2'
@@ -567,7 +575,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    b1 <- noBeforeLoc lv2' fcs
                    b2 <- noRegionStart lv2' fcs
                    b3 <- notFixedLoc lv2'
-                   b3' <- dbgTraceIt "tryInRegion' aftertag: " dbgTraceIt (sdoc (b1, b2, b3, lv2, lv2')) dbgTraceIt "End tryInRegion' afterTag.\n"  notFixedLoc lv2'
+                   -- dbgTraceIt "tryInRegion' aftertag: " dbgTraceIt (sdoc (b1, b2, b3, lv2, lv2')) dbgTraceIt "End tryInRegion' afterTag.\n" 
+                   b3' <- notFixedLoc lv2'
                    if b1 && b2 && b3
                    then do cs' <- tryInRegion' fcs cs
                            r <- lift $ lift $ freshRegVar
@@ -1088,7 +1097,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
                             Just $ AfterCopyL loc1 v v' loc2 f lvs
                           afterVar _ = Nothing
-                      let dataBufferLoc = dbgTraceIt "Print DataConE SoA case argsLs: " dbgTraceIt (sdoc (d, argLs, newLocs)) dbgTraceIt "End DataConE SoA case argLs.\n" Single dataBufferVar
+                          -- dbgTraceIt "Print DataConE SoA case argsLs: " dbgTraceIt (sdoc (d, argLs, newLocs)) dbgTraceIt "End DataConE SoA case argLs.\n"
+                      let dataBufferLoc = Single dataBufferVar
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
                           -- the same datatype. 
@@ -1098,7 +1108,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                           else (w, f ++ [L.elemIndex res ls'])
                                                                       _ -> (w, f ++ [L.elemIndex res ls'])
                                                                    ) ([], []) ls'
-                          idxsWriteDconBuf' = dbgTraceIt "Print tuple line: 1023" dbgTraceIt (sdoc (idxsWriteDconBuf, idxsFields)) dbgTraceIt "End line 1023\n" L.reverse idxsWriteDconBuf  
+                          -- dbgTraceIt "Print tuple line: 1023" dbgTraceIt (sdoc (idxsWriteDconBuf, idxsFields)) dbgTraceIt "End line 1023\n"
+                          idxsWriteDconBuf' = L.reverse idxsWriteDconBuf  
                           idxsFields' = L.reverse idxsFields                                       
                           argsLsDconBuf = L.map (\(Just idx) -> ls' !! idx) idxsWriteDconBuf'
                           dcArgDconBuf = L.map (\(Just idx) -> argLs !! idx) idxsWriteDconBuf'
@@ -1118,7 +1129,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           --                                                               (map Just locsDconBuf)
                           --                                                             )
                           --                                      in [afterTagConstraint] ++ afterTagConstrsTmp
-                          fieldLocVars = dbgTraceIt "Print tuple line: 1040" dbgTraceIt (sdoc (argsLsDconBuf, dcArgDconBuf, locsDconBuf, argsLsFields, dcArgFields, locsFields)) dbgTraceIt "End line 1040\n" P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
+                          -- dbgTraceIt "Print tuple line: 1040" dbgTraceIt (sdoc (argsLsDconBuf, dcArgDconBuf, locsDconBuf, argsLsFields, dcArgFields, locsFields)) dbgTraceIt "End line 1040\n"
+                          fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
                                                                  in case fldloc of 
                                                                            Just location -> Just (Single location)
                                                                            Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
@@ -1131,7 +1143,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- AfterTagConstraints
                       (aftagc, sc, aftvarc) <- case locsDconBuf of
                                                         -- No recursion in the data type
-                                                        [] -> dbgTraceIt "Found a DataConE with no recursion." dbgTraceIt (sdoc (k)) dbgTraceIt "End line 1134.\n"                                                              
+                                                        -- dbgTraceIt "Found a DataConE with no recursion." dbgTraceIt (sdoc (k)) dbgTraceIt "End line 1134.\n"      
+                                                        [] -> do                                                        
                                                               return ([],fieldConstraints, [])
                                                         hloc:rstlocs -> do
                                                                         let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
@@ -1188,9 +1201,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                     ((map Just rstlocs) ++ [Nothing])
                                                                                                     (map Just locsDconBuf)
                                                                                      )
-                                                                        dbgTraceIt "Print tuple line: 1171" dbgTraceIt (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTraceIt "End line 1171\n" return ([tagc], [soac], afvarc)
+                                                                        -- dbgTraceIt "Print tuple line: 1171" dbgTraceIt (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTraceIt "End line 1171\n"
+                                                                        return ([tagc], [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
-                      let constrs = dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n" concat $ [c | (_,_,c) <- ls']
+                          -- dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n"
+                      let constrs = concat $ [c | (_,_,c) <- ls']
                           -- out = case dataBufferConstraints of 
                           --   [dc] -> case dc of 
                           --             AfterTagL loc_new loc_old -> let newFieldLocs = case d of 
@@ -1242,7 +1257,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      dbgTraceIt "Print contrs'" dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      -- dbgTraceIt "Print contrs'" dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n"
+                      return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     IfE a b c@ce -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
@@ -1368,7 +1384,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           let acs = concat acss
           tupBod <- projTups valTy (VarE vr) bod
           res <- inferExp ddefs (extendVEnv vr valTy env) tupBod dest
-          (bod'',ty'',cs'') <- dbgTraceIt "Print res LetE, inferExp " dbgTraceIt (sdoc (f, res, dest, argDests)) dbgTraceIt "End LeE inferExp.\n" handleTrailingBindLoc vr res
+          -- dbgTraceIt "Print res LetE, inferExp " dbgTraceIt (sdoc (f, res, dest, argDests)) dbgTraceIt "End LeE inferExp.\n"
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr res
           let conc_ass_cs'' = acs ++ cs''
           let locs_in_valty = locsInTy valTy
           vcs <- tryNeedRegion locs_in_valty ty'' $ conc_ass_cs''
@@ -1376,7 +1393,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           -- dbgTraceIt "Print handle trailing bind loc: " dbgTraceIt (sdoc (ex0, bod'', res, valTy, locs_in_valty, ty'', f)) dbgTraceIt "End handle trailing bind loc\n"
           -- fcs <- tryInRegion $ acs ++ cs''
           -- dbgTraceIt "inferExp: Let, AppE: " dbgTraceIt (sdoc (vcs, fcs, res, res', res'', valTy, bod'')) dbgTraceIt "print more: " dbgTraceIt (sdoc (cs'', argDests, argTys, ty'', args', atys, tupBod)) dbgTraceIt "End inferExp (Let, AppE)\n"
-          res' <- dbgTraceIt "(vcs, fcs) " dbgTraceIt (sdoc (vcs, fcs)) dbgTraceIt "End (vcs, fcs).\n" tryBindReg (L2.LetE (vr,[], valTy, L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
+          -- dbgTraceIt "(vcs, fcs) " dbgTraceIt (sdoc (vcs, fcs)) dbgTraceIt "End (vcs, fcs).\n"
+          res' <- tryBindReg (L2.LetE (vr,[], valTy, L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           res'' <- bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
           return res''
 
@@ -1671,7 +1689,8 @@ finishExp e =
              e2' <- finishExp e2
              ls' <- mapM finalLocVar ls
              t' <- finishTy t
-             dbgTraceIt "Print in finishExp LetE: " dbgTraceIt (sdoc (ls, t, v, e1, ls', t', e1')) dbgTraceIt "End finishExp LetE.\n" return $ LetE (v,ls',t',e1') e2'
+             -- dbgTraceIt "Print in finishExp LetE: " dbgTraceIt (sdoc (ls, t, v, e1, ls', t', e1')) dbgTraceIt "End finishExp LetE.\n"
+             return $ LetE (v,ls',t',e1') e2'
       IfE e1 e2 e3 -> do
              e1' <- finishExp e1
              e2' <- finishExp e2
@@ -1757,7 +1776,8 @@ finishTy t =
     case t of
       PackedTy tc lv ->
           do lv' <- finalLocVar lv
-             dbgTraceIt "Print in finishTy" dbgTraceIt (sdoc (t, lv, lv')) dbgTraceIt "End in finishTy.\n" return $ PackedTy tc lv'
+             -- dbgTraceIt "Print in finishTy" dbgTraceIt (sdoc (t, lv, lv')) dbgTraceIt "End in finishTy.\n"
+             return $ PackedTy tc lv'
       ProdTy pls ->
            do pls' <- mapM finishTy pls
               return $ ProdTy pls'
@@ -2067,22 +2087,28 @@ unify v1 v2 successA failA = do
   ut2 <- lookupUnifyLoc v2
   case (ut1,ut2) of
     -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1.\n"
-    (FixedLoc l1, FixedLoc l2) -> 
-        if l1 == l2 then dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1 success.\n" successA else dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1 fail.\n" failA
-    (FreshLoc l1, FixedLoc l2) -> 
+    (FixedLoc l1, FixedLoc l2) ->
+        -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify1 success.\n" dbgTraceIt "End unify1 fail.\n" 
+        -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2))
+        if l1 == l2 then successA else failA
+    (FreshLoc l1, FixedLoc l2) ->
+        -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify2.\n" 
         do assocLoc l1 (FixedLoc l2)
-           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify2.\n" successA
+           successA
     (FixedLoc l2, FreshLoc l1) ->
+        -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify3.\n"
         do assocLoc l1 (FixedLoc l2)
-           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify3.\n" successA
-    (FreshLoc l1, FreshLoc l2) -> 
+           successA
+    (FreshLoc l1, FreshLoc l2) ->
+        -- dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify4.\n" 
         do assocLoc l1 (FreshLoc l2)
-           dbgTraceIt "unify: " dbgTraceIt (sdoc (l1, l2)) dbgTraceIt "End unify4.\n" successA
+           successA
 
 unifyAll :: [Dest] -> [Ty2] -> TiM a -> TiM a -> TiM a
 unifyAll (d:ds) (ty:tys) successA failA =
     case (d,ty) of
-      (SingleDest lv1, PackedTy _ lv2) -> dbgTraceIt "Print in unifyAll: " dbgTraceIt (sdoc (lv1, lv2)) dbgTraceIt "End unifyAll unify.\n" unify lv1 lv2 (unifyAll ds tys successA failA) failA
+      -- dbgTraceIt "Print in unifyAll: " dbgTraceIt (sdoc (lv1, lv2)) dbgTraceIt "End unifyAll unify.\n"
+      (SingleDest lv1, PackedTy _ lv2) -> unify lv1 lv2 (unifyAll ds tys successA failA) failA
       (TupleDest ds', ProdTy tys') -> unifyAll ds' tys' (unifyAll ds tys successA failA) failA
       (NoDest, PackedTy _ _) -> err$ "Expected destination for packed type"
       (SingleDest _, ProdTy _ ) -> err$ "Expected prod destination for prod type: " ++ (show (d,ty))
@@ -2122,23 +2148,29 @@ finalUnifyLoc :: LocVar -> TiM UnifyLoc
 finalUnifyLoc v = do
   m <- lift $ St.get
   case M.lookup v m of
-    Nothing -> dbgTraceIt "finalUnifyLoc Nothing" dbgTraceIt (sdoc v) dbgTraceIt "End finalUnifyLoc 1\n" return (FreshLoc v)
-    Just (FixedLoc v') -> dbgTraceIt "finalUnifyLoc FixedLoc" dbgTraceIt (sdoc (v, v')) dbgTraceIt "End finalUnifyLoc 2\n" return (FixedLoc v')
-    Just (FreshLoc v') -> dbgTraceIt "finalUnifyLoc FreshLoc" dbgTraceIt (sdoc (v, v')) dbgTraceIt "End finalUnifyLoc 3\n" finalUnifyLoc v'
+    -- dbgTraceIt "finalUnifyLoc Nothing" dbgTraceIt (sdoc v) dbgTraceIt "End finalUnifyLoc 1\n"
+    Nothing -> return (FreshLoc v)
+    -- dbgTraceIt "finalUnifyLoc FixedLoc" dbgTraceIt (sdoc (v, v')) dbgTraceIt "End finalUnifyLoc 2\n"
+    Just (FixedLoc v') -> return (FixedLoc v')
+    -- dbgTraceIt "finalUnifyLoc FreshLoc" dbgTraceIt (sdoc (v, v')) dbgTraceIt "End finalUnifyLoc 3\n"
+    Just (FreshLoc v') -> finalUnifyLoc v'
 
 notFixedLoc :: LocVar -> TiM Bool
 notFixedLoc lv = do
   uv <- finalUnifyLoc lv
   case uv of
-    FixedLoc _ -> dbgTraceIt "Print in notFixedLoc: " dbgTraceIt (sdoc (uv, lv)) dbgTraceIt "End in notFixedLoc.\n" return False
+    -- dbgTraceIt "Print in notFixedLoc: " dbgTraceIt (sdoc (uv, lv)) dbgTraceIt "End in notFixedLoc.\n" 
+    FixedLoc _ -> return False
     _ -> return True
 
 finalLocVar :: LocVar -> TiM LocVar
 finalLocVar v = do
   u <- finalUnifyLoc v
   case u of
-    FixedLoc v' -> dbgTraceIt "FinalLocVar fixed " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fixed\n" return v'
-    FreshLoc v' -> dbgTraceIt "FinalLocVar fresh " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fresh\n" return v'
+    -- dbgTraceIt "FinalLocVar fixed " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fixed\n"
+    FixedLoc v' -> return v'
+    -- dbgTraceIt "FinalLocVar fresh " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fresh\n"
+    FreshLoc v' -> return v'
 
 fresh :: TiM LocVar
 fresh = do
@@ -2206,25 +2238,31 @@ lookupUnifyLoc lv = do
                     -- TODO: generate a new SoA Location here 
                     l' <- freshSoALoc lv
                     lift $ St.put $ M.insert lv (FreshLoc l') m
-                    dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" return $ FreshLoc l'
+                    -- dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n"
+                    return $ FreshLoc l'
         Single _ -> do 
                     l' <- fresh
                     lift $ St.put $ M.insert lv (FreshLoc l') m
-                    dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" return $ FreshLoc l'
-    Just (FreshLoc l') -> dbgTraceIt "LookupUnifyLoc Fresh " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n" finalUnifyLoc l'
-    Just (FixedLoc l') -> dbgTraceIt "LookupUnifyLoc Fixed " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fixed loc insert.\n" return $ FixedLoc l'
+                    -- dbgTraceIt "LookupUnifyLoc Nothing " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n"
+                    return $ FreshLoc l'
+    -- dbgTraceIt "LookupUnifyLoc Fresh " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fresh loc insert.\n"
+    Just (FreshLoc l') -> finalUnifyLoc l'
+    -- dbgTraceIt "LookupUnifyLoc Fixed " dbgTraceIt (sdoc (lv, l')) dbgTraceIt "End LookupUnifyLoc Fixed loc insert.\n"
+    Just (FixedLoc l') -> return $ FixedLoc l'
 
 fixLoc :: LocVar -> TiM UnifyLoc
 fixLoc lv = do
   -- l' <- fresh
-  m <- dbgTraceIt "Print in fixLoc " dbgTraceIt (sdoc (lv, FixedLoc lv)) dbgTraceIt "End fixloc loc insert.\n" lift $ St.get
+  -- dbgTraceIt "Print in fixLoc " dbgTraceIt (sdoc (lv, FixedLoc lv)) dbgTraceIt "End fixloc loc insert.\n"
+  m <- lift $ St.get
   lift $ St.put $ M.insert lv (FixedLoc lv) m
   return $ FixedLoc lv
 
 assocLoc :: LocVar -> UnifyLoc -> TiM ()
 assocLoc lv ul = do
   m <- lift $ St.get
-  dbgTraceIt "Print in assocLoc " dbgTraceIt (sdoc (lv, ul)) dbgTraceIt "End in assocLoc loc insert.\n" lift $ St.put $ M.insert lv ul m
+  -- dbgTraceIt "Print in assocLoc " dbgTraceIt (sdoc (lv, ul)) dbgTraceIt "End in assocLoc loc insert.\n"
+  lift $ St.put $ M.insert lv ul m
 
 -- | The copy repair tactic:
 copy :: Result -> LocVar -> TiM Result
