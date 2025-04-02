@@ -1198,23 +1198,24 @@ ensurePackedLoc exp ty l =
 ensureDataCon :: Exp -> TyCon -> DataCon -> LocVar -> [Ty2] -> ConstraintSet -> TcM ()
 ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                        Single location -> (go Nothing linit0 tys)
-                                         where go Nothing linit ((PackedTy _dc l):tys) = do
-                                                  ensureAfterConstant exp cs linit l
-                                                  go (Just (PackedTy _dc l)) l tys
+                                          where 
+                                            go Nothing linit ((PackedTy dc2 l):tys) = do
+                                              ensureAfterConstant exp cs linit l
+                                              go (Just (PackedTy dc2 l)) l tys
 
-                                               go Nothing linit (_ty:tys) = do
-                                                    case getAfterConstant cs linit of
-                                                                Nothing     -> go Nothing linit tys
-                                                                Just linit' -> go Nothing linit' tys
-                                                                
-                                               go (Just (PackedTy _dc1 l1)) _linit ((PackedTy dc2 l2):tys) = do
-                                                    ensureAfterPacked exp cs l1 l2
-                                                    go (Just (PackedTy dc2 l2)) l2 tys
-                                                  
-                                               go (Just (PackedTy _dc _l1)) linit (_ty:tys) = go Nothing linit tys
-          
-                                               go _ _ [] = return ()
-                                               go _ _ _  = internalError "Unxpected case reached: L2:ensureDataCon"
+                                            go Nothing linit (_ty:tys) = do
+                                                case getAfterConstant cs linit of
+                                                      Nothing     -> go Nothing linit tys
+                                                      Just linit' -> go Nothing linit' tys
+
+                                            go (Just (PackedTy _dc1 l1)) _linit ((PackedTy dc2 l2):tys) = do
+                                                  ensureAfterPacked exp cs l1 l2
+                                                  go (Just (PackedTy dc2 l2)) l2 tys
+
+                                            go (Just (PackedTy _dc _l1)) linit (_ty:tys) =
+                                             go Nothing linit tys
+                                            go _ _ [] = return ()
+                                            go _ _ _  = internalError "Unxpected case reached: L2:ensureDataCon"
 
                                        -- This checking should be fine for a Flat list data type
                                        -- data List = Cons Int List | Nil
