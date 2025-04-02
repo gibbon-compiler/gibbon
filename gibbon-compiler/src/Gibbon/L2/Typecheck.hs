@@ -1198,9 +1198,9 @@ ensurePackedLoc exp ty l =
 ensureDataCon :: Exp -> TyCon -> DataCon -> LocVar -> [Ty2] -> ConstraintSet -> TcM ()
 ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                        Single location -> (go Nothing linit0 tys)
-                                         where go Nothing linit ((PackedTy dc l):tys) = do
+                                         where go Nothing linit ((PackedTy _dc l):tys) = do
                                                   ensureAfterConstant exp cs linit l
-                                                  go (Just (PackedTy dc l)) l tys
+                                                  go (Just (PackedTy _dc l)) l tys
 
                                                go Nothing linit (_ty:tys) = do
                                                     case getAfterConstant cs linit of
