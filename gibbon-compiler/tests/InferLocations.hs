@@ -98,7 +98,7 @@ case_etest1 :: Assertion
 case_etest1 = (Right (DataConE (singleLocVar "a") "Node" [VarE "x", VarE "y"])) @=? (fst $ fst etest1)
 
 tester1 :: L1.Exp1 -> Exp2
-tester1 e = case fst $ fst $ defaultPackedRunPassM $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
+tester1 e = case fst $ fst $ defaultPackedRunPassM $ St.runStateT (runExceptT (inferExp M.empty emptyEnv e NoDest)) M.empty of
               Right a -> (\(a,_,_)->a) a
               Left a -> error $ show a
 
