@@ -10,10 +10,11 @@ import Gibbon.Common
 import Gibbon.L2.Syntax
 import Data.Maybe ()
 import qualified Data.Maybe as S
+import Data.Text.Array (new)
 
 
-data DelayedBind = DelayRegion Region RegionSize (Maybe RegionType)                                            --define data type that can be Region, Loc, LocExp to store the delayed bindings
-                 | DelayLoc LocVar LocExp | DelayParRegion Region RegionSize (Maybe RegionType)
+data DelayedBind = DelayRegion FreeVarsTy Region RegionSize (Maybe RegionType)                                            --define data type that can be Region, Loc, LocExp to store the delayed bindings
+                 | DelayLoc FreeVarsTy LocExp | DelayParRegion FreeVarsTy Region RegionSize (Maybe RegionType)
   deriving (Show, Generic)
 
 instance Out DelayedBind
@@ -53,7 +54,7 @@ placeRegionInwards env scopeSet ex  =
 
         LetRegionE r sz ty rhs -> do                                                   --take care of regions
           let key' = S.singleton (fromRegVarToFreeVarsTy $ regionToVar r)
-              val' = [DelayRegion r sz ty]
+              val' = [DelayRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
 
@@ -69,13 +70,13 @@ placeRegionInwards env scopeSet ex  =
                   in case key' of
                     Nothing -> do
                       let key'' = S.singleton (fromLocVarToFreeVarsTy loc)
-                          val' = [DelayLoc loc phs]
+                          val' = [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           env' = M.insert key'' val' env
                        in placeRegionInwards env' scopeSet rhs
                     Just myKey -> do
                       let valList  = M.findWithDefault [] myKey env
                           myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
-                          valList' = valList ++ [DelayLoc loc phs]
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs         --recurse on rhs using the newenv
@@ -85,14 +86,14 @@ placeRegionInwards env scopeSet ex  =
                   key'     = F.find (S.member (fromLocVarToFreeVarsTy loc')) keyList'
                   in case key' of
                     Nothing -> do
-                      let key'' = S.singleton (fromLocVarToFreeVarsTy loc')
-                          val' = [DelayLoc loc phs]
+                      let key'' = S.singleton (fromLocVarToFreeVarsTy loc)
+                          val' = [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           env' = M.insert key'' val' env
                         in placeRegionInwards env' scopeSet rhs
                     Just myKey -> do
                       let valList  = M.findWithDefault [] myKey env
                           myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
-                          valList' = valList ++ [DelayLoc loc phs]
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
@@ -103,13 +104,13 @@ placeRegionInwards env scopeSet ex  =
                   in case key' of
                     Nothing -> do
                         let key'' = S.singleton (fromLocVarToFreeVarsTy loc)
-                            val' = [DelayLoc loc phs]
+                            val' = [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                             env' = M.insert key'' val' env
                          in placeRegionInwards env' scopeSet rhs
                     Just myKey -> do
                       let valList  = M.findWithDefault [] myKey env
                           myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
-                          valList' = valList ++ [DelayLoc loc phs]
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
@@ -122,7 +123,7 @@ placeRegionInwards env scopeSet ex  =
                     Just myKey -> do
                       let valList  = M.findWithDefault [] myKey env
                           myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
-                          valList' = valList ++ [DelayLoc loc phs]
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
@@ -135,7 +136,7 @@ placeRegionInwards env scopeSet ex  =
                     Just myKey -> do
                       let valList  = M.findWithDefault [] myKey env
                           myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
-                          valList' = valList ++ [DelayLoc loc phs]
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
@@ -144,7 +145,7 @@ placeRegionInwards env scopeSet ex  =
 
         LetParRegionE r sz ty rhs -> do                                                --Handle a parallel LetRegion
           let key' = S.singleton (fromRegVarToFreeVarsTy $ regionToVar r)
-              val' = [DelayParRegion r sz ty]
+              val' = [DelayParRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
 
@@ -286,51 +287,51 @@ codeGen set env body =
       tupleList = zip newKeys newVals
       newEnv'   = M.fromList tupleList
       exps      = foldr bindDelayedBind body valList                                   -- Get all the bindings for all the expressions in the key
-   in {-dbgTraceIt (sdoc set)-} (newEnv', exps)
-
+   in (newEnv', exps)
+   -- dbgTraceIt "Print in regionsInwards: "  dbgTraceIt (sdoc (set, allKeys, env, valList, newEnv')) dbgTraceIt "End regionsInwards.\n" 
 
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
   case delayed of
-    DelayRegion r sz ty -> Ext $ LetRegionE r sz ty body
-    DelayParRegion r sz ty -> Ext $ LetParRegionE r sz ty body
-    DelayLoc loc locexp -> Ext $ LetLocE loc locexp body
+    DelayRegion r r' sz ty -> Ext $ LetRegionE r' sz ty body
+    DelayParRegion r r' sz ty -> Ext $ LetParRegionE r' sz ty body
+    DelayLoc (FL loc) locexp -> Ext $ LetLocE loc locexp body
 
 
 -- A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
 -- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the
 -- returned set
 
-freeVarsLocal :: Exp2 -> S.Set FreeVarsTy
-freeVarsLocal ex = case ex of
-  Ext ext                           ->
-    case ext of
-      LetRegionE _ _ _ rhs          -> freeVarsLocal rhs
-      LetLocE _ phs rhs             ->
-        case phs of
-        StartOfRegionLE _                 -> freeVarsLocal rhs
-        AfterConstantLE _ _         -> freeVarsLocal rhs
-        AfterVariableLE{}           -> freeVarsLocal rhs
-        InRegionLE _                -> freeVarsLocal rhs
-        FromEndLE _                 -> freeVarsLocal rhs
-        _                           -> S.empty
-      _                             -> S.empty
+-- freeVarsLocal :: Exp2 -> S.Set FreeVarsTy
+-- freeVarsLocal ex = case ex of
+--   Ext ext                           ->
+--     case ext of
+--       LetRegionE _ _ _ rhs          -> freeVarsLocal rhs
+--       LetLocE _ phs rhs             ->
+--         case phs of
+--         StartOfRegionLE _                 -> freeVarsLocal rhs
+--         AfterConstantLE _ _         -> freeVarsLocal rhs
+--         AfterVariableLE{}           -> freeVarsLocal rhs
+--         InRegionLE _                -> freeVarsLocal rhs
+--         FromEndLE _                 -> freeVarsLocal rhs
+--         _                           -> S.empty
+--       _                             -> S.empty
 
-  LetE (_,locs, ty,rhs) bod         -> let freeVarsLocalRhs = freeVarsLocal rhs
-                                           freeVarsLocalBod = freeVarsLocal bod
-                                         in S.fromList (map fromLocVarToFreeVarsTy locs)  `S.union` S.fromList (map fromLocVarToFreeVarsTy (locsInTy ty)) `S.union` freeVarsLocalRhs `S.union` freeVarsLocalBod
-  LitE _                            -> S.empty
-  LitSymE _                         -> S.empty
-  VarE v                            -> S.singleton (fromVarToFreeVarsTy v)
-  AppE v locvarList ls              -> S.unions (L.map freeVarsLocal ls) `S.union` S.singleton (fromVarToFreeVarsTy v) `S.union` S.fromList (map fromLocVarToFreeVarsTy locvarList)
-  PrimAppE _ ls                     -> S.unions (L.map freeVarsLocal ls)
-  MkProdE ls                        -> S.unions (L.map freeVarsLocal ls)
-  DataConE locVar _ ls              -> S.singleton (fromLocVarToFreeVarsTy locVar)  `S.union`  S.unions (L.map freeVarsLocal ls)
-  ProjE _ e                         -> freeVarsLocal e
-  IfE e1 e2 e3                      -> S.unions [freeVarsLocal e1, freeVarsLocal e2, freeVarsLocal e3]
-  CaseE e ls                        -> freeVarsLocal e `S.union`
-                                        S.unions (L.map (\(_, vlocs, ee) ->
-                                           let (vars, locVars) = unzip vlocs
-                                               vars' = L.map fromVarToFreeVarsTy vars
-                                           in freeVarsLocal ee `S.union` S.fromList vars' `S.union` S.fromList (map fromLocVarToFreeVarsTy locVars)) ls)
-  _                                 -> S.empty
+--   LetE (_,locs, ty,rhs) bod         -> let freeVarsLocalRhs = freeVarsLocal rhs
+--                                            freeVarsLocalBod = freeVarsLocal bod
+--                                          in S.fromList (map fromLocVarToFreeVarsTy locs)  `S.union` S.fromList (map fromLocVarToFreeVarsTy (locsInTy ty)) `S.union` freeVarsLocalRhs `S.union` freeVarsLocalBod
+--   LitE _                            -> S.empty
+--   LitSymE _                         -> S.empty
+--   VarE v                            -> S.singleton (fromVarToFreeVarsTy v)
+--   AppE v locvarList ls              -> S.unions (L.map freeVarsLocal ls) `S.union` S.singleton (fromVarToFreeVarsTy v) `S.union` S.fromList (map fromLocVarToFreeVarsTy locvarList)
+--   PrimAppE _ ls                     -> S.unions (L.map freeVarsLocal ls)
+--   MkProdE ls                        -> S.unions (L.map freeVarsLocal ls)
+--   DataConE locVar _ ls              -> S.singleton (fromLocVarToFreeVarsTy locVar)  `S.union`  S.unions (L.map freeVarsLocal ls)
+--   ProjE _ e                         -> freeVarsLocal e
+--   IfE e1 e2 e3                      -> S.unions [freeVarsLocal e1, freeVarsLocal e2, freeVarsLocal e3]
+--   CaseE e ls                        -> freeVarsLocal e `S.union`
+--                                         S.unions (L.map (\(_, vlocs, ee) ->
+--                                            let (vars, locVars) = unzip vlocs
+--                                                vars' = L.map fromVarToFreeVarsTy vars
+--                                            in freeVarsLocal ee `S.union` S.fromList vars' `S.union` S.fromList (map fromLocVarToFreeVarsTy locVars)) ls)
+--   _                                 -> S.empty

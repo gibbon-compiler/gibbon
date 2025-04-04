@@ -597,7 +597,7 @@ freshFieldLocsSoA pfix lst = do
                      case lst of
                           [] -> return [] 
                           (a, b):rst -> do 
-                                        newLoc <- freshSingleLocVar (pfix ++ "_floc")
+                                        newLoc <- freshCommonLoc (pfix ++ "_floc") b
                                         rst' <- freshFieldLocsSoA pfix rst
                                         return $ [(a, newLoc)] ++ rst'
 

@@ -637,6 +637,8 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                             mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
             CursorArrayTy{} -> dcon_let_bind <$> CaseE (VarE $ dcon_var) <$>
                                   mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+            _ -> CaseE (VarE $ v) <$>
+                            mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
       
 
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: "++ndoc ex
@@ -971,7 +973,10 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                         mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
         CursorArrayTy{} ->  dl <$> dcon_let_bind <$>
                               CaseE (VarE $ dcon_var) <$>
-                                mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs                     
+                                mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
+        _ -> dl <$>
+                      CaseE (VarE $ v) <$>
+                        mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs                  
       
 
     DataConE slocarg dcon args -> do
@@ -2137,6 +2142,15 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                 else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv)
                           let lets = mkLets (field_lets) bod
                           dbgTraceIt "Print scrut loc: " dbgTraceIt (sdoc scrut_loc) dbgTraceIt "End loc\n" return (dcon, [], lets)
+    _ -> (dcon, [],)
+                -- Advance the cursor by 1 byte so that it points to the first field
+                <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
+                <$> (if isAbsRANDataCon dcon
+                     then unpackWithAbsRAN field_cur
+                     else if isRelRANDataCon dcon
+                     then unpackWithRelRAN field_cur
+                     else unpackRegularDataCon (AoSWin field_cur) freeVarToVarEnv)
+    
   where
     tys1 = lookupDataCon ddfs dcon
     processRhs denv env = if isPacked

@@ -446,6 +446,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
 				     else parens $ pprint loc <+> text "+" <+> doc v
           InRegionLE r  -> lparen <> text "inRegion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromEnd" <+> pprint loc <> rparen
+          AssignLE loc -> lparen <> text "assignLoc" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen 
 
 

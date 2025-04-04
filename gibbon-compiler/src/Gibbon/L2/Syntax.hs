@@ -211,6 +211,7 @@ data PreLocExp loc = StartOfRegionLE Region
                    | GenSoALoc loc [((DataCon, FieldIndex), loc)]
                    | GetDataConLocSoA loc -- Get the data constructor location from an SoA loc
                    | GetFieldLocSoA (DataCon, FieldIndex) loc -- Get the field location from the SoA loc
+                   | AssignLE loc
                    -- Although this is available in infer locations constraints, i don't think its required in L2 AST.
                    -- | AfterVectorLE (PreLocExp loc) [PreLocExp loc] loc
                      -- Compute new SoA location from an old SoA location

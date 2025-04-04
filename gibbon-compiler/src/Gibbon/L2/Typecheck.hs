@@ -47,6 +47,8 @@ data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of t
                    -- New constraints here for the SoA backend.
                    | GenSoALocC LocVar [((DataCon, FieldIndex), LocVar)]
                    | GetDataConLocSoAC LocVar 
+                   | AssignC LocVar LocVar -- First location is equal to the second location.
+                                           -- First location is rhs, second location is lhs
                    | GetFieldLocSoAC (DataCon, FieldIndex) LocVar
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
@@ -817,6 +819,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                         (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
                         tstate3 <- removeLoc exp tstate2 loc
                         return (ty,tstate3)
+                AssignLE l1 -> 
+                    do r <- getRegion exp constrs l1 
+                       let tstate1 = extendTS loc (Output, True) $ setAfter l1 tstatein
+                       let constrs1 = extendConstrs (InRegionC loc r) $ extendConstrs (AssignC l1 loc) constrs
+                       (ty, tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                       tstate3 <- removeLoc exp tstate2 loc
+                       return (ty, tstate3)
                 AfterVariableLE x l1 _ ->
                     do r <- getRegion exp constrs l1
                        (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ VarE x

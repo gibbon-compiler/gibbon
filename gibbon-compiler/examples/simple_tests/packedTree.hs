@@ -1,5 +1,5 @@
 data List = Cons Int List | Nil
-data Tree = Node Int List Tree Tree | Leaf Int List
+data Tree = Node Int List Tree Tree | Leaf
 
 
 mkList :: Int -> List 
@@ -9,7 +9,7 @@ mkList len = if len <= 0
 
 mkTree :: Int -> Tree
 mkTree d = if (d <= 0)
-	   then Leaf d (mkList 2)
+	   then Leaf
            else Node d (mkList 2) (mkTree (d - 1)) (mkTree (d - 1))
 
 gibbon_main = 

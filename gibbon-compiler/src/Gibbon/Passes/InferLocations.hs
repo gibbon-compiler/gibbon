@@ -171,16 +171,24 @@ getSoARegionsFromLocs :: [((DataCon, Int), LocVar)] -> PassM [((DataCon, Int), R
 getSoARegionsFromLocs locs = case locs of 
                                   [] -> return [] 
                                   (a, b):rst -> do 
-                                                case b of 
-                                                    Single _ -> do 
-                                                                regionVariable <- gensym "r"
-                                                                let region = VarR (regionVariable)
-                                                                rst' <- getSoARegionsFromLocs rst
-                                                                let elem = (a, region) 
-                                                                return $ [elem] ++ rst'
-                                                    SoA _ _ -> error $ "InferLocations : getSoARegionsFromLocs : SoA not implemented!\n" ++ show (a, b)
+                                                region <- getSoARegionFromLocVar b
+                                                rst' <- getSoARegionsFromLocs rst
+                                                let elem = (a, region) 
+                                                return $ [elem] ++ rst'
 
 
+getSoARegionFromLocVar :: LocVar -> PassM Region
+getSoARegionFromLocVar loc = do
+                             case loc of 
+                                  Single _ -> do
+                                              regionVariable <- gensym "r"
+                                              let region = VarR (regionVariable) 
+                                              return region 
+                                  SoA dloc fieldLocs -> do 
+                                                        dcRegionVariable <- gensym "dc_r"
+                                                        fieldRegions <- getSoARegionsFromLocs fieldLocs 
+                                                        let region = SoAR (VarR (dcRegionVariable)) fieldRegions
+                                                        return region
 
 convertTy :: DDefs1 -> Bool -> Ty1 -> PassM Ty2
 convertTy ddefs useSoA ty = case useSoA of 
@@ -191,7 +199,7 @@ convertTy ddefs useSoA ty = case useSoA of
                                                              let dcons = getConOrdering ddefs tycon
                                                              locsForFields <- convertTyHelperSoAParent tycon ddefs dcons
                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
-                                                             return $ PackedTy tycon soaLocation
+                                                             dbgTraceIt "Print ty: " dbgTraceIt (sdoc (PackedTy tycon soaLocation)) dbgTraceIt "End ty.\n" return $ PackedTy tycon soaLocation
                                         _ -> traverse (const (freshLocVar "loc")) ty
 
 convertTyHelperSoAParent :: TyCon -> DDefs1 -> [DataCon] -> PassM [((DataCon, Int), LocVar)]
@@ -203,23 +211,48 @@ convertTyHelperSoAParent tycon ddefs dcons = do
                                                     outRst <- convertTyHelperSoAParent tycon ddefs rst
                                                     return $ out ++ outRst
 
+-- convertTyHelperSoAChild :: TyCon -> DDefs1 -> DataCon -> PassM [((DataCon, Int), LocVar)]
+-- convertTyHelperSoAChild tycon ddefs dcon = do 
+--                                 let fields = lookupDataCon ddefs dcon
+--                                 let fields' = P.concatMap (\f -> case f of 
+--                                                                     PackedTy tycon' _ -> if tycon == tycon' 
+--                                                                                        then [] 
+--                                                                                        else error "convertTyHelperSoAChild: Not implemented!!"
+--                                                                     _ -> [f]
+                                                        
+--                                                           ) fields 
+--                                 let numFields = L.length fields' 
+--                                 let indices = [0 .. numFields]
+--                                 let namesOfLocs = P.map show fields'
+--                                 let zipped = zip namesOfLocs indices
+--                                 out <- convertTyHelperGetLocForField dcon zipped
+--                                 return out
+
 
 convertTyHelperSoAChild :: TyCon -> DDefs1 -> DataCon -> PassM [((DataCon, Int), LocVar)]
-convertTyHelperSoAChild tycon ddefs dcon = do 
-                                let fields = lookupDataCon ddefs dcon
-                                let fields' = P.concatMap (\f -> case f of 
-                                                                    PackedTy tycon' _ -> if tycon == tycon' 
-                                                                                       then [] 
-                                                                                       else error "convertTyHelperSoAChild: Not implemented!!"
-                                                                    _ -> [f]
-                                                        
-                                                          ) fields 
-                                let numFields = L.length fields' 
-                                let indices = [0 .. numFields]
-                                let namesOfLocs = P.map show fields'
-                                let zipped = zip namesOfLocs indices
-                                out <- convertTyHelperGetLocForField dcon zipped
-                                return out
+convertTyHelperSoAChild tycon ddefs dcon = do
+                                          let fields = lookupDataCon ddefs dcon
+                                          (fields', _) <- F.foldlM (\(flds, idx) f -> do 
+                                                                     case f of 
+                                                                        PackedTy tycon' _ -> do
+                                                                                             if tycon == tycon'
+                                                                                             then return (flds, idx)
+                                                                                             else do 
+                                                                                              dconBuff <- freshLocVar "loc"
+                                                                                              let dcons = getConOrdering ddefs tycon'
+                                                                                              locsForFields <- convertTyHelperSoAParent tycon' ddefs dcons
+                                                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
+                                                                                              return (flds ++ [((dcon, idx), soaLocation)], idx + 1)  
+
+                                                                        _ -> do 
+                                                                             info <- convertTyHelperGetLocForField' dcon idx (show f) 
+                                                                             return (flds ++ [info], idx + 1)
+
+
+
+                                                              ) ([], 0) fields
+                                          return fields'
+
 
 convertTyHelperGetLocForField :: DataCon -> [(String, Int)] -> PassM [((DataCon, Int), LocVar)]
 convertTyHelperGetLocForField dcon zipped = do 
@@ -234,6 +267,7 @@ convertTyHelperGetLocForField' :: DataCon -> Int -> String -> PassM ((DataCon, I
 convertTyHelperGetLocForField' dcon index nameForLoc = do
                                                       loc' <- freshLocVar $ "loc_" ++ nameForLoc 
                                                       return ((dcon, index), (loc'))
+
 
     
 
@@ -286,6 +320,7 @@ data Failure = FailUnify Ty2 Ty2
 -- first contraint is for a data constructor buffer and list of constraints for the fields.  
 data Constraint = AfterConstantL LocVar Int LocVar
                 | AfterVariableL LocVar Var LocVar
+                | AssignL LocVar LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
                 | AfterCopyL LocVar Var Var LocVar Var [LocVar]
@@ -373,8 +408,8 @@ destFromType' frt =
     ProdTy tys -> mapM destFromType' tys >>= return . TupleDest
     _ -> return NoDest
 
-freshTyLocs :: Ty2 -> TiM Ty2
-freshTyLocs ty = do 
+freshTyLocs :: Ty2 -> DDefs1 -> TiM Ty2
+freshTyLocs ty ddefs = do 
     dflags <- getDynFlags
     let useSoA = gopt Opt_Packed_SoA dflags 
     case ty of
@@ -382,12 +417,17 @@ freshTyLocs ty = do
                         then do 
                           case lv of 
                             SoA dbuf rst -> do 
+                                            --dbuf' <- fresh
+                                            --rst' <- freshTyLocsSoA rst
+                                            --let newSoALoc = SoA (unwrapLocVar dbuf') rst'
+                                            --return $ PackedTy tc newSoALoc
                                             dbuf' <- fresh
-                                            rst' <- freshTyLocsSoA rst
-                                            let newSoALoc = SoA (unwrapLocVar dbuf') rst'
-                                            return $ PackedTy tc newSoALoc
+                                            let dcons = getConOrdering ddefs tc
+                                            locsForFields <- lift $ lift $convertTyHelperSoAParent tc ddefs dcons
+                                            let soaLocation = SoA (unwrapLocVar dbuf') locsForFields
+                                            return $ PackedTy tc soaLocation
                         else do fresh >>= return . PackedTy tc
-      ProdTy tys -> mapM freshTyLocs tys >>= return . ProdTy
+      ProdTy tys -> mapM (\ty -> freshTyLocs ty ddefs) tys >>= return . ProdTy
       _ -> return ty 
 
 freshTyLocsSoA :: [((DataCon, Int), LocVar)] -> TiM [((DataCon, Int), LocVar)]
@@ -448,6 +488,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                      let used_field_locs = P.map (\c -> case c of 
                                                                                                                                           AfterConstantL lv1 v lv2 -> lv2  
                                                                                                                                           AfterVariableL lv1 v lv2 -> lv2
+                                                                                                                                          AssignL lv1 lv2 -> lv2
                                                                                                                                           _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
                                                                                                                                  ) flst 
                                                                                                          get_loc_keys = P.concatMap (\((dcon, idx), lc) -> if elem lc used_field_locs 
@@ -457,10 +498,11 @@ inferExp' ddefs env exp bound dest=
                                                                                                          exprs = P.map (\(key, l) -> LetLocE l (GetFieldLocSoA key slv2)
                                                                                                                        ) get_loc_keys
                                                                                                          dconLoc = LetLocE lv1 (AfterConstantLE 1 lv2)
-                                                                                                         exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++exprs ++ [dconLoc]
+                                                                                                         exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++ exprs ++ [dconLoc]
                                                                                                          fieldLocExps = P.map (\c -> case c of 
                                                                                                                                 AfterConstantL lv1 v lv2 -> LetLocE lv1 (AfterConstantLE v lv2)
-                                                                                                                                AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)  
+                                                                                                                                AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)
+                                                                                                                                AssignL lv1 lv2 -> LetLocE lv1 (AssignLE lv2)  
                                                                                                                                 _ -> error "InferLocations : bindAllLocations : AfterSoALE: unexpected locatin constraint."
                                                                                                                               ) flst
                                                                                                          --new_field_locs = P.foldr (\c accum -> case c of 
@@ -489,9 +531,10 @@ inferExp' ddefs env exp bound dest=
                                                                                                                    )
                                                                                                             
                                                                                                          returned = lambda exprs'' a
-                                                                                                      in returned
+                                                                                                      in dbgTraceIt " BindAllLocations: " dbgTraceIt (sdoc (get_loc_keys, returned)) dbgTraceIt "End bindAllLocations.\n" returned
                                                                           _ -> error "bindAllLocations: AfterSoALE: unexpected tag constraint."                                       
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
+                      AssignL lv1 lv2 -> Ext (LetLocE lv1 (AssignLE lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
                       StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
                       AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a) {- VS: I think it may be fine to hardcode [] since AfterTagL is reserved for a Tag loc?-}
@@ -507,16 +550,16 @@ inferExp' ddefs env exp bound dest=
                         in LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) $
                            Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
 
-  in do res <- inferExp ddefs env exp dest
+  in do (eres, tyres, csres) <- inferExp ddefs env exp dest
          -- dbgTraceIt "Print res after inferExp: " dbgTraceIt (sdoc (res)) dbgTraceIt "End inferExp call.\n"
-        (e,ty,cs) <- bindAllLocations res
+        (e,ty,cs) <- bindAllLocations (eres, tyres, csres)
         -- dbgTraceIt "Print after bind all locations: " dbgTraceIt (sdoc (e, ty, cs)) dbgTraceIt "End bindAllLocations.\n"
         e' <- finishExp e
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         -- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n"
         e''' <- bindAllUnbound e'' (S.toList unbound)
-        return (e'',ty) -- (e''', ty)
+        return (e''',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -790,8 +833,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         (rhs',ty',cs') <-   bindAfterLocs (orderOfVarsOutputDataConE rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
-        dbgTraceIt "Print in docase: " dbgTraceIt (sdoc (src, dst)) dbgTraceIt "End doCase.\n" return ((con,vars',rhs'),ty',cs')
-
+        return ((con,vars',rhs'),ty',cs')
+        -- dbgTraceIt "Print in docase: " dbgTraceIt (sdoc (src, dst)) dbgTraceIt "End doCase.\n"
 
   in
   case ex0 of
@@ -814,10 +857,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                   let ty' = case ty of
                               PackedTy k lv -> PackedTy k d
                               t -> t
-                  dbgTraceIt "Print in VarE inferExp: " dbgTraceIt (sdoc (v, d, loc)) dbgTraceIt "End VarE unify.\n" unify d loc
+                  unify d loc
                             (return (e',ty',[]))
                             (copy (e',ty,[]) d)
-
+                  -- dbgTraceIt "Print in VarE inferExp: " dbgTraceIt (sdoc (v, d, loc)) dbgTraceIt "End VarE unify.\n"
     ProjE i w -> do
         (e', ty) <- case w of  
           VarE v -> pure (ProjE i (VarE v), let ProdTy tys = lookupVEnv v env in tys !! i)
@@ -832,10 +875,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                 let ty' = case ty of
                             PackedTy k lv -> PackedTy k d
                             t -> t
-                dbgTraceIt "Print in ProjE inferExp: " dbgTraceIt (sdoc (d, loc)) dbgTraceIt "End ProjE unify.\n" unify d loc
+                unify d loc
                           (return (e',ty',[]))
                           (copy (e',ty,[]) d)
-
+                -- dbgTraceIt "Print in ProjE inferExp: " dbgTraceIt (sdoc (d, loc)) dbgTraceIt "End ProjE unify.\n"
     MkProdE ls ->
       case dest of
         NoDest -> do results <- mapM (\e -> inferExp ddefs env e NoDest) ls
@@ -870,16 +913,17 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
     AppE f _ args ->
         do let arrty = lookupFEnv f env
-           valTy    <- freshTyLocs $ arrOut arrty
+           valTy    <- freshTyLocs (arrOut arrty) ddefs
            -- /cc @vollmerm
-           argTys   <- mapM freshTyLocs $ arrIns arrty
+           argTys   <- mapM (\ty -> freshTyLocs ty ddefs) (arrIns arrty)
            argDests <- mapM destFromType' argTys
            (args', atys, acss) <- L.unzip3 <$> mapM (uncurry $ inferExp ddefs env) (zip args argDests)
            let acs = concat acss
            case dest of
              SingleDest d -> do
                case locsInTy valTy of
-                 [outloc] -> dbgTraceIt "Print in AppE" dbgTraceIt (sdoc (valTy, d, outloc)) dbgTraceIt "End AppE inferExp unify.\n" unify d outloc
+                 -- dbgTraceIt "Print in AppE" dbgTraceIt (sdoc (valTy, d, outloc)) dbgTraceIt "End AppE inferExp unify.\n"
+                 [outloc] -> unify d outloc
                                (return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                (err$ "(AppE) Cannot unify" ++ sdoc d ++ " and " ++ sdoc outloc)
                  _ -> err$ "AppE expected a single output location in type: " ++ sdoc valTy
@@ -890,8 +934,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                  (err$ "(AppE) Cannot unify" ++ sdoc ds ++ " and " ++ sdoc tys)
                  _ -> err$ "(AppE) Cannot unify" ++ sdoc dest ++ " and " ++ sdoc valTy
              NoDest ->
+               -- dbgTraceIt "Print in AppE NoDest" dbgTraceIt (sdoc (valTy, NoDest)) dbgTraceIt "\n"
                case locsInTy valTy of
-                 [] -> dbgTraceIt "Print in AppE NoDest" dbgTraceIt (sdoc (valTy, NoDest)) dbgTraceIt "\n" return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
+                 [] -> return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
                  _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy ++ ". This might be caused by a main expression having a packed type." ++ sdoc ex0
 
     TimeIt e t b ->
@@ -909,15 +954,16 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           SingleDest d ->
               do fakeLoc <- fresh
                  case d of 
-                    Single lc -> do 
+                    Single lc -> do
+                                 -- dbgTraceIt "inferExp DataConE single " dbgTraceIt (sdoc (d, constrs)) dbgTraceIt "End inferExp single DataConE.\n" 
                                  let constrs = [AfterTagL fakeLoc d]
-                                 dbgTraceIt "inferExp DataConE single " dbgTraceIt (sdoc (d, constrs)) dbgTraceIt "End inferExp single DataConE.\n" return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs) 
+                                 return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs) 
                     SoA dl fls -> do
                                   -- VS: does this constraint still need to be generated?? 
                                   -- For now, I am commenting it out. 
                                   let constrs = [] --[AfterTagL fakeLoc (singleLocVar dl)]
-                                  dbgTraceIt "inferExp DataConE soa " dbgTraceIt (sdoc (d, dl)) dbgTraceIt "End soa inferExp DataConE.\n" return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)   
-                 
+                                  return (DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)   
+                                  -- dbgTraceIt "inferExp DataConE soa " dbgTraceIt (sdoc (d, dl)) dbgTraceIt "End soa inferExp DataConE.\n"
 
     DataConE () k ls ->
       case dest of
@@ -944,11 +990,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                     Single dVar -> do
                       locs <- sequence $ replicate (length ls) fresh
                       mapM_ fixLoc locs -- Don't allow argument locations to freely unify
-                      ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> 
+                      -- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n"
+                      ls' <- mapM (\(e,lv) -> 
                     
-                        dbgTraceIt "Print in lambda DataConE inferExp: "
-                        dbgTraceIt (sdoc (e, lv))
-                        dbgTraceIt "End in lambda inferExp.\n"
+                        -- dbgTraceIt "Print in lambda DataConE inferExp: "
+                        -- dbgTraceIt (sdoc (e, lv))
+                        -- dbgTraceIt "End in lambda inferExp.\n"
                     
                         (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
                       -- let ls'' = L.map unNestLet ls'
@@ -997,7 +1044,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                             ((map Just $ Sf.tailErr locs) ++ [Nothing])
                                                             (map Just locs))
                                                             -- ((map Just $ L.tail locs) ++ [Nothing])) ++
-                                            in dbgTraceIt "Print in afterVar" dbgTraceIt (sdoc (locs, argLs, ls')) dbgTraceIt "\n" tmpconstrs ++ constrs
+                                            in tmpconstrs ++ constrs
+                                            -- dbgTraceIt "Print in afterVar" dbgTraceIt (sdoc (locs, argLs, ls')) dbgTraceIt "\n"
                         -- traceShow k $ traceShow locs $
                         --let newe = buildLets bnds $ DataConE d k [ e' | (e',_,_)  <- ls'']
                         -- case d of
@@ -1026,7 +1074,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                   _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      dbgTraceIt "Print constrs Aos: " dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      -- dbgTraceIt "Print constrs Aos: " dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n"
                     SoA dataBufferVar fieldLocs -> do 
                       {-
                         VS: Here we assign new locations for each argument 
@@ -1039,20 +1088,22 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       -- Here we are assuming that the DataConE has flattened expressions and each argument is in ANF form. 
                       -- Here we check the type of the variable, in case of a PackedTy type we need to generate a new loc 
                       -- expression. 
+                      -- dbgTraceIt "LOC!!" dbgTraceIt (sdoc (v, tycon, loc)) dbgTraceIt "End LOC!!\n"
                       locs <- mapM (\exp -> case exp of 
                                                   VarE v -> case lookupVEnv v env of 
-                                                                PackedTy tycon loc -> freshSoALoc loc 
+                                                                PackedTy tycon loc -> lift $ lift $ freshCommonLoc "new" loc
                                                                 _ -> fresh
                                                   LitE l -> fresh
                                                   FloatE f -> fresh
                                                   _ -> error $ "DataConE: SoA: expected exp, got " ++ (show exp)  
                                    ) ls
                       mapM_ fixLoc locs -- Don't allow argument locations to freely unify
-                      ls' <- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n" mapM (\(e,lv) -> 
+                      -- dbgTraceIt "Print in SingleDest inferExp " dbgTraceIt (sdoc (locs)) dbgTraceIt "End SingleDest inferExp.\n"
+                      ls' <- mapM (\(e,lv) -> 
                     
-                        dbgTraceIt "Print in lambda DataConE inferExp: "
-                        dbgTraceIt (sdoc (e, lv))
-                        dbgTraceIt "End in lambda inferExp.\n"
+                        -- dbgTraceIt "Print in lambda DataConE inferExp: "
+                        -- dbgTraceIt (sdoc (e, lv))
+                        -- dbgTraceIt "End in lambda inferExp.\n"
                     
                         (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
                       -- let ls'' = L.map unNestLet ls'
@@ -1061,7 +1112,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
                       let tyConOfDataCon = getTyOfDataCon ddefs k
-                      argLs <- dbgTraceIt "inferExp SoA case: " dbgTraceIt (sdoc ((ls, locs, ls'))) dbgTraceIt "End SoA ls'.\n" forM [a | (a,_,_) <- ls'] $ \arg ->
+                      -- dbgTraceIt "inferExp SoA case: " dbgTraceIt (sdoc ((ls, locs, ls'))) dbgTraceIt "End SoA ls'.\n"
+                      argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
                         case arg of
                           (VarE v) -> case lookupVEnv v env of
                                                  CursorTy -> return $ ArgFixed 0
@@ -1096,6 +1148,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
                           afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
                             Just $ AfterVariableL loc1 v loc2
+                          {- TODO: should we just using assign loc instead of afterconstant? -}
+                          {- Con: it might be tougher to typecheck constraints -}
+                          afterVar ((ArgFixed 0), (Just loc1), (Just loc2)) = case loc1 of 
+                                                                                      (Single _) -> Just $ AfterConstantL loc1 0 loc2
+                                                                                      _ -> Just $ AssignL loc1 loc2
                           afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
                             Just $ AfterConstantL loc1 s loc2
                           afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
@@ -1138,7 +1195,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                  in case fldloc of 
                                                                            Just location -> Just location
                                                                            Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
-                                                     ) idxsFields'
+                                               ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
                                                 dcArgFields
                                                 ((map Just locsFields))
@@ -1168,7 +1225,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                         CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
                                                                                                         VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
                                                                                                         ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                                                                                        PackedTy{} -> return $ ArgVar v
+                                                                                                        PackedTy ttyy loccc -> return $ ArgVar v 
+                                                                                                        --if ttyy == tyConOfDataCon
+                                                                                                        --                       then return $ ArgVar v
+                                                                                                        --                       else return $ ArgFixed 0
                                                                                                         _ -> error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
                                                                                       -- TODO: fix these to get the correct offset for an SoA loc.
                                                                                       (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
@@ -1206,7 +1266,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                     (map Just locsDconBuf)
                                                                                      )
                                                                         -- dbgTraceIt "Print tuple line: 1171" dbgTraceIt (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTraceIt "End line 1171\n"
-                                                                        return ([tagc], [soac], afvarc)
+                                                                        dbgTraceIt "Print tuple line: 1171" dbgTraceIt (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTraceIt "End line 1171\n" return ([tagc], [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
                           -- dbgTraceIt "Print tuple line: 1061" dbgTraceIt (sdoc (fieldLocVars, fieldConstraints)) dbgTraceIt "End line 1061\n"
                       let constrs = concat $ [c | (_,_,c) <- ls']
@@ -1262,7 +1322,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       -- dbgTraceIt "Print contrs'" dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n"
-                      return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                      dbgTraceIt "Print contrs'" dbgTraceIt (sdoc (k, constrs')) dbgTraceIt "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     IfE a b c@ce -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
@@ -1380,9 +1440,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
         AppE f [] args -> do
           let arrty = lookupFEnv f env
-          valTy <- freshTyLocs $ arrOut arrty
+          valTy <- freshTyLocs (arrOut arrty) ddefs
           -- /cc @vollmerm
-          argTys   <- mapM freshTyLocs $ arrIns arrty
+          argTys   <- mapM (\ty -> freshTyLocs ty ddefs) (arrIns arrty)
           argDests <- mapM destFromType' argTys
           (args', atys, acss) <- L.unzip3 <$> mapM (uncurry $ inferExp ddefs env) (zip args argDests)
           let acs = concat acss
@@ -1816,7 +1876,7 @@ cleanExp e =
       FloatE v -> (FloatE v, S.empty)
       LitSymE v -> (LitSymE v, S.empty)
       AppE v ls e -> let (e',s') = unzip $ map cleanExp e
-                     in (AppE v ls e', (S.unions s') `S.union` (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --(S.fromList ls)
+                     in (AppE v ls e', (S.unions s') `S.union` (S.fromList ls)) -- (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --(S.fromList ls)
       PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (PrimAppE (DictInsertP ty) es',
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))
@@ -1836,13 +1896,13 @@ cleanExp e =
       LetE (v,ls,t,e1@(Ext (L2.StartOfPkdCursor _cur))) e2 ->
                         let (e1', s1') = cleanExp e1
                             (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1') e2', S.delete (Single v) (S.unions [s1',s2', (P.foldr (\l a -> getAllLocations l a) S.empty ls )])) --S.fromList ls
+                        in (LetE (v,ls,t,e1') e2', S.delete (Single v) (S.unions [s1',s2', S.fromList ls])) 
       LetE (v,ls,t,e1@(Ext (L2.AddFixed _cur _i))) e2 ->
                         let (e2', s2') = cleanExp e2
-                        in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2',(P.foldr (\l a -> getAllLocations l a) S.empty ls )])) --S.fromList ls
+                        in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2', S.fromList ls]))
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
                                  (e2', s2') = cleanExp e2
-                             in (LetE (v,ls,t,e1') e2', S.unions [s1',s2',(P.foldr (\l a -> getAllLocations l a) S.empty ls )]) --S.fromList ls
+                             in (LetE (v,ls,t,e1') e2', S.unions [s1',s2', S.fromList ls ])
       IfE e1 e2 e3 -> let (e1',s1') = cleanExp e1
                           (e2',s2') = cleanExp e2
                           (e3',s3') = cleanExp e3
@@ -1854,14 +1914,14 @@ cleanExp e =
       CaseE e1 prs -> let (e1',s1') = cleanExp e1
                           (prs', ls2') = unzip $ L.map
                                          (\(dc,lvs,e2) -> let (e2', s2) = cleanExp e2
-                                                          in ((dc,lvs,e2'), s2 S.\\ (P.foldr (\l a -> getAllLocations l a) S.empty ((map snd lvs))) )) prs   --S.fromList (map snd lvs)
+                                                          in ((dc,lvs,e2'), s2 S.\\ S.fromList (map snd lvs) )) prs
                       in (CaseE e1' prs', S.union s1' $ S.unions ls2')
       DataConE lv dc es -> let (es',ls') = unzip $ L.map cleanExp es
-                           in (DataConE lv dc es', S.union (getAllLocations lv S.empty) $ S.unions ls')
+                           in (DataConE lv dc es', S.insert lv $ S.unions ls')
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (TimeIt e' d b, s')
       SpawnE v ls e -> let (e',s') = unzip $ map cleanExp e
-                       in (SpawnE v ls e', (S.unions s') `S.union` (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --S.fromList ls
+                       in (SpawnE v ls e', (S.unions s') `S.union` S.fromList ls ) 
       SyncE -> (SyncE, S.empty)
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
@@ -1870,31 +1930,45 @@ cleanExp e =
       Ext (LetParRegionE r sz ty e) -> let (e',s') = cleanExp e
                                  in (Ext (LetParRegionE r sz ty e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
-                                    in if (getAllLocations loc S.empty) `S.isSubsetOf` s'
-                                       then (Ext (LetLocE loc FreeLE e'), S.difference s' (getAllLocations loc S.empty)) --S.delete loc s'
+                                    in if S.member loc s'
+                                       then (Ext (LetLocE loc FreeLE e'), S.delete loc s') --S.delete loc s'
                                        else (e',s')
       Ext (LetLocE loc@(Single l) lex e) -> let (e',s') = cleanExp e
-                                 in if (getAllLocations loc S.empty) `S.isSubsetOf` s' --S.member loc s'
+                                 in if S.member loc s'
                                     then let ls = case lex of
                                                     AfterConstantLE _i lv   -> [lv]
                                                     AfterVariableLE _v lv _ -> [lv]
+                                                    GetFieldLocSoA _ lv -> [lv]
                                                     oth -> []
-                                         in (Ext (LetLocE loc lex e'),
-                                              S.difference (S.union s' $ S.fromList ls) (getAllLocations loc S.empty))
+                                         in (Ext (LetLocE loc lex e'), S.delete loc (S.union s' $ S.fromList ls))
                                     else (e',s')
       Ext (LetLocE s@(SoA dloc flcs) lex@(GenSoALoc _ _) e) -> let (e',s') = cleanExp e
-                                              in if (getAllLocations s S.empty) `S.isSubsetOf` s' --S.member loc s'
+                                              in if S.member s s'
                                                  then let ls = case lex of
                                                                   GenSoALoc dcloc flocs -> [dcloc] ++ P.map (\(_, ll) -> ll) flocs
                                                                   oth -> []
-                                                       in (Ext (LetLocE s lex e'), (S.union s' $ S.fromList ls))
+                                                       in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
                                                  else (e',s')
+      Ext (LetLocE s@(SoA dloc flcs) lex@(AssignLE _) e) -> let (e',s') = cleanExp e
+                                              in if S.member s s'
+                                                 then let ls = case lex of
+                                                                  AssignLE loc -> [loc]
+                                                                  oth -> []
+                                                       in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
+                                                 else (e' ,s')
+      Ext (LetLocE s@(SoA dloc flcs) lex@(GetFieldLocSoA _ loc) e) -> let (e',s') = cleanExp e
+                                              in if S.member s s'
+                                                 then let ls = case lex of
+                                                                  GetFieldLocSoA _ loc -> [loc]
+                                                                  oth -> []
+                                                       in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
+                                                 else (e' ,s')
       Ext (LetLocE s@(SoA dloc flcs) lex e) -> let (e',s') = cleanExp e
-                                              in if (getAllLocations s S.empty) `S.isSubsetOf` s' --S.member loc s'
+                                              in if S.member s s'
                                                  then let ls = case lex of
                                                                   oth -> []
                                                        in (Ext (LetLocE s lex e'), 
-                                                              S.difference (S.union s' $ S.fromList ls) (getAllLocations s S.empty))
+                                                              S.delete s (S.union s' $ S.fromList ls))
                                                  else (e',s')
       --Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
       --                           in (Ext $ LetSoALocE loc e',s')
