@@ -140,6 +140,8 @@ placeRegionInwards env scopeSet ex  =
                           tempDict = M.delete myKey env
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs
+            
+            {- VS : Implement cases for other location expressions -}
 
             FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this?
 
