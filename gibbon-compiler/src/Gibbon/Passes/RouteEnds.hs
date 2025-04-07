@@ -335,9 +335,23 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                             -- generate all alias to field constraints 
                                                                             field_letes = L.concatMap (\(key, lv) -> case L.lookup key (getAllFieldLocsSoA l2loc) of 
                                                                                                                             Nothing -> error "routeEnds: expected location for field."
-                                                                                                                            Just ofl -> [LetLocE lv (GetFieldLocSoA key l1)]  ++ [LetLocE ofl (AfterConstantLE 0 lv)] 
+                                                                                                                            Just ofl -> case ofl of 
+                                                                                                                                            Single _ ->  [LetLocE lv (GetFieldLocSoA key l1)]  ++ [LetLocE ofl (AfterConstantLE 0 lv)]
+                                                                                                                                            SoA _ _ -> [LetLocE lv (GetFieldLocSoA key l1)]  -- ++ [LetLocE ofl (AfterConstantLE 0 lv)]
                                                                                  ) in_flocs
-                                                                            new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) (L.map (\(key, lv) -> (key, lv)) (getAllFieldLocsSoA l2loc)))
+                                                                            field_variables_jump_loc = L.map (\((kdc, kidx), l) -> 
+                                                                                                      let tyOfCon = lookupDataCon ddefs kdc
+                                                                                                          in case tyOfCon !! kidx of 
+                                                                                                                PackedTy _ _ -> 
+                                                                                                                  let l' = case L.lookup (kdc, kidx) in_flocs of 
+                                                                                                                          Nothing -> error "routeEnds: expected location for field."
+                                                                                                                          Just ofl -> ofl
+                                                                                                                   in ((kdc, kidx), l')  
+                                                                                                                _ -> ((kdc, kidx), l)
+  
+                                              
+                                                                               ) (getAllFieldLocsSoA l2loc)     
+                                                                            new_soa_loc  = LetLocE l2loc (GenSoALoc (getDconLoc l2loc) field_variables_jump_loc )
                                                                             all_letes = [in_dcon_lete, end_con_lete] ++ field_letes ++ [new_soa_loc]  
                                                                             new_exp = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                                                           in new_exp
@@ -348,6 +362,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                           case (M.lookup (fromVarToFreeVarsTy x) lenv) of
                             Just scrutloc -> do
                               let need = snd $ last vls
+                                  tyconOfDataCon = getTyOfDataCon ddefs dc
                                   argtys = lookupDataCon ddefs dc
                                   lx = case M.lookup (fromVarToFreeVarsTy x) lenv of
                                           Nothing -> error $ "Failed to find " ++ (show x)
@@ -415,7 +430,37 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                   then ([LetLocE lv (GetFieldLocSoA key scrutloc)] ++ lst1, lst2)  --[LetLocE (singleLocVar lv) (GetFieldLocSoA key scrutloc)] ++ [LetLocE (l1) (AfterConstantLE 0 (getFieldLoc (dc, idx) scrutloc))] ++ 
                                                                                                                                   else ([LetLocE lv (GetFieldLocSoA key scrutloc)] ++ lst1, [LetLocE ofl (AfterConstantLE 0 lv)] ++ lst2)
                                                    ) ([], []) in_flocs
-                                            let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) (L.map (\(key, lv) -> (key, lv)) (getAllFieldLocsSoA final_soa_loc)))
+                                            let argtys' = concatMap (\argty -> case argty of 
+                                                                        PackedTy tcc _ -> if tcc /= tyconOfDataCon
+                                                                                          then [argty]
+                                                                                          else []
+                                                                        _ -> [argty]
+                                                              ) argtys
+                                            -- let field_variables_jump_loc = (L.map (\((key, lv), ty) -> case ty of 
+                                            --                                                                 PackedTy tyconp _  -> if tyconp /= tyconOfDataCon
+                                            --                                                                                       then  
+                                            --                                                                                         let lv' = L.lookup key in_flocs
+                                            --                                                                                           in case lv' of
+                                            --                                                                                               Nothing -> error "routeEnds: expected location for field."
+                                            --                                                                                               Just ofl -> (key, ofl)
+                                            --                                                                                       else (key, lv)
+                                            --                                                                 _ -> (key, lv)
+                                            --                                       ) $ zip (getAllFieldLocsSoA final_soa_loc) (argtys'))
+
+                                            let field_variables_jump_loc = L.map (\((kdc, kidx), l) -> if kdc == dc
+                                                                                                     then 
+                                                                                                      let tyOfCon = lookupDataCon ddefs kdc
+                                                                                                          in case tyOfCon !! kidx of 
+                                                                                                                PackedTy _ _ -> 
+                                                                                                                  let l' = case L.lookup (kdc, kidx) in_flocs of 
+                                                                                                                          Nothing -> error "routeEnds: expected location for field."
+                                                                                                                          Just ofl -> ofl
+                                                                                                                   in ((kdc, kidx), l')  
+                                                                                                                _ -> ((kdc, kidx), l)
+                                                                                                     else ((kdc, kidx), l)  
+                                              
+                                                                               ) (getAllFieldLocsSoA final_soa_loc)
+                                            let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) field_variables_jump_loc)
                                             let all_letes = [in_dcon_lete, end_con_lete] ++ all_field_gets ++ exprs ++ unsed_assign  ++ [new_soa_loc]  
                                             let e' = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                             --let (Just jump) = L1.sizeOfTy ty
@@ -429,6 +474,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             --let new_soa_loc = LetLocE (SoA jump_dloc new_field_locs) (GenSoALoc (singleLocVar jump_dloc) new_field_locs')
                                             --let e' = Ext $ get_dcon_let $ Ext $ after_let $ Ext $ new_soa_loc e
                                             -- let eor'' = mkEnd scrutloc final_soa_loc eor'
+                                            -- VS: Restricts moving scalars fields at the end
                                             let eor'' = case (L.last cases) of
                                                                 (l1, ty, idx) -> case ty of 
                                                                                       PackedTy{} -> eor'

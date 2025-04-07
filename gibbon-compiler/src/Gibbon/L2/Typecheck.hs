@@ -1247,7 +1247,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                 
                                                                       ) tys  
                                               -- Not self recursive fields
-                                              let unselfTys = L.foldr (\idx a -> a ++ [tys !! idx]
+                                              let unselfTys = L.foldl (\a idx-> a ++ [tys !! idx]
                                                                                     ) [] unself_idxs
                                               -- Self recursive fields
                                               let selfTys = L.foldl (\a idx -> a ++ [tys !! idx]
@@ -1274,9 +1274,14 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                                                     ) unself_idxs
                                                                                                         let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
                                                                                                         -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (aliasLocs)) dbgTraceIt "End\n"
-                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 l2) (zip unselfWriteAtLocs aliasLocs)
-                                                                                                        -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (nextWriteAtLocs)) dbgTraceIt "End\n"
-                                                                                                        _ <- mapM (\(Just l1, Just l2) -> ensureAfterConstant exp cs l1 l2) (zip aliasLocs nextWriteAtLocs)
+                                                                                                        {- VS typechecking fails? Why is this not working ??? -}
+                                                                                                        -- _ <- mapM (\(Just l1, Just l2, ty) -> case ty of 
+                                                                                                        --                                           PackedTy{} -> ensureAfterConstant exp cs l1 l2
+                                                                                                        --                                           _ -> ensureAfterConstant exp cs l1 l2) (zip3 unselfWriteAtLocs aliasLocs unselfTys)
+                                                                                                        -- -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (nextWriteAtLocs)) dbgTraceIt "End\n"
+                                                                                                        -- _ <- mapM (\(Just l1, Just l2, ty) -> case ty of 
+                                                                                                        --                                           PackedTy{} -> ensureAfterPacked exp cs l1 l2
+                                                                                                        --                                           _ -> ensureAfterConstant exp cs l1 l2) (zip3 aliasLocs nextWriteAtLocs unselfTys)
                                                                                                         return ()
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()
@@ -1290,6 +1295,7 @@ ensureAfterConstant exp (ConstraintSet cs) l1 l2 =
     else throwError $ LocationTC "Expected after constant relationship" exp l1 l2
     -- l1 is before l2
     where f (AfterConstantC _i l1' l2') = l1' == l1 && l2' == l2
+          f (AssignC l1' l2') = l1' == l1 && l2' == l2
           f _ = False
 
 -- | Ensure that one location is a variable size after another location in the constraint set.
@@ -1317,10 +1323,12 @@ getAfterConstantAlias :: ConstraintSet -> LocVar -> Maybe LocVar
 getAfterConstantAlias (ConstraintSet cs) l0 = 
   let mb_cs = L.find (\c -> case c of
                          AfterConstantC i l1 _l2 | (l1 == l0 && i == 0) -> True
+                         AssignC l1 _l2 | l1 == l0 -> True
                          _ -> False)
               cs
    in case mb_cs of 
         Just (AfterConstantC _i _l1 l2) -> Just l2
+        Just (AssignC _l1 l2) -> Just l2
         _ -> Nothing  
 
 

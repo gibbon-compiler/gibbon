@@ -811,17 +811,18 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
              TiM ((DataCon, [(Var,LocVar)], L2.Exp2), Ty2, [Constraint])
       doCase ddfs env src dst (con,vars,rhs) = do
         let (tyc, (don, flds)) = lkp ddfs con
+        dflags <- getDynFlags
+        let useSoA = gopt Opt_Packed_SoA dflags
         let zippedVars = zip vars flds
         vars' <- forM zippedVars $ \((v,_), (_, t)) -> do 
                                        case t of 
                                           PackedTy ty _ -> do 
-                                              dflags <- getDynFlags
-                                              let useSoA = gopt Opt_Packed_SoA dflags
-                                              lv <- if useSoA
-                                                    then freshSoALoc2 ddfs con
-                                                    else lift $ lift $ freshLocVar "case"
-                                              _ <- fixLoc lv
-                                              return (v,lv)
+                                                lv <- if useSoA
+                                                      then freshSoALoc2 ddfs ty
+                                                      else lift $ lift $ freshLocVar "case"
+                                                _ <- fixLoc lv
+                                                return (v,lv)
+
                                           _ -> do
                                                 lv <- lift $ lift $ freshLocVar "case"
                                                 _ <- fixLoc lv
@@ -1256,7 +1257,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                               in [(ks, loc1, loc2)]
                                                                                                                            else [] 
                                                                                                ) fields_hloc
-                                                                        let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> AfterConstantL loc_new 0 loc_old
+                                                                        let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> case loc_new of 
+                                                                                                                                     Single _ ->  AfterConstantL loc_new 0 loc_old
+                                                                                                                                     _ -> AssignL loc_new loc_old
                                                                                                          ) pair_new_old
 
                                                                         let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed) d
@@ -2272,7 +2275,7 @@ freshSoALoc lc = do
                                      return newSoALoc
 
 
-freshSoALocHelper :: Var -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
+freshSoALocHelper :: TyCon -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
 freshSoALocHelper tyvar lst = do 
                         case lst of
                           [] -> do 
@@ -2281,7 +2284,7 @@ freshSoALocHelper tyvar lst = do
                                             fieldLocs <- fmap concat $ mapM (\e@(_, ty) -> do 
                                                                               case ty of 
                                                                                 PackedTy tyc _ -> do
-                                                                                                if (fromVar tyvar) == tyc 
+                                                                                                if tyvar == tyc 
                                                                                                 then return []
                                                                                                 else do 
                                                                                                   {- TODO: we should return an SoA loc here instead -}
@@ -2296,10 +2299,10 @@ freshSoALocHelper tyvar lst = do
                                             rst' <- freshSoALocHelper tyvar rst
                                             return $ fieldLocs ++ rst'
 
-freshSoALoc2 :: DDefs Ty2 -> DataCon -> TiM LocVar 
-freshSoALoc2 ddfs con = do
-                       let (tyc, (don, flds)) = lkp ddfs con
-                       let DDef{dataCons} = lookupDDef ddfs (fromVar tyc)
+freshSoALoc2 :: DDefs Ty2 -> TyCon -> TiM LocVar 
+freshSoALoc2 ddfs tyc = do
+                       -- let (tyc, (don, flds)) = lkp ddfs con
+                       let DDef{dataCons} = lookupDDef ddfs tyc
                        fields <- freshSoALocHelper tyc dataCons
                        newdcLoc <- fresh
                        return $ SoA (unwrapLocVar newdcLoc) fields

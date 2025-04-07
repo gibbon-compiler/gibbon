@@ -985,7 +985,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         let sloc_loc = toLocVar slocarg
             sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of 
                            Just v -> v 
-                           Nothing -> error $ "cursorizeExp: DataConE: unexpected location variable" ++ "(" ++ show slocarg ++ ")" ++ show freeVarToVarEnv
+                           Nothing -> error $ "cursorizeExp(988): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
             -- Return (start,end) cursors
             -- The final return value lives at the position of the out cursors:
             go2 :: Bool -> Var -> [(Exp2, Ty2)] -> PassM Exp3
@@ -1053,10 +1053,12 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
             field_locs = getAllFieldLocsSoA sloc_loc
             sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of 
                            Just v -> v 
-                           Nothing -> error $ "cursorizeExp: DataConE: unexpected location variable" ++ "(" ++ show slocarg ++ ")" ++ show freeVarToVarEnv
+                           Nothing -> error $ "cursorizeExp(1056): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
             sloc_dcon = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
                            Just v -> v 
-                           Nothing -> error $ "cursorizeExp: DataConE: unexpected location variable" ++ "(" ++ show slocarg ++ ")" ++ show freeVarToVarEnv
+                           Nothing -> case dcon_loc of
+                                            Single l -> l
+                                            _ -> error $ "cursorizeExp(1059): DataConE: unexpected dcon location variable" ++ "(" ++ show (dcon, dcon_loc) ++ ")" ++ show freeVarToVarEnv
             -- Return (start,end) cursors
             -- The final return value lives at the position of the out cursors:
             -- go2 :: Bool -> Var -> [(Exp2, Ty2)] -> PassM Exp3
@@ -1118,7 +1120,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 after_soa_loc <- gensym "aft_soa_loc"
                 let after_flocs_to_vars = map (\(_, floc) -> case (M.lookup (fromLocVarToFreeVarsTy $ floc) fvarenv) of 
                                                                 Just v -> v 
-                                                                Nothing -> error "cursorizeExp: DataConE: unexpected location variable"
+                                                                Nothing -> case floc of 
+                                                                             Single l -> l  
+                                                                             _ -> error $ "cursorizeExp (1123): DataConE: unexpected location variable" ++ "(" ++ show (dcon, floc) ++ ")" ++ show fvarenv
                                             ) aft_flocs
                 let makeCurArr = Ext $ MakeCursorArray (1 + length (aft_flocs)) ([aft_dloc] ++ after_flocs_to_vars)
                 let let_mk_cur_arr = LetE (after_soa_loc, [], CursorArrayTy (1 + length (aft_flocs)), makeCurArr)

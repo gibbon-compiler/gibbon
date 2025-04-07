@@ -694,8 +694,8 @@ passes config@Config{dynflags} l0 = do
               l1 <- go "L1.typecheck"    L1.tcProg     l1
               l1 <- goE1 "removeCopyAliases" removeAliasesForCopyCalls l1
               l2 <- goE2 "inferLocations"  inferLocs    l1
-              l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               l2 <- go "regionsInwards"    regionsInwards l2
+              l2 <- goE2 "simplifyLocBinds_a" (simplifyLocBinds True) l2
               {- VS: Inferlocations needs simplify loc binds to produce a type correct L2 program -}
               -- l2 <- go   "L2.typecheck"    L2.tcProg    l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -793,7 +793,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds False) l2
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 {- VS: This used to be false, why doesn't true work ? -}
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               -- l2 <- if gibbon1
               --       then pure l2

@@ -155,12 +155,19 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                               {- VS: New: each scalar field get a bound check size equal to the size of the field -}
                                                                               boundsCheckDcon = [("_",[],MkTy2 IntTy, Ext $ BoundsCheck 1 dcRegArg dcLocArg)] 
                                                                               boundsCheckFields = concatMap (\(((dcon, idx), floc), freg) -> let ty = (lookupDataCon ddefs dcon) !! idx
-                                                                                                                                                 size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
-                                                                                                                                                in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
+                                                                                                                                               in case (unTy2 ty) of 
+                                                                                                                                                    PackedTy{} -> []
+                                                                                                                                                    _ -> let 
+                                                                                                                                                            size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
+                                                                                                                                                           in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
                                                                                                           
                                                                                                           ) $ zip fieldLocs' fieldRegs'
                                                                               regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
-                                                                              regInst' = concatMap (\(d, freg) -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]) fieldRegs
+                                                                              regInst' = concatMap (\(d, freg) -> case freg of
+                                                                                                                      SoAR _ _ -> []
+                                                                                                                      _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                                                                
+                                                                                                   ) fieldRegs
                                                                            in (boundsCheckDcon ++ boundsCheckFields, regInst ++ regInst')
                                                                         else ([], [])
                                                 _ -> if mode == Output
@@ -261,7 +268,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             out_regvars = map (renv #) outretlocs
         out_regvars' <- mapM (\r -> case r of 
                                       SingleR rv -> SingleR <$> gensym rv
-                                      SoARv (SingleR drv) frvs -> SoARv <$> (SingleR <$> gensym drv) <*> mapM (\(k, (SingleR frv)) -> (,) k <$> (SingleR <$> gensym frv)) frvs
+                                      SoARv (SingleR drv) frvs -> SoARv <$> (SingleR <$> gensym drv) <*> mapM (\(k, (frv)) -> (,) k <$> (genSymRegVar frv)) frvs
                                       _ -> error "threadRegionsExp: SoARv not implemented yet."
                              ) out_regvars
         let out_regargs = map (\r -> NewL2.EndOfReg r Output (toEndVRegVar r)) out_regvars
@@ -272,7 +279,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         let in_regvars = map (renv #) argtylocs
         in_regvars' <- mapM (\r -> case r of 
                                       SingleR rv -> SingleR <$> gensym rv
-                                      SoARv (SingleR drv) frvs -> SoARv <$> (SingleR <$> gensym drv) <*> mapM (\(k, (SingleR frv)) -> (,) k <$> (SingleR <$> gensym frv)) frvs
+                                      SoARv (SingleR drv) frvs -> SoARv <$> (SingleR <$> gensym drv) <*> mapM (\(k, (frv)) -> (,) k <$> (genSymRegVar frv)) frvs
                                       _ -> error "threadRegionsExp: SoARv not implemented yet." 
                             ) in_regvars
         let in_regargs' = map (\r -> NewL2.EndOfReg r Input (toEndVRegVar r)) in_regvars'

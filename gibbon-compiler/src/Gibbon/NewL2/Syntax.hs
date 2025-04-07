@@ -26,7 +26,7 @@ module Gibbon.NewL2.Syntax
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
-    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar
+    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar, genSymRegVar
 
     , module Gibbon.Language
     )
@@ -175,6 +175,19 @@ toTagV v = (toVar "tag_") `varAppend` v
 
 toEndFromTaggedV :: Var -> Var
 toEndFromTaggedV v = (toVar "end_from_tagged_") `varAppend` v
+
+genSymRegVar :: RegVar -> PassM RegVar
+genSymRegVar reg = do
+  case reg of 
+    SingleR v -> do 
+                  v' <- gensym v
+                  return $ SingleR v'
+    SoARv reg fieldRegs -> do 
+                  reg' <- genSymRegVar reg
+                  fieldRegs' <- mapM (\(k, freg) -> do 
+                                        freg' <- genSymRegVar freg
+                                        return (k, freg')) fieldRegs
+                  return $ SoARv reg' fieldRegs'
 
 toEndFromTaggedRegVar :: RegVar -> RegVar
 toEndFromTaggedRegVar r = case r of 
