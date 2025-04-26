@@ -644,8 +644,8 @@ passes config@Config{dynflags} l0 = do
           tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
-      l0 <- go  "elimNewtypes"     L0.elimNewtypes            l0
-      l0 <- goE0 "typecheck"       L0.tcProg             l0
+      --l0 <- go  "elimNewtypes"     L0.elimNewtypes            l0
+      --l0 <- goE0 "typecheck"       L0.tcProg             l0
       l0 <- goE0 "bindLambdas"     L0.bindLambdas       l0
       l0 <- goE0 "monomorphize"    L0.monomorphize      l0
       -- l0 <- goE0 "closureConvert"  L0.closureConvert    l0
