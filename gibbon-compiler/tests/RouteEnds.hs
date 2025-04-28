@@ -14,6 +14,14 @@ import Test.Tasty
 
 import Gibbon.Common hiding (FunDef)
 import Gibbon.L2.Syntax as L2
+    ( Prog2,
+      Prog(fundefs, Prog),
+      FunDef(funTy),
+      ArrowTy2(locRets),
+      LRM(LRM),
+      LocRet(..),
+      Modality(Input),
+      Region(VarR) )
 import Gibbon.L2.Examples
 import Gibbon.L2.Typecheck
 import Gibbon.Passes.RouteEnds
