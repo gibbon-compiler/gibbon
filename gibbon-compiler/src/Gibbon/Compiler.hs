@@ -93,6 +93,7 @@ import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Passes.CorrectLocExprs (delayExpr)
+import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
 -- Configuring and launching the compiler.
@@ -701,6 +702,7 @@ passes config@Config{dynflags} l0 = do
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              l2 <- goE2 "reorderLetExprs" reorderLetExprs l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
