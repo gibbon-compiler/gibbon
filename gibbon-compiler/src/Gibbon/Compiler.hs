@@ -705,6 +705,7 @@ passes config@Config{dynflags} l0 = do
               l2 <- goE2 "reorderLetExprs" reorderLetExprs l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
+              l2 <- goE2 "reorderLetExprs2" reorderLetExprs l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -760,6 +761,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
                   -- l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- goE2 "reorderLetExprs3" reorderLetExprs l2
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
