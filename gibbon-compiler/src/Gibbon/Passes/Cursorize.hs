@@ -3026,10 +3026,12 @@ regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
     
     -- TODO: SoA Region
     SoAR dcreg fieldRegs -> do 
-                            (dcreg_binds, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
-                            field_binds_pairs <- mapM (\(key, field_reg) -> regionToBinds freeVarToVarEnv' for_parallel_allocs field_reg sz) fieldRegs
+                            (dcreg_binds, _freeVarToVarEnv) <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
+                            field_binds_pairs <- mapM (\(key, field_reg) -> regionToBinds _freeVarToVarEnv for_parallel_allocs field_reg sz) fieldRegs
                             let field_binds = concatMap fst field_binds_pairs
                             let field_new_maps = map snd field_binds_pairs 
+                            let _freeVarToVarEnv' = foldr (\m acc -> M.union m acc) freeVarToVarEnv field_new_maps
+                            let freeVarToVarEnv' = M.union _freeVarToVarEnv' _freeVarToVarEnv
                             -- Make the cursor array
                             let reg_to_reg_var = regionToVar r
                             regions_var <- case M.lookup (fromRegVarToFreeVarsTy reg_to_reg_var) freeVarToVarEnv' of 

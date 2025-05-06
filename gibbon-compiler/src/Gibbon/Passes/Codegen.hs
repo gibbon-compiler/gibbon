@@ -1541,6 +1541,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                     let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outVtmp[$int:size] = { $inits:initList }; |]
                                     let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
                                     pure [C.BlockDecl arrayInit, C.BlockDecl arrayMalloc]
+                                    --let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outV[$int:size] = { $inits:initList }; |]
+                                    -- let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
+                                    --pure [C.BlockDecl arrayInit]
 
                  IndexCursorArray -> do 
                                     let [(outV, outT)] = bnds
@@ -1551,7 +1554,13 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  --            [pleft,pright] = rnds in pure
                  --        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
 
-                 _ -> error $ "codegen: " ++ show prm ++ "unhandled."
+                 CastPtr -> do
+                    let [(outV, outT)] = bnds
+                        [ptr] = rnds
+                        ptr' = codegenTriv venv ptr
+                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
+
+                 _ -> error $ "codegen: " ++ show prm ++ " unhandled."
 
        return $ pre ++ bod'
 

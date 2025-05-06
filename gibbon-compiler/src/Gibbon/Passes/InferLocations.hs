@@ -435,7 +435,7 @@ freshTyLocsSoA lst = do
                      case lst of
                           [] -> return [] 
                           (a, b):rst -> do 
-                                        newLoc <- fresh
+                                        newLoc <- freshSoALoc b
                                         rst' <- freshTyLocsSoA rst
                                         return $ [(a, newLoc)] ++ rst'
 
@@ -640,7 +640,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                 -- In case of an SoA loc, we need to construct an SoAR region.  
                                 True -> do 
                                         r <- makeSoARegion lc
-                                        return r    
+                                        dbgTraceIt "Print loc in getNewRegion: " dbgTraceIt (sdoc (lc)) dbgTraceIt "End getNewRegion.\n" return r    
                                 False -> do
                                          r <- lift $ lift $ freshRegVar 
                                          return r
@@ -660,7 +660,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                 [] -> return []
                                 ((d, index), loc):rst -> do 
                                                          {-TODO: if a location is SoA, we need to make an SoAR region-} 
-                                                         fieldReg <- lift $ lift $ freshRegVar
+                                                         fieldReg <- case loc of 
+                                                                          Single _ -> lift $ lift $ freshRegVar
+                                                                          _ -> makeSoARegion loc
                                                          rst' <- makeSoARFields rst
                                                          return $ [((d, index), fieldReg)] ++ rst'
                                                          
@@ -683,7 +685,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                              -- TODO, in case of a SoA loc
                              -- We need an SoAR region. 
                              -- That SoA loc would be the start of the SoAR region.
-                             r <- getNewRegion lv
+                             r <- dbgTraceIt "Print call getNewRegion: " dbgTraceIt (sdoc (l, lv)) dbgTraceIt "End call getNewRegion.\n" getNewRegion lv
                              -- dbgTraceIt "Print output from getNewRegion " dbgTraceIt (sdoc (r)) dbgTraceIt "End getNewRegion.\n"    
                              let c = StartRegionL lv r
                              -- dbgTraceIt "tryInRegion true" dbgTraceIt (sdoc (b1, b2, b3, r, lv, l, vls)) dbgTraceIt "End tryInRegion true\n"
@@ -2268,9 +2270,9 @@ finalLocVar v = do
   u <- finalUnifyLoc v
   case u of
     -- dbgTraceIt "FinalLocVar fixed " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fixed\n"
-    FixedLoc v' -> return v'
+    FixedLoc v' -> dbgTraceIt "FinalLocVar fixed " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fixed\n" return v'
     -- dbgTraceIt "FinalLocVar fresh " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fresh\n"
-    FreshLoc v' -> return v'
+    FreshLoc v' -> dbgTraceIt "FinalLocVar fresh " dbgTraceIt (sdoc (v, u, v')) dbgTraceIt "End FinalLocVar Fresh\n" return v'
 
 fresh :: TiM LocVar
 fresh = do

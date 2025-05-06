@@ -526,6 +526,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               Assert ex -> go ex
               MakeCursorArray len vars -> syms
               IndexCursorArray var idx -> syms
+              CastPtr var ty -> syms
               _ -> error $ "Unexpected Ext: " ++ sdoc ex
           MapE{}         -> syms
           FoldE{}        -> syms
@@ -761,6 +762,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v, T.CursorTy)] T.IndexCursorArray [ triv sym_tbl "base pointer" (VarE cur)  
                                                           , triv sym_tbl "index_into_base_pointer" (LitE idx)] <$>
         tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (CastPtr cur ty))) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] T.CastPtr [triv sym_tbl "cast pointer" (VarE cur)] <$>
+        tail free_reg sym_tbl bod
+
 
     LetE (v, _, ty, (Ext (MakeCursorArray size vars))) bod ->
       T.LetPrimCallT [(v, T.CursorArrayTy size)] T.MakeCursorArray [triv sym_tbl ("MakeCursorArray arg" ++ (show $ fromJust $ L.elemIndex var vars)) (VarE var) | var <- vars] <$>

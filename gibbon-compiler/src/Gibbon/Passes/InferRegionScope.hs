@@ -64,6 +64,21 @@ In fnB, there's no path from `rb` to 1.
 -}
 
 
+mkScopedRegion :: Region -> Multiplicity -> Region 
+mkScopedRegion r m = 
+  case r of 
+    SoAR dcr fieldRegs -> let scopedDcr = case dcr of 
+                                                VarR dcrVar -> GlobR dcrVar m
+                                                _ -> error "Did not handle SoAR in inferRegScopeExp."
+                              scopedFieldRegs = map (\(t, r') -> case r of
+                                                                    _ -> (t, mkScopedRegion r' m)
+                                                                
+                                                    ) fieldRegs
+                           in SoAR scopedDcr scopedFieldRegs
+    VarR reg -> GlobR reg m
+    _ -> error "Did not handle region in inferRegScopeExp (mkScopedRegion)."
+
+
 inferRegScopeExpHelper :: Exp2 -> Exp2 -> Region -> M.Map Region Region -> PassM Exp2 
 inferRegScopeExpHelper ex rhs r env = 
   let deps = depList ex
@@ -88,15 +103,16 @@ inferRegScopeExpHelper ex rhs r env =
                                                     else Infinite
                                           let isPath = path g retVertex regVertex
                                           -- Not handling recursive SoA Regions
-                                          let scopedDcr = case dcr of 
-                                                              VarR dcrVar -> GlobR dcrVar defaultMul
-                                                              _ -> error "Did not handle SoAR in inferRegScopeExp."
-                                          let scopedFieldRegs = map (\(t, r) -> case r of 
-                                                                                    VarR fvar -> (t, GlobR fvar defaultMul)
-                                                                                    _ -> error "Did not handle SoAR in inferRegScopeExp."
+                                          -- let scopedDcr = case dcr of 
+                                          --                     VarR dcrVar -> GlobR dcrVar defaultMul
+                                          --                     _ -> error "Did not handle SoAR in inferRegScopeExp."
+                                          -- let scopedFieldRegs = map (\(t, r) -> case r of 
+                                          --                                           VarR fvar -> (t, GlobR fvar defaultMul)
+                                          --                                           _ -> error "Did not handle SoAR in inferRegScopeExp."
                                                                 
-                                                                      ) fieldRegs
-                                          let scoped_reg = SoAR scopedDcr scopedFieldRegs
+                                          --                             ) fieldRegs
+                                          -- let scoped_reg = SoAR scopedDcr scopedFieldRegs
+                                          let scoped_reg = mkScopedRegion r defaultMul
                                           Ext <$> LetRegionE scoped_reg Undefined Nothing <$> inferRegScopeExp (M.insert r scoped_reg env) rhs 
             _ -> let regV = regionToVar r
                      regVToVar = case regV of

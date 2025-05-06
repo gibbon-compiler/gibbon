@@ -33,19 +33,20 @@ add1 lst = case lst of
                         i1 = addPackedInt' i 1
 					  in Cons i1 (add1 rst)
 
--- sumList :: List -> Int
--- sumList lst = case lst of
--- 		   Nil -> 0
--- 		   Cons i rst -> let sumRst = sumList rst
---                                    in (unwrapPackedInt i) + sumRst
+sumList :: List -> Int
+sumList lst = case lst of
+ 		   Nil -> 0
+ 		   Cons i rst -> let i' = unwrapPackedInt i
+                                     sumRst = sumList rst
+                                   in i' + sumRst
 
 gibbon_main = let 
                 pi = mkPackedInt 10
-                lst = mkList 10
-                lst' = iterate (add1 lst)
+                lst = mkList 100000
+                --lst' = iterate (add1 lst)
                 -- _ = printPacked lst'
                 --(val, lst'') = fieldDep lst'
-               in (printPacked lst') --printPacked lst' --val --sumList lst'
+               in (printPacked lst) --printPacked lst' --val --sumList lst'
 
 
 

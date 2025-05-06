@@ -366,6 +366,7 @@ data Prim
     | Assert
     | IndexCursorArray 
     | MakeCursorArray
+    | CastPtr
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
