@@ -77,19 +77,19 @@ delayExpBody env benv ex = do
       case ext of
         AddFixed{} -> return (ex, env)
         LetLocE loc rhs bod -> do
-                               let exprs_to_discharge = concatMap (\(e, vars) -> if S.isSubsetOf vars benv 
+                               let benv' = S.insert (fromLocVarToFreeVarsTy loc) benv
+                               let exprs_to_discharge = concatMap (\(e, vars) -> if S.isSubsetOf vars benv'
                                                                            then [e]
                                                                            else []      
                                                                   ) (M.toList env)
-                               let env' = M.filterWithKey (\k vars -> not $ S.isSubsetOf vars benv) env
-                               let benv' = S.insert (fromLocVarToFreeVarsTy loc) benv                                    
+                               let env' = M.filterWithKey (\k vars -> not $ S.isSubsetOf vars benv') env
                                (bod', env'') <- delayExpBody env' benv' bod
                                -- Discharge all the expressions.
-                               let bod'' = L.foldr (\e bod -> case e of
-                                                               BoundsCheckExpr sz bound cur -> LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheck sz bound cur)) bod
+                               let bod'' = L.foldr (\e body -> case e of
+                                                               BoundsCheckExpr sz bound cur -> LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheck sz bound cur)) body
                                                                _ -> error "TODO: delayExpBody: unexpected expression\n"
-                                                   ) (Ext $ LetLocE loc rhs bod') exprs_to_discharge
-                               return (bod'', env'')
+                                                   ) bod' exprs_to_discharge
+                               return (Ext $ LetLocE loc rhs bod'', env'')
         LetRegE reg rhs bod -> do 
                                (bod', env') <- delayExpBody env benv bod
                                return (Ext $ LetRegE reg rhs bod', env')

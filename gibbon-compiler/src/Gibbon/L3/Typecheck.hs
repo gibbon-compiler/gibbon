@@ -40,7 +40,7 @@ tcExp isSoA isPacked ddfs env exp = do
           vrhs <- go rhs
           ensureEqualTyModCursor isSoA exp vty CursorTy
           ensureEqualTyModCursor isSoA exp vrhs (scalarToTy s)
-          return CursorTy
+          return CursorTy           
 
         -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
@@ -773,6 +773,15 @@ tcExp isSoA isPacked ddfs env exp = do
                 let env' = extendEnv env [(v,SymDictTy ar CursorTy)]
                 tcExp isSoA isPacked ddfs env' e
         _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
+
+    
+    LetE (v, _, ty, Ext rhs@(CastPtr v' ty')) e -> do
+       if (ty /= ty')
+       then throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
+       else do  
+         let env' = extendEnv env [(v, ty)]
+         tcExp isSoA isPacked ddfs env' e
+           
 
     LetE (v,locs,ty,rhs) e -> do
       -- Check that the expression does not have any locations

@@ -15,14 +15,15 @@ unwrapPackedInt a = case a of
                       PacI a' -> a'
 
 mkPackedInt :: Int -> PackedInt
-mkPackedInt i = PacI i
+mkPackedInt i = let new_packed_int = PacI i
+                  in new_packed_int
 
 mkList :: Int -> List
 mkList length = if length <= 0
                 then Nil
 				else
-                 let rst = mkList (length - 1)
-                     i = mkPackedInt length
+                 let i = mkPackedInt length
+                     rst = mkList (length - 1)
 					in Cons i rst
 
 add1 :: List -> List
@@ -39,8 +40,8 @@ add1 lst = case lst of
 --                                    in (unwrapPackedInt i) + sumRst
 
 gibbon_main = let 
-                pi = PacI 10
-                lst = mkList 20000000
+                pi = mkPackedInt 10
+                lst = mkList 10
                 lst' = iterate (add1 lst)
                 -- _ = printPacked lst'
                 --(val, lst'') = fieldDep lst'

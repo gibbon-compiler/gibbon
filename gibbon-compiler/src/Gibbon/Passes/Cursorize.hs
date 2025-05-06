@@ -247,7 +247,9 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                                             Just v -> v
                                             Nothing -> error "cursorizeFunDef: unexpected variable"
                        ) funArgs)
-
+  
+  {- Get the regions out before hand, these can be eliminated later on -}
+  
   bod <- if hasPacked (unTy2 out_ty)
          then fromDi <$> cursorizePackedExp freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
          else cursorizeExp freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
@@ -1218,7 +1220,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         -- See `cursorizeLocExp`
         LetLocE loc rhs bod -> do
           freeVarToVarEnv' <- do 
-                              case loc of 
+                              case loc of
                                     Single l -> if M.member (fromLocVarToFreeVarsTy loc) freeVarToVarEnv
                                                 then return freeVarToVarEnv
                                                 else return $ M.insert (fromLocVarToFreeVarsTy loc) l freeVarToVarEnv
@@ -1261,6 +1263,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         {- Right now i just skip the let region, just recurse on the body-}              
         LetRegE loc rhs bod -> do
           --let loc = fromRegVarToLocVar reg_var
+          let ty_of_loc = case loc of 
+                            SingleR _ -> CursorTy
+                            SoARv _ flds -> CursorArrayTy (1 + length flds)
           freeVarToVarEnv' <- do 
                               case loc of 
                                     SingleR l -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
@@ -1284,7 +1289,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                 Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
               case rhs of
                 -- Discharge bindings that were waiting on 'loc'. 
-                _ -> onDi (mkLets (bnds' ++ [(locs_var,[],CursorTy,rhs')] ++ bnds)) <$>
+                _ -> onDi (mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds)) <$>
                        go freeVarToVarEnv' (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
@@ -1512,7 +1517,8 @@ But Infinite regions do not support sizes yet. Re-enable this later.
           rhs = Ext $ IndexCursorArray loc_var 0
        in if isBound loc_var tenv
           then Right (rhs, [], tenv, senv)
-          else Left$ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_logarg) [(lvar_name,[],CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg)),rhs)] denv
+          -- CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg))
+          else Left$ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_logarg) [(lvar_name,[],CursorTy,rhs)] denv
     GetFieldLocSoA i loc -> 
       {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
       let loc_from_locarg = toLocVar loc
@@ -1563,7 +1569,8 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
                                 Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show regExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
             in if isBound reg_var tenv
             then Right (rhs, [], tenv, senv)
-            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg)),rhs)] denv
+            -- CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg))
+            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],CursorTy,rhs)] denv
         GetFieldRegSoA i loc ->
           {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
           let loc_from_locarg = toLocVar loc
@@ -1588,6 +1595,47 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
             else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],CursorTy,rhs)] denv
 
 
+
+findSoAParent :: FreeVarsTy -> M.Map FreeVarsTy Var -> Maybe FreeVarsTy
+findSoAParent fvar freeVarEnv = case fvar of
+                                       R r -> let allKeys = M.keys freeVarEnv
+                                                  parent = foldr (\k acc -> case k of 
+                                                                            R r' -> case (findRegInRegion r' r) of 
+                                                                                             Just regg -> Just regg 
+                                                                                             Nothing -> acc
+                                                                            FL l -> acc
+                                                                            V v -> acc 
+                                                                 ) Nothing allKeys
+                                                in case parent of 
+                                                       Just p -> Just $ R p
+                                                       Nothing -> Nothing
+                                       FL l -> Nothing
+                                       V v -> Nothing
+
+-- findSoAParentHelper :: FreeVarsTy -> FreeVarsTy -> Maybe FreeVarsTy
+-- findSoAParentHelper a b = case (a, b) of
+--                                 (R r1, R r2) -> if r1 == r2 
+--                                                 then Just a 
+--                                                 else case r1 of 
+--                                                       SingleR _ -> Nothing 
+--                                                       SoAR dcReg fieldRegs -> let check_fields = map (\r -> if r == r2 then Just r else Nothing) fieldRegs
+--                                                                                 in   
+--                                 FL l ->
+--                                 V v ->  
+
+
+findRegInRegion :: RegVar -> RegVar -> Maybe RegVar 
+findRegInRegion r1 r2 = if r1 == r2 
+                        then Just r1
+                        else case r1 of
+                              SingleR _ -> Nothing
+                              SoARv dcReg fieldRegs -> case r2 of 
+                                                            SingleR _ -> if dcReg == r2 then Just r1 else Nothing
+                                                            SoARv _ _ -> let found = foldr (\(_ , fr) acc -> if fr == r2 then Just r1 else acc) Nothing fieldRegs
+                                                                          in found
+
+
+
 -- ASSUMPTIONS:
 -- (1) `locs` has [in_regions, out_regions, in_locs, out_locs] for the function.
 --     But after Cursorize, the calling convention changes so that input
@@ -1607,25 +1655,75 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs    = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
-          argTys  = map (gRecoverType ddfs (Env2 tenv M.empty)) args
-      freeVarToVarEnv' <- foldrM (\loc acc -> do 
+          argTys  = dbgTraceIt "Print locs in cursorize AppE " dbgTraceIt (sdoc (f, locs)) dbgTraceIt "End cursorize AppE\n" map (gRecoverType ddfs (Env2 tenv M.empty)) args
+      (freeVarToVarEnv', newInsts) <- foldrM (\loc (acc, acc') -> do 
                                              let loc_var = fromLocArgToFreeVarsTy loc
-                                             acc' <- case (M.lookup (loc_var) freeVarToVarEnv) of 
-                                                                          Just v -> return acc
+                                             nacc <- case (M.lookup (loc_var) freeVarToVarEnv) of 
+                                                                          Just v -> return (acc, acc')
                                                                           Nothing -> case loc_var of 
                                                                                             R r -> case r of 
-                                                                                                              SingleR v -> return $ M.insert loc_var v acc
-                                                                                                              SoARv _ _ -> do
-                                                                                                                            name <- gensym "cursor_ptr"
-                                                                                                                            return $ M.insert loc_var name acc
+                                                                                                              SingleR v -> return $ (M.insert loc_var v acc, acc')
+                                                                                                              SoARv dconReg fieldRegions -> do
+                                                                                                                -- let us try to find if the SoA region belongs to any other SoA region in the environment.
+                                                                                                                            let parentRegion = findSoAParent loc_var acc
+                                                                                                                            ret <- case parentRegion of 
+                                                                                                                                      Just par_reg -> do 
+                                                                                                                                                       let name_par_reg = case (M.lookup par_reg acc) of 
+                                                                                                                                                                      Just v -> v 
+                                                                                                                                                                      Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding parent region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc  
+                                                                                                                                                       name <- gensym "cursor_reg_ptr"
+                                                                                                                                                       let instrs = [LetE (name, [], CursorArrayTy (1 + length fieldRegions), Ext $ IndexCursorArray (name_par_reg) 1)]
+                                                                                                                                                       return $ (M.insert loc_var name acc, acc' ++ instrs)
+                                                                                                                                      Nothing -> do 
+                                                                                                                                                  (dconReg_var, dcon_insts) <- case (M.lookup (fromRegVarToFreeVarsTy dconReg) acc) of 
+                                                                                                                                                                                    Just v -> return (v, []) 
+                                                                                                                                                                                    Nothing -> do
+                                                                                                                                                                                                let parent_dcon_end = findSoAParent (fromRegVarToFreeVarsTy dconReg) acc
+                                                                                                                                                                                                name_dcon <- case dconReg of 
+                                                                                                                                                                                                                    SingleR s -> return s 
+                                                                                                                                                                                                                    SoARv _ _ -> do 
+                                                                                                                                                                                                                                 dnew_name <- gensym "dcon_end"
+                                                                                                                                                                                                                                 return dnew_name 
+                                                                                                                                                                                                case parent_dcon_end of 
+                                                                                                                                                                                                        Just p -> do
+                                                                                                                                                                                                                    let p_var_name = case (M.lookup p acc) of 
+                                                                                                                                                                                                                                    Just v -> v 
+                                                                                                                                                                                                                                    Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding parent region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc  
+                                                                                                                                                                                                                    let instrs = [LetE (name_dcon, [], CursorTy, Ext $ IndexCursorArray (p_var_name) 0)]
+                                                                                                                                                                                                                    return (name_dcon, instrs)
+
+                                                                                                                                                                         -- Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding datacon region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc
+                                                                                                                                                  let fieldReg_vars = map (\(key, field_reg) -> case (M.lookup (fromRegVarToFreeVarsTy field_reg) acc) of 
+                                                                                                                                                       Just v -> v
+                                                                                                                                                       Nothing -> error "cursorizeAppE: Did not find an end of region variable for the corresponding  field region.\n"
+                                                                                                                                                                         ) fieldRegions
+                                                                                                                                                  name <- gensym "cursor_reg_ptr"
+                                                                                                                                                  let instrs = dcon_insts ++ [LetE (name, [], CursorArrayTy (1 + length fieldReg_vars), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
+                                                                                                                                                  dbgTraceIt "Print Reg: " dbgTraceIt (sdoc (f, dconReg, fieldRegions)) dbgTraceIt "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
+                                                                                                                            pure ret
+                                                                                                                
+
+
+                                                                                                                            -- may need to generate instructions to fetch correct end of regions here.
+                                                                                                                            -- Right now I am just leaving this to one level of nesting, in the future this may need to be recursive.
+                                                                                                                            -- let dconReg_var = case (M.lookup (fromRegVarToFreeVarsTy dconReg) acc) of 
+                                                                                                                            --                         Just v -> v 
+                                                                                                                            --                         Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding datacon region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc
+                                                                                                                            -- let fieldReg_vars = map (\(key, field_reg) -> case (M.lookup (fromRegVarToFreeVarsTy field_reg) acc) of 
+                                                                                                                            --                                                                         Just v -> v
+                                                                                                                            --                                                                         Nothing -> error "cursorizeAppE: Did not find an end of region variable for the corresponding  field region.\n"
+                                                                                                                            --                         ) fieldRegions
+                                                                                                                            --name <- gensym "cursor_reg_ptr"
+                                                                                                                            --let instrs = [LetE (name, [], CursorArrayTy (1 + length fieldReg_vars), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
+                                                                                                                            --dbgTraceIt "Print Reg: " dbgTraceIt (sdoc (f, dconReg, fieldRegions)) dbgTraceIt "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
                                                                                             FL l -> case l of 
-                                                                                                              Single v -> return $ M.insert loc_var v acc
+                                                                                                              Single v -> return $ (M.insert loc_var v acc, acc')
                                                                                                               SoA _ _ -> do
                                                                                                                             name <- gensym "cursor_ptr"
-                                                                                                                            return $ M.insert loc_var name acc
-                                                                                            V v -> return $ M.insert loc_var v acc
-                                             return acc'
-                                ) freeVarToVarEnv locs
+                                                                                                                            return $ (M.insert loc_var name acc, acc')
+                                                                                            V v -> return $ (M.insert loc_var v acc, acc')
+                                             return nacc
+                                ) (freeVarToVarEnv, []) locs
       args' <- mapM
                  (\(t,a) -> if hasPacked (unTy2 t)
                             then fromDi <$> cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
@@ -1662,8 +1760,12 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                         bod locs
       dflags <- getDynFlags
       if gopt Opt_RtsDebug dflags
-        then pure asserts
-        else pure bod
+        then do
+          asserts' <- foldrM (\exprs body -> pure $ exprs body) asserts newInsts
+          pure asserts'
+        else do 
+          bod' <- foldrM (\exprs body -> pure $ exprs body) bod newInsts 
+          pure bod'
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
 {-
@@ -1898,9 +2000,9 @@ cursorizeLet :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDef
 cursorizeLet freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs) bod
     | isPackedTy ty = do
         rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
-        fresh <- gensym "tup_packed"
+        fresh <- dbgTraceIt "Print locs in cursorize Let " dbgTraceIt (sdoc (locs)) dbgTraceIt "End cursorize Let\n" gensym "tup_packed"
         let cursor_ty_locs = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
-                                              cursorType = case free_var of 
+                                              cursorType = case free_var of
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
                                                                     SoARv _ flds -> CursorArrayTy (1 + length flds)
@@ -2145,10 +2247,14 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                   Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
                           
                           -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-                          (field_lets, field_v_lst) <- foldlM (\(acc1, acc2) (key@(dcon', idx), loc) -> do
+                          (field_lets, field_v_lst) <- dbgTraceIt "Print scrut_loc " dbgTraceIt (sdoc ((dcon, scrut_loc))) dbgTraceIt "end scrut_loc.\n" 
+                                                        foldlM (\(acc1, acc2) (key@(dcon', idx), loc) -> do
                                                                         let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
                                                                         field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
-                                                                        let field_let = [(field_var, [], CursorTy, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
+                                                                        let field_cursor_ty = case loc of 
+                                                                                                    Single _ -> CursorTy
+                                                                                                    SoA _ flds -> CursorArrayTy (1 + L.length (flds)) 
+                                                                        let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
                                                                         let curr_window = [((dcon', idx), field_var)]
                                                                         return (acc1 ++ field_let , acc2 ++ curr_window)
                                                               ) ([], []) (getAllFieldLocsSoA scrut_loc)
@@ -2478,24 +2584,30 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                             -- Cannot read this. Instead, we add it to DepEnv.
                             let denv' = M.insertWith (++) (loc) [(v,[],ty3_of_field2,VarE (loc_var))] denv
                             go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
-                        False -> do 
-                          let tenv' = M.insert v (MkTy2 CursorTy) tenv
+                        False -> do
+                          let ty3_of_field = case ploc of 
+                                                  Single _ -> CursorTy
+                                                  SoA _ fl -> CursorArrayTy (1 + length fl)
+                          let ty3_of_field2 :: Ty3 = case ploc of 
+                                                        Single _ -> CursorTy
+                                                        SoA _ fl -> CursorArrayTy (1 + length fl)
+                          let tenv' = M.insert v (MkTy2 ty3_of_field) tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
-                          -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
-                          let cur = dcur
+                          let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
+                          -- let cur = dcur
                           loc_var <- lookupVariable loc fenv
                           if canBind
                           then do
-                            let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
+                            let tenv'' = M.insert (loc_var) (MkTy2 ty3_of_field) tenv'
                             -- Flip canBind to indicate that the subsequent fields
                             -- should be added to the dependency environment.
                             bod <- go curw freeVarToVarEnv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
-                            return $ mkLets [((loc_var), [], CursorTy, VarE cur)
-                                        ,(v  , [], CursorTy, VarE (loc_var))]
+                            return $ mkLets [((loc_var), [], ty3_of_field2, VarE cur)
+                                        ,(v  , [], ty3_of_field2, VarE (loc_var))]
                                      bod
                           else do
                             -- Cannot read this. Instead, we add it to DepEnv.
-                            let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
+                            let denv' = M.insertWith (++) (loc) [(v,[],ty3_of_field2,VarE (loc_var))] denv
                             go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
                     _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 

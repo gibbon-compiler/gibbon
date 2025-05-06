@@ -69,6 +69,7 @@ data E3Ext loc dec =
   | MakeCursorArray Int [Var] -- ^ Make a Cursor Array from a list of Cursors. Returns a new variable for Cursor Array.
   | IndexCursorArray Var Int                       -- ^ Index into a Cursor Array 
   | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
+  | CastPtr Var dec                                -- ^ Cast a pointer to the specified type
   | SubPtr Var Var                                 -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor

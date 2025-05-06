@@ -91,6 +91,7 @@ import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
+import           Gibbon.Passes.AddCastInstructions (addCasts)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Passes.CorrectLocExprs (delayExpr)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
@@ -819,6 +820,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
+              l3 <- go "addCasts"         addCasts      l3
               l3 <- go "L3.typecheck"     tcProg3       l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               l3 <- go "L3.typecheck"     tcProg3       l3

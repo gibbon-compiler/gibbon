@@ -559,7 +559,7 @@ inferExp' ddefs env exp bound dest=
             unbound = (s S.\\ S.fromList bound)
         -- dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n"
         e''' <- bindAllUnbound e'' (S.toList unbound)
-        return (e''',ty) -- (e''', ty)
+        dbgTraceIt "Print after finishExp: " dbgTraceIt (sdoc (e, e', e'', s)) dbgTraceIt "End after finishExp.\n" return (e''',ty) -- (e''', ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -1613,12 +1613,21 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE p' ls') bod'', ty'', fcs)
 
         DataConE _loc k ls  -> do
-          loc <- lift $ lift $ freshLocVar "datacon"
+          loc <- case bty of 
+                    PackedTy tcon _ -> freshSoALoc3 ddefs tcon 
+                    _ -> lift $ lift $ freshLocVar "datacon"
           (rhs',rty,rcs) <- inferExp ddefs env (DataConE () k ls) $ SingleDest loc
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- tryInRegion cs''
-          tryBindReg (L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) loc,rhs') bod'',
+          -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
+          let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) loc,rhs') bod''
+          let expr = case loc of
+                       SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA loc)
+                                                    fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key loc)) fieldLocs
+                                                    in foldr (\lete acc -> Ext $ lete acc) let_new_dcon (dataConLetE : fieldLetEs)
+                       Single _ -> let_new_dcon
+          dbgTraceIt "Print constratints for Let DataConE: " dbgTraceIt (sdoc (rty, rhs, rhs', loc, fcs)) dbgTraceIt "End constraints let DataConE.\n" tryBindReg (expr,
                     ty', fcs)
 
         LitSymE x       -> do
@@ -1903,6 +1912,16 @@ cleanExp e =
       LetE (v,ls,t,e1@(Ext (L2.AddFixed _cur _i))) e2 ->
                         let (e2', s2') = cleanExp e2
                         in (LetE (v,ls,t,e1) e2', S.delete (Single v) (S.unions [s2', S.fromList ls]))
+      LetE (v,ls,t,e1@(DataConE lv dc es)) e2 -> 
+                         let (e1', s1') = cleanExp e1
+                             (e2', s2') = cleanExp e2
+                             let_new_dcon = LetE (v,ls,t,e1') e2' 
+                             expr = case lv of
+                                          SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA lv)
+                                                                       fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key lv)) fieldLocs
+                                                                      in foldr (\lete acc -> Ext $ lete acc) let_new_dcon (dataConLetE : fieldLetEs)
+                                          Single _ -> let_new_dcon
+                            in (expr, S.unions [s1',s2', S.fromList ls ])
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
                                  (e2', s2') = cleanExp e2
                              in (LetE (v,ls,t,e1') e2', S.unions [s1',s2', S.fromList ls ])
@@ -2304,6 +2323,40 @@ freshSoALoc2 ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
                        fields <- freshSoALocHelper tyc dataCons
+                       newdcLoc <- fresh
+                       return $ SoA (unwrapLocVar newdcLoc) fields
+
+
+
+freshSoALocHelper3 :: TyCon -> [(DataCon,[(IsBoxed, Ty1)])] -> TiM [((DataCon, Int), LocVar)]
+freshSoALocHelper3 tyvar lst = do 
+                        case lst of
+                          [] -> do 
+                                 pure []
+                          (a, flds):rst -> do
+                                            fieldLocs <- fmap concat $ mapM (\e@(_, ty) -> do 
+                                                                              case ty of 
+                                                                                PackedTy tyc _ -> do
+                                                                                                if tyvar == tyc 
+                                                                                                then return []
+                                                                                                else do 
+                                                                                                  {- TODO: we should return an SoA loc here instead -}
+                                                                                                  newLoc <- fresh 
+                                                                                                  let Just idx = L.elemIndex e flds
+                                                                                                  return $ [((a, idx), newLoc)]
+                                                                                _ -> do
+                                                                                     newLoc <- fresh
+                                                                                     let Just idx = L.elemIndex e flds
+                                                                                     return $ [((a, idx), newLoc)]
+                                                             ) flds
+                                            rst' <- freshSoALocHelper3 tyvar rst
+                                            return $ fieldLocs ++ rst'
+
+freshSoALoc3 :: DDefs Ty1 -> TyCon -> TiM LocVar 
+freshSoALoc3 ddfs tyc = do
+                       -- let (tyc, (don, flds)) = lkp ddfs con
+                       let DDef{dataCons} = lookupDDef ddfs tyc
+                       fields <- freshSoALocHelper3 tyc dataCons
                        newdcLoc <- fresh
                        return $ SoA (unwrapLocVar newdcLoc) fields
 
