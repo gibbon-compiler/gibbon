@@ -558,6 +558,11 @@ unwrapLocVar locvar = case locvar of
                                error $  "unwrapLocVar : Did not expect an SoA location! " ++ (show locvar)
                                 --dcon {- Bad, unsafe !! -}
 
+locsInLocVar :: LocVar -> [LocVar]
+locsInLocVar loc = case loc of 
+			Single _ -> [loc]
+			SoA dcon fieldLocs -> [(singleLocVar dcon)] ++ L.map (\(_, l) -> l) fieldLocs
+
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
                         Single loc -> [loc]

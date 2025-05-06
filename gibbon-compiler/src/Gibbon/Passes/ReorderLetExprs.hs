@@ -45,7 +45,8 @@ reorderLetExprsFun f@FunDef{funName,funTy,funArgs,funBody,funMeta} = do
     (funBody', env') <- reorderLetExprsFunBody definedVars M.empty funBody
     funBody'' <- releaseExprsFunBody definedVars env' funBody'
     -- dbgTraceIt "Print Meta: " dbgTraceIt (sdoc (funTy, funMeta)) dbgTraceIt "Print end.\n"
-    dbgTraceIt "Print Env: " dbgTraceIt (sdoc (env')) dbgTraceIt ("End Print Env.\n") pure $ f { funBody = funBody'' }
+    funBody''' <- ensureLocationsAreDefinedForWrite S.empty funBody''
+    dbgTraceIt "Print Env: " dbgTraceIt (sdoc (env')) dbgTraceIt ("End Print Env.\n") pure $ f { funBody = funBody''' }
 
 
 {- We also need to release let expressions which are defined -}
@@ -433,6 +434,125 @@ freeVarsInLocExp expr = case expr of
                     GetDataConLocSoA loc -> S.singleton (fromLocVarToFreeVarsTy loc)
                     GetFieldLocSoA _ loc -> S.singleton (fromLocVarToFreeVarsTy loc)
                     AssignLE loc -> S.singleton (fromLocVarToFreeVarsTy loc)
-    
 
-    
+
+ensureLocationsAreDefinedForWrite :: S.Set FreeVarsTy -> Exp2 -> PassM Exp2
+ensureLocationsAreDefinedForWrite definedVars ex = do
+    case ex of
+        LetE (v,locs,ty,rhs) bod -> do
+            let definedVars' = S.insert (fromVarToFreeVarsTy v) definedVars
+            bod' <- ensureLocationsAreDefinedForWrite definedVars' bod
+            pure $ LetE (v, locs, ty, rhs) bod'
+        LitE _ -> pure ex
+        CharE _ -> pure ex
+        FloatE{} -> pure ex
+        LitSymE _ -> pure ex
+        VarE _ -> pure ex
+        LitSymE _ -> pure ex
+        AppE f lvs ls -> AppE f lvs <$> mapM go ls
+        PrimAppE p ls -> PrimAppE p <$> mapM go ls
+        MkProdE ls -> MkProdE <$> mapM go ls 
+        DataConE loc k ls -> do 
+                              case loc of 
+                                    Single _ -> return ex
+                                    SoA dcloc fieldlocs -> do
+                                        if S.member (fromLocVarToFreeVarsTy (singleLocVar dcloc)) definedVars
+                                            then do
+                                                ls' <- mapM go ls
+                                                pure $ DataConE loc k ls'
+                                            else do
+                                                let definedVars' = S.insert (fromLocVarToFreeVarsTy (singleLocVar dcloc)) definedVars
+                                                let letDcon = [LetLocE (singleLocVar dcloc) (GetDataConLocSoA loc)]
+                                                let (letFieldLocs, definedVars'') = foldr (\(i, floc) (lets, denv) -> if S.member (fromLocVarToFreeVarsTy floc) definedVars'
+                                                                                                    then (lets, denv)
+                                                                                                    else 
+                                                                                                        let fieldLetE = [LetLocE floc (GetFieldLocSoA i loc)]
+                                                                                                            denv' = S.insert (fromLocVarToFreeVarsTy floc) denv
+                                                                                                          in (lets ++ fieldLetE, denv') 
+
+                                                                         ) (letDcon, definedVars') fieldlocs
+                                                ls' <- mapM (ensureLocationsAreDefinedForWrite definedVars'') ls
+                                                let ex' = foldr (\l body -> Ext $ l body) (DataConE loc k ls') letFieldLocs
+                                                pure ex'
+        
+        IfE a b c -> do
+            a' <- go a
+            b' <- go b
+            c' <- go c
+            pure $ IfE a' b' c' 
+
+        ProjE i e -> do
+            e' <- go e
+            pure $ ProjE i e'
+
+        CaseE e ls -> do 
+            e' <- go e
+            ls' <- mapM (\(dcon, vs, rhs) -> do
+                            let definedVars' = S.union definedVars (S.fromList (map (fromVarToFreeVarsTy . fst) vs))
+                            let definedVars'' = S.union definedVars' (S.fromList (map (fromLocVarToFreeVarsTy . snd) vs))
+                            rhs' <- ensureLocationsAreDefinedForWrite definedVars'' rhs
+                            pure (dcon, vs, rhs')) ls
+            pure $ CaseE e' ls'
+
+        TimeIt e _t b -> do
+            e' <- go e
+            pure $ TimeIt e' _t b
+
+        SpawnE f lvs ls -> do 
+            ls' <- mapM go ls
+            pure $ SpawnE f lvs ls'
+        
+        SyncE -> pure SyncE
+
+        WithArenaE v e -> do
+            e' <- go e
+            pure $ WithArenaE v e' 
+
+        MapE _ _ -> error "releaseExprsFunBody: MapE not supported!"
+
+
+        FoldE _ _ _ -> error "releaseExprsFunBody: FoldE not supported!"
+
+        WithArenaE v e -> do
+            e' <- go e
+            pure $ WithArenaE v e'
+
+        Ext (LetLocE loc rhs bod) -> do
+            let definedVars' = S.insert (fromLocVarToFreeVarsTy loc) definedVars
+            bod' <- ensureLocationsAreDefinedForWrite definedVars' bod
+            pure $ Ext $ LetLocE loc rhs bod'
+
+        Ext (StartOfPkdCursor cur) -> pure ex
+
+        Ext (TagCursor a _b) -> pure ex 
+
+        Ext (FromEndE{}) -> pure ex
+
+        Ext (AddFixed{}) -> pure ex
+
+        Ext (RetE _ls v) -> pure ex
+
+        Ext (BoundsCheck{}) -> pure ex
+
+        Ext (IndirectionE tycon _ (a, _) _ _) -> pure ex 
+
+        Ext GetCilkWorkerNum -> pure ex
+
+        Ext (LetAvail _ bod) -> pure ex
+
+        Ext (AllocateTagHere{}) -> pure ex
+
+        Ext (AllocateScalarsHere{}) -> pure ex
+
+        Ext (SSPush{}) -> pure ex
+
+        Ext (SSPop{}) -> pure ex
+
+        Ext (LetRegionE r sz ty bod) -> do
+            bod' <- go bod
+            pure $ Ext $ LetRegionE r sz ty bod'
+        
+        _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
+        _ -> pure ex
+    where 
+        go = ensureLocationsAreDefinedForWrite definedVars
