@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Gibbon.Passes.Cursorize
   (cursorize) where
 
@@ -194,7 +196,7 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                                                                                                   Nothing -> error "cursorizeFunDef: unexpected location variable"
                                                                  packed_cursor_ty = case loc of 
                                                                                          Single _ -> CursorTy
-                                                                                         SoA _ fields -> CursorArrayTy (1 + length (fields))
+                                                                                         SoA _ fields -> CursorArrayTy (linearLengthLocVar loc)  --(1 + length (fields))
                                                                in (var_for_loc, [], packed_cursor_ty, proj)
                                                ) inLocs projs -- [((unwrapLocVar loc),[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
                            in mkLets bnds
@@ -205,7 +207,7 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                                                                                                   Nothing -> error "cursorizeFunDef: unexpected location variable"
                                                                packed_cursor_ty = case l of 
                                                                                          Single _ -> CursorTy
-                                                                                         SoA _ fields -> CursorArrayTy (1 + length (fields))
+                                                                                         SoA _ fields -> CursorArrayTy (linearLengthLocVar l) --(1 + length (fields))
                                                                loc_entry = (var_for_loc, MkTy2 packed_cursor_ty)
                                                                var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv') of 
                                                                                                   Just v -> v 
@@ -276,7 +278,9 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
         PDictTy k v -> PDictTy (cursorizeInTy k) (cursorizeInTy v)
         PackedTy _ l    -> case l of 
                              Single _ -> CursorTy
-                             SoA _ fieldLocs -> CursorArrayTy (1 + (length fieldLocs))
+                             -- Another way is to linearize all locs in the cursory array
+                             -- SoA _ fieldLocs -> CursorArrayTy (1 + (length fieldLocs))
+                             SoA _ fieldLocs -> CursorArrayTy (linearLengthLocVar l)
         VectorTy el_ty -> VectorTy $ cursorizeInTy el_ty
         ListTy el_ty -> ListTy $ cursorizeInTy el_ty
         PtrTy -> PtrTy
@@ -328,7 +332,7 @@ This is used to create bindings for input location variables.
 
           outRegs = L.map (\r -> case r of
                                    SingleR v -> CursorTy
-                                   SoARv dcr frs -> CursorArrayTy (1 + length frs)
+                                   SoARv dcr frs -> CursorArrayTy (linearLengthRegVar r) -- (1 + length frs)
                           ) (outRegVars ty)
 
 
@@ -341,7 +345,7 @@ This is used to create bindings for input location variables.
           ret_curs = L.map (\lret -> case lret of
                                           EndOf (LRM l _ _) -> case l of 
                                                                   Single _ -> CursorTy 
-                                                                  SoA dcl flocs -> CursorArrayTy (1 + length flocs)
+                                                                  SoA dcl flocs -> CursorArrayTy (linearLengthLocVar l) --(1 + length flocs)
                                   
                            ) locRets
 
@@ -353,7 +357,8 @@ This is used to create bindings for input location variables.
           -- Packed types in the output then become end-cursors for those same destinations.
           newOut = mapPacked (\var loc -> case loc of 
                                                Single _  -> ProdTy [CursorTy, CursorTy]
-                                               SoA _ fields -> ProdTy [CursorArrayTy (1 + length fields), CursorArrayTy (1 + length fields)]
+                                               -- [CursorArrayTy (1 + length fields), CursorArrayTy (1 + length fields)]
+                                               SoA _ fields -> ProdTy [CursorArrayTy (linearLengthLocVar loc), CursorArrayTy (linearLengthLocVar loc)]
                            
                            ) out_ty
 
@@ -366,11 +371,11 @@ This is used to create bindings for input location variables.
           outCurs   = filter (\(LRM _ _ m) -> m == Output) locVars
           outCurTys = map (\(LRM l _ _) -> case l of 
                                         Single _ -> CursorTy
-                                        SoA _ fields -> CursorArrayTy (1 + length (fields))
+                                        SoA _ fields -> CursorArrayTy (linearLengthLocVar l) --(1 + length (fields))
                           ) outCurs
           inRegs    = map (\r -> case r of 
                                     SingleR _ -> CursorTy
-                                    SoARv _ frs -> CursorArrayTy (1 + length frs) 
+                                    SoARv _ frs -> CursorArrayTy (linearLengthRegVar r) -- (1 + length frs) 
                           ) (inRegVars ty)
           in_tys    = inRegs ++ outRegs ++ outCurTys ++ (map unTy2 arrIns)
 
@@ -678,10 +683,10 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         LetLocE loc rhs bod -> do
           let ty2_of_loc = case loc of 
                              Single l -> CursorTy
-                             SoA _ fields -> CursorArrayTy (1 + length fields)
+                             SoA _ fields -> CursorArrayTy (linearLengthLocVar loc) --(1 + length fields)
           let ty3_of_loc :: Ty3 = case loc of 
                                     Single l -> CursorTy
-                                    SoA _ fields -> CursorArrayTy (1 + length fields) 
+                                    SoA _ fields -> CursorArrayTy (linearLengthLocVar loc) --(1 + length fields) 
           freeVarToVarEnv' <- do 
                               case loc of 
                                     Single l -> if M.member (fromLocVarToFreeVarsTy loc) freeVarToVarEnv
@@ -727,8 +732,11 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   else mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
                          cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                 -- Discharge bindings that were waiting on 'loc'.
+                GetFieldLocSoA{} -> mkLets (bnds' ++ bnds) <$>
+                       cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
                 _ -> mkLets (bnds' ++ [(locs_var,[],ty3_of_loc,rhs')] ++ bnds) <$>
                        cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
+
             Left denv' -> cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
@@ -1120,6 +1128,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               if not (marker_added)
               then do
                 after_soa_loc <- gensym "aft_soa_loc"
+                let dummy_soa_loc_aft_loc = SoA aft_dloc aft_flocs
                 let after_flocs_to_vars = map (\(_, floc) -> case (M.lookup (fromLocVarToFreeVarsTy $ floc) fvarenv) of 
                                                                 Just v -> v 
                                                                 Nothing -> case floc of 
@@ -1127,7 +1136,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                              _ -> error $ "cursorizeExp (1123): DataConE: unexpected location variable" ++ "(" ++ show (dcon, floc) ++ ")" ++ show fvarenv
                                             ) aft_flocs
                 let makeCurArr = Ext $ MakeCursorArray (1 + length (aft_flocs)) ([aft_dloc] ++ after_flocs_to_vars)
-                let let_mk_cur_arr = LetE (after_soa_loc, [], CursorArrayTy (1 + length (aft_flocs)), makeCurArr)
+                let let_mk_cur_arr = LetE (after_soa_loc, [], CursorArrayTy (linearLengthLocVar dummy_soa_loc_aft_loc), makeCurArr)
                 end_scalars_alloc <- gensym "end_scalars_alloc" 
                 return (let_mk_cur_arr $ LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation (curr_soa_loc))
                              (MkProdE [VarE (curr_soa_loc), VarE (after_soa_loc)]))
@@ -1143,7 +1152,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 PackedTy _ l -> do
                   let cur_ty = case l of 
                               Single _ -> CursorTy
-                              SoA _ fields -> CursorArrayTy (1 + length (fields))
+                              SoA _ fields -> CursorArrayTy (linearLengthLocVar l)
                   rnd' <- go freeVarToVarEnv tenv senv rnd
                   end_scalars_alloc <- gensym "end_scalars_alloc"
                   (if not marker_added
@@ -1242,10 +1251,10 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                 Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
               let locs_ty3 :: Ty3 = case loc of
                                 Single _ -> CursorTy
-                                SoA _ fields -> CursorArrayTy (1 + length (fields))
+                                SoA _ fields -> CursorArrayTy (linearLengthLocVar loc) --(1 + length (fields))
               let locs_ty2 = case loc of
                                 Single _ -> CursorTy
-                                SoA _ fields -> CursorArrayTy (1 + length (fields))
+                                SoA _ fields -> CursorArrayTy (linearLengthLocVar loc) --(1 + length (fields))
               case rhs of
                 FromEndLE{} ->
                   if isBound locs_var tenv
@@ -1265,7 +1274,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           --let loc = fromRegVarToLocVar reg_var
           let ty_of_loc = case loc of 
                             SingleR _ -> CursorTy
-                            SoARv _ flds -> CursorArrayTy (1 + length flds)
+                            SoARv _ flds -> CursorArrayTy (linearLengthRegVar loc) --(1 + length flds)
           freeVarToVarEnv' <- do 
                               case loc of 
                                     SingleR l -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
@@ -1533,26 +1542,55 @@ But Infinite regions do not support sizes yet. Re-enable this later.
           elem_idx = case (L.elemIndex field_loc_elem field_locs) of 
                         Just idx -> idx
                         Nothing -> error "cursorizeLocExp: GetFieldLocSoA: field location not found!"
-          lvar_name = case (M.lookup (fromLocVarToFreeVarsTy lvar) freeVarToVarEnv) of 
-                        Just v -> v 
-                        Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
-          rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx) {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
-       in if isBound loc_var tenv
-          then Right (rhs, [], tenv, senv)
-          else Left$ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) [(lvar_name,[],CursorTy,rhs)] denv
+          -- We should unpack all locations from field_loc such that we are linearizing them. 
+          -- Order matters so we need to be consistent.
+          ret = case field_loc of
+                      Single _ -> let
+                                    lvar_name = case (M.lookup (fromLocVarToFreeVarsTy lvar) freeVarToVarEnv) of 
+                                       Just v -> v 
+                                       Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
+                                    rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx) {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
+                                   in if isBound loc_var tenv
+                                      then Right (rhs, [], tenv, senv)
+                                      else Left$ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) [(lvar_name,[],CursorTy,rhs)] denv
+                      SoA _ _ -> let
+                                    lvar_name = case (M.lookup (fromLocVarToFreeVarsTy lvar) freeVarToVarEnv) of 
+                                       Just v -> v 
+                                       Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
+                                    rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx) {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
+                                   in if isBound loc_var tenv
+                                      then Right (rhs, genIndexFromComplexLoc field_loc loc_var (1 + elem_idx + 0), tenv, senv)
+                                      else Left$ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) [(lvar_name,[],CursorTy,rhs)] denv
+         in ret
     GenSoALoc dloc flocs ->
         {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}   
-        let dcloc_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar dloc)) freeVarToVarEnv) of
-                              Just v -> v 
-                              Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected data constructor location variable" 
-            field_vars = map (\(_, loc) -> case (M.lookup (fromLocVarToFreeVarsTy (toLocVar loc)) freeVarToVarEnv) of
-                                                Just v -> v 
-                                                Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected field location variable"
-                             ) flocs
-            rhs = Ext $ MakeCursorArray (1 + length flocs) ([dcloc_var] ++ field_vars)
-         in dbgTraceIt "Print freeVarEnv GenSoALoc:" dbgTraceIt (sdoc (freeVarToVarEnv)) dbgTraceIt "End freeVarEnv\n"  Right (rhs, [], tenv, senv)
+        -- let dcloc_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar dloc)) freeVarToVarEnv) of
+        --                       Just v -> v 
+        --                       Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected data constructor location variable" 
+        --     field_vars = map (\(_, loc) -> case (M.lookup (fromLocVarToFreeVarsTy (toLocVar loc)) freeVarToVarEnv) of
+        --                                         Just v -> v 
+        --                                         Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected field location variable"
+        --                      ) flocs
+          let flocs' = map (\(k, lc) -> (k, (toLocVar lc))) flocs
+              loc = SoA ((unwrapLocVar . toLocVar) dloc) flocs'    --(map (\((_, floc) -> (toLocVar floc)) flocs))
+              rhs = Ext $ MakeCursorArray (linearLengthLocVar loc) (linearizeLocToCursorArray loc freeVarToVarEnv)  --([dcloc_var] ++ field_vars)
+            in dbgTraceIt "Print freeVarEnv GenSoALoc:" dbgTraceIt (sdoc (freeVarToVarEnv)) dbgTraceIt "End freeVarEnv\n"  Right (rhs, [], tenv, senv)
     
     _ -> error $ "cursorizeLocExp: Unexpected locExp: " ++ sdoc locExp
+
+
+
+genIndexFromComplexLoc :: LocVar -> Var -> Int -> [Binds Exp3]
+genIndexFromComplexLoc l p id = case l of
+                                 SoA dl fls -> let dl_let = [(dl, [], CursorTy, (Ext (IndexCursorArray p id)))]
+                                                   f_lets = foldl (\acc (k, fl) -> let
+                                                                                  flets = genIndexFromComplexLoc fl p (id + 1)
+                                                                                  in acc ++ flets
+                                                                ) [] fls   
+                                                in dl_let ++ f_lets
+                                 Single l -> [(l, [], CursorTy, (Ext (IndexCursorArray p id)))]
+
+
 
 cursorizeRegExp :: M.Map FreeVarsTy Var -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> RegVar -> RegExp -> Either DepEnv (Exp3, [Binds Exp3], TyEnv Var Ty2, SyncEnv)
 cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp = 
@@ -1672,7 +1710,7 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                                                                                       Just v -> v 
                                                                                                                                                                       Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding parent region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc  
                                                                                                                                                        name <- gensym "cursor_reg_ptr"
-                                                                                                                                                       let instrs = [LetE (name, [], CursorArrayTy (1 + length fieldRegions), Ext $ IndexCursorArray (name_par_reg) 1)]
+                                                                                                                                                       let instrs = [LetE (name, [], CursorArrayTy (linearLengthRegVar r), Ext $ IndexCursorArray (name_par_reg) 1)]
                                                                                                                                                        return $ (M.insert loc_var name acc, acc' ++ instrs)
                                                                                                                                       Nothing -> do 
                                                                                                                                                   (dconReg_var, dcon_insts) <- case (M.lookup (fromRegVarToFreeVarsTy dconReg) acc) of 
@@ -1698,7 +1736,7 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                                                                        Nothing -> error "cursorizeAppE: Did not find an end of region variable for the corresponding  field region.\n"
                                                                                                                                                                          ) fieldRegions
                                                                                                                                                   name <- gensym "cursor_reg_ptr"
-                                                                                                                                                  let instrs = dcon_insts ++ [LetE (name, [], CursorArrayTy (1 + length fieldReg_vars), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
+                                                                                                                                                  let instrs = dcon_insts ++ [LetE (name, [], CursorArrayTy (linearLengthRegVar r), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
                                                                                                                                                   dbgTraceIt "Print Reg: " dbgTraceIt (sdoc (f, dconReg, fieldRegions)) dbgTraceIt "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
                                                                                                                             pure ret
                                                                                                                 
@@ -2005,22 +2043,22 @@ cursorizeLet freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v
                                               cursorType = case free_var of
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) --(1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         let cursor_ty_locs' = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
                                                cursorType :: Ty3 = case free_var of 
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) --(1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         let ty' = case locs of
@@ -2069,22 +2107,22 @@ cursorizeLet freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v
                                               cursorType = case free_var of 
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) --(1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         let cursor_ty_locs' = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
                                                cursorType :: Ty3 = case free_var of 
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) --(1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
@@ -2147,22 +2185,22 @@ Also, the binding itself now changes to:
                                               cursorType = case free_var of 
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) -- (1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         let cursor_ty_locs' = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
                                                cursorType :: Ty3 = case free_var of 
                                                         R r -> case r of 
                                                                     SingleR _ -> CursorTy
-                                                                    SoARv _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoARv _ flds -> CursorArrayTy (linearLengthRegVar r) --(1 + length flds)
                                                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
                                                         FL l -> case l of 
                                                                     Single _ -> CursorTy
-                                                                    SoA _ flds -> CursorArrayTy (1 + length flds)
+                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar l) --(1 + length flds)
                                             in cursorType
                                  ) locs
         rhs' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
@@ -2253,7 +2291,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                         field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
                                                                         let field_cursor_ty = case loc of 
                                                                                                     Single _ -> CursorTy
-                                                                                                    SoA _ flds -> CursorArrayTy (1 + L.length (flds)) 
+                                                                                                    SoA _ flds -> CursorArrayTy (linearLengthLocVar loc) --(1 + L.length (flds)) 
                                                                         let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
                                                                         let curr_window = [((dcon', idx), field_var)]
                                                                         return (acc1 ++ field_let , acc2 ++ curr_window)
@@ -2556,10 +2594,10 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         True -> do 
                           let ty3_of_field = case ploc of 
                                                   Single _ -> CursorTy
-                                                  SoA _ fl -> CursorArrayTy (1 + length fl)
+                                                  SoA _ fl -> CursorArrayTy (linearLengthLocVar ploc) --(1 + length fl)
                           let ty3_of_field2 :: Ty3 = case ploc of 
                                                         Single _ -> CursorTy
-                                                        SoA _ fl -> CursorArrayTy (1 + length fl)
+                                                        SoA _ fl -> CursorArrayTy (linearLengthLocVar ploc) --(1 + length fl)
                           let tenv' = M.insert v (MkTy2 ty3_of_field) tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                           -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
@@ -2573,8 +2611,8 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                             dcon_next <- gensym $ toVar $ (fromVar dcur) ++ "_next"
                             let end_fields = map (\(key, varr) -> varr ) field_cur
                             let makeCurArr = Ext $ MakeCursorArray (1 + length (end_fields)) ([dcon_next] ++ end_fields)
-                            let let_mk_cur_arr = (loc_var, [], CursorArrayTy (1 + length (end_fields)), makeCurArr)
-                            let dcon_nxt = [(dcon_next,[],CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr,(v  , [], CursorArrayTy (1 + length (end_fields)), VarE (loc_var))]
+                            let let_mk_cur_arr = (loc_var, [], CursorArrayTy (linearLengthLocVar ploc) , makeCurArr) --(1 + length (end_fields)) (1 + length (end_fields)
+                            let dcon_nxt = [(dcon_next,[],CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr,(v  , [], CursorArrayTy (linearLengthLocVar ploc), VarE (loc_var))]
                             -- make the new curw type 
                             -- this consists of incrementing the data constructor buffer by one and all the rest of the fields 
                             let curw' = SoAWin dcon_next field_cur
@@ -2587,10 +2625,10 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         False -> do
                           let ty3_of_field = case ploc of 
                                                   Single _ -> CursorTy
-                                                  SoA _ fl -> CursorArrayTy (1 + length fl)
+                                                  SoA _ fl -> CursorArrayTy (linearLengthLocVar ploc) --(1 + length fl)
                           let ty3_of_field2 :: Ty3 = case ploc of 
                                                         Single _ -> CursorTy
-                                                        SoA _ fl -> CursorArrayTy (1 + length fl)
+                                                        SoA _ fl -> CursorArrayTy (linearLengthLocVar ploc) -- (1 + length fl)
                           let tenv' = M.insert v (MkTy2 ty3_of_field) tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                           let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
@@ -3078,8 +3116,10 @@ regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
                             let end_soa_reg_name = case (M.lookup (fromRegVarToFreeVarsTy end_soa_reg) freeVarToVarEnv''''''') of 
                                                             Just v -> v
                                                             Nothing -> error "cursorizeExp: regionToBinds: SoAR: unexpected end of region variable"
-                            let make_cur_array_bind = (regions_var, [], CursorArrayTy (1 + length field_reg_vars), Ext $ MakeCursorArray (1 + length field_reg_vars) ([dc_reg_var] ++ field_reg_vars))
-                            let make_end_cur_array_bind = (end_soa_reg_name, [], CursorArrayTy (1 + length field_end_reg_vars), Ext $ MakeCursorArray (1 + length field_end_reg_vars) ([dc_reg_end_var_name] ++ field_end_reg_vars))
+                            -- (1 + length field_reg_vars)
+                            -- (1 + length field_end_reg_vars)
+                            let make_cur_array_bind = (regions_var, [], CursorArrayTy (linearLengthRegVar (regionToVar r)) , Ext $ MakeCursorArray (1 + length field_reg_vars) ([dc_reg_var] ++ field_reg_vars))
+                            let make_end_cur_array_bind = (end_soa_reg_name, [], CursorArrayTy (linearLengthRegVar (regionToVar r)) , Ext $ MakeCursorArray (1 + length field_end_reg_vars) ([dc_reg_end_var_name] ++ field_end_reg_vars))
                             return (dcreg_binds ++ field_binds ++ [make_cur_array_bind] ++ [make_end_cur_array_bind], freeVarToVarEnv''''''')
 
  where

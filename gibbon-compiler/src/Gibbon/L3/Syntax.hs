@@ -13,7 +13,7 @@ module Gibbon.L3.Syntax
   , Scalar(..), mkScalar, scalarToTy
 
     -- * Functions
-  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars
+  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars, linearLengthLocVar, linearLengthRegVar, linearizeLocToCursorArray
 
   , module Gibbon.Language
   )
@@ -274,6 +274,39 @@ eraseLocMarkers (DDef tyargs tyname ls) = DDef tyargs tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs (L2.unTy2 ty))) ls')
 
+
+linearLengthLocVar :: LocVar -> Int
+linearLengthLocVar locvar = case locvar of
+                                  Single lc -> 1 
+                                  SoA dloc fieldLocs -> let fieldLengths = foldr (\(_, l) acc -> let len = linearLengthLocVar l
+                                                                                                   in acc + len
+                                                                                 ) 0 fieldLocs
+                                                          in 1 + fieldLengths
+
+linearLengthRegVar :: RegVar -> Int
+linearLengthRegVar regvar = case regvar of
+                                  SingleR lc -> 1 
+                                  SoARv dloc fieldLocs -> let fieldLengths = foldr (\(_, l) acc -> let len = linearLengthRegVar l
+                                                                                                   in acc + len
+                                                                                 ) 0 fieldLocs
+                                                          in 1 + fieldLengths
+
+linearizeLocToCursorArray :: LocVar -> M.Map FreeVarsTy Var -> [Var]
+linearizeLocToCursorArray loc env = case loc of
+                                          Single l -> case (M.lookup (fromLocVarToFreeVarsTy loc) env) of
+                                                                          Just v -> [v]
+                                                                          Nothing -> [l] -- This should be an error : TODO
+                                          SoA dl flocs -> let dl_var = case (M.lookup (fromLocVarToFreeVarsTy (singleLocVar dl)) env) of
+                                                                                          Just v -> v
+                                                                                          Nothing -> dl --error $ "(linearizeLocToCursorArray) Expected to have a variable for data con loc: " ++ show dl
+                                                              f_vars = foldl (\acc (_, fl) -> let
+                                                                                               fvars = linearizeLocToCursorArray fl env
+                                                                                               acc' = acc ++ fvars
+                                                                                               in acc'
+                                                                             ) [] flocs
+                                                            in [dl_var] ++ f_vars
+
+
 cursorizeTy :: UrTy LocVar -> UrTy b
 cursorizeTy ty =
   case ty of
@@ -287,7 +320,7 @@ cursorizeTy ty =
     PDictTy k v   -> PDictTy (cursorizeTy k) (cursorizeTy v)
     PackedTy _ l    -> case l of 
                            Single _ -> ProdTy [CursorTy, CursorTy]
-			   SoA _ flds -> ProdTy [CursorArrayTy (1 + length flds), CursorArrayTy (1 + length flds)]
+			   SoA _ flds -> ProdTy [CursorArrayTy (linearLengthLocVar l), CursorArrayTy (linearLengthLocVar l)]
     VectorTy el_ty' -> VectorTy $ cursorizeTy el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy
