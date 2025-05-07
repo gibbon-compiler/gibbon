@@ -833,7 +833,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
         res <- inferExp ddefs env' rhs dst
-        (rhs',ty',cs') <-   bindAfterLocs (orderOfVarsOutputDataConE rhs) res
+        (rhs',ty',cs') <- bindAfterLocs (orderOfVarsOutputDataConE rhs) res
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
         return ((con,vars',rhs'),ty',cs')
@@ -2296,8 +2296,8 @@ freshSoALoc lc = do
                                      return newSoALoc
 
 
-freshSoALocHelper :: TyCon -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
-freshSoALocHelper tyvar lst = do 
+freshSoALocHelper :: DDefs Ty2 -> TyCon -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
+freshSoALocHelper ddefs tyvar lst = do 
                         case lst of
                           [] -> do 
                                  pure []
@@ -2309,7 +2309,7 @@ freshSoALocHelper tyvar lst = do
                                                                                                 then return []
                                                                                                 else do 
                                                                                                   {- TODO: we should return an SoA loc here instead -}
-                                                                                                  newLoc <- fresh 
+                                                                                                  newLoc <- freshSoALoc2 ddefs tyc
                                                                                                   let Just idx = L.elemIndex e flds
                                                                                                   return $ [((a, idx), newLoc)]
                                                                                 _ -> do
@@ -2317,21 +2317,21 @@ freshSoALocHelper tyvar lst = do
                                                                                      let Just idx = L.elemIndex e flds
                                                                                      return $ [((a, idx), newLoc)]
                                                              ) flds
-                                            rst' <- freshSoALocHelper tyvar rst
+                                            rst' <- freshSoALocHelper ddefs tyvar rst
                                             return $ fieldLocs ++ rst'
 
 freshSoALoc2 :: DDefs Ty2 -> TyCon -> TiM LocVar 
 freshSoALoc2 ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
-                       fields <- freshSoALocHelper tyc dataCons
+                       fields <- freshSoALocHelper ddfs tyc dataCons
                        newdcLoc <- fresh
                        return $ SoA (unwrapLocVar newdcLoc) fields
 
 
 
-freshSoALocHelper3 :: TyCon -> [(DataCon,[(IsBoxed, Ty1)])] -> TiM [((DataCon, Int), LocVar)]
-freshSoALocHelper3 tyvar lst = do 
+freshSoALocHelper3 :: DDefs Ty1 -> TyCon -> [(DataCon,[(IsBoxed, Ty1)])] -> TiM [((DataCon, Int), LocVar)]
+freshSoALocHelper3 ddefs tyvar lst = do 
                         case lst of
                           [] -> do 
                                  pure []
@@ -2343,7 +2343,7 @@ freshSoALocHelper3 tyvar lst = do
                                                                                                 then return []
                                                                                                 else do 
                                                                                                   {- TODO: we should return an SoA loc here instead -}
-                                                                                                  newLoc <- fresh 
+                                                                                                  newLoc <- freshSoALoc3 ddefs tyc 
                                                                                                   let Just idx = L.elemIndex e flds
                                                                                                   return $ [((a, idx), newLoc)]
                                                                                 _ -> do
@@ -2351,14 +2351,14 @@ freshSoALocHelper3 tyvar lst = do
                                                                                      let Just idx = L.elemIndex e flds
                                                                                      return $ [((a, idx), newLoc)]
                                                              ) flds
-                                            rst' <- freshSoALocHelper3 tyvar rst
+                                            rst' <- freshSoALocHelper3 ddefs tyvar rst
                                             return $ fieldLocs ++ rst'
 
 freshSoALoc3 :: DDefs Ty1 -> TyCon -> TiM LocVar 
 freshSoALoc3 ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
-                       fields <- freshSoALocHelper3 tyc dataCons
+                       fields <- freshSoALocHelper3 ddfs tyc dataCons
                        newdcLoc <- fresh
                        return $ SoA (unwrapLocVar newdcLoc) fields
 
