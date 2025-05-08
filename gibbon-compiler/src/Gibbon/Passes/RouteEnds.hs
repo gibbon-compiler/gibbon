@@ -402,26 +402,27 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             --let jump_dloc = dloc 
                                             l2 <- freshCommonLoc "jumpf" scrutloc
                                             let final_soa_loc = l2
-                                            (eor', exprs) <- foldrM (\(l1, ty, idx) (eorr, ee)  -> do
+                                            let seenSamePackedTy = False
+                                            (eor', exprs, _) <- foldrM (\(l1, ty, idx) (eorr, ee, seen)  -> do
                                                                                                  case ty of
-                                                                                                    PackedTy tycon _ -> if tycon == tyconOfDataCon
-                                                                                                                        then do
-                                                                                                                           return (eorr, ee)
-                                                                                                                        else do
-                                                                                                                          let jump_loc = getFieldLoc (dc, idx) final_soa_loc
-                                                                                                                            -- let l2loc = l2
-                                                                                                                          let eorr' = mkEnd l1 jump_loc eorr
-                                                                                                                          let (Just jump) = L1.sizeOfTy ty
-                                                                                                                          let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
-                                                                                                                          return (eorr', [fieldCon] ++ ee)
+                                                                                                    -- PackedTy tycon _ -> if tycon == tyconOfDataCon
+                                                                                                    --                     then do
+                                                                                                    --                       if seen == False
+                                                                                                    --                       then do
+                                                                                                    --                         return (eorr, ee, True)
+                                                                                                    --                       else do 
+                                                                                                    --                         return (eorr, ee, seen)
+                                                                                                    --                     else do
+                                                                                                    --                       return (eorr, ee, seen)
+                                                                                                    PackedTy tycon _ -> return (eorr, ee, seen)
                                                                                                     _ -> do
                                                                                                         let jump_loc = getFieldLoc (dc, idx) final_soa_loc
                                                                                                         -- let l2loc = l2
                                                                                                         let eorr' = mkEnd l1 jump_loc eorr
                                                                                                         let (Just jump) = L1.sizeOfTy ty
                                                                                                         let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
-                                                                                                        return (eorr', [fieldCon] ++ ee)                                            
-                                                                  ) (eor, []) cases
+                                                                                                        return (eorr', [fieldCon] ++ ee, seen)                                            
+                                                                  ) (eor, [], seenSamePackedTy) cases
                                             let in_dcon_lete = LetLocE (singleLocVar in_dbuf_loc) (GetDataConLocSoA scrutloc)
                                             let end_con_lete = LetLocE (getDconLoc final_soa_loc) (AfterConstantLE 1 (singleLocVar in_dbuf_loc))
                                             --let (Just jump) = L1.sizeOfTy ty
@@ -697,20 +698,20 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                          -- VS: Here we need to check the type of location. 
                          -- it is possible that we have a complex after location, an SoA one. 
                          -- We might need to assign its parts appropriately.
-                         --bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
-                         bod'' = case la of
-                                    Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                                    SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
-                                                                  Just ty -> case ty of 
-                                                                                PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
-                                                                                                                  Just ty' -> case ty' of
-                                                                                                                                PackedTy tycon' _ -> if tycon == tycon'
-                                                                                                                                                     then Ext (LetLocE la (FromEndLE l2) bod')
-                                                                                                                                                     else bod'
-                                                                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
+                         bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
+                        --  bod'' = case la of
+                        --             Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                        --             SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
+                        --                                           Just ty -> case ty of 
+                        --                                                         PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
+                        --                                                                                           Just ty' -> case ty' of
+                        --                                                                                                         PackedTy tycon' _ -> if tycon == tycon'
+                        --                                                                                                                              then Ext (LetLocE la (FromEndLE l2) bod')
+                        --                                                                                                                              else bod'
+                        --                                                                                                         _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                        --                                                                                           Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
+                        --                                                         _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                        --                                           Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
                      in wrapBody bod'' ls
                wrapBody e [] = e
 
