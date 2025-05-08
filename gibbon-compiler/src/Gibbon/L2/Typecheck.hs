@@ -50,6 +50,7 @@ data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of t
                    | AssignC LocVar LocVar -- First location is equal to the second location.
                                            -- First location is rhs, second location is lhs
                    | GetFieldLocSoAC (DataCon, FieldIndex) LocVar
+                   | FromEndC LocVar
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
@@ -682,16 +683,32 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
 
+      LetE (v, _ls, ty, e1@(AppE f _ls1 _)) e2 -> do
+        (ty1,tstate1) <- recur tstatein e1
+        ensureEqualTyNoLoc exp ty1 ty
+        let zipped = zip _ls _ls1
+        (tstate', constrs') <- foldrM (\(l, l1) (st, c) -> do 
+                                             r <- getRegion exp c l1
+                                             let c' = extendConstrs (InRegionC l r) c
+                                             pure (st, c') 
+                         ) (tstate1, constrs) zipped  
+        --r <- getRegion exp constrs _l1
+        --let tstate1 = extendTS loc (Output,True) $ setAfter _l1 tstatein
+        --let constrs1 = extendConstrs (InRegionC loc r) $ extendConstrs (FromEndC _l1) constrs
+        
+        let env' = extendVEnvLocVar (fromVarToFreeVarsTy v) ty env 
+        tcExp ddfs env' funs constrs' regs tstate' e2
 
       LetE (v,_ls,ty,e1) e2 -> do
-
                -- We get the type and new location state from e1
                (ty1,tstate1) <- recur tstatein e1
                ensureEqualTyNoLoc exp ty1 ty
                let env' = extendVEnvLocVar (fromVarToFreeVarsTy v) ty env
-
                -- Then we check e1 with that location state
                tcExp ddfs env' funs constrs regs tstate1 e2
+
+                 
+                
 
       IfE e1 e2 e3 -> do
 
@@ -839,8 +856,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                 FromEndLE _l1 ->
                     do -- TODO: This is the bare minimum which gets the examples typechecking again.
                        -- Need to figure out if we need to check more things here
-                      (ty,tstate1) <- tcExp ddfs env' funs constrs regs tstatein e
-                      return (ty,tstate1)
+                        r <- getRegion exp constrs _l1
+                        let tstate1 = extendTS loc (Output,True) $ setAfter _l1 tstatein
+                        let constrs1 = extendConstrs (InRegionC loc r) $ extendConstrs (FromEndC _l1) constrs 
+                        (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                        return (ty,tstate2)
                 FreeLE ->
                     do let constrs1 = extendConstrs (InRegionC loc globalReg) $ constrs
                        (ty,tstate1) <- tcExp ddfs env' funs constrs1 regs tstatein e

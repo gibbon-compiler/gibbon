@@ -21,10 +21,10 @@ mkPackedInt i = let new_packed_int = PacI i
 mkList :: Int -> List
 mkList length = if length <= 0
                 then Nil
-				else
+		else
                  let i = mkPackedInt length
                      rst = mkList (length - 1)
-					in Cons i rst
+		   in Cons i rst
 
 add1 :: List -> List
 add1 lst = case lst of

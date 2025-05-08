@@ -301,7 +301,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  (outlocs,newls,eor') <- doBoundApp f lsin
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
                  return $ LetE (v,outlocs,ty, AppE f lsin e1)
-                               (wrapBody e2' newls)
+                               (wrapBody f e2' newls)
 
           -- Exactly like AppE.
           LetE (v,_ls,ty,(SpawnE f lsin e1)) e2 -> do
@@ -311,7 +311,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  (outlocs,newls,eor') <- doBoundApp f lsin
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
                  return $ LetE (v,outlocs,ty, SpawnE f lsin e1)
-                               (wrapBody e2' newls)
+                               (wrapBody f e2' newls)
 
           SpawnE{} -> error "routeEnds: Unbound SpawnE"
           SyncE    -> pure e
@@ -405,16 +405,24 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             let seenSamePackedTy = False
                                             (eor', exprs, _) <- foldrM (\(l1, ty, idx) (eorr, ee, seen)  -> do
                                                                                                  case ty of
-                                                                                                    -- PackedTy tycon _ -> if tycon == tyconOfDataCon
-                                                                                                    --                     then do
-                                                                                                    --                       if seen == False
-                                                                                                    --                       then do
-                                                                                                    --                         return (eorr, ee, True)
-                                                                                                    --                       else do 
-                                                                                                    --                         return (eorr, ee, seen)
-                                                                                                    --                     else do
-                                                                                                    --                       return (eorr, ee, seen)
-                                                                                                    PackedTy tycon _ -> return (eorr, ee, seen)
+                                                                                                    PackedTy tycon _ -> if tycon == tyconOfDataCon
+                                                                                                                        then do
+                                                                                                                          if seen == False
+                                                                                                                          -- First time we see the same packed type.
+                                                                                                                          -- Make additional lets to be safe
+                                                                                                                          -- This needs more fixing 
+                                                                                                                          -- for instance if you have multiple packed types that are different 
+                                                                                                                          -- before.    
+                                                                                                                          then do
+                                                                                                                            let jump_d_loc_p = getDconLoc l1
+                                                                                                                            let jump_d_final = getDconLoc final_soa_loc
+                                                                                                                            let aliasLet = LetLocE jump_d_loc_p (AfterConstantLE 0 jump_d_final)
+                                                                                                                            return (eorr, [aliasLet] ++ ee, True)
+                                                                                                                          else do 
+                                                                                                                            return (eorr, ee, seen)
+                                                                                                                        else do
+                                                                                                                          return (eorr, ee, seen)
+                                                                                                    -- PackedTy tycon _ -> return (eorr, ee, seen)
                                                                                                     _ -> do
                                                                                                         let jump_loc = getFieldLoc (dc, idx) final_soa_loc
                                                                                                         -- let l2loc = l2
@@ -673,9 +681,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
                -- We may need to emit some additional let bindings if we've reached
                -- an end witness that is equivalent to the after location of something.
-               wrapBody e ((l1,l2):ls) =
+               wrapBody f e ((l1,l2):ls) =
                  case M.lookup (fromLocVarToFreeVarsTy l1) afterenv of
-                   Nothing -> wrapBody e ls
+                   Nothing -> wrapBody f e ls
                    Just la ->
                      let go loc acc =
                            case M.lookup (fromLocVarToFreeVarsTy loc) (vEnv env2) of
@@ -698,22 +706,37 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                          -- VS: Here we need to check the type of location. 
                          -- it is possible that we have a complex after location, an SoA one. 
                          -- We might need to assign its parts appropriately.
-                         bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
-                        --  bod'' = case la of
-                        --             Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                        --             SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
-                        --                                           Just ty -> case ty of 
-                        --                                                         PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
-                        --                                                                                           Just ty' -> case ty' of
-                        --                                                                                                         PackedTy tycon' _ -> if tycon == tycon'
-                        --                                                                                                                              then Ext (LetLocE la (FromEndLE l2) bod')
-                        --                                                                                                                              else bod'
-                        --                                                                                                         _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                        --                                                                                           Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
-                        --                                                         _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                        --                                           Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
-                     in wrapBody bod'' ls
-               wrapBody e [] = e
+                        --  bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
+                        --   in wrapBody f bod'' ls
+                        in if True -- ( isSubset "print" (show f))
+                         then
+                          let bod'' = case la of
+                                    Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                    SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
+                                                                  Just ty -> case ty of 
+                                                                                PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
+                                                                                                                  Just ty' -> case ty' of
+                                                                                                                                PackedTy tycon' _ -> if tycon == tycon'
+                                                                                                                                                     then Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                                                                                     else
+                                                                                                                                                       let same_ty_loc = fromJust $ findSubSetLoc la l2
+                                                                                                                                                           alias_same = [LetLocE same_ty_loc (FromEndLE l2)]
+                                                                                                                                                           gen_soa = GenSoALoc (getDconLoc la) flocs 
+                                                                                                                                                           let_soa = [LetLocE la gen_soa]
+                                                                                                                                                           bod'' = L.foldr (\lete acc -> Ext $ lete acc) bod' (alias_same ++ let_soa)
+                                                                                                                                                         in bod''
+
+
+
+                                                                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
+                           in wrapBody f bod'' ls
+                         else
+                          let bod'' = Ext (LetLocE la (FromEndLE l2) bod')
+                            in wrapBody f bod'' ls 
+               wrapBody f e [] = e
 
                -- Process a let bound fn app.
                doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, LocVar)], EndOfRel)
@@ -739,3 +762,40 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
                  dbgTraceIt "Print in doBoundApp: " dbgTraceIt (sdoc (f, newls)) dbgTraceIt "End in doBoundAppE.\n" return (outlocs, newls, eor')
+
+
+isSubset :: String -> String -> Bool
+isSubset subset str = all (`elem` str) (L.nub subset)
+
+findSubSetLoc :: LocVar -> LocVar -> Maybe LocVar
+findSubSetLoc l1@(SoA dloc1 flocs1) l2@(SoA dloc2 flocs2) = if l1 == l2 then Just l1
+                                                            else checkIfFieldLocInLoc flocs1 l2
+findSubSetLoc l1@(SoA dloc1 flocs1) l2@(Single dloc2) = Nothing
+findSubSetLoc l1@(Single _) l2@(SoA _ _) = Nothing
+findSubSetLoc l1@(Single dloc1) l2@(Single dloc2) = if l1 == l2 then Just l1
+                                                      else Nothing
+
+
+
+checkIfFieldLocInLoc :: [((DataCon, Int), LocVar)] -> LocVar -> Maybe LocVar
+checkIfFieldLocInLoc f1 f2 = let ret = L.foldr (\(_, f1') acc -> case f1' of
+                                                              SoA _ floc1 -> case f2 of
+                                                                     SoA _ floc2 -> if ((L.length floc1) == (L.length floc2)) && (ensureFieldsSameSoALoc floc1 floc2)
+                                                                                    then Just f1'
+                                                                                    else acc
+                                                                     Single _ -> acc
+                                                              Single _ -> case f2 of
+                                                                      SoA _ floc2 -> acc
+                                                                      Single _ -> if f1' == f2
+                                                                                  then Just f1'
+                                                                                  else acc
+                                              ) Nothing f1
+                              in ret
+
+ensureFieldsSameSoALoc :: [((DataCon, Int), LocVar)] -> [((DataCon, Int), LocVar)] -> Bool
+ensureFieldsSameSoALoc [] [] = True
+ensureFieldsSameSoALoc l1 l2 = let l1' = L.map (\(k, _) -> k) l1
+                                   l2' = L.map (\(k, _) -> k) l2
+                               in if l1' == l2'
+                                  then True
+                                  else False
