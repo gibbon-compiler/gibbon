@@ -404,7 +404,16 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             let final_soa_loc = l2
                                             (eor', exprs) <- foldrM (\(l1, ty, idx) (eorr, ee)  -> do
                                                                                                  case ty of
-                                                                                                    PackedTy _ _ -> return (eorr, ee)
+                                                                                                    PackedTy tycon _ -> if tycon == tyconOfDataCon
+                                                                                                                        then do
+                                                                                                                           return (eorr, ee)
+                                                                                                                        else do
+                                                                                                                          let jump_loc = getFieldLoc (dc, idx) final_soa_loc
+                                                                                                                            -- let l2loc = l2
+                                                                                                                          let eorr' = mkEnd l1 jump_loc eorr
+                                                                                                                          let (Just jump) = L1.sizeOfTy ty
+                                                                                                                          let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
+                                                                                                                          return (eorr', [fieldCon] ++ ee)
                                                                                                     _ -> do
                                                                                                         let jump_loc = getFieldLoc (dc, idx) final_soa_loc
                                                                                                         -- let l2loc = l2
