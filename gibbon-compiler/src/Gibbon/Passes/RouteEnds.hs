@@ -685,7 +685,23 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                          --l2' = case l2 of
                          --          L l2loc -> l2loc 
                          --          _ -> error "RouteEnds: wrapBody: expected location."
-                         bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
+                         -- VS: Here we need to check the type of location. 
+                         -- it is possible that we have a complex after location, an SoA one. 
+                         -- We might need to assign its parts appropriately.
+                         --bod'' =  Ext (LetLocE la (FromEndLE l2) bod')
+                         bod'' = case la of
+                                    Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                    SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
+                                                                  Just ty -> case ty of 
+                                                                                PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
+                                                                                                                  Just ty' -> case ty' of
+                                                                                                                                PackedTy tycon' _ -> if tycon == tycon'
+                                                                                                                                                     then Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                                                                                     else bod'
+                                                                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
                      in wrapBody bod'' ls
                wrapBody e [] = e
 
@@ -712,4 +728,4 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  newls <- reverse <$> foldM handleTravList [] travlist
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
-                 return (outlocs, newls, eor')
+                 dbgTraceIt "Print in doBoundApp: " dbgTraceIt (sdoc (f, newls)) dbgTraceIt "End in doBoundAppE.\n" return (outlocs, newls, eor')
