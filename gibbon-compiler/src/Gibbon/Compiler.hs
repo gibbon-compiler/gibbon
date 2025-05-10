@@ -795,6 +795,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
+              -- VS: [05.10.2022] -- This causes a bug, likely error in reordering pass.
+              --l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2

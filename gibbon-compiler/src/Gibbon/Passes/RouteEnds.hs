@@ -403,7 +403,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             l2 <- freshCommonLoc "jumpf" scrutloc
                                             let final_soa_loc = l2
                                             let seenSamePackedTy = False
-                                            (eor', exprs, _) <- foldlM (\(eorr, ee, seen) (l1, ty, idx)  -> do
+                                            (eor', exprs, _, bnds') <- foldlM (\(eorr, ee, seen, bnds) (l1, ty, idx)  -> do
                                                                                                  case ty of
                                                                                                     PackedTy tycon _ -> if tycon == tyconOfDataCon
                                                                                                                         then do
@@ -427,11 +427,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                                                           Single _ -> acc ++ [LetLocE l (AfterConstantLE 0 (getFieldLoc k final_soa_loc))]
                                                                                                                                                                           SoA _ _ -> acc
                                                                                                                                                       ) [aliasLet] (getAllFieldLocsSoA l1)
-                                                                                                                            return (eorr,  ee ++ alias_flets, True)
+                                                                                                                            return (eorr,  ee, True, bnds ++ alias_flets)
                                                                                                                           else do 
-                                                                                                                            return (eorr, ee, seen)
+                                                                                                                            return (eorr, ee, seen, bnds)
                                                                                                                         else do
-                                                                                                                          return (eorr, ee, seen)
+                                                                                                                          return (eorr, ee, seen, bnds)
                                                                                                     -- PackedTy tycon _ -> return (eorr, ee, seen)
                                                                                                     _ -> do
                                                                                                         let jump_loc = getFieldLoc (dc, idx) final_soa_loc
@@ -439,8 +439,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                         let eorr' = mkEnd l1 jump_loc eorr
                                                                                                         let (Just jump) = L1.sizeOfTy ty
                                                                                                         let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
-                                                                                                        return (eorr', [fieldCon] ++ ee, seen)                                            
-                                                                  ) (eor, [], seenSamePackedTy) cases
+                                                                                                        return (eorr', [fieldCon] ++ ee, seen, bnds)                                            
+                                                                  ) (eor, [], seenSamePackedTy, []) cases
                                             let in_dcon_lete = LetLocE (singleLocVar in_dbuf_loc) (GetDataConLocSoA scrutloc)
                                             let end_con_lete = LetLocE (getDconLoc final_soa_loc) (AfterConstantLE 1 (singleLocVar in_dbuf_loc))
                                             --let (Just jump) = L1.sizeOfTy ty
@@ -489,7 +489,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                               
                                                                                ) (getAllFieldLocsSoA final_soa_loc)
                                             let new_soa_loc  = LetLocE final_soa_loc (GenSoALoc (getDconLoc final_soa_loc) field_variables_jump_loc)
-                                            let all_letes = [in_dcon_lete, end_con_lete] ++ all_field_gets ++ exprs ++ unsed_assign  ++ [new_soa_loc]  
+                                            let all_letes = [in_dcon_lete, end_con_lete] ++ all_field_gets ++ exprs ++ unsed_assign  ++ bnds' ++ [new_soa_loc]  
                                             let e' = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                             --let (Just jump) = L1.sizeOfTy ty
                                             --let get_dcon_let = LetLocE (singleLocVar jump_dloc) (GetDataConLocSoA scrutloc)
