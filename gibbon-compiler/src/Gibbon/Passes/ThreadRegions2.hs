@@ -430,6 +430,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                     in dbgTraceIt "Print in updated: " dbgTraceIt (sdoc (updated, to_update)) dbgTraceIt "End in updated!\n" (updated, acc2, bod_acc')
                              Nothing -> error $ 
                                            "threadRegionsExp: unbound loc " ++ sdoc (lc,locs_in_r,indirs,region_locs1,r) ++ 
+                                           "\n\nPrint region of the loc: " ++ sdoc r ++ 
                                            "\n\nPrint the LetE expression: " ++ sdoc (v,locs,ty, (AppE f applocs args)) ++ 
                                            "\n\n region_locs2: " ++ sdoc region_locs2 ++ 
                                            "\n\n Print argtylocs: " ++ sdoc argtylocs ++ 
@@ -617,9 +618,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                GenSoALoc{} -> case (M.member reg region_locs) of 
                                                             True -> M.adjust (\locs -> locs ++ [loc]) reg region_locs
                                                             False -> M.insert reg [loc] region_locs
-                               -- FromEndLE{} -> 
+                               FromEndLE{} -> case (M.member reg region_locs) of 
+                                                            True -> M.adjust (\locs -> locs ++ [loc]) reg region_locs
+                                                            False -> M.insert reg [loc] region_locs
                                _ -> region_locs
-              wlocs_env' = dbgTraceIt "Print renv LetLocE: " dbgTraceIt (sdoc (renv, region_locs, region_locs1)) dbgTraceIt "End renv LetLocE.\n" M.insert loc hole_tycon wlocs_env
+              wlocs_env' = dbgTraceIt "Print renv LetLocE: " dbgTraceIt (sdoc (loc, reg, renv, region_locs, region_locs1)) dbgTraceIt "End renv LetLocE.\n" M.insert loc hole_tycon wlocs_env
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' pkd_env region_locs1 ran_env indirs redirs bod
 

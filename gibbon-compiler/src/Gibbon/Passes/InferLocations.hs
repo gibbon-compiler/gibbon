@@ -489,7 +489,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                                                           AfterConstantL lv1 v lv2 -> lv2  
                                                                                                                                           AfterVariableL lv1 v lv2 -> lv2
                                                                                                                                           AssignL lv1 lv2 -> lv2
-                                                                                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected location constraint!"
+                                                                                                                                          _ -> error $ "bindAllLocations: AfterSoALE: unexpected location constraint!" ++ " " ++ show c
                                                                                                                                  ) flst 
                                                                                                          get_loc_keys = P.concatMap (\((dcon, idx), lc) -> if elem lc used_field_locs 
                                                                                                                                                      then [((dcon, idx), lc)]

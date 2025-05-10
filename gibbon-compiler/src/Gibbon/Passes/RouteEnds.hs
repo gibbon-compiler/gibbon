@@ -35,7 +35,7 @@ import Data.Map as M
 import Data.Set as S
 import Control.Monad
 
-import Data.Foldable ( foldrM )
+import Data.Foldable ( foldrM, foldlM )
 
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
@@ -403,7 +403,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                             l2 <- freshCommonLoc "jumpf" scrutloc
                                             let final_soa_loc = l2
                                             let seenSamePackedTy = False
-                                            (eor', exprs, _) <- foldrM (\(l1, ty, idx) (eorr, ee, seen)  -> do
+                                            (eor', exprs, _) <- foldlM (\(eorr, ee, seen) (l1, ty, idx)  -> do
                                                                                                  case ty of
                                                                                                     PackedTy tycon _ -> if tycon == tyconOfDataCon
                                                                                                                         then do
@@ -417,7 +417,17 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                             let jump_d_loc_p = getDconLoc l1
                                                                                                                             let jump_d_final = getDconLoc final_soa_loc
                                                                                                                             let aliasLet = LetLocE jump_d_loc_p (AfterConstantLE 0 jump_d_final)
-                                                                                                                            return (eorr, [aliasLet] ++ ee, True)
+                                                                                                                            -- VS [05.11.2025]
+                                                                                                                            -- It is fine to remove all locs that are scalars. 
+                                                                                                                            -- In the case of an SoA transformation, all single field locs are scalars 
+                                                                                                                            -- As long as we don't have a type level annotation this is fine. 
+                                                                                                                            -- Later on this needs to be updated. 
+                                                                                                                            -- Make lets for all the other scalar field locs
+                                                                                                                            let alias_flets = L.foldr (\(k, l) acc -> case l of 
+                                                                                                                                                                          Single _ -> acc ++ [LetLocE l (AfterConstantLE 0 (getFieldLoc k final_soa_loc))]
+                                                                                                                                                                          SoA _ _ -> acc
+                                                                                                                                                      ) [aliasLet] (getAllFieldLocsSoA l1)
+                                                                                                                            return (eorr,  ee ++ alias_flets, True)
                                                                                                                           else do 
                                                                                                                             return (eorr, ee, seen)
                                                                                                                         else do
