@@ -81,6 +81,7 @@ import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.FollowPtrs     (followPtrs)
 import           Gibbon.NewL2.FromOldL2       (fromOldL2)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
+import           Gibbon.Passes.ThreadRegions2  (threadRegions2)
 import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -811,7 +812,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
-              l2' <- go "threadRegions"    threadRegions l2'
+              -- l2' <- go "threadRegions"    threadRegions l2'
+              l2' <- go "threadRegions2" threadRegions2 l2'
               l2' <- go "delayExprs"  delayExpr l2'
 
               -- L2 -> L3

@@ -664,7 +664,9 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               _  -> return $ L3.MkProdE $ (map (\loc -> let loc_to_free_var = fromLocArgToFreeVarsTy loc
                                                             locs_variable = case (M.lookup (loc_to_free_var) freeVarToVarEnv) of 
                                                                             Just v -> v 
-                                                                            Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                                                            Nothing -> case (toLocVar loc) of 
+                                                                                            Single lvarr -> lvarr
+                                                                                            SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
                                                           in VarE locs_variable
                                                ) locs) ++ [VarE v]
 
@@ -694,7 +696,9 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                   return $ M.insert (fromLocVarToFreeVarsTy loc) name freeVarToVarEnv
           let locs_variable = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') of 
                                 Just v -> v 
-                                Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                Nothing -> case loc of 
+                                                Single lvarrr -> lvarrr
+                                                SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
           let    rhs_either = cursorizeLocExp freeVarToVarEnv' denv tenv senv loc rhs
           let    (bnds,tenv') = case M.lookup (fromLocVarToFreeVarsTy loc) denv of
                                Nothing -> ([],tenv)
@@ -718,7 +722,9 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               let tenv''' = M.union tenv' tenv''
               let locs_var = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') of 
                                 Just v -> v 
-                                Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                Nothing -> case loc of 
+                                              Single lvarrr -> lvarrr
+                                              SoA _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
               case rhs of
                 FromEndLE{} ->
                   if isBound locs_var tenv
@@ -782,6 +788,49 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
 
         SSPush a b c d -> pure $ Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d
         SSPop a b c -> pure $ Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c)
+
+        {-VS: TODO: This needs to be fixed to produce the correct L3 expression. See above. -}      
+        {- Right now i just skip the let region, just recurse on the body-}              
+        LetRegE loc rhs bod -> do
+          --let loc = fromRegVarToLocVar reg_var
+          let ty_of_loc = case loc of 
+                            SingleR _ -> CursorTy
+                            SoARv _ flds -> CursorArrayTy (1 + length flds)
+          freeVarToVarEnv' <- do 
+                              case loc of 
+                                    SingleR l -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
+                                                then return freeVarToVarEnv
+                                                else return $ M.insert (fromRegVarToFreeVarsTy loc) l freeVarToVarEnv
+                                    SoARv _ _ -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
+                                                then return $ freeVarToVarEnv
+                                                else do
+                                                  name <- gensym "cursor_ptr"
+                                                  return $ M.insert (fromRegVarToFreeVarsTy loc) name freeVarToVarEnv
+          let rhs_either = cursorizeRegExp freeVarToVarEnv' denv tenv senv loc rhs
+              (bnds,tenv') = case M.lookup (fromRegVarToFreeVarsTy loc) denv of
+                               Nothing -> ([],tenv)
+                               Just vs -> let extended = M.fromList [ (v, MkTy2 CursorTy) | (v,_,CursorTy,_) <- vs]
+                                          in (vs, M.union extended tenv)
+          case rhs_either of
+            Right (rhs', bnds', tenv'', senv') -> do
+              let tenv''' = M.union tenv' tenv''
+              let locs_var = case (M.lookup (fromRegVarToFreeVarsTy loc) freeVarToVarEnv') of 
+                                Just v -> v 
+                                Nothing -> case loc of 
+                                                SingleR lvarrr -> lvarrr 
+                                                SoARv _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
+              case rhs of
+                -- Discharge bindings that were waiting on 'loc'. 
+                _ ->  mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds) <$>
+                       cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
+                       -- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+            Left denv' -> (mkLets bnds) <$>
+                            cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+          -- case reg_var of
+          -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
+          -- SoARv dv _ -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
+
+        _ -> error $ "Unpexected Expression: " ++ show ext
 
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
@@ -1239,7 +1288,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               let tenv''' = M.union tenv' tenv''
               let locs_var = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') of 
                                 Just v -> v 
-                                Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                Nothing -> case loc of 
+                                              Single lvarrr -> lvarrr 
+                                              SoA _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
               let locs_ty3 :: Ty3 = case loc of
                                 Single _ -> CursorTy
                                 SoA _ fields -> CursorArrayTy (1 + length (fields))
@@ -1286,7 +1337,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               let tenv''' = M.union tenv' tenv''
               let locs_var = case (M.lookup (fromRegVarToFreeVarsTy loc) freeVarToVarEnv') of 
                                 Just v -> v 
-                                Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                Nothing -> case loc of 
+                                                SingleR lvarrr -> lvarrr 
+                                                SoARv _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
               case rhs of
                 -- Discharge bindings that were waiting on 'loc'. 
                 _ -> onDi (mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds)) <$>
@@ -1311,13 +1364,17 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                      let loc_to_free_var = fromLocArgToFreeVarsTy loc
                      let locs_variable = case (M.lookup (loc_to_free_var) freeVarToVarEnv) of 
                                           Just v -> v 
-                                          Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                          Nothing -> case (toLocVar loc) of
+                                                              Single lvarr -> lvarr
+                                                              SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
               
                      pure $ mkDi (VarE (locs_variable)) [ fromDi v' ]
             _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> let loc_to_free_var = fromLocArgToFreeVarsTy loc
                                                                      locs_variable = case (M.lookup (loc_to_free_var) freeVarToVarEnv) of 
                                                                                       Just v -> v 
-                                                                                      Nothing -> error "cursorizeExp: LetLocE: unexpected location variable"
+                                                                                      Nothing -> case (toLocVar loc) of
+                                                                                                      Single lvarr -> lvarr 
+                                                                                                      SoA _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
                                                                   in (VarE (locs_variable)):acc
                                                     ) [fromDi v'] locs
 

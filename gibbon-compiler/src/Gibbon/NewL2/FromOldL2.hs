@@ -2,6 +2,7 @@ module Gibbon.NewL2.FromOldL2 ( fromOldL2, toOldL2, toOldL2Exp ) where
 
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.List as L
 import qualified Safe as Sf
 
 import           Gibbon.L2.Syntax
@@ -126,9 +127,23 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
                  docase (dcon, vlocs, rhs) = do
 
-                   let mkLocArg loc = New.Loc $ lrem { New.lremLoc = loc }
+                   let mkLocArg loc (Just idx) = let lrem_reg = New.lremReg lrem
+                                                     lrem_end_reg = New.lremEndReg lrem
+                                                     New.Loc lrem' = case lrem_reg of 
+                                                                  SingleR _ -> New.Loc $ lrem { New.lremLoc = loc }
+                                                                  SoARv dcreg fregs -> case L.lookup (dcon, idx) fregs of 
+                                                                                            Just fr -> New.Loc $ lrem { New.lremLoc = loc, New.lremReg = fr }
+                                                                                            Nothing -> New.Loc $ lrem { New.lremLoc = loc }
+                                                     New.Loc lrem'' = case lrem_end_reg of 
+                                                                      SingleR _ -> New.Loc lrem' 
+                                                                      SoARv dcreg fregs -> case L.lookup (dcon, idx) fregs of
+                                                                                                Just fr -> New.Loc $ lrem' { New.lremEndReg = fr} 
+                                                                                                Nothing -> New.Loc lrem'
+                                                    in New.Loc lrem''   
+
+                       mkLocArg loc Nothing = New.Loc $ lrem { New.lremLoc = loc }
                    let (vars,locs) = unzip vlocs
-                       locargs = map mkLocArg locs
+                       locargs = map (\(loc, idx) -> mkLocArg loc (Just idx)) $ zip locs [0..length(locs)]
                        vlocs' = zip vars locargs
                        locenv' = foldr
                                    (\(New.Loc lrem') acc -> M.insert (New.lremLoc lrem') (New.Loc lrem') acc)
@@ -136,10 +151,10 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                        env2' = extendPatternMatchEnv dcon ddefs vars locs env2
                        locenv'' = if isRedirectionTag dcon || isIndirectionTag dcon
                                   then let ptr = Single $ Sf.headErr vars
-                                       in M.insert ptr (mkLocArg ptr) locenv'
+                                       in M.insert ptr (mkLocArg ptr Nothing) locenv'
                                   else locenv'
                    rhs' <- go locenv'' env2' rhs
-                   pure $ (dcon, vlocs', rhs')
+                   dbgTraceIt "Print LREM Case: " dbgTraceIt (sdoc (lrem, locargs, locenv'')) dbgTraceIt "End LREM Case.\n" pure $ (dcon, vlocs', rhs')
 
              (CaseE (VarE v)) <$> mapM docase brs
 
