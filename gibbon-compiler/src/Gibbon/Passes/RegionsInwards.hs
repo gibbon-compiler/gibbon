@@ -459,12 +459,21 @@ getAliasLoc :: AlisedLocsEnv -> LocVar -> LocVar
 getAliasLoc env loc = case M.lookup loc env of
                                Nothing -> 
                                 let vals = M.toList env
-                                    key = map (\(k, v) -> if S.member loc v then Just k else Nothing) vals
-                                  in case key of 
-                                        [Just k] -> k
-                                        [Nothing] -> loc
+                                    keys = map (\(k, v) -> if S.member loc v then Just k else Nothing) vals
+                                  in case keys of 
                                         [] -> loc
-                                        _ -> error "getAliasLoc: More than one key found!"
+                                        _ -> let out = foldr (\key acc  -> case key of
+                                                                  Just k -> Just k
+                                                                  Nothing -> acc 
+                                                             ) Nothing keys
+                                              in case out of 
+                                                    Just k -> k 
+                                                    Nothing -> loc   
+
+                                        --[Just k] -> k
+                                        --[Nothing] -> loc
+                                        --[] -> loc
+                                        --_ -> loc --error $ "getAliasLoc: More than one key found! " ++ show (key, loc) ++ "\n\n\n" ++  show env 
                                _ -> loc
 
 makeAlias :: AlisedLocsEnv -> LocVar -> LocVar -> AlisedLocsEnv
@@ -597,7 +606,7 @@ removeAliasedLocations env ex  =
                                      rhs' <- go rhs
                                      bod' <- go bod
                                      let ty' = case ty of 
-                                                 PackedTy k loc -> PackedTy k (getAliasLoc env loc)
+                                                 PackedTy k loc -> dbgTraceIt "Remove Aliased Location: " dbgTraceIt (sdoc (loc, env)) dbgTraceIt "End ty remove alias.\n" PackedTy k (getAliasLoc env loc)
                                                  _ -> ty
                                      return $ LetE (v, nlocs, ty', rhs') bod' 
 

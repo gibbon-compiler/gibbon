@@ -258,7 +258,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
     -- | Process expressions.
     -- Takes the following arguments:
-    -- 1. a function environment
+    -- 1. A function definition map
     -- 2. a list of locations we need to return the ends of
     -- 3. an end-of relation
     -- 4. a map of var to location
@@ -364,6 +364,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                               let need = snd $ last vls
                                   tyconOfDataCon = getTyOfDataCon ddefs dc
                                   argtys = lookupDataCon ddefs dc
+                                  env2' = extendsVEnvLocVar (M.fromList (zip (L.map fromLocVarToFreeVarsTy locs) argtys ++ zip varsToFreeVarsTy argtys)) env2
                                   lx = case M.lookup (fromVarToFreeVarsTy x) lenv of
                                           Nothing -> error $ "Failed to find " ++ (show x)
                                           Just l -> l
@@ -373,7 +374,41 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                   -- what we really want is the end of need.
                                   eor' = mkEqual lx need eor
                                   f (l1,l2) env = M.insert l1 l2 env
-                                  afterenv' = L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls)
+                                  afterenv' = case scrutloc of
+                                                Single _ -> L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls) 
+                                                SoA dcloc flocs -> let 
+                                                                    locations = L.map snd vls  
+                                                                    self_recursive_locs_in_order = concatMap (\(v, l) -> case (lookupVEnvLocVar (V v) env2') of
+                                                                                                                               PackedTy tycon _ -> if tycon == tyconOfDataCon
+                                                                                                                                                then [l]
+                                                                                                                                                else []          
+                                                                                                                               _ -> []
+                                                                                      
+
+                                                                                                         ) vls
+                                                                    afterenv_self_rec = L.foldr f afterenv $ zip (L.map FL self_recursive_locs_in_order) (Sf.tailErr self_recursive_locs_in_order) 
+                                                                    -- VS: TODO what about other fields that are not self recursive and other scalar fields ? 
+                                                                    -- assumption that all scalar and related packed fields are before the first self recursive fields. 
+                                                                    -- TODO: this may need to change in the future.
+                                                                    --let idx = L.elemIndex tup vls
+                                                                    --    in case idx of 
+                                                                    --    Nothing -> error ""
+                                                                    --    Just idx' ->
+                                                                    first_self_rec = L.head self_recursive_locs_in_order  
+                                                                    (afterenv_self_rec', _) = L.foldr (\tup@(v, l) (acc, seen) -> if (l /= first_self_rec)
+                                                                                                                             then
+                                                                                                                              if seen == True
+                                                                                                                              then 
+                                                                                                                                (acc, seen)
+                                                                                                                              else 
+                                                                                                                                (M.insert (FL l) first_self_rec acc, seen)
+                                                                                                                             else (acc, seen)
+                                                                    
+                                                                    
+                                                                                                 ) (afterenv_self_rec, False) vls
+                                                                   in afterenv_self_rec'
+
+                                  -- afterenv' = L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls)
                                   -- two cases here for handing bound parameters:
                                   -- we have a packed type:
                                   handleLoc (eor,e) (_,(PackedTy _ _), _) = return (eor,e)
@@ -514,7 +549,6 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                   varsToFreeVarsTy = L.map fromVarToFreeVarsTy vars 
                                   locs = L.map snd vls
                                   vls' = L.map (\(v, l) -> (fromVarToFreeVarsTy v, l)) vls
-                                  env2' = extendsVEnvLocVar (M.fromList (zip (L.map fromLocVarToFreeVarsTy locs) argtys ++ zip varsToFreeVarsTy argtys)) env2
                                   lenv' = M.union lenv $ M.fromList vls'
                               (eor'',e') <- case scrutloc of 
                                                   Single _ -> foldM handleLoc (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
@@ -729,12 +763,15 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                 PackedTy tycon' _ -> if tycon == tycon'
                                                                                                                                                      then Ext (LetLocE la (FromEndLE l2) bod')
                                                                                                                                                      else
-                                                                                                                                                       let same_ty_loc = fromJust $ findSubSetLoc la l2
-                                                                                                                                                           alias_same = [LetLocE same_ty_loc (FromEndLE l2)]
-                                                                                                                                                           gen_soa = GenSoALoc (getDconLoc la) flocs 
-                                                                                                                                                           let_soa = [LetLocE la gen_soa]
-                                                                                                                                                           bod'' = L.foldr (\lete acc -> Ext $ lete acc) bod' (alias_same ++ let_soa)
-                                                                                                                                                         in bod''
+                                                                                                                                                       let same_ty_loc = findSubSetLoc la l2
+                                                                                                                                                         in case same_ty_loc of 
+                                                                                                                                                                Nothing -> error $ "RouteEnds: could not find same loc for: " ++ show (l2, la)
+                                                                                                                                                                Just l2loc -> let  
+                                                                                                                                                                    alias_same = [LetLocE l2loc (FromEndLE l2)]
+                                                                                                                                                                    gen_soa = GenSoALoc (getDconLoc la) flocs 
+                                                                                                                                                                    let_soa = [LetLocE la gen_soa]
+                                                                                                                                                                    bod'' = L.foldr (\lete acc -> Ext $ lete acc) bod' (alias_same ++ let_soa)
+                                                                                                                                                                   in bod''
 
 
 

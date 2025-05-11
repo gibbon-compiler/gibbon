@@ -56,7 +56,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
         LetE (v,locs,ty,rhs) bod -> do
             let freeVarsRhs = allFreeVars rhs 
                 pckdLoc = locsInTy ty
-                freeVarsRhs' = S.union (S.fromList $ map fromLocVarToFreeVarsTy pckdLoc) freeVarsRhs
+                freeVarsRhs' = freeVarsRhs --S.union (S.fromList $ map fromLocVarToFreeVarsTy pckdLoc) freeVarsRhs
                 {- Check if variables in rhs are in the DefinedVars-}
                 isDefined = S.isSubsetOf freeVarsRhs' definedVars
               in if isDefined 
@@ -364,7 +364,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
             pure $ WithArenaE v e'
 
         Ext (LetLocE loc rhs bod) -> do
-            let definedVars' = S.insert (fromLocVarToFreeVarsTy loc) definedVars
+            let definedVars' = dbgTraceIt "Print in LetLocE: " dbgTraceIt (sdoc (definedVars, delayedExprMap)) dbgTraceIt "End print in LetLocE.\n" S.insert (fromLocVarToFreeVarsTy loc) definedVars
             (bod', definedVars'', delayedExprMap') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
                                                             let can_release = S.isSubsetOf dvars env 
                                                               in if can_release
