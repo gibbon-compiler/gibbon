@@ -40,6 +40,10 @@ import Data.Foldable ( foldrM, foldlM )
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
 import Gibbon.L1.Syntax as L1
+import Control.Arrow (Arrow(first))
+import Gibbon.L0.Typecheck (instDataConTy)
+import GHC.Generics
+import Text.PrettyPrint.GenericPretty
 
 
 -- | Data structure that accumulates what we know about the relationship
@@ -59,6 +63,12 @@ data EndOfRel = EndOfRel
     , equivTo :: M.Map LocVar LocVar -- ^ Map of a location to a known equivalent location
     }
   deriving (Eq, Ord, Read, Show)
+
+data DelayedExpr = LetExpr (Var, [LocVar], Ty2, Exp2)
+                 | LetLocExpr LocVar LocExp 
+                    deriving (Eq, Ord, Show, Generic)
+
+instance Out DelayedExpr
 
 -- | Create an empty EndOfRel
 emptyRel :: EndOfRel
@@ -213,7 +223,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
                 Just (e,t) -> do e' <- bindReturns e
-                                 e'' <- exp fundefs'' [] emptyRel M.empty M.empty env2 e'
+                                 e'' <- exp M.empty fundefs'' [] emptyRel M.empty M.empty env2 e'
                                  return $ Just (e'',t)
 
   -- Return the updated Prog
@@ -252,7 +262,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                initVEnv = M.fromList $ pakdLocs tyins ++ zip funArgs' tyins
                env2 = Env2 initVEnv (initFunEnv' fundefs)
            funBody' <- bindReturns funBody
-           funBody'' <- exp fns retlocs emptyRel lenv M.empty env2 funBody'
+           funBody'' <- exp M.empty fns retlocs emptyRel lenv M.empty env2 funBody'
            return FunDef{funName,funTy,funArgs,funBody=funBody'',funMeta}
 
 
@@ -264,9 +274,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
     -- 4. a map of var to location
     -- 5. a map from location to location after it
     -- 6. the expression to process
-    exp :: FunDefs2 -> [LocVar] -> EndOfRel -> M.Map FreeVarsTy LocVar ->
+    
+    exp :: M.Map LocVar [DelayedExpr] -> FunDefs2 -> [LocVar] -> EndOfRel -> M.Map FreeVarsTy LocVar ->
            M.Map FreeVarsTy LocVar -> Env2 FreeVarsTy Ty2 -> Exp2 -> PassM Exp2
-    exp fns retlocs eor lenv afterenv env2 e =
+    exp inst_waiting_on_loc fns retlocs eor lenv afterenv env2 e =
         case e of
 
           -- Variable case, *should* be the base case assuming our expression was
@@ -299,9 +310,14 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                _ -> lenv
 
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
-                 return $ LetE (v,outlocs,ty, AppE f lsin e1)
-                               (wrapBody f e2' newls)
+                 let (e2', inst_waiting_on_loc', rel) = wrapBody f e2 newls inst_waiting_on_loc 
+
+                 e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
+                 let expr = dbgTraceIt "Print insts_waiting_on_loc: " dbgTraceIt (sdoc (newls, (v,_ls,ty,(AppE f lsin e1)), inst_waiting_on_loc', rel)) dbgTraceIt "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f lsin e1) e2''
+                 return $ L.foldr (\lete acc -> case lete of 
+                                                  LetExpr (v,ls,ty,rhs) -> LetE (v,ls,ty,rhs) acc
+                                                  LetLocExpr loc locexp -> Ext $ LetLocE loc locexp acc
+                                  ) expr (L.nub rel)              
 
           -- Exactly like AppE.
           LetE (v,_ls,ty,(SpawnE f lsin e1)) e2 -> do
@@ -309,9 +325,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                PackedTy _n l -> M.insert (fromVarToFreeVarsTy v) l lenv
                                _ -> lenv
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
-                 return $ LetE (v,outlocs,ty, SpawnE f lsin e1)
-                               (wrapBody f e2' newls)
+                 let (e2', inst_waiting_on_loc', rel) = wrapBody f e2 newls inst_waiting_on_loc
+                 e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
+                 return $ LetE (v,outlocs,ty, SpawnE f lsin e1) e2''
+                               
 
           SpawnE{} -> error "routeEnds: Unbound SpawnE"
           SyncE    -> pure e
@@ -355,7 +372,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                             all_letes = [in_dcon_lete, end_con_lete] ++ field_letes ++ [new_soa_loc]  
                                                                             new_exp = L.foldr (\lete acc -> Ext $ lete acc) e all_letes
                                                                           in new_exp
-                               e'' <- exp fns retlocs eor' lenv (M.insert (fromLocVarToFreeVarsTy l1) l2loc lenv) env2 e'
+                               e'' <- exp inst_waiting_on_loc fns retlocs eor' lenv (M.insert (fromLocVarToFreeVarsTy l1) l2loc lenv) env2 e'
                                return (dc, vls, e'')
                              Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
                          _ -> do
@@ -395,14 +412,22 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                     --    Nothing -> error ""
                                                                     --    Just idx' ->
                                                                     first_self_rec = L.head self_recursive_locs_in_order  
-                                                                    (afterenv_self_rec', _) = L.foldr (\tup@(v, l) (acc, seen) -> if (l /= first_self_rec)
+                                                                    (afterenv_self_rec', _) = L.foldl (\(acc, seen) tup@(v, l) -> if (l /= first_self_rec)
                                                                                                                              then
                                                                                                                               if seen == True
                                                                                                                               then 
                                                                                                                                 (acc, seen)
-                                                                                                                              else 
-                                                                                                                                (M.insert (FL l) first_self_rec acc, seen)
-                                                                                                                             else (acc, seen)
+                                                                                                                              else
+                                                                                                                                case (lookupVEnvLocVar (V v) env2') of
+                                                                                                                                            PackedTy tycon _ -> (M.insert (FL l) first_self_rec acc, seen)
+                                                                                                                                            _ -> 
+                                                                                                                                                let elem_idx = L.elemIndex tup vls
+                                                                                                                                                  in case elem_idx of 
+                                                                                                                                                          Nothing -> error ""
+                                                                                                                                                          Just idx' -> let idx'' = idx' + 1 
+                                                                                                                                                                           (_, l') = vls !! idx''
+                                                                                                                                                                         in (M.insert (FL l) l' acc, seen)
+                                                                                                                             else (acc, True)
                                                                     
                                                                     
                                                                                                  ) (afterenv_self_rec, False) vls
@@ -553,7 +578,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                               (eor'',e') <- case scrutloc of 
                                                   Single _ -> foldM handleLoc (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
                                                   _ -> handleLocSoA (eor',e) $ zip3 (L.map snd vls) argtys [0..((length vls) - 1)]
-                              e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
+                              e'' <- exp inst_waiting_on_loc fns retlocs eor'' lenv' afterenv' env2' e'
                               return (dc, vls, e'')
                             Nothing -> error $ "Failed to find " ++ (show x)
                  return $ CaseE (VarE x) brs'
@@ -564,7 +589,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             let ty = gRecoverTypeLoc ddefs env2 complex
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],ty,complex)] (CaseE (VarE v) brs)
-            exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) ex
+            exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) ex
 
 
           -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
@@ -595,41 +620,41 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- Processing the RHS here would cause an infinite loop.
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@DataConE{}) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert (fromVarToFreeVarsTy v) loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+            e2' <- exp inst_waiting_on_loc fns retlocs eor (M.insert (fromVarToFreeVarsTy v) loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@(PrimAppE (ReadPackedFile{}) [])) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert (fromVarToFreeVarsTy v) loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+            e2' <- exp inst_waiting_on_loc fns retlocs eor (M.insert (fromVarToFreeVarsTy v) loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@ProjE{}) e2 -> do
             let lenv' = case ty of
                           PackedTy _ loc -> M.insert (fromVarToFreeVarsTy v) loc lenv
                           _ -> lenv
-            e2' <- exp fns retlocs eor lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+            e2' <- exp inst_waiting_on_loc fns retlocs eor lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@MkProdE{}) e2 -> do
-            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+            LetE (v,ls,ty,e1) <$> exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
 
           LetE (v,ls,ty,e1@(PrimAppE (DictLookupP _) _)) e2 -> do
-            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+            LetE (v,ls,ty,e1) <$> exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
 
           --
 
           LetE (v,ls,ty@(PackedTy n l),e1) e2 -> do
                  e1' <- go e1
-                 e2' <- exp fns retlocs eor (M.insert (fromVarToFreeVarsTy v) l lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+                 e2' <- exp inst_waiting_on_loc fns retlocs eor (M.insert (fromVarToFreeVarsTy v) l lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
                  return $ LetE (v,ls,PackedTy n l,e1') e2'
 
           LetE (v,ls,ty,e1@TimeIt{}) e2 -> do
                  e1' <- go e1
-                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
+                 e2' <- exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2
                  return $ LetE (v,ls,ty,e1') e2'
 
           -- Most boring LetE case, just recur on body
           LetE (v,ls,ty,rhs) bod -> do
-            bod' <- exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) bod
+            bod' <- exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) bod
             return $ LetE (v,ls,ty,rhs) bod'
 
           IfE e1 e2 e3 -> do
@@ -642,7 +667,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                 prodty = ProdTy tys
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],prodty,(MkProdE ls))] (VarE v)
-            exp fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) prodty env2) ex
+            exp inst_waiting_on_loc fns retlocs eor lenv afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) prodty env2) ex
 
           ProjE{} -> do
             v <- gensym "flt_RE"
@@ -651,7 +676,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                           PackedTy _ loc -> M.insert (fromVarToFreeVarsTy v) loc lenv
                           _ -> lenv
                 ex = L1.mkLets [(v,[],ty,e)] (VarE v)
-            exp fns retlocs eor lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) ex
+            exp inst_waiting_on_loc fns retlocs eor lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) ex
 
           -- Could fail here, but try to fix the broken program
           DataConE loc dc es -> do
@@ -659,7 +684,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let ty = PackedTy (getTyOfDataCon ddefs dc) loc
                      e' = LetE (v',[],ty, DataConE loc dc es)
                                (VarE v')
-                 exp fns retlocs eor (M.insert (fromVarToFreeVarsTy v') loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v') ty env2) (e')
+                 exp inst_waiting_on_loc fns retlocs eor (M.insert (fromVarToFreeVarsTy v') loc lenv) afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v') ty env2) (e')
 
           LitE i -> return (LitE i)
           CharE i -> return (CharE i)
@@ -720,14 +745,19 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                              Nothing -> error $ "Function " ++ (show v) ++ " not found"
                              Just fundef -> funTy fundef
 
-               go = exp fns retlocs eor lenv afterenv env2
+               go = exp inst_waiting_on_loc fns retlocs eor lenv afterenv env2
 
 
                -- We may need to emit some additional let bindings if we've reached
                -- an end witness that is equivalent to the after location of something.
-               wrapBody f e ((l1,l2):ls) =
+               wrapBody f e ((l1,l2):ls) inst_waiting_on_loc =
                  case M.lookup (fromLocVarToFreeVarsTy l1) afterenv of
-                   Nothing -> wrapBody f e ls
+                   Nothing -> let let_to_release = case (M.lookup l1 inst_waiting_on_loc) of
+                                                                Just lets -> lets
+                                                                Nothing -> [] 
+                                  inst_waiting_on_loc' = M.delete l1 inst_waiting_on_loc
+                                  (e'', inst_waiting_on_loc'', let_to_release') = wrapBody f e ls inst_waiting_on_loc' 
+                                in (e'', inst_waiting_on_loc'', let_to_release ++ let_to_release') 
                    Just la ->
                      let go loc acc =
                            case M.lookup (fromLocVarToFreeVarsTy loc) (vEnv env2) of
@@ -754,14 +784,19 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                         --   in wrapBody f bod'' ls
                         in if True -- ( isSubset "print" (show f))
                          then
-                          let bod'' = case la of
-                                    Single _ -> Ext (LetLocE la (FromEndLE l2) bod')
+                          let (bod'', inst_waiting_on_loc', rels)  = case la of
+                                    Single _ -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
                                     SoA dloc flocs -> case M.lookup (fromLocVarToFreeVarsTy la) (vEnv env2) of
                                                                   Just ty -> case ty of 
                                                                                 PackedTy tycon _ -> case M.lookup (fromLocVarToFreeVarsTy l1) (vEnv env2) of 
                                                                                                                   Just ty' -> case ty' of
                                                                                                                                 PackedTy tycon' _ -> if tycon == tycon'
-                                                                                                                                                     then Ext (LetLocE la (FromEndLE l2) bod')
+                                                                                                                                                     then 
+                                                                                                                                                      let 
+                                                                                                                                                        let_to_release = case (M.lookup l1 inst_waiting_on_loc) of
+                                                                                                                                                                                            Just lets -> lets
+                                                                                                                                                                                            Nothing -> []
+                                                                                                                                                        in (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, let_to_release)
                                                                                                                                                      else
                                                                                                                                                        let same_ty_loc = findSubSetLoc la l2
                                                                                                                                                          in case same_ty_loc of 
@@ -770,20 +805,34 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                                                     alias_same = [LetLocE l2loc (FromEndLE l2)]
                                                                                                                                                                     gen_soa = GenSoALoc (getDconLoc la) flocs 
                                                                                                                                                                     let_soa = [LetLocE la gen_soa]
-                                                                                                                                                                    bod'' = L.foldr (\lete acc -> Ext $ lete acc) bod' (alias_same ++ let_soa)
-                                                                                                                                                                   in bod''
+                                                                                                                                                                    let_soa_data = [LetLocExpr la gen_soa]
+                                                                                                                                                                    let_to_release = case (M.lookup l1 inst_waiting_on_loc) of
+                                                                                                                                                                                            Just lets -> let lets' = L.map (\exp -> case exp of 
+                                                                                                                                                                                                                                          LetLocExpr a b -> LetLocE a b
+                                                                                                                                                                                                                          ) lets
+                                                                                                                                                                                            
+                                                                                                                                                                                                           in lets' ++ alias_same
+                                                                                                                                                                                            Nothing -> alias_same
+                                                                                                                                                                    inst_waiting_on_loc' = M.delete l1 inst_waiting_on_loc 
+                                                                                                                                                                    inst_waiting_on_loc'' = case (M.member la inst_waiting_on_loc) of
+                                                                                                                                                                                            True -> M.adjust (\vals -> vals ++ let_soa_data) la inst_waiting_on_loc'
+                                                                                                                                                                                            False -> M.insert la let_soa_data inst_waiting_on_loc'
+                                                                                                                                                                    bod'' = L.foldr (\lete acc -> Ext $ lete acc) bod' let_to_release
+                                                                                                                                                                   in (bod'', inst_waiting_on_loc'', [])
 
 
 
-                                                                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                                _ -> Ext (LetLocE la (FromEndLE l2) bod')
-                                                                  Nothing -> Ext (LetLocE la (FromEndLE l2) bod')
-                           in wrapBody f bod'' ls
+                                                                                                                                _ -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
+                                                                                                                  Nothing -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
+                                                                                _ -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
+                                                                  Nothing -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
+                              (bod''', inst_waiting_on_loc'', rel) = wrapBody f bod'' ls inst_waiting_on_loc'       
+                            in (bod''', M.unionWith (++) inst_waiting_on_loc' inst_waiting_on_loc'', rels ++ rel)
                          else
                           let bod'' = Ext (LetLocE la (FromEndLE l2) bod')
-                            in wrapBody f bod'' ls 
-               wrapBody f e [] = e
+                              (bod''', inst_waiting_on_loc', rel) = wrapBody f bod'' ls inst_waiting_on_loc 
+                            in (bod''', M.unionWith (++) inst_waiting_on_loc' inst_waiting_on_loc, rel)
+               wrapBody f e [] inst_waiting_on_loc = (e, inst_waiting_on_loc, [])
 
                -- Process a let bound fn app.
                doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, LocVar)], EndOfRel)

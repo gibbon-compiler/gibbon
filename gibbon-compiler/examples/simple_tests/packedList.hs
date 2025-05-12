@@ -1,5 +1,5 @@
 data PackedInt = PacI Int
-data List = Cons PackedInt List | Nil 
+data List = Cons Int PackedInt List | Nil 
 
 addPackedInt' :: PackedInt -> Int -> PackedInt
 addPackedInt' a b = case a of
@@ -24,21 +24,21 @@ mkList length = if length <= 0
 		else
                  let i = mkPackedInt length
                      rst = mkList (length - 1)
-		   in Cons i rst
+		   in Cons length i rst
 
 add1 :: List -> List
 add1 lst = case lst of
 		Nil -> Nil
-		Cons i rst -> let
+		Cons j i rst -> let
                         i1 = addPackedInt' i 1
-					  in Cons i1 (add1 rst)
+					  in Cons (j + 1) i1 (add1 rst)
 
 sumList :: List -> Int
 sumList lst = case lst of
  		   Nil -> 0
- 		   Cons i rst -> let i' = unwrapPackedInt i
-                                     sumRst = sumList rst
-                                   in i' + sumRst
+ 		   Cons j i rst -> let i' = unwrapPackedInt i
+                                       sumRst = sumList rst
+                                     in j + i' + sumRst
 
 gibbon_main = let 
                 pi = mkPackedInt 10

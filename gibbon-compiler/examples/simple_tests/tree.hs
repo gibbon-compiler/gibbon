@@ -39,4 +39,4 @@ gibbon_main =
        rmost = rightmost tree'
        _ = printint rmost
        _ = printsym (quote ")\n\n")
-     in ()
+     in sumTree tree'

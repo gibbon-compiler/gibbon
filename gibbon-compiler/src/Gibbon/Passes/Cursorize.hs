@@ -2304,22 +2304,23 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                   Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
                           
                           -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-                          (field_lets, field_v_lst) <- dbgTraceIt "Print scrut_loc " dbgTraceIt (sdoc ((dcon, scrut_loc))) dbgTraceIt "end scrut_loc.\n" 
-                                                        foldlM (\(acc1, acc2) (key@(dcon', idx), loc) -> do
+                          (field_lets, field_v_lst, freeVarToVarEnv') <- dbgTraceIt "Print scrut_loc " dbgTraceIt (sdoc ((dcon, scrut_loc))) dbgTraceIt "end scrut_loc.\n" 
+                                                        foldlM (\(acc1, acc2, acc3) (key@(dcon', idx), loc) -> do
                                                                         let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
                                                                         field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
+                                                                        let acc3' = dbgTraceIt "print loc: " dbgTraceIt (sdoc (loc, scrut_loc)) dbgTraceIt "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
                                                                         let field_cursor_ty = case loc of 
                                                                                                     Single _ -> CursorTy
                                                                                                     SoA _ flds -> CursorArrayTy (1 + L.length (flds)) 
                                                                         let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
                                                                         let curr_window = [((dcon', idx), field_var)]
-                                                                        return (acc1 ++ field_let , acc2 ++ curr_window)
-                                                              ) ([], []) (getAllFieldLocsSoA scrut_loc)
+                                                                        return (acc1 ++ field_let , acc2 ++ curr_window, acc3')
+                                                              ) ([], [], freeVarToVarEnv) (getAllFieldLocsSoA scrut_loc)
                           bod <- (if isAbsRANDataCon dcon
                                 then unpackWithAbsRAN field_cur
                                 else if isRelRANDataCon dcon
                                 then unpackWithRelRAN field_cur
-                                else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv)
+                                else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv')
                           let lets = mkLets (field_lets) bod
                           dbgTraceIt "Print scrut loc: " dbgTraceIt (sdoc scrut_loc) dbgTraceIt "End loc\n" return (dcon, [], lets)
     _ -> (dcon, [],)
@@ -2355,13 +2356,13 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
     -- to true initially, and we flip it as soon as we see a packed value.
     --
     unpackRegularDataCon :: WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
-    unpackRegularDataCon field_cur freeVarToVarEnv = do 
+    unpackRegularDataCon field_cur freeVarToVarEnv_unpack = do 
       let tenv1' = case field_cur of 
                         AoSWin cf -> (M.insert cf (MkTy2 CursorTy) tenv1)
                         SoAWin dcf fieldfvs -> let tenv1'' = M.insert dcf (MkTy2 CursorTy) tenv1 
                                                  in foldr (\(x,y) acc -> M.insert y (MkTy2 CursorTy) acc) tenv1'' fieldfvs
-      exp <- go field_cur freeVarToVarEnv vlocs1 tys1 True denv1 tenv1'
-      return exp
+      exp_unp <- go field_cur freeVarToVarEnv_unpack vlocs1 tys1 True denv1 tenv1'
+      return exp_unp
       where
         go :: WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
         go curw fenv vlocs tys canBind denv tenv = do 
@@ -2384,12 +2385,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         loc_var <- lookupVariable loc fenv
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
-                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv tenv''
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
+                        go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv' tenv'
 
                     -- An indirection or redirection pointer.
                     -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
@@ -2412,7 +2413,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                    (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
                                    (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
                                    (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
-                      bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'
+                      bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv tenv'
                       return $ mkLets binds bod
 
 
@@ -2435,12 +2436,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         loc_var <- lookupVariable loc fenv
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
-                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv tenv''
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
+                        go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv' tenv'
 
 
                     ListTy el_ty -> do
@@ -2462,12 +2463,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         loc_var <- lookupVariable loc fenv
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
-                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv tenv''
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
+                        go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv' tenv'
 
                     PackedTy _ ploc -> do
                       let tenv' = M.insert v (MkTy2 CursorTy) tenv
@@ -2477,14 +2478,14 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
                         -- Flip canBind to indicate that the subsequent fields
                         -- should be added to the dependency environment.
-                        bod <- go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys False denv tenv''
+                        bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys False denv tenv''
                         return $ mkLets [((loc_var), [], CursorTy, VarE cur)
                                         ,(v  , [], CursorTy, VarE (loc_var))]
                                  bod
                       else do
                         -- Cannot read this. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) [(v,[],CursorTy,VarE (loc_var))] denv
-                        go (AoSWin (toEndV v)) freeVarToVarEnv rst_vlocs rst_tys False denv' tenv'
+                        go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys False denv' tenv'
 
                     _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
@@ -2512,12 +2513,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
                         
-                        bod <- go (SoAWin dcur field_cur') freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv''
+                        bod <- go (SoAWin dcur field_cur') fenv rst_vlocs rst_tys canBind denv tenv''
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go (SoAWin dcur field_cur') freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv'
+                        go (SoAWin dcur field_cur') fenv rst_vlocs rst_tys canBind denv' tenv'
 
                     -- An indirection or redirection pointer.
                     -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
@@ -2542,7 +2543,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                    (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
                                    (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
                                    (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
-                      bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
+                      bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
                       return $ mkLets binds bod
 
 
@@ -2567,12 +2568,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         loc_var <- lookupVariable loc fenv
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
-                        bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
+                        bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
+                        go curw fenv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
 
 
                     ListTy el_ty -> do
@@ -2596,12 +2597,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         loc_var <- lookupVariable loc fenv
                         let binds' = ((loc_var),[],CursorTy, VarE cur):binds
                             tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
-                        bod <- go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
+                        bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv'' --(toEndV v)
                         return $ mkLets binds' bod
                       else do
                         -- Cannot read this int. Instead, we add it to DepEnv.
                         let denv' = M.insertWith (++) (loc) binds denv
-                        go curw freeVarToVarEnv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
+                        go curw fenv rst_vlocs rst_tys canBind denv' tenv' --(toEndV v)
 
                     PackedTy tycon ploc -> do
                       -- Two cases 
@@ -2635,12 +2636,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                             -- make the new curw type 
                             -- this consists of incrementing the data constructor buffer by one and all the rest of the fields 
                             let curw' = SoAWin dcon_next field_cur
-                            bod <- go curw' freeVarToVarEnv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
+                            bod <- go curw' fenv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
                             return $ mkLets dcon_nxt bod
                           else do
                             -- Cannot read this. Instead, we add it to DepEnv.
                             let denv' = M.insertWith (++) (loc) [(v,[],ty3_of_field2,VarE (loc_var))] denv
-                            go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
+                            go curw  fenv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
                         False -> do
                           let ty3_of_field = case ploc of 
                                                   Single _ -> CursorTy
@@ -2658,14 +2659,20 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                             let tenv'' = M.insert (loc_var) (MkTy2 ty3_of_field) tenv'
                             -- Flip canBind to indicate that the subsequent fields
                             -- should be added to the dependency environment.
-                            bod <- go curw freeVarToVarEnv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
+                            bod <- go curw fenv rst_vlocs rst_tys False denv tenv'' --(toEndV v)
                             return $ mkLets [((loc_var), [], ty3_of_field2, VarE cur)
                                         ,(v  , [], ty3_of_field2, VarE (loc_var))]
                                      bod
                           else do
                             -- Cannot read this. Instead, we add it to DepEnv.
-                            let denv' = M.insertWith (++) (loc) [(v,[],ty3_of_field2,VarE (loc_var))] denv
-                            go curw  freeVarToVarEnv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
+                            let denv' = dbgTraceIt "Printing in packedTy unpack dcon: " dbgTraceIt (sdoc (loc)) dbgTraceIt "End in unpacking dcon.\n" M.insertWith (++) (loc) [((loc_var), [], ty3_of_field2, VarE cur), (v,[],ty3_of_field2,VarE (loc_var))] denv
+                            bod <- go curw  fenv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
+                            -- VS: [05.11.2025] This is a hack to ensure that the location variable is not undefined. 
+                            -- If we have serialized packed types that are not self recursive, we still have to release 
+                            -- The let binding and just adding it to the depenv is not enough. 
+                            -- There should be a careful look at why this is and if this is functionally correct. 
+                            return $ mkLets [((loc_var), [], ty3_of_field2, VarE cur), (v  , [], ty3_of_field2, VarE (loc_var))]
+                                     bod
                     _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
                 _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
