@@ -419,7 +419,10 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                         acc1' = M.insert fake_last_loc r' acc1
                                         acc2' = M.adjust (\ls -> ls ++ [fake_last_loc]) r acc2
                                         acc2'' =  M.insert r' (acc2' # r) acc2'
-                                        acc2''' = foldr (\lc2 acc3 -> M.adjust (\ls -> ls ++ [fake_last_loc]) (acc1' # lc2) acc3) acc2'' locs_in_r
+                                        acc2''' = foldr (\lc2 acc3 -> case (M.lookup lc2 acc1') of 
+                                                                                  Just rr' -> M.adjust (\ls -> ls ++ [fake_last_loc]) rr' acc3
+                                                                                  Nothing -> error "Expected location to be in argtylocs.\n"
+                                                        ) acc2'' locs_in_r
                                     in dbgTraceIt "Print in updated: " dbgTraceIt (sdoc (acc1')) dbgTraceIt "End in updated!\n" (acc1', acc2''', bod_acc)
                                else let (_, to_update) = splitAt (idx+1) locs_in_r
                                         updated = M.mapWithKey (\key val -> if key `elem` to_update then r' else val) acc1

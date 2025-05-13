@@ -1,6 +1,6 @@
 data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
-data Tree = Node Int FloatList List Tree Tree Tree | Leaf
+data Tree = Node Int Float FloatList List Tree Tree Tree | Leaf
 
 
 mkList :: Int -> List 
@@ -16,7 +16,7 @@ mkFloatList len = if len <= 0
 mkTree :: Int -> Tree
 mkTree d = if (d <= 0)
 	   then Leaf
-           else Node d (mkFloatList d) (mkList d) (mkTree (d - 1)) (mkTree (d - 1)) (mkTree (d - 1))
+           else Node d 1.0 (mkFloatList d) (mkList d) (mkTree (d - 1)) (mkTree (d - 1)) (mkTree (d - 1))
 
 add1List :: List -> List
 add1List lst = case lst of 
@@ -31,7 +31,7 @@ add1FloatList lst = case lst of
 add1Tree :: Tree -> Tree
 add1Tree tree = case tree of 
 		     Leaf -> Leaf
-                     Node x flst lst l r rr -> Node (x+1) (add1FloatList flst) (add1List lst) (add1Tree l) (add1Tree r) (add1Tree rr)
+                     Node x y flst lst l r rr -> Node (x+1) (y .+. 2.0) (add1FloatList flst) (add1List lst) (add1Tree l) (add1Tree r) (add1Tree rr)
 
 
 intToFloat :: Int -> Float 
@@ -58,7 +58,7 @@ intToFloat val = if (val == 1)
 sumTree :: Tree -> Int 
 sumTree tree = case tree of 
 		    Leaf -> 0 
-		    Node x l1 l2 l r rr -> x + (sumFloatList l1) + (sumIntList l2) + (sumTree l) + (sumTree r) + (sumTree rr)
+		    Node x y l1 l2 l r rr -> x + (sumFloatList l1) + (sumIntList l2) + (sumTree l) + (sumTree r) + (sumTree rr)
 
 
 sumIntList :: List -> Int 

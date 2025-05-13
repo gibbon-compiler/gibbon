@@ -1141,7 +1141,12 @@ allFreeVars ex =
                                                       -- TODO this works since locvar is not recursive but this needs to change
                                                       GetDataConLocSoA loc -> S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)
                                                       GetFieldLocSoA _ loc -> S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)
-                                                      GenSoALoc loc flocs -> S.fromList (L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)) `S.union` (S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (L.concatMap (\(_, loc) -> varsInLocVar loc) flocs))
+                                                      GenSoALoc dloc flocs -> let 
+                                                                               field_locs_only = map (\(_, floc_inner) -> floc_inner) flocs
+                                                                               field_locs_only' = field_locs_only ++ [dloc]
+                                                                              in S.fromList (L.map fromLocVarToFreeVarsTy field_locs_only') 
+                                                        
+                                                        --S.fromList (L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)) `S.union` (S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (L.concatMap (\(_, loc) -> varsInLocVar loc) flocs))
                                                       _ -> S.empty
                                       vars_locexp = S.map fromVarToFreeVarsTy (gFreeVars locexp)
                                     in S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars bod `S.union` locs_locexp `S.union` vars_locexp)
