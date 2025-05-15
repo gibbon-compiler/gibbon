@@ -154,7 +154,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                                        in M.insert ptr (mkLocArg ptr Nothing) locenv'
                                   else locenv'
                    rhs' <- go locenv'' env2' rhs
-                   dbgTraceIt "Print LREM Case: " dbgTraceIt (sdoc (lrem, locargs, locenv'')) dbgTraceIt "End LREM Case.\n" pure $ (dcon, vlocs', rhs')
+                   dbgTrace minChatLvl "Print LREM Case: " dbgTrace minChatLvl (sdoc (lrem, locargs, locenv'')) dbgTrace minChatLvl "End LREM Case.\n" pure $ (dcon, vlocs', rhs')
 
              (CaseE (VarE v)) <$> mapM docase brs
 

@@ -29,8 +29,9 @@ reorderLetExprs (Prog ddefs fundefs mainExp) = do
     let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
     mainExp' <- case mainExp of
                     Just (e,ty) -> do
-                                      (e', _) <- reorderLetExprsFunBody S.empty M.empty e
-                                      pure $ Just (e', ty)
+                                      (e', env) <- reorderLetExprsFunBody S.empty M.empty e
+                                      e'' <- releaseExprsFunBody S.empty env e'
+                                      pure $ Just (e'', ty)
                     Nothing     -> pure Nothing
     pure $ Prog ddefs fundefs' mainExp'
 
@@ -44,9 +45,9 @@ reorderLetExprsFun f@FunDef{funName,funTy,funArgs,funBody,funMeta} = do
         definedVars = S.union args locToFreeVarsTy
     (funBody', env') <- reorderLetExprsFunBody definedVars M.empty funBody
     funBody'' <- releaseExprsFunBody definedVars env' funBody'
-    -- dbgTraceIt "Print Meta: " dbgTraceIt (sdoc (funTy, funMeta)) dbgTraceIt "Print end.\n"
+    -- dbgTrace (minChatLvl) "Print Meta: " dbgTrace (minChatLvl) (sdoc (funTy, funMeta)) dbgTrace (minChatLvl) "Print end.\n"
     funBody''' <- ensureLocationsAreDefinedForWrite S.empty funBody''
-    dbgTraceIt "Print Env: " dbgTraceIt (sdoc (env')) dbgTraceIt ("End Print Env.\n") pure $ f { funBody = funBody''' }
+    dbgTrace (minChatLvl) "Print Env: " dbgTrace (minChatLvl) (sdoc (env', funBody''')) dbgTrace (minChatLvl) ("End Print Env.\n") pure $ f { funBody = funBody''' }
 
 
 {- We also need to release let expressions which are defined -}
@@ -54,8 +55,12 @@ reorderLetExprsFunBody :: DefinedVars -> DelayedExprMap -> Exp2 -> PassM (Exp2, 
 reorderLetExprsFunBody definedVars delayedExprMap ex = do
     case ex of
         LetE (v,locs,ty,rhs) bod -> do
-            let freeVarsRhs = allFreeVars rhs 
-                pckdLoc = locsInTy ty
+            let freeVarsRhs = case rhs of 
+                                   TimeIt e _ _ -> case e of 
+                                                      LetE (_, _, _, rhs') bod' -> S.union (allFreeVars rhs') (allFreeVars bod')
+                                                      _ -> allFreeVars e
+                                   _ -> allFreeVars rhs
+                -- pckdLoc = locsInTy ty
                 freeVarsRhs' = freeVarsRhs --S.union (S.fromList $ map fromLocVarToFreeVarsTy pckdLoc) freeVarsRhs
                 {- Check if variables in rhs are in the DefinedVars-}
                 isDefined = S.isSubsetOf freeVarsRhs' definedVars
@@ -83,7 +88,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
                     --                                   ) (bod, definedVars', delayedExprMap) (M.toList delayedExprMap)
                     (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars' delayedExprMap bod
                     pure $ (LetE (v, locs, ty, rhs) bod', delayedExprMap')
-                    -- dbgTraceIt "reorderLetExprsFunBody (LetE isdef): " dbgTraceIt (sdoc (freeVarsRhs')) dbgTraceIt "End reorderLetExprsFunBody (LetE isdef)\n."
+                    -- dbgTrace (minChatLvl) "reorderLetExprsFunBody (LetE isdef): " dbgTrace (minChatLvl) (sdoc (freeVarsRhs')) dbgTrace (minChatLvl) "End reorderLetExprsFunBody (LetE isdef)\n."
                  else do
                     (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap bod
                     let delayedLetE = LetExpr (v, locs, ty, rhs)
@@ -108,7 +113,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
                     --                                   ) (bod, definedVars, delayedExprMap') (M.toList delayedExprMap')    
                     -- bod'' <- reorderLetExprsFunBody definedVars'' delayedExprMap'' bod'
                    
-                    -- dbgTraceIt "reorderLetExprsFunBody (LetE isndef): " dbgTraceIt (sdoc (delayedLetE, freeVarsRhs', definedVars, delayedExprMap'', bod, bod', bod'')) dbgTraceIt "End reorderLetExprsFunBody (LetE isndef)\n."
+                    -- dbgTrace (minChatLvl) "reorderLetExprsFunBody (LetE isndef): " dbgTrace (minChatLvl) (sdoc (delayedLetE, freeVarsRhs', definedVars, delayedExprMap'', bod, bod', bod'')) dbgTrace (minChatLvl) "End reorderLetExprsFunBody (LetE isndef)\n."
                     pure (bod', delayedExprMap'')
         
         LitE _ -> pure (ex, delayedExprMap)
@@ -166,7 +171,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
 
         TimeIt e _t b -> do
             (e', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap e
-            pure $ (TimeIt e' _t b, delayedExprMap')
+            dbgTrace (minChatLvl) "Print in TimeIt: " dbgTrace (minChatLvl) (sdoc (definedVars, delayedExprMap)) dbgTrace (minChatLvl) "1End TimeIt.\n" pure $ (TimeIt e' _t b, delayedExprMap')
 
         SpawnE f lvs ls -> do 
             ls' <- mapM (reorderLetExprsFunBody definedVars delayedExprMap) ls
@@ -243,7 +248,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
                     --bod'' <- reorderLetExprsFunBody definedVars' delayedExprMap'' bod'
                     
                     pure (bod', delayedExprMap'')
-                    -- dbgTraceIt "reorderLetExprsFunBody (LetLocE isndef): " dbgTraceIt (sdoc (delayedLetLocE, freeVarsRhs, definedVars, delayedExprMap'', bod, bod', bod'')) dbgTraceIt "End reorderLetExprsFunBody (LetLocE isndef)\n."
+                    -- dbgTrace (minChatLvl) "reorderLetExprsFunBody (LetLocE isndef): " dbgTrace (minChatLvl) (sdoc (delayedLetLocE, freeVarsRhs, definedVars, delayedExprMap'', bod, bod', bod'')) dbgTrace (minChatLvl) "End reorderLetExprsFunBody (LetLocE isndef)\n."
 
         Ext (StartOfPkdCursor cur) -> pure (ex, delayedExprMap)
 
@@ -284,8 +289,8 @@ releaseExprsFunBody :: DefinedVars -> DelayedExprMap -> Exp2 -> PassM Exp2
 releaseExprsFunBody definedVars delayedExprMap ex = do
     case ex of
         LetE (v,locs,ty,rhs) bod -> do
-            let definedVars' = S.insert (fromVarToFreeVarsTy v) definedVars
-            (bod', definedVars'', delayedExprMap') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
+            let definedVars' = S.union (S.insert (fromVarToFreeVarsTy v) definedVars) (S.fromList (map fromLocVarToFreeVarsTy locs))
+            (bod', definedVars'', delayedExprMap') <- foldlM (\(body, env, env2) (dvars, expr) -> do 
                                                             let can_release = S.isSubsetOf dvars env 
                                                               in if can_release
                                                                  then do
@@ -303,6 +308,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
                                                                  else do
                                                                     pure (body, env, env2)
                                                                ) (bod, definedVars', delayedExprMap) (M.toList delayedExprMap)
+            --let bod' = foldr (\exp -> Ext $ exp ) bod [] 
             bod'' <- releaseExprsFunBody definedVars'' delayedExprMap' bod'
             pure $ LetE (v, locs, ty, rhs) bod''
         
@@ -341,7 +347,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
             pure $ CaseE e' ls'
 
         TimeIt e _t b -> do
-            e' <- releaseExprsFunBody definedVars delayedExprMap e
+            e' <- dbgTrace (minChatLvl) "Print in TimeIt: " dbgTrace (minChatLvl) (sdoc (definedVars, delayedExprMap)) dbgTrace (minChatLvl) "End TimeIt.\n" releaseExprsFunBody definedVars delayedExprMap e
             pure $ TimeIt e' _t b
 
         SpawnE f lvs ls -> do 
@@ -364,7 +370,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
             pure $ WithArenaE v e'
 
         Ext (LetLocE loc rhs bod) -> do
-            let definedVars' = dbgTraceIt "Print in LetLocE: " dbgTraceIt (sdoc (definedVars, delayedExprMap)) dbgTraceIt "End print in LetLocE.\n" S.insert (fromLocVarToFreeVarsTy loc) definedVars
+            let definedVars' = dbgTrace (minChatLvl) "Print in LetLocE: " dbgTrace (minChatLvl) (sdoc (loc, definedVars, delayedExprMap)) dbgTrace (minChatLvl) "End print in LetLocE.\n" S.insert (fromLocVarToFreeVarsTy loc) definedVars
             (bod', definedVars'', delayedExprMap') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
                                                             let can_release = S.isSubsetOf dvars env 
                                                               in if can_release

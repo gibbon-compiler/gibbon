@@ -59,7 +59,7 @@ intToFloat val = if (val == 1)
 sumTree :: Tree -> Int 
 sumTree tree = case tree of 
 		    Leaf -> 0 
-		    Node x y l1 l2 l r rr -> x + (floatToInt y) + (lengthFloatList l1) + (sumIntList l2) + (sumTree l) + (sumTree r) + (sumTree rr)
+		    Node x y l1 l2 l r rr -> x + (floatToInt y) + (getIntConstantFromFloatList l1) + (sumIntList l2) + (sumTree l) + (sumTree r) + (sumTree rr)
 
 
 floatToInt :: Float -> Int 

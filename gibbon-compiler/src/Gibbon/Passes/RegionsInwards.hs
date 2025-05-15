@@ -307,7 +307,7 @@ placeRegionInwards env scopeSet ex  =
                                      let freeVarsLocalB  = allFreeVars b
                                          freeVarsLocalC  = allFreeVars c
                                          commonVars = freeVarsLocalB `S.intersection` freeVarsLocalC
-                                         --_          = dbgTraceIt (sdoc commonVars)
+                                         --_          = dbgTrace minChatLvl (sdoc commonVars)
                                          allKeys    = M.keys env
                                          keyList    = map (\variable -> F.find (S.member variable) allKeys) (S.toList commonVars)
                                          keyList'   = S.catMaybes keyList
@@ -318,7 +318,7 @@ placeRegionInwards env scopeSet ex  =
                                      b' <- placeRegionInwards env scopeSet b       -- Recurse on b (Then part)
                                      c' <- placeRegionInwards env scopeSet c       -- Recurse on c (Else part)
                                      let (_, a') = dischargeBinds' newEnv' commonVars a
-                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTraceIt (sdoc (commonVars, keyList, env, newEnv'))-}
+                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTrace minChatLvl (sdoc (commonVars, keyList, env, newEnv'))-}
 
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
@@ -351,7 +351,7 @@ placeRegionInwards env scopeSet ex  =
                             newEnv'   = M.fromList tupleList
                         c' <- placeRegionInwards env newScope c
                         let (_, c'') = dischargeBinds' newEnv' free_vars c'                                                -- Discharge the binds using the newScope and the dictionary
-                         in return (a,b,c'')) brs                                                                          -- dbgTraceIt (sdoc (free_vars, keyList, env, newEnv'))
+                         in return (a,b,c'')) brs                                                                          -- dbgTrace minChatLvl (sdoc (free_vars, keyList, env, newEnv'))
 
       return $ CaseE scrt brs'
     TimeIt e ty b                 -> do
@@ -391,8 +391,8 @@ codeGen set env body =
       newEnv'   = M.fromList tupleList
       exps      = foldr bindDelayedBind body valList                                   -- Get all the bindings for all the expressions in the key
    in (newEnv', exps)
-   -- dbgTraceIt "Print in regionsInwards: "  dbgTraceIt (sdoc (set, allKeys, env, valList, newEnv')) dbgTraceIt "End regionsInwards.\n" 
-   -- dbgTraceIt "Print in regionsInwards: "  dbgTraceIt (sdoc (set, allKeys, env, valList, newEnv')) dbgTraceIt "End regionsInwards.\n" 
+   -- dbgTrace minChatLvl "Print in regionsInwards: "  dbgTrace minChatLvl (sdoc (set, allKeys, env, valList, newEnv')) dbgTrace minChatLvl "End regionsInwards.\n" 
+   -- dbgTrace minChatLvl "Print in regionsInwards: "  dbgTrace minChatLvl (sdoc (set, allKeys, env, valList, newEnv')) dbgTrace minChatLvl "End regionsInwards.\n" 
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
   case delayed of
@@ -606,7 +606,7 @@ removeAliasedLocations env ex  =
                                      rhs' <- go rhs
                                      bod' <- go bod
                                      let ty' = case ty of 
-                                                 PackedTy k loc -> dbgTraceIt "Remove Aliased Location: " dbgTraceIt (sdoc (loc, env)) dbgTraceIt "End ty remove alias.\n" PackedTy k (getAliasLoc env loc)
+                                                 PackedTy k loc -> dbgTrace (minChatLvl) "Remove Aliased Location: " dbgTrace minChatLvl (sdoc (loc, env)) dbgTrace (minChatLvl) "End ty remove alias.\n" PackedTy k (getAliasLoc env loc)
                                                  _ -> ty
                                      return $ LetE (v, nlocs, ty', rhs') bod' 
 

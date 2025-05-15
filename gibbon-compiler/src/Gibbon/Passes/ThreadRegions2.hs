@@ -124,7 +124,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                           _ -> [(regionToVar r, [l])] 
                                      ) (locVars funTy)
   --let bod' =  funBody  
-  bod' <- dbgTraceIt "Print region environment " dbgTraceIt (sdoc (initRegEnv)) dbgTraceIt "End print threadRegionsFn.\n" threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs M.empty S.empty S.empty funBody
+  bod' <- dbgTrace (minChatLvl) "Print region environment " dbgTrace (minChatLvl) (sdoc (initRegEnv)) dbgTrace (minChatLvl) "End print threadRegionsFn.\n" threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs M.empty S.empty S.empty funBody
   -- Boundschecking
   dflags <- getDynFlags
   let free_wlocs = S.fromList (map fromLocVarToFreeVarsTy (outLocVars funTy))
@@ -225,7 +225,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                               bc = boundsCheck ddefs (locs_tycons M.! loc)
                                                               locarg = NewL2.Loc (LREM loc rv end_rv mode)
                                                               regarg = NewL2.EndOfReg rv mode end_rv
-                                                            in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
+                                                            in -- dbgTrace (minChatLvl) ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
                                                           -- maintain shadowstack in no eager promotion mode
                                                               ([("_",[],MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)], [])
                                                      else ([], [])
@@ -335,7 +335,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         let ran_endofregs = map (\loc -> (loc,renv # loc)) $
                             map (\(PackedTy _ loc) -> loc) $
                             getPackedTys (unTy2 ty)
-        let !pkd_env1 = dbgTraceIt "Print stuff: " dbgTraceIt (sdoc (renv, in_regvars, in_regvars',out_regvars, out_regvars')) dbgTraceIt "End stuff.\n"  pkd_env `M.union` (M.fromList ran_endofregs)
+        let !pkd_env1 = dbgTrace (minChatLvl) "Print stuff: " dbgTrace (minChatLvl) (sdoc (renv, in_regvars, in_regvars',out_regvars, out_regvars')) dbgTrace (minChatLvl) "End stuff.\n"  pkd_env `M.union` (M.fromList ran_endofregs)
         --------------------
         let applocs' = map (\loc -> case loc of
                                       NewL2.Loc lrem ->
@@ -350,7 +350,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         --------------------
         -- 'locs' only has end-witnesses up to this pass. Make their regions
         -- same as regions of the locations that the function traverses.
-        let !traversed_indices = dbgTraceIt "Print (renv) in LetE: " dbgTraceIt (sdoc (renv, (v,locs,ty, (AppE f applocs args)))) dbgTraceIt "End (renv) LetE.\n" let fnty = funTy (fundefs # f) in
+        let !traversed_indices = dbgTrace (minChatLvl) "Print (renv) in LetE: " dbgTrace (minChatLvl) (sdoc (renv, (v,locs,ty, (AppE f applocs args)))) dbgTrace (minChatLvl) "End (renv) LetE.\n" let fnty = funTy (fundefs # f) in
                                       map fst $
                                       filter (\(_i,loc) -> Traverse loc `S.member` (arrEffs fnty)) $
                                       zip [0..] (allLocVars fnty)
@@ -360,7 +360,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                      Just r' = lookup r zipped
                                                  in r')
                                           traversed_indices)
-        let !renv2 = dbgTraceIt "Print (renv1) in LetE: " dbgTraceIt (sdoc (renv1, traversed_indices,  (v,locs,ty, (AppE f applocs args)))) dbgTraceIt "End (renv1) LetE.\n" M.union renv1 renv
+        let !renv2 = dbgTrace (minChatLvl) "Print (renv1) in LetE: " dbgTrace (minChatLvl) (sdoc (renv1, traversed_indices,  (v,locs,ty, (AppE f applocs args)))) dbgTrace (minChatLvl) "End (renv1) LetE.\n" M.union renv1 renv
 
         -- Update input and returned locations to point to the fresh regions
         --
@@ -368,7 +368,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         let !region_locs1 =  foldr (\(r,r') acc -> let rr' = case (M.lookup r acc) of 
                                                               Just rr' -> rr' 
                                                               Nothing -> [] 
-                                                  in dbgTraceIt "Print (renv2) in LetE: " dbgTraceIt (sdoc (renv2, (v,locs,ty, (AppE f applocs args)))) dbgTraceIt "End (renv2) LetE.\n" M.insert r' rr' acc)
+                                                  in dbgTrace (minChatLvl) "Print (renv2) in LetE: " dbgTrace (minChatLvl) (sdoc (renv2, (v,locs,ty, (AppE f applocs args)))) dbgTrace (minChatLvl) "End (renv2) LetE.\n" M.insert r' rr' acc)
                                       region_locs
                                       (zip in_regvars in_regvars')
         let region_locs2 = foldr (\(r,r') acc -> let rr' = case (M.lookup r acc) of
@@ -379,13 +379,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                              (zip out_regvars out_regvars')
         -- liftIO $ hPutStrLn stderr "RRRRRRRRRRRRRRRRR"
         -- [2022.10.04]: do outregvars need to updated like inregvars below?
-        let (!renv3, !bod1) = dbgTraceIt "Print region_locs1: " dbgTraceIt (sdoc (region_locs1, region_locs2, in_regvars, in_regvars')) dbgTraceIt "End region_locs1.\n" 
+        let (!renv3, !bod1) = dbgTrace (minChatLvl) "Print region_locs1: " dbgTrace (minChatLvl) (sdoc (region_locs1, region_locs2, in_regvars, in_regvars')) dbgTrace (minChatLvl) "End region_locs1.\n" 
               foldr (\(lc,r,r') (acc, bod_acc) -> 
                        ( (M.insert lc r' $ M.map (\w -> if w == r then r' else w) acc)
                        ,  substEndReg (Right r) (toEndVRegVar r') bod_acc))
               (renv2, bod)
               (L.zip3 outretlocs out_regvars out_regvars')
-        let !(!renv4, !region_locs3, !bod2) = dbgTraceIt "Print (renv3) in LetE: " dbgTraceIt (sdoc (renv3, (v,locs,ty, (AppE f applocs args)))) dbgTraceIt "End (renv3) LetE.\n"
+        let !(!renv4, !region_locs3, !bod2) = dbgTrace (minChatLvl) "Print (renv3) in LetE: " dbgTrace (minChatLvl) (sdoc (renv3, (v,locs,ty, (AppE f applocs args)))) dbgTrace (minChatLvl) "End (renv3) LetE.\n"
               foldr (\(lc,r,r') (acc1,acc2,bod_acc) ->
                        -- Keep the old mapping for lc in renv because at the end of a
                        -- branch for indirections we want to return the end-of-input-region
@@ -423,14 +423,14 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                                                   Just rr' -> M.adjust (\ls -> ls ++ [fake_last_loc]) rr' acc3
                                                                                   Nothing -> error "Expected location to be in argtylocs.\n"
                                                         ) acc2'' locs_in_r
-                                    in dbgTraceIt "Print in updated: " dbgTraceIt (sdoc (acc1')) dbgTraceIt "End in updated!\n" (acc1', acc2''', bod_acc)
+                                    in dbgTrace (minChatLvl) "Print in updated: " dbgTrace (minChatLvl) (sdoc (acc1')) dbgTrace (minChatLvl) "End in updated!\n" (acc1', acc2''', bod_acc)
                                else let (_, to_update) = splitAt (idx+1) locs_in_r
                                         updated = M.mapWithKey (\key val -> if key `elem` to_update then r' else val) acc1
                                         bod_acc' = foldr
                                                      (\l b -> substEndReg (Left l) (toEndVRegVar r') b)
                                                      bod_acc
                                                      (S.toList (M.keysSet acc1 `S.intersection` (S.fromList to_update)))
-                                    in dbgTraceIt "Print in updated: " dbgTraceIt (sdoc (updated, to_update)) dbgTraceIt "End in updated!\n" (updated, acc2, bod_acc')
+                                    in dbgTrace (minChatLvl) "Print in updated: " dbgTrace (minChatLvl) (sdoc (updated, to_update)) dbgTrace (minChatLvl) "End in updated!\n" (updated, acc2, bod_acc')
                              Nothing -> error $ 
                                            "threadRegionsExp: unbound loc " ++ sdoc (lc,locs_in_r,indirs,region_locs1,r) ++ 
                                            "\n\nPrint region of the loc: " ++ sdoc r ++ 
@@ -447,7 +447,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
               (L.zip3 argtylocs in_regvars in_regvars')
         -- TODO: only keep the rightmost end-of-input-region cursor in renv.
         --------------------
-        let !env2' = dbgTraceIt "Print (renv4) in LetE: " dbgTraceIt (sdoc (renv4, (v,locs,ty, (AppE f applocs args)))) dbgTraceIt "End (renv4) LetE.\n" extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2
+        let !env2' = dbgTrace (minChatLvl) "Print (renv4) in LetE: " dbgTrace (minChatLvl) (sdoc (renv4, (v,locs,ty, (AppE f applocs args)))) dbgTrace (minChatLvl) "End (renv4) LetE.\n" extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2
             rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (NewL2.locsInTy ty)
         bod3 <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' pkd_env1 region_locs3 ran_env indirs redirs bod2
@@ -536,7 +536,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           -- This is too narrow to represent a SoA region at the moment.
           -- I also don't think this is used in the L2 IR atm. 
           -- I but in case it is, then its type needs to be changed.
-          dbgTraceIt "Print TagCursor: " dbgTraceIt (sdoc(loc)) dbgTraceIt "End TagCursor\n" return $ Ext $ TagCursor (unwrapLocVar loc) (toEndV reg')
+          dbgTrace (minChatLvl) "Print TagCursor: " dbgTrace (minChatLvl) (sdoc(loc)) dbgTrace (minChatLvl) "End TagCursor\n" return $ Ext $ TagCursor (unwrapLocVar loc) (toEndV reg')
 
         Nothing -> error $ "threadRegionsExp: unbound " ++ sdoc (loc, pkd_env)
 
@@ -625,7 +625,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                             True -> M.adjust (\locs -> locs ++ [loc]) reg region_locs
                                                             False -> M.insert reg [loc] region_locs
                                _ -> region_locs
-              wlocs_env' = dbgTraceIt "Print renv LetLocE: " dbgTraceIt (sdoc (loc, reg, renv, region_locs, region_locs1)) dbgTraceIt "End renv LetLocE.\n" M.insert loc hole_tycon wlocs_env
+              wlocs_env' = dbgTrace (minChatLvl) "Print renv LetLocE: " dbgTrace (minChatLvl) (sdoc (loc, reg, renv, region_locs, region_locs1)) dbgTrace (minChatLvl) "End renv LetLocE.\n" M.insert loc hole_tycon wlocs_env
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' pkd_env region_locs1 ran_env indirs redirs bod
 
@@ -645,7 +645,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                        in r') $
                           filter (\lrm -> lremMode lrm == Input) fnLocArgs
               inregargs = map (fn Input) inregvars
-              newlocs = dbgTraceIt "Print in RetE: " dbgTraceIt (sdoc (fnLocArgs, renv, region_locs, inregargs)) dbgTraceIt "End in RetE.\n" inregargs ++ outtyregargs
+              newlocs = dbgTrace (minChatLvl) "Print in RetE: " dbgTrace (minChatLvl) (sdoc (fnLocArgs, renv, region_locs, inregargs)) dbgTrace (minChatLvl) "End in RetE.\n" inregargs ++ outtyregargs
           return $ Ext $ RetE (newlocs ++ locs) v
 
         TagCursor a b -> return $ Ext $ TagCursor a b
@@ -697,7 +697,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
     CaseE scrt mp -> do
       let (VarE v) = scrt
           PackedTy _ tyloc = unTy2 (lookupVEnvLocVar (fromVarToFreeVarsTy v) env2)
-          reg = dbgTraceIt "Print in CaseE: " dbgTraceIt (sdoc (region_locs)) dbgTraceIt "End in CaseE.\n"  renv M.! tyloc
+          reg = dbgTrace (minChatLvl) "Print in CaseE: " dbgTrace (minChatLvl) (sdoc (region_locs)) dbgTrace (minChatLvl) "End in CaseE.\n"  renv M.! tyloc
           -- region_locs' = case reg of 
           --                     SingleR _ -> region_locs 
           --                     SoARv _ fregs -> let locs_case = (concatMap (\(a, b, c) -> map snd b) mp)
@@ -707,7 +707,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           --                                                               ) region_locs zip $ (concatMap (\(a, b, c) -> map snd b) mp) [0..(length locs_case)]
           --                                        in acc'
       mp' <- mapM (\tup@(dcon, b, c) -> do 
-                                             let locs_case =  dbgTraceIt "Print ty of Scrut: " dbgTraceIt (sdoc (reg)) dbgTraceIt "End scrut ty.\n" map (toLocVar . snd) b
+                                             let locs_case =  dbgTrace (minChatLvl) "Print ty of Scrut: " dbgTrace (minChatLvl) (sdoc (reg)) dbgTrace (minChatLvl) "End scrut ty.\n" map (toLocVar . snd) b
                                              let region_locs' = case reg of
                                                                       SingleR _ -> region_locs
                                                                       SoARv _ fregs -> let acc' = foldr (\(loc, idx) acc -> case (L.lookup (dcon, idx) fregs) of
@@ -715,7 +715,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                                                                                                 Just reg' -> M.adjust (\locs -> locs ++ [loc]) reg' acc
                                                                                                         ) region_locs (zip locs_case [0..(length locs_case)])
                                                                                          in acc'
-                                             tup' <- dbgTraceIt "Print in CaseE after: " dbgTraceIt (sdoc (region_locs, region_locs')) dbgTraceIt "End in CaseE after.\n" docase reg renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs tup
+                                             tup' <- dbgTrace (minChatLvl) "Print in CaseE after: " dbgTrace (minChatLvl) (sdoc (region_locs, region_locs')) dbgTrace (minChatLvl) "End in CaseE after.\n" docase reg renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs tup
                                              pure tup'
                           ) mp 
       let !new_expr = CaseE scrt mp' 
@@ -787,7 +787,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                                                             Just reg' -> M.adjust (\val -> val ++ [loc]) reg' acc
                                                                       ) region_locs1 (zip locs [0..length(locs)])
                                                       in acc'
-          num_cursor_tys = dbgTraceIt "print in doCase (renv0): " dbgTraceIt (sdoc (renv1'', renv0, region_locs1')) dbgTraceIt "End doCase (renv0).\n" length $ filter ((== CursorTy) . unTy2) dcon_tys
+          num_cursor_tys = dbgTrace (minChatLvl) "print in doCase (renv0): " dbgTrace (minChatLvl) (sdoc (renv1'', renv0, region_locs1')) dbgTrace (minChatLvl) "End doCase (renv0).\n" length $ filter ((== CursorTy) . unTy2) dcon_tys
           ran_env1' = ran_env1 `M.union`
                       (if isIndirectionTag dcon || isRedirectionTag dcon then M.empty else
                          M.fromList $ zip
@@ -940,7 +940,7 @@ boundsCheck ddefs tycon =
       -- Add a byte for the tag.
       num_bytes = (1 + maximum vals)
   -- Reserve additional space for a redirection node or a forwarding pointer.
-  in dbgTraceIt "Print boundsCheck: " dbgTraceIt (sdoc (dcons, vals, tyss)) dbgTraceIt "End boundsCheck.\n" num_bytes + 9
+  in dbgTrace (minChatLvl) "Print boundsCheck: " dbgTrace (minChatLvl) (sdoc (dcons, vals, tyss)) dbgTrace (minChatLvl) "End boundsCheck.\n" num_bytes + 9
 
 -- Not making a seperate function for bounds checking an SoA location at the moment. 
 -- For a data constructor region -- it is 1 byte 

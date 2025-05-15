@@ -255,7 +255,7 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
          else cursorizeExp freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
   let bod' = inCurBinds bod
       fn = FunDef funName funargs funTy' bod' funMeta
-  dbgTraceIt "Print in cursorizeFunDef: " dbgTraceIt (sdoc (initTyEnv, locVars funTy)) dbgTraceIt "End cursorizeFunDef\n" return fn
+  dbgTrace (minChatLvl) "Print in cursorizeFunDef: " dbgTrace (minChatLvl) (sdoc (initTyEnv, locVars funTy)) dbgTrace (minChatLvl) "End cursorizeFunDef\n" return fn
 
   where
     -- | The only difference between this and L3.cursorizeTy is that here,
@@ -380,7 +380,7 @@ This is used to create bindings for input location variables.
                    then map (cursorizeInTy) in_tys
                    else map (constPacked CursorTy) in_tys
 
-      in dbgTraceIt "Print in_tys" dbgTraceIt (sdoc (out_ty, in_tys)) dbgTraceIt "End in_tys\n" (map stripTyLocs newIns, stripTyLocs newOut')
+      in dbgTrace (minChatLvl) "Print in_tys" dbgTrace (minChatLvl) (sdoc (out_ty, in_tys)) dbgTrace (minChatLvl) "End in_tys\n" (map stripTyLocs newIns, stripTyLocs newOut')
 
 
 -- | Cursorize expressions NOT producing `Packed` values
@@ -1278,7 +1278,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                 else do
                                                   name <- gensym "cursor_ptr"
                                                   return $ M.insert (fromLocVarToFreeVarsTy loc) name freeVarToVarEnv
-          let rhs_either = dbgTraceIt "Print env" dbgTraceIt (sdoc (freeVarToVarEnv')) dbgTraceIt "End env\n" cursorizeLocExp freeVarToVarEnv' denv tenv senv loc rhs
+          let rhs_either = dbgTrace (minChatLvl) "Print env" dbgTrace (minChatLvl) (sdoc (freeVarToVarEnv')) dbgTrace (minChatLvl) "End env\n" cursorizeLocExp freeVarToVarEnv' denv tenv senv loc rhs
               (bnds,tenv') = case M.lookup (fromLocVarToFreeVarsTy loc) denv of
                                Nothing -> ([],tenv)
                                Just vs -> let extended = M.fromList [ (v, MkTy2 CursorTy) | (v,_,CursorTy,_) <- vs]
@@ -1607,7 +1607,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                                                 Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected field location variable"
                              ) flocs
             rhs = Ext $ MakeCursorArray (1 + length flocs) ([dcloc_var] ++ field_vars)
-         in dbgTraceIt "Print freeVarEnv GenSoALoc:" dbgTraceIt (sdoc (freeVarToVarEnv)) dbgTraceIt "End freeVarEnv\n"  Right (rhs, [], tenv, senv)
+         in dbgTrace (minChatLvl) "Print freeVarEnv GenSoALoc:" dbgTrace (minChatLvl) (sdoc (freeVarToVarEnv)) dbgTrace (minChatLvl) "End freeVarEnv\n"  Right (rhs, [], tenv, senv)
     
     _ -> error $ "cursorizeLocExp: Unexpected locExp: " ++ sdoc locExp
 
@@ -1712,7 +1712,7 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs    = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
-          argTys  = dbgTraceIt "Print locs in cursorize AppE " dbgTraceIt (sdoc (f, locs)) dbgTraceIt "End cursorize AppE\n" map (gRecoverType ddfs (Env2 tenv M.empty)) args
+          argTys  = dbgTrace (minChatLvl) "Print locs in cursorize AppE " dbgTrace (minChatLvl) (sdoc (f, locs)) dbgTrace (minChatLvl) "End cursorize AppE\n" map (gRecoverType ddfs (Env2 tenv M.empty)) args
       (freeVarToVarEnv', newInsts) <- foldrM (\loc (acc, acc') -> do 
                                              let loc_var = fromLocArgToFreeVarsTy loc
                                              nacc <- case (M.lookup (loc_var) freeVarToVarEnv) of 
@@ -1756,7 +1756,7 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                                                                                          ) fieldRegions
                                                                                                                                                   name <- gensym "cursor_reg_ptr"
                                                                                                                                                   let instrs = dcon_insts ++ [LetE (name, [], CursorArrayTy (1 + length fieldReg_vars), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
-                                                                                                                                                  dbgTraceIt "Print Reg: " dbgTraceIt (sdoc (f, dconReg, fieldRegions)) dbgTraceIt "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
+                                                                                                                                                  dbgTrace (minChatLvl) "Print Reg: " dbgTrace (minChatLvl) (sdoc (f, dconReg, fieldRegions)) dbgTrace (minChatLvl) "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
                                                                                                                             pure ret
                                                                                                                 
 
@@ -1772,7 +1772,7 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                                             --                         ) fieldRegions
                                                                                                                             --name <- gensym "cursor_reg_ptr"
                                                                                                                             --let instrs = [LetE (name, [], CursorArrayTy (1 + length fieldReg_vars), Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
-                                                                                                                            --dbgTraceIt "Print Reg: " dbgTraceIt (sdoc (f, dconReg, fieldRegions)) dbgTraceIt "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
+                                                                                                                            --dbgTrace (minChatLvl) "Print Reg: " dbgTrace (minChatLvl) (sdoc (f, dconReg, fieldRegions)) dbgTrace (minChatLvl) "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
                                                                                             FL l -> case l of 
                                                                                                               Single v -> return $ (M.insert loc_var v acc, acc')
                                                                                                               SoA _ _ -> do
@@ -2057,7 +2057,7 @@ cursorizeLet :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDef
 cursorizeLet freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v,locs,(MkTy2 ty),rhs) bod
     | isPackedTy ty = do
         rhs' <- fromDi <$> cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
-        fresh <- dbgTraceIt "Print locs in cursorize Let " dbgTraceIt (sdoc (locs)) dbgTraceIt "End cursorize Let\n" gensym "tup_packed"
+        fresh <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (locs)) dbgTrace (minChatLvl) "End cursorize Let\n" gensym "tup_packed"
         let cursor_ty_locs = map (\loc -> let free_var = fromLocArgToFreeVarsTy loc
                                               cursorType = case free_var of
                                                         R r -> case r of 
@@ -2304,11 +2304,11 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                   Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
                           
                           -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-                          (field_lets, field_v_lst, freeVarToVarEnv') <- dbgTraceIt "Print scrut_loc " dbgTraceIt (sdoc ((dcon, scrut_loc))) dbgTraceIt "end scrut_loc.\n" 
+                          (field_lets, field_v_lst, freeVarToVarEnv') <- dbgTrace (minChatLvl) "Print scrut_loc " dbgTrace (minChatLvl) (sdoc ((dcon, scrut_loc))) dbgTrace (minChatLvl) "end scrut_loc.\n" 
                                                         foldlM (\(acc1, acc2, acc3) (key@(dcon', idx), loc) -> do
                                                                         let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
                                                                         field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
-                                                                        let acc3' = dbgTraceIt "print loc: " dbgTraceIt (sdoc (loc, scrut_loc)) dbgTraceIt "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
+                                                                        let acc3' = dbgTrace (minChatLvl) "print loc: " dbgTrace (minChatLvl) (sdoc (loc, scrut_loc)) dbgTrace (minChatLvl) "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
                                                                         let field_cursor_ty = case loc of 
                                                                                                     Single _ -> CursorTy
                                                                                                     SoA _ flds -> CursorArrayTy (1 + L.length (flds)) 
@@ -2322,7 +2322,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                 then unpackWithRelRAN field_cur
                                 else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv')
                           let lets = mkLets (field_lets) bod
-                          dbgTraceIt "Print scrut loc: " dbgTraceIt (sdoc scrut_loc) dbgTraceIt "End loc\n" return (dcon, [], lets)
+                          dbgTrace (minChatLvl) "Print scrut loc: " dbgTrace (minChatLvl) (sdoc scrut_loc) dbgTrace (minChatLvl) "End loc\n" return (dcon, [], lets)
     _ -> (dcon, [],)
                 -- Advance the cursor by 1 byte so that it points to the first field
                 <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
@@ -2665,7 +2665,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                      bod
                           else do
                             -- Cannot read this. Instead, we add it to DepEnv.
-                            let denv' = dbgTraceIt "Printing in packedTy unpack dcon: " dbgTraceIt (sdoc (loc)) dbgTraceIt "End in unpacking dcon.\n" M.insertWith (++) (loc) [((loc_var), [], ty3_of_field2, VarE cur), (v,[],ty3_of_field2,VarE (loc_var))] denv
+                            let denv' = dbgTrace (minChatLvl) "Printing in packedTy unpack dcon: " dbgTrace (minChatLvl) (sdoc (loc)) dbgTrace (minChatLvl) "End in unpacking dcon.\n" M.insertWith (++) (loc) [((loc_var), [], ty3_of_field2, VarE cur), (v,[],ty3_of_field2,VarE (loc_var))] denv
                             bod <- go curw  fenv rst_vlocs rst_tys False denv' tenv' --(toEndV v)
                             -- VS: [05.11.2025] This is a hack to ensure that the location variable is not undefined. 
                             -- If we have serialized packed types that are not self recursive, we still have to release 

@@ -87,7 +87,7 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
                   freelocs = freeVarsLocExp `Set.difference` bound
                   chk = Set.null freelocs
               in if chk
-                 -- dbgTraceIt (if loc == "loc_17052" then (sdoc (loc, locexp, freelocs, chk)) else "")
+                 -- dbgTrace (minChatLvl) (if loc == "loc_17052" then (sdoc (loc, locexp, freelocs, chk)) else "")
                  then Ext $ LetLocE loc locexp $ goE (Set.insert (fromLocVarToFreeVarsTy loc) bound) mp bod
                  else
                    case locexp of
@@ -151,7 +151,7 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
 handle :: Set.Set FreeVarsTy -> FunDefs2 -> Map.Map FreeVarsTy DelayedBind -> Exp2 -> Exp2
 handle bound fundefs mp expr =
     dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show expr)) $
-    -- dbgTraceIt (if vars /= [] then "binding: " ++ sdoc vars else "")
+    -- dbgTrace (minChatLvl) (if vars /= [] then "binding: " ++ sdoc vars else "")
     buildLets mp vars expr
     where freeInBind v = case Map.lookup (view v) mp of
                            Nothing -> []

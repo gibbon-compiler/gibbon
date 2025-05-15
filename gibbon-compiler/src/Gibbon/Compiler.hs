@@ -98,6 +98,7 @@ import           Gibbon.Passes.CorrectLocExprs (delayExpr)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
+import qualified Data.Tree as L2
 -- Configuring and launching the compiler.
 --------------------------------------------------------------------------------
 
@@ -547,7 +548,7 @@ isBench _ = False
 
 -- | The debug level at which we start to call the interpreter on the program during compilation.
 interpDbgLevel :: Int
-interpDbgLevel = 5
+interpDbgLevel = 6
 
 -- |
 clearFile :: FilePath -> IO ()
@@ -795,8 +796,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
+              l2 <- goE2 "L2.flatten" flattenL2 l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
-              -- l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
+              l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
               -- VS: [05.10.2022] -- This causes a bug, likely error in reordering pass.
               --l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2

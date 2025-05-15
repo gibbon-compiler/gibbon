@@ -313,7 +313,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let (e2', inst_waiting_on_loc', rel) = wrapBody f e2 newls inst_waiting_on_loc 
 
                  e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
-                 let expr = dbgTraceIt "Print insts_waiting_on_loc: " dbgTraceIt (sdoc (newls, (v,_ls,ty,(AppE f lsin e1)), inst_waiting_on_loc', rel)) dbgTraceIt "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f lsin e1) e2''
+                 let expr = dbgTrace (minChatLvl) "Print insts_waiting_on_loc: " dbgTrace (minChatLvl) (sdoc (newls, (v,_ls,ty,(AppE f lsin e1)), inst_waiting_on_loc', rel)) dbgTrace (minChatLvl) "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f lsin e1) e2''
                  return $ L.foldr (\lete acc -> case lete of 
                                                   LetExpr (v,ls,ty,rhs) -> LetE (v,ls,ty,rhs) acc
                                                   LetLocExpr loc locexp -> Ext $ LetLocE loc locexp acc
@@ -857,7 +857,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  newls <- reverse <$> foldM handleTravList [] travlist
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
-                 dbgTraceIt "Print in doBoundApp: " dbgTraceIt (sdoc (f, newls)) dbgTraceIt "End in doBoundAppE.\n" return (outlocs, newls, eor')
+                 dbgTrace (minChatLvl) "Print in doBoundApp: " dbgTrace (minChatLvl) (sdoc (f, newls)) dbgTrace (minChatLvl) "End in doBoundAppE.\n" return (outlocs, newls, eor')
 
 
 isSubset :: String -> String -> Bool

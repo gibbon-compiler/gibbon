@@ -488,7 +488,7 @@ dbgLvl = case L.lookup "GIBBON_DEBUG" theEnv of
 -- | We should not create chatter below this level.  DEBUG=1 is used
 -- for assertions only, not chatter.
 minChatLvl :: Int
-minChatLvl = 2
+minChatLvl = 5
 
 defaultDbg :: Int
 defaultDbg = 0
