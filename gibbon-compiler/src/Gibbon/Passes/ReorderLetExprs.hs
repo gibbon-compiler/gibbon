@@ -316,7 +316,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
         CharE _ -> pure ex
         FloatE{} -> pure ex
         LitSymE _ -> pure ex
-        VarE _ -> pure ex
+        VarE v -> pure ex
         LitSymE _ -> pure ex
 
         AppE f lvs ls -> AppE f lvs <$> mapM (releaseExprsFunBody definedVars delayedExprMap) ls

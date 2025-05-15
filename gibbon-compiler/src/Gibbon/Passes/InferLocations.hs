@@ -1615,8 +1615,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE p' ls') bod'', ty'', fcs)
 
         DataConE _loc k ls  -> do
+          dflags <- getDynFlags
+          let useSoA = gopt Opt_Packed_SoA dflags
           loc <- case bty of 
-                    PackedTy tcon _ -> freshSoALoc3 ddefs tcon 
+                    PackedTy tcon _ -> if useSoA 
+                                       then freshSoALoc3 ddefs tcon
+                                       else lift $ lift $ freshLocVar "datacon"
                     _ -> lift $ lift $ freshLocVar "datacon"
           (rhs',rty,rcs) <- inferExp ddefs env (DataConE () k ls) $ SingleDest loc
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) loc) env) bod dest
@@ -1647,7 +1651,13 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                              ty'', fcs)
 
         CaseE ex ls    -> do
-          loc <- lift $ lift $ freshLocVar "scrut"
+          dflags <- getDynFlags
+          let useSoA = gopt Opt_Packed_SoA dflags
+          loc <- case bty of 
+                    PackedTy tcon _ -> if useSoA 
+                                       then freshSoALoc3 ddefs tcon
+                                       else lift $ lift $ freshLocVar "datacon"
+                    _ -> lift $ lift $ freshLocVar "datacon"
           (ex',ty2,cs) <- inferExp ddefs env ex (SingleDest loc)
           let src = locOfTy ty2
           rhsTy <- lift $ lift $ convertTy ddefs False bty
