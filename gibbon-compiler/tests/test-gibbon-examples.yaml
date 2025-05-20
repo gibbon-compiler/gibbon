@@ -71,15 +71,15 @@ tests:
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
   - name: test12b_traverse.gib
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
   - name: test12c_traverse.gib
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
   - name: test13b_build.gib
   - name: test13_build.gib
   - name: Test185.hs
     answer-file: examples/Test185.ans
     # Scalar fields after packed not allowed
-    failing: [gibbon1,gibbon2,gibbon3]
+    failing: [gibbon1,gibbon2,gibbon3, colobus]
   - name: SS.hs
     dir: examples/gc
     answer-file: examples/gc/SS.ans
@@ -257,7 +257,7 @@ tests:
   - name: Poly1.hs
     dir: examples/poly
     answer-file: examples/poly/Poly1.ans
-    failing: [gibbon1, gibbon2, gibbon3, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, interp1,colobus]
 
   # - name: measure_mode.hs
   #   answer-file: examples/measure_mode.ans
@@ -287,7 +287,7 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/CurriedFns.ans
     skip: true
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
 
   - name: T127.hs
     dir: examples/poly
@@ -307,19 +307,19 @@ tests:
 
   - name: unariser_bug1.hs
     answer-file: examples/unariser_bug1.ans
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     skip: true
 
   - name: ParseLinearTypes.hs
     test-flags: ["--ghc-tc"]
     dir: examples/lineartypes/
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
 
   - name: EqBench.hs
     answer-file: examples/EqBench.ans
 
   - name: test_parse.hs
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
 
   - name: toplevel_value.hs
     answer-file: examples/toplevel_value.ans
@@ -356,7 +356,7 @@ tests:
     dir: examples
     answer-file: examples/test_printpacked.ans
     # gibbon3 and gibbon2: Inferlocations bug.
-    failing: [interp1,gibbon1,pointer]
+    failing: [interp1,gibbon1,pointer, colobus]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
@@ -370,7 +370,7 @@ tests:
 
     ## FAILING: Scalar field after a packed field.
   - name: test12_skip.gib
-    failing: [gibbon1]
+    failing: [gibbon1, colobus]
     skip: true
   - name: test12b_traverse.gib
     skip: true
@@ -400,7 +400,7 @@ tests:
     skip: true
   - name: test29d_list.gib
     skip: true
-    failing: [gibbon1]
+    failing: [gibbon1, colobus]
   - name: test_unpacking.gib
     skip: true
 
@@ -408,46 +408,46 @@ tests:
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
   - name: Fail2.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
   - name: Fail3.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
 
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     test-flags: ["--fusion"]
 
   - name: render_tree.hs
     dir: examples/fusion-benchmarks
     skip: true
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree.ans
 
   - name: render_tree_two_passes.hs
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree_two_passes.ans
 
   - name: render_tree_four_passes.hs
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree_four_passes.ans
 
   - name: render_tree_five_passes.hs
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3, pointer]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, colobus]
     ## [2020.05.27]: It never finishes on Travis...
     skip: true
     test-flags: ["--fusion"]
@@ -455,7 +455,7 @@ tests:
 
   - name: LC.hs
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
     test-flags: ["--fusion"]
     skip: true
     # gibbon2: segfaults in free_region
@@ -493,29 +493,29 @@ tests:
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, colobus]
     answer-file: examples/ast/C1.ans
     skip: true
 
   ## Tests that only work with some backend:
   - name: test18f_flip.gib
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, colobus]
   - name: pp_projs.gib
     skip: true
   - name: test12_skip.gib
-    failing: [gibbon1]
+    failing: [gibbon1, colobus]
     skip: true
 
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, colobus]
   - name: test08b_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, colobus]
   - name: test08c_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, colobus]
   - name: test08d_sharedict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, colobus]
 
   # - name: test08f_dict.gib
   # - name: test08f2_dict.gib
@@ -523,13 +523,13 @@ tests:
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
-    failing: [gibbon1,gibbon2,gibbon3]
+    failing: [gibbon1,gibbon2,gibbon3, colobus]
     skip: true
     # printing symbols is broken atm
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib
-    failing: [gibbon1,gibbon2,gibbon3,pointer,interp1]
+    failing: [gibbon1,gibbon2,gibbon3,pointer,interp1, colobus]
 
   # sym-append not implemented in the RTS
   - name: test15b_symappend.gib
@@ -554,15 +554,15 @@ tests:
     failing: [interp1]
 
   - name: test_153.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1]
+    failing: [gibbon3,gibbon2,gibbon1,interp1, colobus]
     answer-file: examples/test_153.ans
 
   - name: test_164.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1]
+    failing: [gibbon3,gibbon2,gibbon1,interp1, colobus]
     answer-file: examples/test_164.ans
 
   - name: test_166.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1]
+    failing: [gibbon3,gibbon2,gibbon1,interp1, colobus]
     answer-file: examples/test_166.ans
 
   - name: test_167.hs
@@ -579,12 +579,12 @@ tests:
   - name: test_power.hs
     answer-file: examples/test_power.ans
     # gib_alloc_region_on_heap: gib_alloc failed
-    failing: [gibbon1]
+    failing: [gibbon1, colobus]
     # Vidush: unskip this, thing hangs because of all the debug print statements
     skip: true
 
   - name: test_191.hs
     answer-file: examples/test_191.ans
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
-    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2]
+    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2, colobus]
     run-modes: ["gibbon2"]

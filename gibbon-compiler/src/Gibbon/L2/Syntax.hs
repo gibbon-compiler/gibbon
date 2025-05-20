@@ -66,6 +66,9 @@ module Gibbon.L2.Syntax
   , singleLocVar
   , freeVars
   , freeRegVars
+  , fromRegVarToLocVar
+  , fromSingleRegVarToVar
+  , fromLocVarToRegVar
 
 -- * Other helpers
   , revertToL1
@@ -958,6 +961,7 @@ occurs w ex =
             InRegionLE{}        -> oc_bod
             FreeLE{}            -> oc_bod
             FromEndLE{}         -> oc_bod
+            _ -> oc_bod
         StartOfPkdCursor v -> v `S.member` w
         TagCursor a b -> a `S.member` w || b `S.member` w
         RetE _ v      -> v `S.member` w
@@ -1155,7 +1159,7 @@ allFreeVars ex =
         RetE locs v     -> S.insert (V v) (S.fromList (map fromLocVarToFreeVarsTy locs))
         FromEndE loc    -> S.singleton (fromLocVarToFreeVarsTy loc)
         BoundsCheck _ reg cur -> S.fromList [(fromLocVarToFreeVarsTy reg),(fromLocVarToFreeVarsTy cur)]
-        IndirectionE _ _ (a, b) (c, d) _ -> S.fromList $ [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b), (fromLocVarToFreeVarsTy c), (fromLocVarToFreeVarsTy d)]
+        IndirectionE _ _ (a, b) (c, d) _ -> S.fromList $ [(fromLocVarToFreeVarsTy a), (fromRegVarToFreeVarsTy (fromLocVarToRegVar b)), (fromLocVarToFreeVarsTy c), (fromRegVarToFreeVarsTy (fromLocVarToRegVar d))]
         AddFixed v _    -> S.singleton (V v)
         GetCilkWorkerNum -> S.empty
         LetAvail vs bod -> S.fromList (L.map V vs) `S.union` (S.map V (gFreeVars bod))
@@ -1226,3 +1230,18 @@ changeAppToSpawn v args2 ex1 =
     FoldE{}  -> error "addRANExp: TODO FoldE"
 
   where go = changeAppToSpawn v args2
+
+
+fromSingleRegVarToVar :: RegVar -> Var
+fromSingleRegVarToVar (SingleR v) = v
+fromSingleRegVarToVar _ = error "fromSingleRegVarToVar: unexpected case."
+
+fromRegVarToLocVar :: RegVar -> LocVar
+fromRegVarToLocVar reg = case reg of 
+  SingleR v -> Single v
+  SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromRegVarToLocVar freg)) fieldRegs)
+
+fromLocVarToRegVar :: LocVar -> RegVar
+fromLocVarToRegVar loc = case loc of 
+  Single v -> SingleR v
+  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)  

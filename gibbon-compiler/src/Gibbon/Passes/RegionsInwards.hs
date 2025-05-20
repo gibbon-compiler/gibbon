@@ -32,20 +32,19 @@ regionsInwards Prog{ddefs,fundefs,mainExp} = do
     mainExp' <- case mainExp of
         Nothing -> return Nothing
         Just (mn, ty)-> do
-          let env = M.empty                                                      --Use M.empty for creating the empty env
-              in Just . (,ty) <$> placeRegionInwards env scopeSetMain mn         --Delay Regions for the main function
-
-    return $ Prog ddefs fundefs' mainExp'                                        --return new ddefs, fundefs and mainExpressions
-
-
+          let env = M.empty
+          mn' <- removeAliasedLocations M.empty S.empty mn        --Use M.empty for creating the empty env
+          -- mn'' <- placeRegionInwards env scopeSetMain mn' --Delay Regions for the main function
+          pure $ Just (mn', ty) --(mn'', ty)
+    return $ Prog ddefs fundefs' mainExp'
 
 placeRegionsInwardsFunBody :: S.Set FreeVarsTy -> FunDef2  -> PassM FunDef2
 placeRegionsInwardsFunBody scopeSet f@FunDef{funBody}  = do
   let env     = M.empty                                                          --Create empty environment
-  funBody' <- removeAliasedLocations M.empty funBody
+  funBody' <- removeAliasedLocations M.empty S.empty funBody
   funBody'' <- placeRegionInwards env scopeSet funBody'                            --Recursively delay regions for function body
   
-  return $ f {funBody = funBody''}
+  return $ f {funBody = funBody''} --funBody''
 
 
 placeRegionInwards :: DelayedBindEnv -> S.Set FreeVarsTy -> Exp2 -> PassM Exp2          --Recursive funtion that will move the regions inwards
@@ -148,8 +147,23 @@ placeRegionInwards env scopeSet ex  =
             FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this?
 
             GetFieldLocSoA _ loc' -> do
-                                     rhs' <- placeRegionInwards env scopeSet rhs
-                                     return $ Ext $ LetLocE loc phs rhs' 
+                                    -- rhs' <- placeRegionInwards env scopeSet rhs
+                                   --  return $ Ext $ LetLocE loc phs rhs' 
+                let keyList' = M.keys env
+                    key'     = F.find (S.member (fromLocVarToFreeVarsTy loc')) keyList'
+                   in case key' of
+                    Nothing -> do
+                      let key'' = S.singleton (fromLocVarToFreeVarsTy loc)
+                          val' = [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
+                          env' = M.insert key'' val' env
+                        in placeRegionInwards env' scopeSet rhs
+                    Just myKey -> do
+                      let valList  = M.findWithDefault [] myKey env
+                          myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
+                          tempDict = M.delete myKey env
+                          newEnv   = M.insert myKey' valList' tempDict
+                          in placeRegionInwards newEnv scopeSet rhs
               
               
               
@@ -171,8 +185,24 @@ placeRegionInwards env scopeSet ex  =
               --                                                in placeRegionInwards newEnv scopeSet rhs
 
             GetDataConLocSoA loc' -> do
-                                     rhs' <- placeRegionInwards env scopeSet rhs
-                                     return $ Ext $ LetLocE loc phs rhs' 
+                                     --rhs' <- placeRegionInwards env scopeSet rhs
+                                     --return $ Ext $ LetLocE loc phs rhs'
+                  let keyList' = M.keys env
+                      key'     = F.find (S.member (fromLocVarToFreeVarsTy loc')) keyList'
+                   in case key' of
+                    Nothing -> do
+                      let key'' = S.singleton (fromLocVarToFreeVarsTy loc)
+                          val' = [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
+                          env' = M.insert key'' val' env
+                        in placeRegionInwards env' scopeSet rhs
+                    Just myKey -> do
+                      let valList  = M.findWithDefault [] myKey env
+                          myKey'   = S.insert (fromLocVarToFreeVarsTy loc) myKey
+                          valList' = valList ++ [DelayLoc (fromLocVarToFreeVarsTy loc) phs]
+                          tempDict = M.delete myKey env
+                          newEnv   = M.insert myKey' valList' tempDict
+                          in placeRegionInwards newEnv scopeSet rhs
+
               
               
               
@@ -478,13 +508,71 @@ getAliasLoc env loc = case M.lookup loc env of
 
 makeAlias :: AlisedLocsEnv -> LocVar -> LocVar -> AlisedLocsEnv
 makeAlias env alphaLoc betaLoc = case M.lookup alphaLoc env of
-                                            Nothing -> M.insert alphaLoc (S.singleton betaLoc) env
-                                            Just locs -> 
-                                              let env' = M.delete alphaLoc env
-                                               in M.insert alphaLoc (S.insert betaLoc locs) env'
+                                            Nothing -> let env'' = M.insert alphaLoc (S.singleton betaLoc) env
+                                                         in case alphaLoc of 
+                                                              SoA dl fls -> case betaLoc of 
+                                                                            Single _ -> error "Expected an SoA Location to be aliased.\n"
+                                                                            SoA dl' fls' -> if (length fls /= length fls')
+                                                                                            then
+                                                                                              error "Length of fields is not the same.\n"
+                                                                                            else 
+                                                                                              let
+                                                                                                env''' = case (M.lookup (Single dl) env'') of 
+                                                                                                            Nothing -> M.insert (Single dl) (S.singleton (Single dl')) env'' 
+                                                                                                            Just dlocs -> let
+                                                                                                                            tmp = M.delete (Single dl) env''
+                                                                                                                           in M.insert (Single dl) (S.insert (Single dl') dlocs) tmp
+                                                                                                env'''' = foldr (\(k, fl) acc -> case (M.lookup fl acc) of
+                                                                                                                                        Nothing -> case (L.lookup k fls') of 
+                                                                                                                                                            Nothing -> error $ "Expected a field for key: " ++ show k
+                                                                                                                                                            Just hit -> M.insert fl (S.singleton hit) acc
+                                                                                                                                        Just flocs -> case (L.lookup k fls') of 
+                                                                                                                                                            Nothing -> error $ "Expected a field for key: " ++ show k
+                                                                                                                                                            Just hit -> let 
+                                                                                                                                                                          acc' = M.delete fl acc 
+                                                                                                                                                                          acc'' = M.insert fl (S.insert hit flocs) acc' 
+                                                                                                                                                                         in acc''
+                                                                                                                                                       
+                                                                                                  
+                                                                                                                  ) env''' fls
+                                                                                               in env''''
+                                                              Single _ -> env''
 
-removeAliasedLocations :: AlisedLocsEnv -> Exp2 -> PassM Exp2
-removeAliasedLocations env ex  =
+                                            Just locs -> 
+                                              let env'  = M.delete alphaLoc env
+                                                  env'' = M.insert alphaLoc (S.insert betaLoc locs) env'
+                                                in case alphaLoc of 
+                                                        SoA dl fls -> case betaLoc of 
+                                                                            Single _ -> error "Expected an SoA Location to be aliased.\n"
+                                                                            SoA dl' fls' -> if (length fls /= length fls')
+                                                                                            then
+                                                                                              error "Length of fields is not the same.\n"
+                                                                                            else 
+                                                                                              let
+                                                                                                env''' = case (M.lookup (Single dl) env'') of 
+                                                                                                            Nothing -> M.insert (Single dl) (S.singleton (Single dl')) env'' 
+                                                                                                            Just dlocs -> let
+                                                                                                                            tmp = M.delete (Single dl) env''
+                                                                                                                           in M.insert (Single dl) (S.insert (Single dl') dlocs) tmp
+                                                                                                env'''' = foldr (\(k, fl) acc -> case (M.lookup fl acc) of
+                                                                                                                                        Nothing -> case (L.lookup k fls') of 
+                                                                                                                                                            Nothing -> error $ "Expected a field for key: " ++ show k
+                                                                                                                                                            Just hit -> M.insert fl (S.singleton hit) acc
+                                                                                                                                        Just flocs -> case (L.lookup k fls') of 
+                                                                                                                                                            Nothing -> error $ "Expected a field for key: " ++ show k
+                                                                                                                                                            Just hit -> let 
+                                                                                                                                                                          acc' = M.delete fl acc 
+                                                                                                                                                                          acc'' = M.insert fl (S.insert hit flocs) acc' 
+                                                                                                                                                                         in acc''
+                                                                                                                                                       
+                                                                                                  
+                                                                                                                  ) env''' fls
+                                                                                               in env''''
+                                                        Single _ -> env''
+                                                                               
+
+removeAliasedLocations :: AlisedLocsEnv -> S.Set LocVar -> Exp2 -> PassM Exp2
+removeAliasedLocations env definedLocs ex  =
   case ex of
     Ext ext ->
       case ext of
@@ -493,53 +581,67 @@ removeAliasedLocations env ex  =
                                   return $ Ext $ LetRegionE r sz ty rhs' 
         StartOfPkdCursor{} -> return ex
         TagCursor{} -> return ex
-        LetLocE loc phs rhs -> do                                             
+        LetLocE loc phs rhs -> do
+          let existsLetForLoc = S.member loc definedLocs
+          let definedLocs' = case existsLetForLoc of 
+                                    True -> definedLocs
+                                    False -> S.insert loc definedLocs
+          rhs' <- removeAliasedLocations env definedLocs' rhs                                              
           case phs of
             StartOfRegionLE r -> do 
                                  let nloc = getAliasLoc env loc
-                                 rhs' <- go rhs
-                                 return $ Ext $ LetLocE nloc phs rhs'
+                                 case existsLetForLoc of 
+                                        True -> return rhs'
+                                        False -> return $ Ext $ LetLocE nloc phs rhs' 
             -- VS: We can remove AfterConstanteLE relations that are 0 constant apart?
             AfterConstantLE c loc' -> do 
                                       let nloc = getAliasLoc env loc
                                           nloc' = getAliasLoc env loc'
-                                      rhs' <- go rhs
-                                      return $ Ext $ LetLocE nloc (AfterConstantLE c nloc') rhs'               
+                                      case existsLetForLoc of 
+                                            True -> return rhs'
+                                            False -> return $ Ext $ LetLocE nloc (AfterConstantLE c nloc') rhs'               
             AfterVariableLE v loc' b -> do
                                         let nloc = getAliasLoc env loc
                                             nloc' = getAliasLoc env loc'
-                                        rhs' <- go rhs
-                                        return $ Ext $ LetLocE nloc (AfterVariableLE v nloc' b) rhs'
+                                        case existsLetForLoc of 
+                                               True -> return rhs'
+                                               False -> return $ Ext $ LetLocE nloc (AfterVariableLE v nloc' b) rhs'
             InRegionLE r -> do
                             let nloc = getAliasLoc env loc
-                            rhs' <- go rhs
-                            return $ Ext $ LetLocE nloc phs rhs'
-
+                            case existsLetForLoc of 
+                              True -> return rhs'
+                              False -> return $ Ext $ LetLocE nloc phs rhs'                             
             FromEndLE loc' -> do
                               let nloc = getAliasLoc env loc
                                   nloc' = getAliasLoc env loc'
-                              rhs' <- go rhs
-                              return $ Ext $ LetLocE nloc (FromEndLE nloc') rhs'
+                              case existsLetForLoc of
+                                True -> return rhs'
+                                False -> return $ Ext $ LetLocE nloc (FromEndLE nloc') rhs' 
+                              
             FreeLE -> do 
                       let nloc = getAliasLoc env loc
-                      rhs' <- go rhs
-                      return $ Ext $ LetLocE nloc phs rhs'
+                      case existsLetForLoc of 
+                            True ->  return rhs'
+                            False -> return $ Ext $ LetLocE nloc phs rhs' 
+                      
 
             GetFieldLocSoA key loc' -> do
                                        let nloc = getAliasLoc env loc
                                            nloc' = getAliasLoc env loc'
-                                       rhs' <- go rhs
-                                       return $ Ext $ LetLocE nloc (GetFieldLocSoA key nloc') rhs' 
+                                       case existsLetForLoc of
+                                              True ->  return rhs'
+                                              False -> return $ Ext $ LetLocE nloc (GetFieldLocSoA key nloc') rhs'
 
             GetDataConLocSoA loc' -> do 
                                       let nloc = getAliasLoc env loc
                                           nloc' = getAliasLoc env loc'
-                                      rhs' <- go rhs
-                                      return $ Ext $ LetLocE nloc (GetDataConLocSoA nloc') rhs'
+                                      case existsLetForLoc of
+                                             True -> return rhs'
+                                             False -> return $ Ext $ LetLocE nloc (GetDataConLocSoA nloc') rhs'
 
             AssignLE loc' -> do 
                              let env' = makeAlias env loc' loc
-                             removeAliasedLocations env' rhs
+                             removeAliasedLocations env' definedLocs rhs
 
             GenSoALoc dconl fieldLocs -> do 
                                          let nloc = case loc of 
@@ -549,8 +651,10 @@ removeAliasedLocations env ex  =
                                                                                 in SoA (unwrapLocVar dcl') fieldLocs'
                                              ndconl = getAliasLoc env dconl 
                                              nfieldLocs = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs
-                                         rhs' <- go rhs
-                                         return $ Ext $LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'
+                                         case existsLetForLoc of
+                                             True -> return rhs'
+                                             False -> return $ Ext $LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'  
+                                         
 
         LetParRegionE r sz ty rhs -> do 
                                      rhs' <- go rhs
@@ -627,4 +731,4 @@ removeAliasedLocations env ex  =
     MapE{}                        -> return ex                        -- Is there a recursion element to this?
     FoldE{}                       -> return ex                        -- Is there a recursion element to this?
   where
-    go = removeAliasedLocations env
+    go = removeAliasedLocations env definedLocs

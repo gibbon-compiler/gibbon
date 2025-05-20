@@ -375,3 +375,5 @@ substLocInExp mp ex1 =
                      InRegionLE{} -> lexp
                      FreeLE -> lexp
                      FromEndLE loc -> FromEndLE (sub loc)
+                     GetDataConLocSoA loc -> GetDataConLocSoA (sub loc)
+                     GetFieldLocSoA k loc -> GetFieldLocSoA k (sub loc)

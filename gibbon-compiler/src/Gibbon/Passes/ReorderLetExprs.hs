@@ -13,15 +13,15 @@ import Gibbon.L2.Syntax
 import Data.Maybe ()
 import qualified Data.Maybe as S
 
-
 data DelayedExpr = LetExpr (Var, [LocVar], Ty2, Exp2)
                  | LetLocExpr LocVar LocExp 
                     deriving (Eq, Ord, Show, Generic)
 
+
 instance Out DelayedExpr
 
 type DefinedVars = S.Set FreeVarsTy
-type DelayedExprMap = M.Map DefinedVars DelayedExpr
+type DelayedExprMap = M.Map (Var, DefinedVars) DelayedExpr
 
 reorderLetExprs :: Prog2 -> PassM Prog2
 reorderLetExprs (Prog ddefs fundefs mainExp) = do
@@ -39,15 +39,18 @@ reorderLetExprsFun :: FunDef2 -> PassM FunDef2
 reorderLetExprsFun f@FunDef{funName,funTy,funArgs,funBody,funMeta} = do
     let args = S.fromList $ map (fromVarToFreeVarsTy) funArgs
     {- Add location variables to defined environment from funTy -}
-        inLocs = inLocVars funTy
-        outLoc = outLocVars funTy
-        locToFreeVarsTy = S.fromList $ map fromLocVarToFreeVarsTy (inLocs ++ outLoc)
-        definedVars = S.union args locToFreeVarsTy
+        inLocs = allLocVars funTy
+        --outLoc = outLocVars funTy
+        inRegs = allRegVars funTy
+        --outRegs = outRegVars funTy
+        locToFreeVarsTy = S.fromList $ map fromLocVarToFreeVarsTy (inLocs)
+        regToFreeVarsTy = S.fromList $ map fromRegVarToFreeVarsTy (inRegs)
+        definedVars = S.unions [args, locToFreeVarsTy, regToFreeVarsTy]
     (funBody', env') <- reorderLetExprsFunBody definedVars M.empty funBody
     funBody'' <- releaseExprsFunBody definedVars env' funBody'
     -- dbgTrace (minChatLvl) "Print Meta: " dbgTrace (minChatLvl) (sdoc (funTy, funMeta)) dbgTrace (minChatLvl) "Print end.\n"
     funBody''' <- ensureLocationsAreDefinedForWrite S.empty funBody''
-    dbgTrace (minChatLvl) "Print Env: " dbgTrace (minChatLvl) (sdoc (env', funBody''')) dbgTrace (minChatLvl) ("End Print Env.\n") pure $ f { funBody = funBody''' }
+    dbgTrace (minChatLvl) "Print Env: " dbgTrace (minChatLvl) (sdoc (definedVars, env', funBody''')) dbgTrace (minChatLvl) ("End Print Env.\n") pure $ f { funBody = funBody''' }
 
 
 {- We also need to release let expressions which are defined -}
@@ -56,10 +59,9 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
     case ex of
         LetE (v,locs,ty,rhs) bod -> do
             let freeVarsRhs = case rhs of 
-                                   TimeIt e _ _ -> case e of 
-                                                      LetE (_, _, _, rhs') bod' -> S.union (allFreeVars rhs') (allFreeVars bod')
-                                                      _ -> allFreeVars e
-                                   _ -> allFreeVars rhs
+                                   TimeIt e _ _ -> S.empty {-VS: For now leaving TimeIt as is. TODO: Implement. -}
+                                   AppE _ _ _ -> allFreeVars rhs
+                                   _ -> S.empty
                 -- pckdLoc = locsInTy ty
                 freeVarsRhs' = freeVarsRhs --S.union (S.fromList $ map fromLocVarToFreeVarsTy pckdLoc) freeVarsRhs
                 {- Check if variables in rhs are in the DefinedVars-}
@@ -91,8 +93,9 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
                     -- dbgTrace (minChatLvl) "reorderLetExprsFunBody (LetE isdef): " dbgTrace (minChatLvl) (sdoc (freeVarsRhs')) dbgTrace (minChatLvl) "End reorderLetExprsFunBody (LetE isdef)\n."
                  else do
                     (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap bod
+                    key_str <- gensym ""
                     let delayedLetE = LetExpr (v, locs, ty, rhs)
-                        delayedExprMap'' = M.insert freeVarsRhs' delayedLetE delayedExprMap'
+                        delayedExprMap'' = M.insert (key_str, freeVarsRhs') delayedLetE delayedExprMap'
                     -- (bod', definedVars'', delayedExprMap'') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
                     --                                         let can_release = S.isSubsetOf dvars env 
                     --                                           in if can_release
@@ -225,8 +228,9 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
                     pure $ (Ext $ LetLocE loc rhs bod', delayedExprMap')
                  else do
                     (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap bod
+                    key_str <- gensym ""
                     let delayedLetLocE = LetLocExpr loc rhs
-                        delayedExprMap'' = M.insert freeVarsRhs delayedLetLocE delayedExprMap'
+                        delayedExprMap'' = M.insert (key_str, freeVarsRhs) delayedLetLocE delayedExprMap'
                     --(bod', definedVars', delayedExprMap'') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
                     --                                                    let can_release = S.isSubsetOf dvars env 
                     --                                                       in if can_release
@@ -290,25 +294,29 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
     case ex of
         LetE (v,locs,ty,rhs) bod -> do
             let definedVars' = S.union (S.insert (fromVarToFreeVarsTy v) definedVars) (S.fromList (map fromLocVarToFreeVarsTy locs))
-            (bod', definedVars'', delayedExprMap') <- foldlM (\(body, env, env2) (dvars, expr) -> do 
+            (definedVars'', delayedExprMap', letsToRel) <- foldlM (\(env, env2, eprs) ((kid, dvars), expr) -> do 
                                                             let can_release = S.isSubsetOf dvars env 
                                                               in if can_release
                                                                  then do
                                                                     case expr of 
                                                                         LetExpr (v', locs', ty', rhs') -> do
                                                                             let env' = S.insert (fromVarToFreeVarsTy v') env
-                                                                                new_body = LetE (v', locs', ty', rhs') body
-                                                                                env2' = M.delete dvars env2
-                                                                            pure (new_body, env', env2')
+                                                                                new_body = LetE (v', locs', ty', rhs') (VarE v')
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
                                                                         LetLocExpr loc rhs' -> do
                                                                             let env' = S.insert (fromLocVarToFreeVarsTy loc) env
-                                                                                new_body = Ext $ LetLocE loc rhs' body
-                                                                                env2' = M.delete dvars env2
-                                                                            pure (new_body, env', env2')
+                                                                                new_body = Ext $ LetLocE loc rhs' (VarE "")
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
                                                                  else do
-                                                                    pure (body, env, env2)
-                                                               ) (bod, definedVars', delayedExprMap) (M.toList delayedExprMap)
-            --let bod' = foldr (\exp -> Ext $ exp ) bod [] 
+                                                                    pure (env, env2, eprs)
+                                                               ) (definedVars', delayedExprMap, []) (M.toList delayedExprMap)
+            let bod' = foldr (\expr b -> case expr of 
+                                            LetE (_v, _locs, _ty, _rhs) _ ->  LetE (_v, _locs, _ty, _rhs) b
+                                            Ext (LetLocE _loc _rhs _) ->  Ext $ LetLocE _loc _rhs b
+                
+                             ) bod letsToRel  
             bod'' <- releaseExprsFunBody definedVars'' delayedExprMap' bod'
             pure $ LetE (v, locs, ty, rhs) bod''
         
@@ -371,24 +379,29 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
 
         Ext (LetLocE loc rhs bod) -> do
             let definedVars' = dbgTrace (minChatLvl) "Print in LetLocE: " dbgTrace (minChatLvl) (sdoc (loc, definedVars, delayedExprMap)) dbgTrace (minChatLvl) "End print in LetLocE.\n" S.insert (fromLocVarToFreeVarsTy loc) definedVars
-            (bod', definedVars'', delayedExprMap') <- foldrM (\(dvars, expr) (body, env, env2) -> do 
+            (definedVars'', delayedExprMap', letsToRel) <- foldlM (\(env, env2, eprs) ((kid, dvars), expr)  -> do 
                                                             let can_release = S.isSubsetOf dvars env 
                                                               in if can_release
                                                                  then do
                                                                     case expr of 
                                                                         LetExpr (v', locs', ty', rhs') -> do
                                                                             let env' = S.insert (fromVarToFreeVarsTy v') env
-                                                                                new_body = LetE (v', locs', ty', rhs') body
-                                                                                env2' = M.delete dvars env2
-                                                                            pure (new_body, env', env2')
+                                                                                new_body = LetE (v', locs', ty', rhs') (VarE v')
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
                                                                         LetLocExpr loc' rhs' -> do
                                                                             let env' = S.insert (fromLocVarToFreeVarsTy loc) env
-                                                                                new_body = Ext $ LetLocE loc' rhs' body
-                                                                                env2' = M.delete dvars env2
-                                                                            pure (new_body, env', env2')
+                                                                                new_body = Ext $ LetLocE loc' rhs' (VarE "")
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
                                                                  else do
-                                                                    pure (body, env, env2)
-                                                        ) (bod, definedVars', delayedExprMap) (M.toList delayedExprMap)
+                                                                    pure (env, env2, eprs)
+                                                        ) (definedVars', delayedExprMap, []) (M.toList delayedExprMap)
+            let bod' = foldr (\expr b -> case expr of 
+                                            LetE (_v, _locs, _ty, _rhs) _ ->  LetE (_v, _locs, _ty, _rhs) b
+                                            Ext (LetLocE _loc _rhs _) ->  Ext $ LetLocE _loc _rhs b
+                
+                             ) bod letsToRel  
             bod'' <- releaseExprsFunBody definedVars'' delayedExprMap' bod'
             pure $ Ext $ LetLocE loc rhs bod''
 

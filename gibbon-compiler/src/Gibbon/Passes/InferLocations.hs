@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- | Convert from L1 to L2, adding region constructs.
 
@@ -146,7 +147,7 @@ convertFunTy ddefs (from,to,isPar) = do
     lrm1 <- concat <$> mapM (toLRM useSoA Input) from'
     lrm2 <- toLRM useSoA Output to'
     -- dbgTrace minChatLvl "convertFunTy: " dbgTrace minChatLvl (sdoc (from', to', lrm1, lrm2, useSoA)) dbgTrace minChatLvl "\n"
-    return $ ArrowTy2 { locVars = lrm1 ++ lrm2
+    dbgTrace minChatLvl  "Print The data type definitions: " dbgTrace minChatLvl (sdoc (from', to')) dbgTrace minChatLvl "End print data type definitions.\n" return $ ArrowTy2 { locVars = lrm1 ++ lrm2
                      , arrIns  = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
@@ -158,7 +159,9 @@ convertFunTy ddefs (from,to,isPar) = do
                           True -> mapM (\v -> do
                                               dataBufRegion <- freshLocVar "r"
                                               case v of 
-                                                Single _ -> error "InferLocations : toLRM : Expected an SoA location!\n"
+                                                Single _ -> do 
+                                                            regionForLoc <- freshRegVar
+                                                            return $ LRM v regionForLoc md
                                                 SoA _ fieldLocs -> do
                                                                    fieldRegions <- getSoARegionsFromLocs fieldLocs 
                                                                    let region = SoAR (VarR (unwrapLocVar dataBufRegion)) fieldRegions
@@ -426,6 +429,9 @@ freshTyLocs ty ddefs = do
                                             locsForFields <- lift $ lift $convertTyHelperSoAParent tc ddefs dcons
                                             let soaLocation = SoA (unwrapLocVar dbuf') locsForFields
                                             return $ PackedTy tc soaLocation
+                            Single _ -> do
+                                         freshLoc <- fresh
+                                         return $ PackedTy tc freshLoc
                         else do fresh >>= return . PackedTy tc
       ProdTy tys -> mapM (\ty -> freshTyLocs ty ddefs) tys >>= return . ProdTy
       _ -> return ty 
@@ -452,6 +458,28 @@ getFieldLocs loc = case loc of
                     SoA dcon fieldLocs -> fieldLocs
                     Single lc -> error "InferLocations : getFieldLocs : Did not expect a non SoA location!"
 
+
+makeSoARegion :: LocVar -> TiM Region 
+makeSoARegion loc = do 
+                      case loc of 
+                            SoA dbuf rst -> do 
+                                            dbufRegion <- lift $ lift $ freshRegVar
+                                            rstRegions <- makeSoARFields rst 
+                                            return $ SoAR dbufRegion rstRegions
+                            _ -> lift $ lift $ freshRegVar
+
+makeSoARFields :: [((DataCon, Int), LocVar)] -> TiM [((DataCon, Int), Region)]
+makeSoARFields lst = do 
+                           case lst of 
+                                [] -> return []
+                                ((d, index), loc):rst -> do 
+                                                         {-TODO: if a location is SoA, we need to make an SoAR region-} 
+                                                         fieldReg <- case loc of 
+                                                                          Single _ -> lift $ lift $ freshRegVar
+                                                                          _ -> makeSoARegion loc
+                                                         rst' <- makeSoARFields rst
+                                                         return $ [((d, index), fieldReg)] ++ rst'
+
 -- | Wrap the inferExp procedure, and consume all remaining constraints
 inferExp' :: DDefs1 -> FullEnv -> Exp1 -> [LocVar] -> Dest -> TiM (L2.Exp2, L2.Ty2)
 inferExp' ddefs env exp bound dest=
@@ -461,7 +489,7 @@ inferExp' ddefs env exp bound dest=
 
       bindAllUnbound :: L2.Exp2 -> [LocVar] -> TiM L2.Exp2
       bindAllUnbound e (lv:ls) = do
-        r <- lift $ lift $ freshRegVar
+        r <- makeSoARegion lv
         e' <- bindAllUnbound e ls
         return $ Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) e')))
       bindAllUnbound e _ = return e
@@ -644,27 +672,6 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                 False -> do
                                          r <- lift $ lift $ freshRegVar 
                                          return r
-
-      makeSoARegion :: LocVar -> TiM Region 
-      makeSoARegion loc = do 
-                          case loc of 
-                               SoA dbuf rst -> do 
-                                               dbufRegion <- lift $ lift $ freshRegVar
-                                               rstRegions <- makeSoARFields rst 
-                                               return $ SoAR dbufRegion rstRegions
-                               _ -> error "makeSoARegion: did not expect a location other than a SoA location."
-
-      makeSoARFields :: [((DataCon, Int), LocVar)] -> TiM [((DataCon, Int), Region)]
-      makeSoARFields lst = do 
-                           case lst of 
-                                [] -> return []
-                                ((d, index), loc):rst -> do 
-                                                         {-TODO: if a location is SoA, we need to make an SoAR region-} 
-                                                         fieldReg <- case loc of 
-                                                                          Single _ -> lift $ lift $ freshRegVar
-                                                                          _ -> makeSoARegion loc
-                                                         rst' <- makeSoARFields rst
-                                                         return $ [((d, index), fieldReg)] ++ rst'
                                                          
 
       -- | This function looks at a series of locations and a type, and determines if
@@ -1136,7 +1143,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                  PackedTy tycon loc -> if tycon == tyConOfDataCon
                                                                        then return $ ArgVar v
                                                                        else return $ ArgFixed 0
-                                                 _ -> error $  "inferExp: DataConE SoA: offset for type not implemented! var: " ++ (show v)
+                                                 _ -> return $ ArgVar v --error $  "inferExp: DataConE SoA: offset for type not implemented! var: " ++ (show v)
                           -- TODO: fix these to get the correct offset for an SoA loc.
                           (LitE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy IntTy)
                           (FloatE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy FloatTy)
@@ -1197,7 +1204,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
                                                                  in case fldloc of 
                                                                            Just location -> Just location
-                                                                           Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                                           Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
                                                ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
                                                 dcArgFields
@@ -1215,7 +1222,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                         let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
                                                                                                                         in case fldloc of 
                                                                                                                             Just location -> Just location
-                                                                                                                            Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                                                                                            Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
                                                                                                       ) idxsFields'
                                                                         argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
                                                                                   case arg of
@@ -1232,7 +1239,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                         --if ttyy == tyConOfDataCon
                                                                                                         --                       then return $ ArgVar v
                                                                                                         --                       else return $ ArgFixed 0
-                                                                                                        _ -> error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
+                                                                                                        _ -> return $ ArgVar v --error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
                                                                                       -- TODO: fix these to get the correct offset for an SoA loc.
                                                                                       (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                                                                                       (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
@@ -1617,23 +1624,30 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         DataConE _loc k ls  -> do
           dflags <- getDynFlags
           let useSoA = gopt Opt_Packed_SoA dflags
-          loc <- case bty of 
+          (_, locTy) <- case bty of 
                     PackedTy tcon _ -> if useSoA 
-                                       then freshSoALoc3 ddefs tcon
-                                       else lift $ lift $ freshLocVar "datacon"
-                    _ -> lift $ lift $ freshLocVar "datacon"
-          (rhs',rty,rcs) <- inferExp ddefs env (DataConE () k ls) $ SingleDest loc
-          (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) loc) env) bod dest
+                                       then do
+                                            lc1 <- freshSoALoc3 (Just k) ddefs tcon
+                                            lc2 <- freshSoALoc3 Nothing ddefs tcon
+                                            return (lc1, lc2)
+                                       else do
+                                            lcd <- lift $ lift $ freshLocVar "datacon"
+                                            return $ (lcd, lcd)
+                    _ -> do 
+                         lcd <- lift $ lift $ freshLocVar "datacon"
+                         return (lcd, lcd)
+          (rhs',rty,rcs) <- dbgTrace minChatLvl "Print DataConE loc obtained: " dbgTrace minChatLvl (sdoc (locTy)) dbgTrace minChatLvl "End loc obtained in DataConE.\n"  inferExp ddefs env (DataConE () k ls) $ SingleDest locTy
+          (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) locTy) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- tryInRegion cs''
           -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
-          let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) loc,rhs') bod''
-          let expr = case loc of
-                       SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA loc)
-                                                    fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key loc)) fieldLocs
+          let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) locTy,rhs') bod''
+          let expr = case locTy of
+                       SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA locTy)
+                                                    fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key locTy)) fieldLocs
                                                     in foldr (\lete acc -> Ext $ lete acc) let_new_dcon (dataConLetE : fieldLetEs)
                        Single _ -> let_new_dcon
-          dbgTrace minChatLvl "Print constratints for Let DataConE: " dbgTrace minChatLvl (sdoc (rty, rhs, rhs', loc, fcs)) dbgTrace minChatLvl "End constraints let DataConE.\n" tryBindReg (expr,
+          dbgTrace minChatLvl "Print constratints for Let DataConE: " dbgTrace minChatLvl (sdoc (rty, rhs, rhs', locTy, fcs)) dbgTrace minChatLvl "End constraints let DataConE.\n" tryBindReg (expr,
                     ty', fcs)
 
         LitSymE x       -> do
@@ -1655,7 +1669,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           let useSoA = gopt Opt_Packed_SoA dflags
           loc <- case bty of 
                     PackedTy tcon _ -> if useSoA 
-                                       then freshSoALoc3 ddefs tcon
+                                       then freshSoALoc3 Nothing ddefs tcon
                                        else lift $ lift $ freshLocVar "datacon"
                     _ -> lift $ lift $ freshLocVar "datacon"
           (ex',ty2,cs) <- inferExp ddefs env ex (SingleDest loc)
@@ -2346,31 +2360,41 @@ freshSoALocHelper3 ddefs tyvar lst = do
                           [] -> do 
                                  pure []
                           (a, flds):rst -> do
-                                            fieldLocs <- fmap concat $ mapM (\e@(_, ty) -> do 
+                                            fieldLocs <- fmap concat $ mapM (\(e@(_, ty), idx) -> do 
                                                                               case ty of 
                                                                                 PackedTy tyc _ -> do
                                                                                                 if tyvar == tyc 
                                                                                                 then return []
                                                                                                 else do 
                                                                                                   {- TODO: we should return an SoA loc here instead -}
-                                                                                                  newLoc <- freshSoALoc3 ddefs tyc 
-                                                                                                  let Just idx = L.elemIndex e flds
+                                                                                                  newLoc <- freshSoALoc3 Nothing ddefs tyc 
+                                                                                                  --let Just idx = L.elemIndex e flds
                                                                                                   return $ [((a, idx), newLoc)]
                                                                                 _ -> do
                                                                                      newLoc <- fresh
-                                                                                     let Just idx = L.elemIndex e flds
+                                                                                     --let Just idx = L.elemIndex e flds
                                                                                      return $ [((a, idx), newLoc)]
-                                                             ) flds
+                                                             ) (zip flds [0..L.length(flds)])
                                             rst' <- freshSoALocHelper3 ddefs tyvar rst
                                             return $ fieldLocs ++ rst'
 
-freshSoALoc3 :: DDefs Ty1 -> TyCon -> TiM LocVar 
-freshSoALoc3 ddfs tyc = do
+freshSoALoc3 :: Maybe DataCon -> DDefs Ty1 -> TyCon -> TiM LocVar 
+freshSoALoc3 (Just currDcon) ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
-                       fields <- freshSoALocHelper3 ddfs tyc dataCons
-                       newdcLoc <- fresh
-                       return $ SoA (unwrapLocVar newdcLoc) fields
+                       let curr_dcon_info = L.lookup currDcon dataCons
+                        in case curr_dcon_info of 
+                               Nothing -> error "Expected data con information!"
+                               Just dinfo -> do        
+                                             fields <- freshSoALocHelper3 ddfs tyc [(currDcon, dinfo)]
+                                             newdcLoc <- fresh
+                                             dbgTrace minChatLvl "Print in freshSoALoc3: " dbgTrace minChatLvl (sdoc (fields, currDcon, dinfo)) dbgTrace minChatLvl "End freshSoALoc3.\n" return $ SoA (unwrapLocVar newdcLoc) fields
+freshSoALoc3 Nothing ddfs tyc = do
+                         let DDef{dataCons} = lookupDDef ddfs tyc     
+                         fields <- freshSoALocHelper3 ddfs tyc dataCons
+                         newdcLoc <- fresh
+                         return $ SoA (unwrapLocVar newdcLoc) fields
+
 
 
                     

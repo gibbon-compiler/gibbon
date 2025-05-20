@@ -753,7 +753,9 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                    let bound_reg = fromLocVarToRegVar bound_loc
                                    let bound_var = case (M.lookup (fromRegVarToFreeVarsTy bound_reg) freeVarToVarEnv) of 
                                                      Just v -> v 
-                                                     Nothing -> error $ "cursorizeExp: BoundsCheck: unexpected location variable" ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
+                                                     Nothing -> case bound_reg of 
+                                                                     SingleR vr -> vr
+                                                                     SoARv _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
                                    let cur_loc = toLocVar cur
                                    let cur_var = case (M.lookup (fromLocVarToFreeVarsTy cur_loc) freeVarToVarEnv) of 
                                                      Just v -> v 
@@ -1225,6 +1227,49 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let_assign_write_cur <$> LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') <$>
                     go2 marker_added fvarenv' aft_dloc from_rec_end aft_flocs' rst
 
+                
+                    -- Write a pointer to a vector
+                VectorTy el_ty -> do
+                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                  -- get the location variable where the scalar must be written
+                  let floc_loc = case floc of 
+                                       Just l -> l 
+                                       Nothing -> error "cursorizeExp: DataConE: expected a location for scalar buffer"
+                  let floc_var = case (M.lookup (fromLocVarToFreeVarsTy $ floc_loc) fvarenv) of 
+                                        Just v -> v 
+                                        Nothing -> case floc_loc of 
+                                                        Single l -> l 
+                                                        SoA _ _ -> error $ "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected location variable " ++ ":" ++ show floc_loc ++ "\n\n" ++ show fvarenv
+                  write_vector_at <- gensym "write_vector_at"
+                  let let_assign_write_cur = LetE (write_vector_at, [], CursorTy, (VarE floc_var))
+                  {- Update, aft_flocs with the correct location for the scalar field -}
+                  {- TODO: Audit aft_flocs'  and fvarenv'-}
+                  {- TODO: Check if its fine to use singleLocVar d' here!! -}
+                  let aft_flocs' = map (\((d, idx'), l) -> if d == dcon && idx' == index
+                                                            then ((d, idx'), singleLocVar d')
+                                                            else ((d, idx'), l)
+                                       ) aft_flocs
+                  let fvarenv' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv
+                  let_assign_write_cur <$> LetE (d',[], CursorTy, Ext $ WriteVector write_vector_at rnd' (stripTyLocs el_ty)) <$>
+                    go2 marker_added fvarenv' aft_dloc from_rec_end aft_flocs' rst
+
+                _ -> error "TODO: Cursorize: cursorizePackedExp: Not implemented!!"
+
+                -- -- Write a pointer to a vector
+                -- ListTy el_ty -> do
+                --   rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                --   LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
+                --     go2 marker_added d' rst
+
+                -- -- shortcut pointer
+                -- CursorTy -> do
+                --   rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
+                --   LetE (d',[], CursorTy, Ext $ WriteTaggedCursor d rnd') <$>
+                --     go2 marker_added d' rst
+                -- _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty 
+
+
+              
         writetag <- gensym "writetag"
         after_tag <- gensym "after_tag"
         start_tag_alloc <- gensym "start_tag_alloc"

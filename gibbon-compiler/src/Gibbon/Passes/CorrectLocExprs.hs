@@ -58,10 +58,15 @@ delayExpBody env benv ex = do
          case rhs of
            Ext (BoundsCheck sz bound cur) -> do
                            let free_vars_in_bound_expr = S.fromList [fromLocVarToFreeVarsTy $ toLocVar cur]
-                           let delayBind = BoundsCheckExpr sz bound cur
-                           let env' = M.insert delayBind free_vars_in_bound_expr env
-                           (bod', env'') <- delayExpBody env' benv bod
-                           return (bod', env'')
+                           if (S.isSubsetOf free_vars_in_bound_expr benv)
+                           then do
+                            (bod', env') <- delayExpBody env benv bod
+                            return (LetE bnd bod', env')
+                           else do 
+                            let delayBind = BoundsCheckExpr sz bound cur
+                            let env' = M.insert delayBind free_vars_in_bound_expr env
+                            (bod', env'') <- delayExpBody env' benv bod
+                            return (bod', env'')
            _ -> do
                (rhs', env') <- delayExpBody env benv rhs
                (bod', env'') <- delayExpBody env benv bod

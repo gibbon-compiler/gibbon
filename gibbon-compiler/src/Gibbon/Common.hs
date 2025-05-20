@@ -627,7 +627,7 @@ freshCommonLoc pfix lc = do
                      Single _ -> do 
                                   l' <- freshSingleLocVar (pfix ++"_loc")
                                   return l'
-                     soa@SoA{} -> freshSoALoc pfix lc
+                     soa@SoA{} -> dbgTrace minChatLvl "Print soa loc in freshCommonLoc: " dbgTrace minChatLvl (sdoc (soa)) dbgTrace minChatLvl "End in freshCommonLoc.\n" freshSoALoc pfix lc
 
 singleLocVar :: Location -> LocVar 
 singleLocVar loc = Single loc 

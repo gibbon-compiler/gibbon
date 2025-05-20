@@ -189,7 +189,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
         FromEndE loc -> Ext <$> FromEndE <$> pure (locenv # loc)
 
         BoundsCheck i reg loc -> do
-         let reg' = New.Reg (New.fromLocVarToRegVar reg) Output
+         let reg' = New.Reg (fromLocVarToRegVar reg) Output
              loc' = locenv # loc
          pure $ Ext $ BoundsCheck i reg' loc'
 
@@ -205,8 +205,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
             IndirectionE
               tycon
               dcon
-              (locenv # from, New.EndOfReg (New.fromLocVarToRegVar from_reg) Output ((toEndVRegVar . New.fromLocVarToRegVar) from_reg))
-              (locenv # to, New.EndOfReg (New.fromLocVarToRegVar to_reg) Input ((toEndVRegVar . New.fromLocVarToRegVar) to_reg))
+              (locenv # from, New.EndOfReg (fromLocVarToRegVar from_reg) Output ((toEndVRegVar . fromLocVarToRegVar) from_reg))
+              (locenv # to, New.EndOfReg (fromLocVarToRegVar to_reg) Input ((toEndVRegVar . fromLocVarToRegVar) to_reg))
               e'
               -- (locenv # from, New.Reg (VarR from_reg) Output)
               -- (locenv # to, New.Reg (VarR to_reg) Input)

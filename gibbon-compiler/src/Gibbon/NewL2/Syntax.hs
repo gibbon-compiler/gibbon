@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM, fromLocVarToRegVar, fromVarToSingleRegVar, fromRegVarToLocVar, fromSingleRegVarToVar, fromLocArgToFreeVarsTy
+    , toLocVar, fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -116,22 +116,8 @@ toRegVar arg =
     EndOfReg _ _ v -> v
     EndOfReg_Tagged v -> v
 
-fromLocVarToRegVar :: LocVar -> RegVar
-fromLocVarToRegVar loc = case loc of 
-  Single v -> SingleR v
-  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)
-
 fromVarToSingleRegVar :: Var -> RegVar
 fromVarToSingleRegVar v = SingleR v
-
-fromSingleRegVarToVar :: RegVar -> Var
-fromSingleRegVarToVar (SingleR v) = v
-fromSingleRegVarToVar _ = error "fromSingleRegVarToVar: unexpected case."
-
-fromRegVarToLocVar :: RegVar -> LocVar
-fromRegVarToLocVar reg = case reg of 
-  SingleR v -> Single v
-  SoARv regvar fieldRegs -> SoA (fromSingleRegVarToVar regvar) (L.map (\(k, freg) -> (k, fromRegVarToLocVar freg)) fieldRegs)
 
 {- VS: TODO: this should return either LocVar or RegVar -}
 toLocVar :: LocArg -> LocVar
@@ -139,10 +125,10 @@ toLocVar arg =
   case arg of
     Loc lrm        -> lremLoc lrm
     EndWitness _ v -> v
-    Loc lrm        -> fromRegVarToLocVar $ lremReg lrm
-    Reg v _        -> fromRegVarToLocVar v
-    EndOfReg _ _ v -> fromRegVarToLocVar v
-    EndOfReg_Tagged v -> fromRegVarToLocVar v
+    Loc lrm        -> Old.fromRegVarToLocVar $ lremReg lrm
+    Reg v _        -> Old.fromRegVarToLocVar v
+    EndOfReg _ _ v -> Old.fromRegVarToLocVar v
+    EndOfReg_Tagged v -> Old.fromRegVarToLocVar v
     _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
 
 

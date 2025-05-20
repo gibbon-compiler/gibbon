@@ -411,27 +411,28 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                     --    in case idx of 
                                                                     --    Nothing -> error ""
                                                                     --    Just idx' ->
-                                                                    first_self_rec = L.head self_recursive_locs_in_order  
-                                                                    (afterenv_self_rec', _) = L.foldl (\(acc, seen) tup@(v, l) -> if (l /= first_self_rec)
-                                                                                                                             then
-                                                                                                                              if seen == True
-                                                                                                                              then 
-                                                                                                                                (acc, seen)
-                                                                                                                              else
-                                                                                                                                case (lookupVEnvLocVar (V v) env2') of
-                                                                                                                                            PackedTy tycon _ -> (M.insert (FL l) first_self_rec acc, seen)
-                                                                                                                                            _ -> 
-                                                                                                                                                let elem_idx = L.elemIndex tup vls
-                                                                                                                                                  in case elem_idx of 
-                                                                                                                                                          Nothing -> error ""
-                                                                                                                                                          Just idx' -> let idx'' = idx' + 1 
-                                                                                                                                                                           (_, l') = vls !! idx''
-                                                                                                                                                                         in (M.insert (FL l) l' acc, seen)
-                                                                                                                             else (acc, True)
-                                                                    
-                                                                    
-                                                                                                 ) (afterenv_self_rec, False) vls
-                                                                   in afterenv_self_rec'
+                                                                     in case self_recursive_locs_in_order of 
+                                                                                  [] -> L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls)
+                                                                                  _ -> let 
+                                                                                         first_self_rec = L.head self_recursive_locs_in_order  
+                                                                                         (afterenv_self_rec', _) = L.foldl (\(acc, seen) tup@(v, l) -> if (l /= first_self_rec)
+                                                                                                                                                       then
+                                                                                                                                                         if seen == True
+                                                                                                                                                         then 
+                                                                                                                                                            (acc, seen)
+                                                                                                                                                         else
+                                                                                                                                                            case (lookupVEnvLocVar (V v) env2') of
+                                                                                                                                                                PackedTy tycon _ -> (M.insert (FL l) first_self_rec acc, seen)
+                                                                                                                                                                _ -> 
+                                                                                                                                                                      let elem_idx = L.elemIndex tup vls
+                                                                                                                                                                        in case elem_idx of 
+                                                                                                                                                                              Nothing -> error ""
+                                                                                                                                                                              Just idx' -> let idx'' = idx' + 1 
+                                                                                                                                                                                               (_, l') = vls !! idx''
+                                                                                                                                                                                            in (M.insert (FL l) l' acc, seen)
+                                                                                                                                                       else (acc, True)
+                                                                                                                           ) (afterenv_self_rec, False) vls
+                                                                                             in afterenv_self_rec'
 
                                   -- afterenv' = L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls)
                                   -- two cases here for handing bound parameters:
