@@ -750,9 +750,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                 if gibbon1
                 then do
                   l2 <- goE2 "addTraversals" addTraversals l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "inferEffects2"  inferEffects l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "repairProgram"  (pure . id)  l2
                   pure l2
                 else do
@@ -767,25 +767,25 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- goE2 "reorderLetExprs3" reorderLetExprs l2
                   l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2
-                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
+                  --l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "regionsInwards" regionsInwards l2
-                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
+                  --l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "removeCopies"  removeCopies  l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "inferEffects2" inferEffects  l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "addTraversals" addTraversals l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  --l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "repairProgram" (pure . id)   l2
                   pure l2
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- VS: TODO: This pass needs to be debugged.
               -- VS: This currently generates incorrect code for SoA case. 
               -- Hence, i've added a conditional here.
@@ -796,20 +796,20 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                     then pure l2 
                     else goE2 "parAlloc"   parAlloc  l2
               lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
-              l2 <- go "L2.typecheck" L2.tcProg l2
+              --l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- goE2 "L2.flatten" flattenL2 l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              --l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 {- VS: This used to be false, why doesn't true work ? -}
               l2 <- go "addRedirectionCon" addRedirectionCon l2

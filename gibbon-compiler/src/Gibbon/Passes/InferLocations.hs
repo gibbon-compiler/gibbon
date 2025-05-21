@@ -634,7 +634,6 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    b1 <- noBeforeLoc lv2' fcs 
                    b2 <- noRegionStart lv2' fcs 
                    b3 <- notFixedLoc lv2'
-                   -- dbgTrace minChatLvl "tryInRegion': " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2')) dbgTrace minChatLvl "End tryInRegion' aftersoaloc.\n"
                    b3' <- notFixedLoc lv2'                    
                    if b1 && b2 && b3
                    then do cs' <- tryInRegion' fcs cs 
@@ -1639,7 +1638,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           (rhs',rty,rcs) <- dbgTrace minChatLvl "Print DataConE loc obtained: " dbgTrace minChatLvl (sdoc (locTy)) dbgTrace minChatLvl "End loc obtained in DataConE.\n"  inferExp ddefs env (DataConE () k ls) $ SingleDest locTy
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) locTy) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
-          fcs <- tryInRegion cs''
+          fcs <- dbgTraceIt "print tryInRegion in DataConE: " dbgTraceIt (sdoc (cs'', k)) dbgTraceIt "End print DataConE.\n" tryInRegion cs''
           -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
           let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) locTy,rhs') bod''
           let expr = case locTy of
@@ -2199,8 +2198,8 @@ noBeforeLoc lv [] = return True
 noRegionStart :: LocVar -> [Constraint] -> TiM Bool
 noRegionStart lv (c:cs) =
     case c of
-      StartRegionL lv2 _r -> ((lv /= lv2) &&) <$> noRegionStart lv cs
-      _ -> noRegionStart lv cs
+      StartRegionL lv2 _r -> dbgTrace (minChatLvl) "Print in noRegionStart: " dbgTrace (minChatLvl) (sdoc (lv, c:cs)) dbgTrace (minChatLvl) "End noRegionStart.\n" ((lv /= lv2) &&) <$> noRegionStart lv cs
+      _ -> dbgTrace (minChatLvl) "Print in noRegionStart: " dbgTrace (minChatLvl) (sdoc (lv, c:cs)) dbgTrace (minChatLvl) "End noRegionStart.\n" noRegionStart lv cs
 noRegionStart lv [] = return True
 
 -- | Unify is a conditional form that takes a "success branch" and
