@@ -585,33 +585,37 @@ removeAliasedLocations env definedLocs ex  =
           let existsLetForLoc = S.member loc definedLocs
           let definedLocs' = case existsLetForLoc of 
                                     True -> definedLocs
-                                    False -> S.insert loc definedLocs
-          rhs' <- removeAliasedLocations env definedLocs' rhs                                              
+                                    False -> S.insert loc definedLocs                                              
           case phs of
             StartOfRegionLE r -> do 
+                                 rhs' <- removeAliasedLocations env definedLocs' rhs
                                  let nloc = getAliasLoc env loc
                                  case existsLetForLoc of 
                                         True -> return rhs'
                                         False -> return $ Ext $ LetLocE nloc phs rhs' 
             -- VS: We can remove AfterConstanteLE relations that are 0 constant apart?
             AfterConstantLE c loc' -> do 
+                                      rhs' <- removeAliasedLocations env definedLocs' rhs
                                       let nloc = getAliasLoc env loc
                                           nloc' = getAliasLoc env loc'
                                       case existsLetForLoc of 
                                             True -> return rhs'
                                             False -> return $ Ext $ LetLocE nloc (AfterConstantLE c nloc') rhs'               
             AfterVariableLE v loc' b -> do
+                                        rhs' <- removeAliasedLocations env definedLocs' rhs
                                         let nloc = getAliasLoc env loc
                                             nloc' = getAliasLoc env loc'
                                         case existsLetForLoc of 
                                                True -> return rhs'
                                                False -> return $ Ext $ LetLocE nloc (AfterVariableLE v nloc' b) rhs'
             InRegionLE r -> do
+                            rhs' <- removeAliasedLocations env definedLocs' rhs
                             let nloc = getAliasLoc env loc
                             case existsLetForLoc of 
                               True -> return rhs'
                               False -> return $ Ext $ LetLocE nloc phs rhs'                             
             FromEndLE loc' -> do
+                              rhs' <- removeAliasedLocations env definedLocs' rhs
                               let nloc = getAliasLoc env loc
                                   nloc' = getAliasLoc env loc'
                               case existsLetForLoc of
@@ -619,6 +623,7 @@ removeAliasedLocations env definedLocs ex  =
                                 False -> return $ Ext $ LetLocE nloc (FromEndLE nloc') rhs' 
                               
             FreeLE -> do 
+                      rhs' <- removeAliasedLocations env definedLocs' rhs
                       let nloc = getAliasLoc env loc
                       case existsLetForLoc of 
                             True ->  return rhs'
@@ -626,6 +631,7 @@ removeAliasedLocations env definedLocs ex  =
                       
 
             GetFieldLocSoA key loc' -> do
+                                       rhs' <- removeAliasedLocations env definedLocs' rhs 
                                        let nloc = getAliasLoc env loc
                                            nloc' = getAliasLoc env loc'
                                        case existsLetForLoc of
@@ -635,15 +641,20 @@ removeAliasedLocations env definedLocs ex  =
             GetDataConLocSoA loc' -> do 
                                       let nloc = getAliasLoc env loc
                                           nloc' = getAliasLoc env loc'
+                                          dloc' = getDconLoc nloc'
+                                          env' = makeAlias env dloc' nloc
+                                      rhs' <- removeAliasedLocations env' definedLocs' rhs
                                       case existsLetForLoc of
                                              True -> return rhs'
-                                             False -> return $ Ext $ LetLocE nloc (GetDataConLocSoA nloc') rhs'
+                                             False -> return $ Ext $ LetLocE dloc' (GetDataConLocSoA nloc') rhs'
 
             AssignLE loc' -> do 
+                             --rhs' <- removeAliasedLocations env definedLocs' rhs 
                              let env' = makeAlias env loc' loc
                              removeAliasedLocations env' definedLocs rhs
 
             GenSoALoc dconl fieldLocs -> do 
+                                         rhs' <- removeAliasedLocations env definedLocs' rhs
                                          let nloc = case loc of 
                                                          Single _ -> getAliasLoc env loc
                                                          SoA dcl fieldLocs -> let dcl' = getAliasLoc env (Single dcl)

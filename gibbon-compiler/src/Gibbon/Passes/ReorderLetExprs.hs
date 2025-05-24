@@ -31,7 +31,8 @@ reorderLetExprs (Prog ddefs fundefs mainExp) = do
                     Just (e,ty) -> do
                                       (e', env) <- reorderLetExprsFunBody S.empty M.empty e
                                       e'' <- releaseExprsFunBody S.empty env e'
-                                      pure $ Just (e'', ty)
+                                      e''' <- removeDuplicateLocations S.empty e''
+                                      pure $ Just (e''', ty)
                     Nothing     -> pure Nothing
     pure $ Prog ddefs fundefs' mainExp'
 
@@ -50,7 +51,8 @@ reorderLetExprsFun f@FunDef{funName,funTy,funArgs,funBody,funMeta} = do
     funBody'' <- releaseExprsFunBody definedVars env' funBody'
     -- dbgTrace (minChatLvl) "Print Meta: " dbgTrace (minChatLvl) (sdoc (funTy, funMeta)) dbgTrace (minChatLvl) "Print end.\n"
     funBody''' <- ensureLocationsAreDefinedForWrite S.empty funBody''
-    dbgTrace (minChatLvl) "Print Env: " dbgTrace (minChatLvl) (sdoc (definedVars, env', funBody''')) dbgTrace (minChatLvl) ("End Print Env.\n") pure $ f { funBody = funBody''' }
+    funBody'''' <- removeDuplicateLocations S.empty funBody'''
+    dbgTrace (minChatLvl) "Print Env: " dbgTrace (minChatLvl) (sdoc (definedVars, env', funBody''')) dbgTrace (minChatLvl) ("End Print Env.\n") pure $ f { funBody = funBody'''' } --funBody'''
 
 
 {- We also need to release let expressions which are defined -}
@@ -59,8 +61,13 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
     case ex of
         LetE (v,locs,ty,rhs) bod -> do
             let freeVarsRhs = case rhs of 
-                                   TimeIt e _ _ -> S.empty {-VS: For now leaving TimeIt as is. TODO: Implement. -}
+                                   TimeIt _ _ _ -> S.empty {-VS: For now leaving TimeIt as is. TODO: Implement. -}
                                    AppE _ _ _ -> allFreeVars rhs
+                                   DataConE loc _ args -> 
+                                       let extractVars argvar = case argvar of
+                                               VarE v' -> [fromVarToFreeVarsTy v']
+                                               _ -> []
+                                       in S.union (S.singleton (fromLocVarToFreeVarsTy loc)) (S.fromList $ concatMap extractVars args)
                                    _ -> S.empty
                 -- pckdLoc = locsInTy ty
                 freeVarsRhs' = freeVarsRhs --S.union (S.fromList $ map fromLocVarToFreeVarsTy pckdLoc) freeVarsRhs
@@ -379,24 +386,25 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
 
         Ext (LetLocE loc rhs bod) -> do
             let definedVars' = dbgTrace (minChatLvl) "Print in LetLocE: " dbgTrace (minChatLvl) (sdoc (loc, definedVars, delayedExprMap)) dbgTrace (minChatLvl) "End print in LetLocE.\n" S.insert (fromLocVarToFreeVarsTy loc) definedVars
-            (definedVars'', delayedExprMap', letsToRel) <- foldlM (\(env, env2, eprs) ((kid, dvars), expr)  -> do 
-                                                            let can_release = S.isSubsetOf dvars env 
-                                                              in if can_release
-                                                                 then do
-                                                                    case expr of 
-                                                                        LetExpr (v', locs', ty', rhs') -> do
-                                                                            let env' = S.insert (fromVarToFreeVarsTy v') env
-                                                                                new_body = LetE (v', locs', ty', rhs') (VarE v')
-                                                                                env2' = M.delete (kid, dvars) env2
-                                                                            pure (env', env2', eprs ++ [new_body])
-                                                                        LetLocExpr loc' rhs' -> do
-                                                                            let env' = S.insert (fromLocVarToFreeVarsTy loc) env
-                                                                                new_body = Ext $ LetLocE loc' rhs' (VarE "")
-                                                                                env2' = M.delete (kid, dvars) env2
-                                                                            pure (env', env2', eprs ++ [new_body])
-                                                                 else do
-                                                                    pure (env, env2, eprs)
-                                                        ) (definedVars', delayedExprMap, []) (M.toList delayedExprMap)
+            -- (definedVars'', delayedExprMap', letsToRel) <- foldlM (\(env, env2, eprs) ((kid, dvars), expr)  -> do 
+            --                                                 let can_release = S.isSubsetOf dvars env 
+            --                                                   in if can_release
+            --                                                      then do
+            --                                                         case expr of 
+            --                                                             LetExpr (v', locs', ty', rhs') -> do
+            --                                                                 let env' = S.insert (fromVarToFreeVarsTy v') env
+            --                                                                     new_body = LetE (v', locs', ty', rhs') (VarE v')
+            --                                                                     env2' = M.delete (kid, dvars) env2
+            --                                                                 pure (env', env2', eprs ++ [new_body])
+            --                                                             LetLocExpr loc' rhs' -> do
+            --                                                                 let env' = S.insert (fromLocVarToFreeVarsTy loc') env
+            --                                                                     new_body = Ext $ LetLocE loc' rhs' (VarE "")
+            --                                                                     env2' = M.delete (kid, dvars) env2
+            --                                                                 pure (env', env2', eprs ++ [new_body])
+            --                                                      else do
+            --                                                         pure (env, env2, eprs)
+            --                                             ) (definedVars', delayedExprMap, []) (M.toList delayedExprMap)
+            (definedVars'', delayedExprMap', letsToRel) <- releaseAllLetLocE definedVars' delayedExprMap []
             let bod' = foldr (\expr b -> case expr of 
                                             LetE (_v, _locs, _ty, _rhs) _ ->  LetE (_v, _locs, _ty, _rhs) b
                                             Ext (LetLocE _loc _rhs _) ->  Ext $ LetLocE _loc _rhs b
@@ -437,6 +445,35 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
         _ -> pure ex
+        where
+            releaseAllLetLocE :: DefinedVars -> DelayedExprMap -> [Exp2] -> PassM (DefinedVars, DelayedExprMap, [Exp2])
+            releaseAllLetLocE envDefinedVars envDelayedExprMap letsToBeReleased = do
+                case (M.toList envDelayedExprMap) of 
+                       [] -> pure (envDefinedVars, envDelayedExprMap, letsToBeReleased) 
+                       _ -> do  
+                            (definedVars'', delayedExprMap', letsToRel) <- foldlM (\(env, env2, eprs) ((kid, dvars), expr)  -> do 
+                                                            let can_release = S.isSubsetOf dvars env 
+                                                              in if can_release
+                                                                 then do
+                                                                    case expr of 
+                                                                        LetExpr (v', locs', ty', rhs') -> do
+                                                                            let env' = S.insert (fromVarToFreeVarsTy v') env
+                                                                                new_body = LetE (v', locs', ty', rhs') (VarE v')
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
+                                                                        LetLocExpr loc' rhs' -> do
+                                                                            let env' = S.insert (fromLocVarToFreeVarsTy loc') env
+                                                                                new_body = Ext $ LetLocE loc' rhs' (VarE "")
+                                                                                env2' = M.delete (kid, dvars) env2
+                                                                            pure (env', env2', eprs ++ [new_body])
+                                                                 else do
+                                                                    pure (env, env2, eprs)
+                                                        ) (envDefinedVars, envDelayedExprMap, letsToBeReleased) (M.toList envDelayedExprMap)
+                            case (delayedExprMap' == envDelayedExprMap) of
+                                True -> pure (definedVars'', delayedExprMap', letsToRel)
+                                False -> do 
+                                         (definedVars''', delayedExprMap'', letsToRel') <- releaseAllLetLocE definedVars'' delayedExprMap' letsToRel 
+                                         pure (definedVars''', delayedExprMap'', letsToRel') 
 
 
 freeVarsInLocExp :: LocExp -> S.Set FreeVarsTy
@@ -575,3 +612,108 @@ ensureLocationsAreDefinedForWrite definedVars ex = do
         _ -> pure ex
     where 
         go = ensureLocationsAreDefinedForWrite definedVars
+
+
+
+removeDuplicateLocations :: S.Set FreeVarsTy -> Exp2 -> PassM Exp2 
+removeDuplicateLocations definedLocs ex = case ex of
+        LetE (v,locs,ty,rhs) bod -> do
+            rhs' <- removeDuplicateLocations definedLocs rhs
+            bod' <- removeDuplicateLocations definedLocs bod
+            pure $ LetE (v, locs, ty, rhs') bod'
+        LitE _ -> pure ex
+        CharE _ -> pure ex
+        FloatE{} -> pure ex
+        LitSymE _ -> pure ex
+        VarE _ -> pure ex
+        LitSymE _ -> pure ex
+        AppE f lvs ls -> AppE f lvs <$> mapM go ls
+        PrimAppE p ls -> PrimAppE p <$> mapM go ls
+        MkProdE ls -> MkProdE <$> mapM go ls 
+        DataConE loc k ls -> DataConE loc k <$> mapM go ls
+        IfE a b c -> do
+            a' <- go a
+            b' <- go b
+            c' <- go c
+            pure $ IfE a' b' c' 
+
+        ProjE i e -> do
+            e' <- go e
+            pure $ ProjE i e'
+
+        CaseE e ls -> do 
+            e' <- go e
+            ls' <- mapM (\(dcon, vs, rhs) -> do
+                            rhs' <- removeDuplicateLocations definedLocs rhs
+                            pure (dcon, vs, rhs')) ls
+            pure $ CaseE e' ls'
+
+        TimeIt e _t b -> do
+            e' <- go e
+            pure $ TimeIt e' _t b
+
+        SpawnE f lvs ls -> do 
+            ls' <- mapM go ls
+            pure $ SpawnE f lvs ls'
+        
+        SyncE -> pure SyncE
+
+        WithArenaE v e -> do
+            e' <- go e
+            pure $ WithArenaE v e' 
+
+        MapE _ _ -> error "releaseExprsFunBody: MapE not supported!"
+
+
+        FoldE _ _ _ -> error "releaseExprsFunBody: FoldE not supported!"
+
+        Ext (LetLocE loc rhs bod) -> do
+            let alreadyExists = S.member (fromLocVarToFreeVarsTy loc) definedLocs
+            let definedLocs' = if alreadyExists
+                               then definedLocs
+                               else S.insert (fromLocVarToFreeVarsTy loc) definedLocs
+            bod' <- removeDuplicateLocations definedLocs' bod
+            if alreadyExists
+               then pure bod'
+               else pure $ Ext $ LetLocE loc rhs bod'
+
+        Ext (StartOfPkdCursor cur) -> pure ex
+
+        Ext (TagCursor a _b) -> pure ex 
+
+        Ext (FromEndE{}) -> pure ex
+
+        Ext (AddFixed{}) -> pure ex
+
+        Ext (RetE _ls v) -> pure ex
+
+        Ext (BoundsCheck{}) -> pure ex
+
+        Ext (IndirectionE tycon _ (a, _) _ _) -> pure ex 
+
+        Ext GetCilkWorkerNum -> pure ex
+
+        Ext (LetAvail _ bod) -> pure ex
+
+        Ext (AllocateTagHere{}) -> pure ex
+
+        Ext (AllocateScalarsHere{}) -> pure ex
+
+        Ext (SSPush{}) -> pure ex
+
+        Ext (SSPop{}) -> pure ex
+
+        Ext (LetRegionE r sz ty bod) -> do
+            let doesRegionExist = S.member (fromRegVarToFreeVarsTy (regionToVar r)) definedLocs
+            let definedLocs' = if doesRegionExist 
+                               then definedLocs
+                               else S.insert (fromRegVarToFreeVarsTy (regionToVar r)) definedLocs
+            bod' <- removeDuplicateLocations definedLocs' bod
+            if doesRegionExist
+            then pure bod'
+            else pure $ Ext $ LetRegionE r sz ty bod'
+        
+        _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
+        _ -> pure ex
+    where 
+        go = removeDuplicateLocations definedLocs

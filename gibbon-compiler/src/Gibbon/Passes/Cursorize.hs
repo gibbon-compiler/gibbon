@@ -639,6 +639,11 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                             mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
             CursorArrayTy{} -> dcon_let_bind <$> CaseE (VarE $ dcon_var) <$>
                                   mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+            PackedTy _ scrutLoc -> case scrutLoc of 
+                                         Single _ -> CaseE (VarE $ v) <$>
+                                                        mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+                                         SoA _ _ -> dcon_let_bind <$> CaseE (VarE $ dcon_var) <$>
+                                                      mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
             _ -> CaseE (VarE $ v) <$>
                             mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
       
@@ -1027,8 +1032,13 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         CursorArrayTy{} ->  dl <$> dcon_let_bind <$>
                               CaseE (VarE $ dcon_var) <$>
                                 mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
-        _ -> dl <$>
-                      CaseE (VarE $ v) <$>
+        PackedTy _ scrutLoc -> case scrutLoc of 
+                                         Single _ -> dl <$> CaseE (VarE $ v) <$>
+                                                          mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs 
+                                         SoA _ _ -> dl <$> dcon_let_bind <$>
+                                                        CaseE (VarE $ dcon_var) <$>
+                                                                mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
+        _ -> dl <$> CaseE (VarE $ v) <$>
                         mapM (unpackDataCon dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs                  
       
 
@@ -2327,9 +2337,8 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
   let ty_of_scrut = case (M.lookup scrtCur tenv1) of 
                             Just (MkTy2 ty) -> ty
                             Nothing -> error "unpackDataCon: unexpected location variable"
-
   case ty_of_scrut of 
-    CursorTy -> (dcon, [],)
+    CursorTy -> dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 1.\n" (dcon, [],)
                 -- Advance the cursor by 1 byte so that it points to the first field
                 <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
                 <$> (if isAbsRANDataCon dcon
@@ -2339,7 +2348,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                      else unpackRegularDataCon (AoSWin field_cur) freeVarToVarEnv)
     CursorArrayTy size -> do
                           -- dcon_var <- gensym "dcon" 
-                          let first_var = field_cur
+                          let first_var = dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 2.\n" field_cur
                           let scrut_loc = case (M.lookup scrtCur lenv) of 
                                                                   Just loc -> case loc of
                                                                                   Just l -> case l of 
@@ -2368,7 +2377,40 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                 else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv')
                           let lets = mkLets (field_lets) bod
                           dbgTrace (minChatLvl) "Print scrut loc: " dbgTrace (minChatLvl) (sdoc scrut_loc) dbgTrace (minChatLvl) "End loc\n" return (dcon, [], lets)
-    _ -> (dcon, [],)
+    PackedTy tycon locationVar -> case locationVar of 
+                                        Single _ -> (dcon, [],)
+                                         -- Advance the cursor by 1 byte so that it points to the first field
+                                         <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
+                                         <$> (if isAbsRANDataCon dcon
+                                             then unpackWithAbsRAN field_cur
+                                             else if isRelRANDataCon dcon
+                                             then unpackWithRelRAN field_cur
+                                             else unpackRegularDataCon (AoSWin field_cur) freeVarToVarEnv)
+                                        SoA _ _ -> do
+                                          -- dcon_var <- gensym "dcon" 
+                                          let first_var = dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 2.\n" field_cur
+                                          let scrut_loc = locationVar
+                                                                  -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
+                                          (field_lets, field_v_lst, freeVarToVarEnv') <- dbgTrace (minChatLvl) "Print scrut_loc " dbgTrace (minChatLvl) (sdoc ((dcon, scrut_loc))) dbgTrace (minChatLvl) "end scrut_loc.\n" 
+                                                        foldlM (\(acc1, acc2, acc3) (key@(dcon', idx), loc) -> do
+                                                                        let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
+                                                                        field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
+                                                                        let acc3' = dbgTrace (minChatLvl) "print loc: " dbgTrace (minChatLvl) (sdoc (loc, scrut_loc)) dbgTrace (minChatLvl) "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
+                                                                        let field_cursor_ty = case loc of 
+                                                                                                    Single _ -> CursorTy
+                                                                                                    SoA _ flds -> CursorArrayTy (1 + L.length (flds)) 
+                                                                        let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1+idx_elem))]
+                                                                        let curr_window = [((dcon', idx), field_var)]
+                                                                        return (acc1 ++ field_let , acc2 ++ curr_window, acc3')
+                                                              ) ([], [], freeVarToVarEnv) (getAllFieldLocsSoA scrut_loc)
+                                          bod <- (if isAbsRANDataCon dcon
+                                                  then unpackWithAbsRAN field_cur
+                                                  else if isRelRANDataCon dcon
+                                                  then unpackWithRelRAN field_cur
+                                                  else unpackRegularDataCon (SoAWin dcon_var field_v_lst) freeVarToVarEnv')
+                                          let lets = mkLets (field_lets) bod
+                                          return (dcon, [], lets)
+    _ -> dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 3.\n" (dcon, [],)
                 -- Advance the cursor by 1 byte so that it points to the first field
                 <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
                 <$> (if isAbsRANDataCon dcon
