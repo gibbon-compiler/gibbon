@@ -1175,12 +1175,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
                           -- the same datatype. 
-                          (idxsWriteDconBuf, idxsFields) = L.foldr (\res@(_, ty, _) (w, f) -> case ty of 
+                          (idxsWriteDconBuf, idxsFields) = L.foldr (\(res@(_, ty, _), idx) (w, f) -> case ty of 
                                                                       PackedTy tycon _ -> if tycon == tyConOfDataCon
-                                                                                          then (w ++ [L.elemIndex res ls'], f)
-                                                                                          else (w, f ++ [L.elemIndex res ls'])
-                                                                      _ -> (w, f ++ [L.elemIndex res ls'])
-                                                                   ) ([], []) ls'
+                                                                                          then (w ++ [Just idx], f)
+                                                                                          else (w, f ++ [Just idx])
+                                                                      _ -> (w, f ++ [Just idx])
+                                                                   ) ([], []) (zip ls' [0..length(ls')])
                           -- dbgTrace minChatLvl "Print tuple line: 1023" dbgTrace minChatLvl (sdoc (idxsWriteDconBuf, idxsFields)) dbgTrace minChatLvl "End line 1023\n"
                           idxsWriteDconBuf' = L.reverse idxsWriteDconBuf  
                           idxsFields' = L.reverse idxsFields                                       
@@ -1279,8 +1279,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                     ((map Just rstlocs) ++ [Nothing])
                                                                                                     (map Just locsDconBuf)
                                                                                      )
+                                                                        -- , locsFields, fieldLocVarsAfter
                                                                         -- dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n"
-                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
+                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', ls', fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
                           -- dbgTrace minChatLvl "Print tuple line: 1061" dbgTrace minChatLvl (sdoc (fieldLocVars, fieldConstraints)) dbgTrace minChatLvl "End line 1061\n"
                       let constrs = concat $ [c | (_,_,c) <- ls']

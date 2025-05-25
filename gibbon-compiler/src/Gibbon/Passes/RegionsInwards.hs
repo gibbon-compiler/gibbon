@@ -42,7 +42,7 @@ placeRegionsInwardsFunBody :: S.Set FreeVarsTy -> FunDef2  -> PassM FunDef2
 placeRegionsInwardsFunBody scopeSet f@FunDef{funBody}  = do
   let env     = M.empty                                                          --Create empty environment
   funBody' <- removeAliasedLocations M.empty S.empty funBody
-  funBody'' <- placeRegionInwards env scopeSet funBody'                            --Recursively delay regions for function body
+  funBody'' <- placeRegionInwards env scopeSet funBody' --funBody'                            --Recursively delay regions for function body
   
   return $ f {funBody = funBody''} --funBody''
 
@@ -493,7 +493,9 @@ getAliasLoc env loc = case M.lookup loc env of
                                   in case keys of 
                                         [] -> loc
                                         _ -> let out = foldr (\key acc  -> case key of
-                                                                  Just k -> Just k
+                                                                  Just k -> if k /= loc 
+                                                                            then Just k
+                                                                            else acc
                                                                   Nothing -> acc 
                                                              ) Nothing keys
                                               in case out of 
@@ -508,8 +510,26 @@ getAliasLoc env loc = case M.lookup loc env of
 
 makeAlias :: AlisedLocsEnv -> LocVar -> LocVar -> AlisedLocsEnv
 makeAlias env alphaLoc betaLoc = case M.lookup alphaLoc env of
-                                            Nothing -> let env'' = M.insert alphaLoc (S.singleton betaLoc) env
-                                                         in case alphaLoc of 
+                                            Nothing -> let vals = M.toList env
+                                                           keys = map (\(k, v) -> if S.member alphaLoc v then Just k else Nothing) vals
+                                                           alphaLoc' = case keys of 
+                                                                          [] -> Nothing
+                                                                          _ -> let out = foldr (\key acc  -> case key of
+                                                                                                                Just k -> if k /= betaLoc 
+                                                                                                                          then Just k
+                                                                                                                          else acc
+                                                                                                                Nothing -> acc 
+                                                                                               ) Nothing keys
+                                                                                 in case out of 
+                                                                                          Just k -> Just k 
+                                                                                          Nothing -> Nothing 
+                                                           env'' = case alphaLoc' of 
+                                                                          Nothing -> M.insert alphaLoc (S.singleton betaLoc) env
+                                                                          Just akey ->  M.insertWith (S.union) akey (S.singleton betaLoc) env --M.insert alphaLoc (S.singleton betaLoc) env
+                                                           alphaLocToUse = case alphaLoc' of 
+                                                                                  Nothing -> alphaLoc
+                                                                                  Just akey -> akey
+                                                          in case alphaLocToUse of 
                                                               SoA dl fls -> case betaLoc of 
                                                                             Single _ -> error "Expected an SoA Location to be aliased.\n"
                                                                             SoA dl' fls' -> if (length fls /= length fls')
@@ -602,9 +622,9 @@ removeAliasedLocations env definedLocs ex  =
                                             True -> return rhs'
                                             False -> return $ Ext $ LetLocE nloc (AfterConstantLE c nloc') rhs'               
             AfterVariableLE v loc' b -> do
-                                        rhs' <- removeAliasedLocations env definedLocs' rhs
                                         let nloc = getAliasLoc env loc
                                             nloc' = getAliasLoc env loc'
+                                        rhs' <- dbgTrace (minChatLvl) "Print env AfterVariableLE: " dbgTrace (minChatLvl) (sdoc (env)) dbgTrace (minChatLvl) "End env in AfterVariableLE.\n" removeAliasedLocations env definedLocs' rhs
                                         case existsLetForLoc of 
                                                True -> return rhs'
                                                False -> return $ Ext $ LetLocE nloc (AfterVariableLE v nloc' b) rhs'
@@ -635,7 +655,8 @@ removeAliasedLocations env definedLocs ex  =
                                            nloc' = getAliasLoc env loc'
                                            floc' = getFieldLoc key nloc'
                                            env' = makeAlias env floc' nloc
-                                       rhs' <- removeAliasedLocations env' definedLocs' rhs
+                                           --env'' = makeAlias env' loc (getFieldLoc key loc')
+                                       rhs' <- dbgTrace (minChatLvl) "Print env getFieldLoc: " dbgTrace (minChatLvl) (sdoc (env')) dbgTrace (minChatLvl) "End env in GetFieldLoc.\n" removeAliasedLocations env' definedLocs' rhs
                                        case existsLetForLoc of
                                               True ->  return rhs'
                                               False -> return $ Ext $ LetLocE floc' (GetFieldLocSoA key nloc') rhs'
