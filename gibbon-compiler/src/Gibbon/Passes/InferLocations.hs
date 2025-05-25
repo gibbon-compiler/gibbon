@@ -1843,8 +1843,8 @@ finishExp e =
              e1' <- finishExp e1
              return $ Ext (LetRegionE r sz ty e1')
       Ext (LetLocE loc lex e1) -> do
-             e1' <- finishExp e1
              loc' <- finalLocVar loc
+             e1' <- finishExp e1
              lex' <- case lex of
                        AfterConstantLE i lv -> do
                                     lv' <- finalLocVar lv
@@ -1855,6 +1855,9 @@ finishExp e =
                        GetDataConLocSoA lv -> do
                                     lv' <- finalLocVar lv
                                     return $ GetDataConLocSoA lv'
+                       GetFieldLocSoA key lv -> do
+                                    lv' <- finalLocVar lv
+                                    return $ GetFieldLocSoA key lv'
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
       --Ext (LetSoALocE loc e1) -> do

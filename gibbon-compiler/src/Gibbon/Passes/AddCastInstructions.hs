@@ -16,7 +16,7 @@ addCasts :: Prog3 -> PassM Prog3
 addCasts Prog{ddefs, fundefs, mainExp} = do
     main' <- case mainExp of 
                     Just (m, t) -> do 
-                                    m' <- addCastsExp M.empty (Env2 M.empty funEnv)  m
+                                    m' <- addCastsExp Nothing M.empty (Env2 M.empty funEnv)  m
                                     return $ Just (m', t)
                     Nothing -> return Nothing
     fds' <- mapM addCastsFunction fundefs
@@ -28,11 +28,11 @@ addCasts Prog{ddefs, fundefs, mainExp} = do
         addCastsFunction f@FunDef{funTy, funArgs, funBody} = do
             let in_tys  = inTys funTy
             let env2 = Env2 (M.fromList $ zip  funArgs in_tys) funEnv
-            funBody' <- addCastsExp M.empty env2 funBody
+            funBody' <- addCastsExp (Just f) M.empty env2 funBody
             return $ f {funBody = funBody'}
 
-addCastsExp :: CastMapInfo -> Env2 Var Ty3 -> Exp3 -> PassM Exp3
-addCastsExp cenv env ex =
+addCastsExp :: Maybe FunDef3 -> CastMapInfo -> Env2 Var Ty3 -> Exp3 -> PassM Exp3
+addCastsExp fundef cenv env ex =
     case ex of
         LetE (v,locs,ty,rhs@(Ext (IndexCursorArray vec idx))) bod -> do
              let new_env = extendVEnv v ty env
@@ -47,7 +47,7 @@ addCastsExp cenv env ex =
                                                         -- let new_inst = [LetE (v, locs, ty, rhs)] ++ [LetE (casted_var, [], CursorTy, cast_ins)]
                                                         let new_inst = [LetE (casted_var, locs, CursorTy, rhs)] ++ [LetE (v, [], ty, cast_ins)]
                                                         pure $ (new_inst, ncenv, nenv)
-             bod' <- addCastsExp cenv' env' bod
+             bod' <- addCastsExp fundef cenv' env' bod
              let ex' = foldr (\ex acc -> ex acc) bod' let_expr
              pure $ ex'
 
@@ -66,9 +66,51 @@ addCastsExp cenv env ex =
                                                                                         let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins)]
                                                                                         pure (insts ++ cast_inst, nfcenv, nfenv, nvars ++ [casted_var])
                                                 ) ([], cenv, new_env, []) vars
-             bod' <- addCastsExp cenv' env' bod
+             bod' <- addCastsExp fundef cenv' env' bod
              let ex' = foldr (\ex acc -> ex acc) (LetE (v, locs, ty, (Ext (MakeCursorArray len (L.reverse vars')))) bod') new_insts
              pure $ ex'
+
+        LetE (v, locs, ty, rhs@(MkProdE es)) bod -> do
+             let new_env = extendVEnv v ty env
+             let tys_of_es = case ty of 
+                                ProdTy tys -> tys
+                                _ -> error $ "addCastsExp: Expected a product type, got " ++ show ty
+             (new_insts, cenv', env', vars') <- foldrM (\(expr, exp_ty) (insts, fcenv, fenv, fexps) -> do
+                                                                   case expr of 
+                                                                        VarE var -> do 
+                                                                                    let ty_of_var = lookupVEnv var fenv
+                                                                                    case ty_of_var of
+                                                                                        CursorTy -> pure (insts, fcenv, fenv, fexps ++ [VarE var])
+                                                                                        CursorArrayTy len -> case exp_ty of
+                                                                                                                CursorTy -> do
+                                                                                                                           casted_var <- gensym "cast"
+                                                                                                                           let nfcenv = M.insert var casted_var fcenv
+                                                                                                                           let cursor_ty3 :: Ty3 = CursorTy
+                                                                                                                           let nfenv = extendVEnv casted_var cursor_ty3 fenv
+                                                                                                                           let cast_ins = Ext $ CastPtr var cursor_ty3
+                                                                                                                           let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins)]
+                                                                                                                           pure (insts ++ cast_inst, nfcenv, nfenv, fexps ++ [VarE casted_var])
+                                                                                                                CursorArrayTy len' -> if (len /= len')
+                                                                                                                                     then do
+                                                                                                                                          casted_var <- gensym "cast"
+                                                                                                                                          let nfcenv = M.insert var casted_var fcenv
+                                                                                                                                          let cursor_ty3 :: Ty3 = CursorArrayTy len'
+                                                                                                                                          let nfenv = extendVEnv casted_var cursor_ty3 fenv
+                                                                                                                                          let cast_ins = Ext $ CastPtr var cursor_ty3
+                                                                                                                                          let cast_inst = [LetE (casted_var, [], CursorArrayTy len', cast_ins)]
+                                                                                                                                          pure (insts ++ cast_inst, nfcenv, nfenv, fexps ++ [VarE casted_var])
+                                                                                                                                     else 
+                                                                                                                                        pure (insts, fcenv, fenv, fexps ++ [VarE var])
+                                                                                                                _ -> error $ "addCastsExp: Expected a variable, got " ++ show exp_ty
+                                                                                        _ -> pure (insts, fcenv, fenv, fexps ++ [VarE var]) --error $ "addCastsExp: Expected a variable, got " ++ show ty_of_var
+                                                                        _ -> pure (insts, fcenv, fenv, fexps ++ [expr]) -- error "TODO: addCastsExp: not implemented yet!!"                 
+                
+                
+                                                       ) ([], cenv, new_env, []) (zip es tys_of_es)
+             bod' <- addCastsExp fundef cenv' env' bod
+             let ex' = foldr (\ex acc -> ex acc) (LetE (v, locs, ty, ((MkProdE (L.reverse vars')))) bod') new_insts
+             pure $ ex'
+
              
         -- LetE (v, locs, ty, rhs@(Ext (AppE f _locs args))) bod -> do
         --     let new_env = extendVEnv v ty env
@@ -80,11 +122,24 @@ addCastsExp cenv env ex =
                             Just v' -> v'
                             Nothing -> v
             let env' = extendVEnv v ty env
-            rhs' <- addCastsExp cenv env' rhs
-            bod' <- addCastsExp cenv env' bod
+            rhs' <- addCastsExp fundef cenv env' rhs
+            bod' <- addCastsExp fundef cenv env' bod
             pure $ (LetE (nv, locs, ty, rhs')) bod'
 
-        MkProdE es -> MkProdE <$> mapM go es
+        MkProdE es -> do
+                      let def = case fundef of 
+                                      Just def' -> Just $ funTy def'
+                                      Nothing -> Nothing
+                      case def of 
+                        Just (_, outTy') -> do
+                                (new_insts, _, _, vars') <- handleProdTy outTy' ex
+                                let ex' = foldr (\expr acc -> case expr of 
+                                                    LetE (v, locs, ty, rhs) _ -> LetE (v, locs, ty, rhs) acc
+                                                    _ -> error "Did not expect a non-LetE in MkProdE"
+                                             ) (MkProdE (L.reverse vars')) new_insts
+                                pure $ ex' 
+                        Nothing -> MkProdE <$> mapM go es
+                      -- MkProdE <$> mapM go es
         ProjE i e -> ProjE i <$> go e
         VarE v -> do 
                   return $ VarE v
@@ -291,4 +346,53 @@ addCastsExp cenv env ex =
         MapE{}  -> error "addCastsExp: MapE TODO"
         FoldE{} -> error "addCastsExp: FoldE TODO"
     where
-        go = addCastsExp cenv env   
+       go = addCastsExp fundef cenv env   
+
+       handleProdTy :: Ty3 -> Exp3 -> PassM ([Exp3], CastMapInfo, Env2 Var Ty3, [Exp3])
+       handleProdTy ty expr = do 
+                                case expr of 
+                                    MkProdE es -> 
+                                        case ty of 
+                                            ProdTy tys -> do
+                                                            let zipped = zip es tys
+                                                            (new_insts, cenv', env', vars') <- foldrM (\(expr, exp_ty) (insts, fcenv, fenv, fexps) -> do
+                                                                                                                                        case expr of 
+                                                                                                                                            VarE var -> do 
+                                                                                                                                                        let ty_of_var = lookupVEnv var fenv
+                                                                                                                                                        case ty_of_var of
+                                                                                                                                                                CursorTy -> pure (insts, fcenv, fenv, fexps ++ [VarE var])
+                                                                                                                                                                CursorArrayTy len -> case exp_ty of
+                                                                                                                                                                                        CursorTy -> do
+                                                                                                                                                                                                    casted_var <- gensym "cast"
+                                                                                                                                                                                                    let nfcenv = M.insert var casted_var fcenv
+                                                                                                                                                                                                    let cursor_ty3 :: Ty3 = CursorTy
+                                                                                                                                                                                                    let nfenv = extendVEnv casted_var cursor_ty3 fenv
+                                                                                                                                                                                                    let cast_ins = Ext $ CastPtr var cursor_ty3
+                                                                                                                                                                                                    let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins) (VarE casted_var)]
+                                                                                                                                                                                                    pure (insts ++ cast_inst, nfcenv, nfenv, fexps ++ [VarE casted_var])
+                                                                                                                                                                                        CursorArrayTy len' -> if (len /= len')
+                                                                                                                                                                                                            then do
+                                                                                                                                                                                                                casted_var <- gensym "cast"
+                                                                                                                                                                                                                let nfcenv = M.insert var casted_var fcenv
+                                                                                                                                                                                                                let cursor_ty3 :: Ty3 = CursorArrayTy len'
+                                                                                                                                                                                                                let nfenv = extendVEnv casted_var cursor_ty3 fenv
+                                                                                                                                                                                                                let cast_ins = Ext $ CastPtr var cursor_ty3
+                                                                                                                                                                                                                let cast_inst = [LetE (casted_var, [], CursorArrayTy len', cast_ins) (VarE casted_var)]
+                                                                                                                                                                                                                pure (insts ++ cast_inst, nfcenv, nfenv, fexps ++ [VarE casted_var])
+                                                                                                                                                                                                            else 
+                                                                                                                                                                                                                pure (insts, fcenv, fenv, fexps ++ [VarE var])
+                                                                                                                                                                                        _ -> error $ "addCastsExp: Expected a variable, got " ++ show exp_ty
+                                                                                                                                                                _ -> pure (insts, fcenv, fenv, fexps ++ [VarE var]) -- error $ "addCastsExp: Expected a variable, got " ++ show ty_of_var
+                                                                                                                                            MkProdE es' -> do 
+                                                                                                                                                           res <- handleProdTy exp_ty expr
+                                                                                                                                                           pure res
+
+                                                                                                                                                
+                                                                                                                                            _ -> error "TODO: addCastsExp: not implemented yet!!"                 
+                                                                                                        ) ([], cenv, env, []) zipped
+                                                            pure $ (new_insts, cenv', env', vars')
+                                                           
+                                            _ -> error $ "addCastsExp: Expected a product type, got " ++ show ty 
+
+                                    VarE v -> error $ "addCastsExp: Expected a product type, got VarE " ++ show v
+                                    _ -> error $ "addCastsExp: Expected a product type, got " ++ show ty

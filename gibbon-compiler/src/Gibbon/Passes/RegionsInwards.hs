@@ -630,13 +630,15 @@ removeAliasedLocations env definedLocs ex  =
                             False -> return $ Ext $ LetLocE nloc phs rhs' 
                       
 
-            GetFieldLocSoA key loc' -> do
-                                       rhs' <- removeAliasedLocations env definedLocs' rhs 
+            GetFieldLocSoA key loc' -> do 
                                        let nloc = getAliasLoc env loc
                                            nloc' = getAliasLoc env loc'
+                                           floc' = getFieldLoc key nloc'
+                                           env' = makeAlias env floc' nloc
+                                       rhs' <- removeAliasedLocations env' definedLocs' rhs
                                        case existsLetForLoc of
                                               True ->  return rhs'
-                                              False -> return $ Ext $ LetLocE nloc (GetFieldLocSoA key nloc') rhs'
+                                              False -> return $ Ext $ LetLocE floc' (GetFieldLocSoA key nloc') rhs'
 
             GetDataConLocSoA loc' -> do 
                                       let nloc = getAliasLoc env loc
