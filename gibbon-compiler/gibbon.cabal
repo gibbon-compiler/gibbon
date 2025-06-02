@@ -22,7 +22,8 @@ tested-with:           GHC==9.4.6
                      , GHC==8.8.4
                      , GHC==9.6.5
                      , GHC==9.8.2
-                     , GHC==9.10.1
+                     , GHC==9.10.2
+                     , GHC==9.12.2
 
 flag LLVM_ENABLED
   description:         Enable LLVM backend
