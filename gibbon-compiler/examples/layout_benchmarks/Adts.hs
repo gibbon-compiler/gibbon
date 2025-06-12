@@ -5,8 +5,10 @@ import Contents
 import Tags
  
 
-data Adt = Nil | CA (Content) (Adt) | AC (Adt) (Content) | TCA (Tags) (Content) (Adt) | ACT (Adt) (Content) (Tags) | TAC (Tags) (Adt) (Content) | ATC (Adt) (Tags) (Content) | CTA (Content) (Tags) (Adt) | CAT (Content) (Adt) (Tags)
-    deriving (Show)
+data Adt = Nil | CA (Content) (Adt) 
+              deriving (Show)
+
+-- | AC (Adt) (Content) | TCA (Tags) (Content) (Adt) | ACT (Adt) (Content) (Tags) | TAC (Tags) (Adt) (Content) | ATC (Adt) (Tags) (Content) | CTA (Content) (Tags) (Adt) | CAT (Content) (Adt) (Tags) deriving (Show)
 
 
 -- make list for adt CA Tail recursive
@@ -28,7 +30,7 @@ mkCAList len strLen = if len <= 0
                     in CA content rst                    
                     
 
--- make list for adt AC
+{-- make list for adt AC
 mkACList :: Int -> Int -> Adt
 mkACList len strLen = if len <= 0
                   then Nil 
@@ -54,7 +56,7 @@ mkACTList len tagLen strLen = if (len <= 0)
                                            tags    = mkRandomTags tagLen
                                        in ACT rst content tags
                                        
-                                       
+                                      
 mkTACList :: Int -> Int -> Int -> Adt
 mkTACList len tagLen strLen = if (len <= 0)
                                   then Nil
@@ -86,7 +88,7 @@ mkCATList len tagLen strLen = if (len <= 0)
                                     else let content = mkContentText strLen
                                              rst     = mkCATList (len-1) tagLen strLen 
                                              tags    = mkRandomTags tagLen 
-                                         in CAT content rst tags
+                                         in CAT content rst tags ---}
                     
 printAdt :: Adt -> ()
 printAdt adt =
@@ -103,67 +105,70 @@ printAdt adt =
           _ = printsym (quote ")")
           _ = printsym (quote "SPACE")
       in ()
-    AC rst a -> 
-        let _ = printsym (quote "(AC ")
-            _ = printAdt rst
-            _ = printContent a
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    TCA tags content rst -> 
-        let _ = printsym (quote "(TCA ")
-            _ = printTags tags
-            _ = printContent content
-            _ = printAdt rst
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    ACT rst content tags -> 
-        let _ = printsym (quote "(ACT ")
-            _ = printAdt rst
-            _ = printContent content
-            _ = printTags tags
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    TAC tags rst content -> 
-        let _ = printsym (quote "(TAC ")
-            _ = printTags tags
-            _ = printAdt rst
-            _ = printContent content
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    ATC rst tags content -> 
-        let _ = printsym (quote "(ATC ")
-            _ = printAdt rst
-            _ = printTags tags
-            _ = printContent content
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    CTA content tags rst -> 
-        let _ = printsym (quote "(CTA ")
-            _ = printContent content
-            _ = printTags tags
-            _ = printAdt rst
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")
-        in ()
-    CAT content rst tags ->
-        let _ = printsym (quote "(CAT ")
-            _ = printContent content
-            _ = printAdt rst
-            _ = printTags tags
-            _ = printsym (quote "SPACE")
-            _ = printsym (quote ")")
-            _ = printsym (quote "SPACE")          
-        in ()
-    
-        
+--     AC rst a ->
+--         let _ = printsym (quote "(AC ")
+--             _ = printAdt rst
+--             _ = printContent a
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     TCA tags content rst ->
+--         let _ = printsym (quote "(TCA ")
+--             _ = printTags tags
+--             _ = printContent content
+--             _ = printAdt rst
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     ACT rst content tags ->
+--         let _ = printsym (quote "(ACT ")
+--             _ = printAdt rst
+--             _ = printContent content
+--             _ = printTags tags
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     TAC tags rst content ->
+--         let _ = printsym (quote "(TAC ")
+--             _ = printTags tags
+--             _ = printAdt rst
+--             _ = printContent content
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     ATC rst tags content ->
+--         let _ = printsym (quote "(ATC ")
+--             _ = printAdt rst
+--             _ = printTags tags
+--             _ = printContent content
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     CTA content tags rst ->
+--         let _ = printsym (quote "(CTA ")
+--             _ = printContent content
+--             _ = printTags tags
+--             _ = printAdt rst
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--     CAT content rst tags ->
+--         let _ = printsym (quote "(CAT ")
+--             _ = printContent content
+--             _ = printAdt rst
+--             _ = printTags tags
+--             _ = printsym (quote "SPACE")
+--             _ = printsym (quote ")")
+--             _ = printsym (quote "SPACE")
+--         in ()
+--
+
+gibbon_main = 
+	let lst = mkCAList 10 2
+         in printAdt lst  

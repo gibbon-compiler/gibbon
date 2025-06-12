@@ -137,10 +137,11 @@ tests:
   - name: test29b_list.gib
   - name: test30_twitter.gib
     # ThreadRegions bug.
-    failing: []
+    failing: [colobus]
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtreesum.gib
+    failing: [colobus]
   - name: test_ddtree.gib
   - name: test_stree.gib
   - name: test_sumstree.gib

@@ -8,6 +8,7 @@ import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 import           Data.Foldable ( foldlM, foldrM )
+import Control.Monad.RWS.Strict (execRWS)
 
 -- A map mapping a variable to the casted variable
 type CastMapInfo = M.Map Var Var
@@ -115,6 +116,38 @@ addCastsExp fundef cenv env ex =
         -- LetE (v, locs, ty, rhs@(Ext (AppE f _locs args))) bod -> do
         --     let new_env = extendVEnv v ty env
         --     (new_insts, cenv', env', args')
+
+        LetE (v, locs, ty, rhs@(Ext (AddCursor v' e))) bod -> do
+            let nv = case (M.lookup v cenv) of 
+                            Just v' -> v'
+                            Nothing -> v
+            let env' = extendVEnv v (CursorTy) env
+            rhs' <- addCastsExp fundef cenv env' rhs
+            bod' <- addCastsExp fundef cenv env' bod
+            pure $ (LetE (nv, locs, CursorTy, rhs')) bod'
+            -- let nv = case (M.lookup v' cenv) of 
+            --                     Just v'' -> v''
+            --                     Nothing -> v'
+            -- let nv_ty = lookupVEnv nv env
+            -- e' <- go e
+            -- bod' <- addCastsExp fundef cenv env' bod
+            -- pure $ (LetE (nv, locs, ty, rhs')) bod'
+
+            --let ty_v' = lookupVEnv v' env
+            --case (ty == ty_v') of
+            --    True -> do
+            --            e' <- go e
+            --            let env' = extendVEnv v ty env
+            --            bod' <- addCastsExp fundef cenv env' bod
+            --            pure $ (LetE (v, locs, ty, Ext (AddCursor v' e'))) bod'
+            --    False -> do 
+            --             let nv = case (M.lookup v cenv) of 
+            --                            Just v'' -> v''
+            --                            Nothing -> v
+            --             let env' = extendVEnv v ty env
+            --             rhs' <- addCastsExp fundef cenv env' rhs
+            --             bod' <- addCastsExp fundef cenv env' bod
+            --             pure $ (LetE (nv, locs, ty, rhs')) bod'
 
 
         LetE (v, locs, ty, rhs) bod -> do 

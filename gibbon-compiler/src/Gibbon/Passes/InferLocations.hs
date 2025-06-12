@@ -239,7 +239,7 @@ convertTyHelperSoAChild tycon ddefs dcon = do
                                                                      case f of 
                                                                         PackedTy tycon' _ -> do
                                                                                              if tycon == tycon'
-                                                                                             then return (flds, idx)
+                                                                                             then return (flds, idx + 1)
                                                                                              else do 
                                                                                               dconBuff <- freshLocVar "loc"
                                                                                               let dcons = getConOrdering ddefs tycon'
