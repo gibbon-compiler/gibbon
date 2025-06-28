@@ -747,11 +747,11 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
     bool old_chunk_in_nursery;
     GibOldgenChunkFooter *old_footer = NULL;
 
-    if (gib_addr_in_nursery(footer_ptr)) {
-        old_chunk_in_nursery = true;
-        GibNurseryChunkFooter oldsize = *(GibNurseryChunkFooter *) footer_ptr;
-        newsize = oldsize * 2;
-    } else {
+    // if (gib_addr_in_nursery(footer_ptr)) {
+    //     old_chunk_in_nursery = true;
+    //     GibNurseryChunkFooter oldsize = *(GibNurseryChunkFooter *) footer_ptr;
+    //     newsize = oldsize * 2;
+    // } else {
         old_chunk_in_nursery = false;
         old_footer = (GibOldgenChunkFooter *) footer_ptr;
         newsize = sizeof(GibOldgenChunkFooter) + (old_footer->size);
@@ -759,7 +759,7 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
         if (newsize > GIB_MAX_CHUNK_SIZE) {
             newsize = GIB_MAX_CHUNK_SIZE;
         }
-    }
+    // }
 
 #if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
     // If the old chunk is in nursery, try to grow it in the nursery.

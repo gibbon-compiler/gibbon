@@ -1,0 +1,21 @@
+cabal-version:      >= 1.10
+name:               gibbon-plugin
+version:            0.1
+author:             Chaitanya Koparkar
+maintainer:         ckoparkar@gmail.com
+build-type:         Simple
+
+library
+    exposed-modules:    Gibbon.Plugin
+    hs-source-dirs:     src
+    build-depends:      base
+                      , ghc
+                      , gibbon
+                      , containers
+                      , filepath
+                      , random
+    ghc-options:        -Wall -Wcompat -fdefer-typed-holes
+    default-language:   Haskell2010
+    default-extensions: ScopedTypeVariables
+                        BangPatterns
+                        TupleSections

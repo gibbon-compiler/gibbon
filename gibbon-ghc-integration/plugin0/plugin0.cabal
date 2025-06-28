@@ -6,7 +6,7 @@ maintainer:         ckoparkar@gmail.com
 build-type:         Simple
 
 library
-    exposed-modules:  Gibbon.Plugin
+    exposed-modules:  Gibbon.Plugin0
     other-modules:    Gibbon.CoreToL0
                       Gibbon.Utils
     hs-source-dirs:   src

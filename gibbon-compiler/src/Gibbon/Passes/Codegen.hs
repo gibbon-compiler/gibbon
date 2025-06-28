@@ -190,7 +190,7 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
 -- | Compile a program to C code that has the side effect of the
 -- "gibbon_main" expression in that program.
 codegenProg :: Config -> Prog -> IO String
-codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
+codegenProg cfg@Config{mode} prg@(Prog info_tbl sym_tbl funs mtal) =
       return (hashIncludes ++ pretty 80 (stack (map ppr defs)))
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
@@ -201,9 +201,12 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         (prots,funs') <- (unzip . concat) <$> mapM codegenFun funs
         main_expr' <- main_expr
         let struct_tys = uniqueDicts $ S.toList $ harvestStructTys prg
-        return ((L.nub $ makeStructs struct_tys) ++ prots ++
+        return ((L.nub $ makeStructs struct_tys) ++
+                prots ++
                 [gibTypesEnum, initInfoTable info_tbl, initSymTable sym_tbl] ++
-                funs' ++ [main_expr'])
+                funs' ++
+                if isLibrary mode then [] else [main_expr']
+               )
 
       main_expr :: PassM C.Definition
       main_expr = do
