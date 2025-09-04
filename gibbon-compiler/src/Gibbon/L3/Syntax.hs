@@ -81,6 +81,7 @@ data E3Ext loc dec =
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
+  | BoundsCheckVector [(Int, Var, Var)] -- ^ Bytes required, region, write cursor but for a vector of cursors and regions
   | IndirectionBarrier TyCon (Var,Var,Var,Var)
     -- ^ Do one of the following:
     -- (1) If it's a old-to-young indirection, record it in the remembered set.

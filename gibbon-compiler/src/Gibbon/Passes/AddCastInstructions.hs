@@ -334,7 +334,18 @@ addCastsExp fundef cenv env ex =
                                     let nb = case (M.lookup b cenv) of 
                                                Just v' -> v'
                                                Nothing -> b
-                                    pure $ Ext (BoundsCheck i na nb)               
+                                    pure $ Ext (BoundsCheck i na nb)     
+        Ext (BoundsCheckVector bounds) -> do 
+                                           bounds' <- mapM (\(i, a, b) -> do
+                                                                           let na = case (M.lookup a cenv) of 
+                                                                                            Just v' -> v'
+                                                                                            Nothing -> b
+                                                                           let nb = case (M.lookup b cenv) of
+                                                                                            Just v' -> v'
+                                                                                            Nothing -> b
+                                                                           return $ (i, na, nb)
+                                                           ) bounds
+                                           pure $ Ext (BoundsCheckVector bounds')          
         Ext (IndirectionBarrier tcon (a,b,c,d)) -> pure ex 
         Ext (BumpArenaRefCount a b) -> pure ex
         Ext NullCursor -> pure ex

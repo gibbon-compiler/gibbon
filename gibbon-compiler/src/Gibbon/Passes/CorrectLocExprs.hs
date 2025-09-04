@@ -11,6 +11,8 @@ import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.NewL2.Syntax as NewL2
 import Gibbon.L2.Syntax as Old
+import Gibbon.L4.Syntax (Tail(bod))
+import GHC.Arr (bounds)
 
 ---------------------------------------------------------------------------
 -- Very restrictive, only delays BoundCheck expressions for now. 
@@ -19,7 +21,8 @@ import Gibbon.L2.Syntax as Old
 type BoundEnv = S.Set FreeVarsTy
  
 {- VS: We can only delay a bounds check expression, for now -} 
-data DelayExpr = BoundsCheckExpr Int LocArg LocArg
+data DelayExpr = BoundsCheckExpr Int LocArg LocArg | 
+                 BoundsCheckVectorExpr [(Int, LocArg, LocArg)]
     deriving (Eq, Ord)
 
 type DelayExprMap = M.Map DelayExpr (S.Set FreeVarsTy)
@@ -67,6 +70,17 @@ delayExpBody env benv ex = do
                             let env' = M.insert delayBind free_vars_in_bound_expr env
                             (bod', env'') <- delayExpBody env' benv bod
                             return (bod', env'')
+           Ext (BoundsCheckVector bounds) -> do
+                           let free_vars_in_bound_expr = S.fromList $ map (\(_, _, cur) -> fromLocVarToFreeVarsTy $ toLocVar cur) bounds
+                           if (S.isSubsetOf free_vars_in_bound_expr benv)
+                            then do
+                              (bod', env') <- delayExpBody env benv bod
+                              return (LetE bnd bod', env')
+                            else do
+                              let delayBind = BoundsCheckVectorExpr bounds
+                              let env' = M.insert delayBind free_vars_in_bound_expr env 
+                              (bod', env'') <- delayExpBody env' benv bod
+                              return (bod', env'') 
            _ -> do
                (rhs', env') <- delayExpBody env benv rhs
                (bod', env'') <- delayExpBody env benv bod
@@ -92,6 +106,7 @@ delayExpBody env benv ex = do
                                -- Discharge all the expressions.
                                let bod'' = L.foldr (\e body -> case e of
                                                                BoundsCheckExpr sz bound cur -> LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheck sz bound cur)) body
+                                                               BoundsCheckVectorExpr bounds -> LetE ("_", [], MkTy2 IntTy, (Ext $ BoundsCheckVector bounds)) body
                                                                _ -> error "TODO: delayExpBody: unexpected expression\n"
                                                    ) bod' exprs_to_discharge
                                return (Ext $ LetLocE loc rhs bod'', env'')

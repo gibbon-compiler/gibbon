@@ -32,11 +32,11 @@ sumList lst = case lst of
                                   in i + sumRst
 
 gibbon_main = let 
-		lst = mkList 20000000
+		lst = mkList 20000
                 lst' = iterate (add1 lst)
                 -- _ = printPacked lst'
                 --(val, lst'') = fieldDep lst' 
-	       in () --printPacked lst' --val --sumList lst'
+	       in sumList lst' --() --printPacked lst' --val --sumList lst'
 
 
 
