@@ -168,6 +168,11 @@ data E2Ext loc dec
   | BoundsCheck Int -- Bytes required
                 loc -- Region
                 loc -- Write cursor
+  | BoundsCheckVector [(Int, loc, loc)] -- Check the bounds of multiple buffers in one go.
+                                        -- If there exists a region that needs to be grown. 
+                                        -- We grow all regions together.
+                                        --(Int, loc, loc)
+                                        --(Bytes required, Region, Write cursor)
   -- | BoundsCheckVector [Int] [loc] [loc] -- BoundsCheck on vector of regions/loc Probably not needed yet. 
   | AddFixed Var Int
   | IndirectionE TyCon     -- Type of the data pointed to by this indirection.

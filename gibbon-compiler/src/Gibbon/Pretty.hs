@@ -481,6 +481,7 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
           L2.StartOfPkdCursor c -> parens $ text "startOfPkdCursor" <+> pprint c
           L2.TagCursor a b -> parens $ text "tagCursor" <+> pprint a <+> pprint b
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
+          L2.BoundsCheckVector bounds -> lparen <+>  hcat (punctuate (text " || ") (map (\(i, a, b) -> "boundscheck" <+> int i <+> pprint a <+> pprint b) bounds)) <> rparen
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
                                                      doc dc <+>

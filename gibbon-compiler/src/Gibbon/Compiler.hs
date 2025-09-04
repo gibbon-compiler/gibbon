@@ -769,13 +769,21 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- go "fixRANs"         fixRANs       l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "regionsInwards" regionsInwards l2
+                  l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
+                  l2 <- goE2 "+" reorderLetExprs l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
-                  l2 <- go "L2.flatten"      flattenL2     l2
+                  -- VS : This pass is causing a bug 
+                  --l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE2 "removeCopies"  removeCopies  l2
+                  l2 <- if no_rcopies
+                        then return l2                          
+                        else
+                          do 
+                          l2 <- goE2 "removeCopies" removeCopies l2
+                          return l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "inferEffects2" inferEffects  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2

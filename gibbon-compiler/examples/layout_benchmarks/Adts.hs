@@ -99,7 +99,7 @@ printAdt adt =
         in ()
     CA a rst ->
       let _ = printsym (quote "(CA ")
-          _ = printContent a
+          --_ = printContent a
           _ = printsym (quote "SPACE")
           _ = printAdt rst
           _ = printsym (quote ")")

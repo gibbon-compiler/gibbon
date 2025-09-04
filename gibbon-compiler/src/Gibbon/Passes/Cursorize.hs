@@ -772,6 +772,26 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                    --            let denv' = M.insertWith (++) (cur_loc) [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
                                    --         return $ Ext $ L3.BoundsCheck i bound_var cur_var --Left$ M.insertWith (++) ((toLocVar) loc) [((unwrapLocVar lvar),[],CursorTy,rhs)] denv
                                    return exp'
+        
+        Gibbon.NewL2.Syntax.BoundsCheckVector bounds -> do
+                                    bounds' <- mapM (\(i, bound, cur) -> do 
+                                                                  let bound_loc = toLocVar bound
+                                                                  let bound_reg = fromLocVarToRegVar bound_loc
+                                                                  let bound_var = case (M.lookup (fromRegVarToFreeVarsTy bound_reg) freeVarToVarEnv) of 
+                                                                                            Just v -> v 
+                                                                                            Nothing -> case bound_reg of
+                                                                                                          SingleR vr -> vr
+                                                                                                          SoARv _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
+                                                                  let cur_loc = toLocVar cur
+                                                                  let cur_var = case (M.lookup (fromLocVarToFreeVarsTy cur_loc) freeVarToVarEnv) of 
+                                                                                                          Just v -> v 
+                                                                                                          Nothing -> case cur_loc of
+                                                                                                                                    Single vr -> vr
+                                                                                                                                    SoA _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
+                                                                  return $ (i, bound_var, cur_var)
+                                                        ) bounds
+                                    exp' <- return $ Ext $ L3.BoundsCheckVector bounds'
+                                    return exp'
 
         FromEndE{} -> error $ "cursorizeExp: TODO FromEndE" ++ sdoc ext
 

@@ -43,3 +43,12 @@ printContent content =
             let _ = printsym (quote "Image ")
                 _ = printString n
             in ()
+
+
+
+
+
+gibbon_main = 
+	let content = mkContentText 10
+            imageContent = mkContentImage 10
+         in (printContent content, printContent imageContent)
