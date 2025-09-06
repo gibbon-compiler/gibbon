@@ -40,22 +40,30 @@ followPtrs (Prog ddefs fundefs mainExp) = do
             if no_copies
             then do
               indir_ptrv <- gensym "indr"
+              indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
               callv <- gensym "call"
               wc <- gensym "wildcard"
-              indir_ptrloc <- gensym "case"
-              endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
-              let endofs' = map Single endofs
+              indir_ptrloc <- freshCommonLoc "case" scrt_loc
+
+              endofs <- mapM (\lr -> case lr of
+                                            EndOf lrm -> do 
+                                                         let loc = lrmLoc lrm 
+                                                         freshCommonLoc "endof" loc
+                              ) (locRets funTy)
+
+              --endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
+              --let endofs' = map Single endofs
               let args = foldr (\v acc -> if v == scrtv
                                           then ((VarE indir_ptrv) : acc)
                                           else (VarE v : acc))
                               [] funArgs
-              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((Single indir_ptrv) : acc) else (loc : acc)) [] (inLocVars funTy)
+              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((indir_ptrloc) : acc) else (loc : acc)) [] (inLocVars funTy)
               let out_locs = outLocVars funTy
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                              LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
-                              Ext (RetE endofs' callv)
-              let redir_br = (redir_dcon,[(indir_ptrv,(Single indir_ptrloc))],redir_bod)
+                              LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                              Ext (RetE endofs callv)
+              let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod)
               ----------------------------------------
               (pure (CaseE scrt (brs ++ [redir_br])))
             else do
