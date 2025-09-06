@@ -160,6 +160,15 @@ tcExp isSoA isPacked ddfs env exp = do
           cty <- lookupVar env cur exp
           ensureEqualTyModCursor isSoA exp cty CursorTy
           return IntTy
+        
+        BoundsCheckVector bounds -> do
+                                    _ <- mapM (\(_, bound, cur) -> do
+                                                                   rty <- lookupVar env bound exp
+                                                                   ensureEqualTyModCursor isSoA exp rty CursorTy
+                                                                   cty <- lookupVar env cur exp
+                                                                   ensureEqualTyModCursor isSoA exp cty CursorTy
+                                              ) bounds
+                                    return IntTy
 
         IndirectionBarrier _tycon (l1, end_r1, l2, end_r2) -> do
           l1_ty  <- lookupVar env l1 exp

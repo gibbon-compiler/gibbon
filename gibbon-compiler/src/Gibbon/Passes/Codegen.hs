@@ -1068,6 +1068,20 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        bck = [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
                    pure [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
 
+                 BoundsCheckVector -> do
+                   --_new_chunk   <- gensym "new_chunk"
+                   --_chunk_start <- gensym "chunk_start"
+                   --_chunk_end   <- gensym "chunk_end"
+                   ifConds <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
+                                           pure [cexp| ($id:cur + $int:i) > $id:bound |]
+                                      ) rnds
+                   ifBody <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
+                                       pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
+                                  ) rnds
+                   let condExpr = foldr1 (\c1 c2 -> [cexp| $exp:c1 || $exp:c2 |]) ifConds
+                   let ifBody' = concat ifBody
+                   pure [ C.BlockStm [cstm| if ($exp:condExpr) { $items:ifBody' } |] ]
+
                  SizeOfPacked -> let [(sizeV,IntTy)] = bnds
                                      [(VarTriv startV), (VarTriv endV)] = rnds
                                  in pure
@@ -1076,7 +1090,6 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                      [(VarTriv w)]   = rnds
                                  in pure
                                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizeV = ($ty:(codegenTy IntTy)) sizeof($id:w); |] ]
-
 
                  GetFirstWord ->
                   let [ptr] = rnds in

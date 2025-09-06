@@ -339,7 +339,7 @@ addCastsExp fundef cenv env ex =
                                            bounds' <- mapM (\(i, a, b) -> do
                                                                            let na = case (M.lookup a cenv) of 
                                                                                             Just v' -> v'
-                                                                                            Nothing -> b
+                                                                                            Nothing -> a
                                                                            let nb = case (M.lookup b cenv) of
                                                                                             Just v' -> v'
                                                                                             Nothing -> b
