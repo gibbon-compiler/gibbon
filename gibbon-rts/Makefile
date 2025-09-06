@@ -44,7 +44,7 @@ CFLAGS += -D_GIBBON_VERBOSITY=$(VERBOSITY)
 ifeq ($(MODE), debug)
 	CFLAGS += -O0 -g -D_GIBBON_DEBUG
 else
-	CFLAGSS += -O3
+	CFLAGS += -O3
 	RSFLAGS += --release
 endif
 
