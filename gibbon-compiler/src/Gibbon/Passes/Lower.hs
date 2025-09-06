@@ -506,6 +506,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SizeOfPacked{}     -> syms
               SizeOfScalar{}     -> syms
               BoundsCheck{}      -> syms
+              BoundsCheckVector{} -> syms
               ReadCursor{}       -> syms
               WriteTaggedCursor{}-> syms
               ReadTaggedCursor{} -> syms
@@ -853,6 +854,15 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE(_,_,_,  (Ext (BoundsCheck i bound cur))) bod -> do
       let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
       T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
+
+    LetE(_,_,_, (Ext (BoundsCheckVector bounds))) bod -> do 
+      let args = map (\(i, bound, cur) -> 
+                        T.ProdTriv [ T.IntTriv (fromIntegral i)
+                              , T.VarTriv bound
+                              , T.VarTriv cur
+                              ]
+                     ) bounds
+      T.LetPrimCallT [] T.BoundsCheckVector args <$> tail free_reg sym_tbl bod
 
     LetE(v,_,_,  (Ext (TagCursor a b))) bod -> do
       T.LetPrimCallT [(v, T.CursorTy)] T.TagCursor [T.VarTriv a, T.VarTriv b] <$>
