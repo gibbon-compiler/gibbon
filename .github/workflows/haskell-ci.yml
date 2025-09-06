@@ -15,6 +15,9 @@
 name: Haskell-CI
 on:
   - push
+      branches:
+        - main
+        - vidush/soa
   - pull_request
 jobs:
   linux:
