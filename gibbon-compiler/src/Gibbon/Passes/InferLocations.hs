@@ -200,11 +200,11 @@ convertTy ddefs useSoA ty = case useSoA of
                                         PackedTy tycon _ -> do 
                                                              dconBuff <- freshLocVar "loc"
                                                              let dcons = getConOrdering ddefs tycon
-                                                             let dcons' = concatMap (\dcon -> if ('^' `elem` dcon)
-                                                                                              then []
-                                                                                              else [dcon]
-                                                                                     ) dcons
-                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons'
+                                                            --  let dcons' = concatMap (\dcon -> if ('^' `elem` dcon)
+                                                            --                                   then []
+                                                            --                                   else [dcon]
+                                                            --                          ) dcons
+                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons
                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
                                                              dbgTrace minChatLvl "Print ty: " dbgTrace minChatLvl (sdoc (PackedTy tycon soaLocation)) dbgTrace minChatLvl "End ty.\n" return $ PackedTy tycon soaLocation
                                         _ -> traverse (const (freshLocVar "loc")) ty
@@ -251,6 +251,8 @@ convertTyHelperSoAChild tycon ddefs dcon = do
                                                                                               let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
                                                                                               return (flds ++ [((dcon, idx), soaLocation)], idx + 1)  
 
+                                                                        CursorTy -> return (flds, idx+1)
+                                                                        CursorArrayTy _ -> return (flds, idx+1)
                                                                         _ -> do 
                                                                              info <- convertTyHelperGetLocForField' dcon idx (show f) 
                                                                              return (flds ++ [info], idx + 1)
@@ -462,7 +464,7 @@ fixType_ ty =
 getFieldLocs :: LocVar -> [((DataCon, FieldIndex), LocVar)]
 getFieldLocs loc = case loc of 
                     SoA dcon fieldLocs -> fieldLocs
-                    Single lc -> error "InferLocations : getFieldLocs : Did not expect a non SoA location!"
+                    Single lc -> error $ "InferLocations : getFieldLocs : Did not expect a non SoA location!" ++ show loc
 
 
 makeSoARegion :: LocVar -> TiM Region 
@@ -1185,6 +1187,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                       PackedTy tycon _ -> if tycon == tyConOfDataCon
                                                                                           then (w ++ [Just idx], f)
                                                                                           else (w, f ++ [Just idx])
+                                                                      -- redirections, indirections, shortcut pointers...
+                                                                      CursorTy -> (w ++ [Just idx], f)
+                                                                      CursorArrayTy _ -> (w ++ [Just idx], f)                     
                                                                       _ -> (w, f ++ [Just idx])
                                                                    ) ([], []) (zip ls' [0..length(ls')])
                           -- dbgTrace minChatLvl "Print tuple line: 1023" dbgTrace minChatLvl (sdoc (idxsWriteDconBuf, idxsFields)) dbgTrace minChatLvl "End line 1023\n"
@@ -1212,7 +1217,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
                                                                  in case fldloc of 
                                                                            Just location -> Just location
-                                                                           Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
+                                                                           Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ show (k, idx) ++ " ," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
                                                ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
                                                 dcArgFields
