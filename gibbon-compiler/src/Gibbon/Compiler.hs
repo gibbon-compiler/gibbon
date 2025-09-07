@@ -640,6 +640,7 @@ passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l0 = do
       let isPacked   = gopt Opt_Packed dynflags
           isSoA      = gopt Opt_Packed_SoA dynflags
+          noRAN      = gopt Opt_No_RAN dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
@@ -747,7 +748,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
 -}
               l2 <-
-                if gibbon1
+                if gibbon1 || noRAN
                 then do
                   l2 <- goE2 "addTraversals" addTraversals l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2

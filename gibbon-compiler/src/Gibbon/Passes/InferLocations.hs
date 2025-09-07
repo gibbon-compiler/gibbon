@@ -200,7 +200,11 @@ convertTy ddefs useSoA ty = case useSoA of
                                         PackedTy tycon _ -> do 
                                                              dconBuff <- freshLocVar "loc"
                                                              let dcons = getConOrdering ddefs tycon
-                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons
+                                                             let dcons' = concatMap (\dcon -> if ('^' `elem` dcon)
+                                                                                              then []
+                                                                                              else [dcon]
+                                                                                     ) dcons
+                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons'
                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
                                                              dbgTrace minChatLvl "Print ty: " dbgTrace minChatLvl (sdoc (PackedTy tycon soaLocation)) dbgTrace minChatLvl "End ty.\n" return $ PackedTy tycon soaLocation
                                         _ -> traverse (const (freshLocVar "loc")) ty

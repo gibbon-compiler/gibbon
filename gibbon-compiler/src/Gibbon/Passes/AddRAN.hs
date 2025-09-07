@@ -150,8 +150,15 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
              else do
           let -- n elements after the first packed one require RAN's.
               needRANsExp = L.drop (length args - n) args
+              fields = lookupDataCon ddfs dcon
+              needsRanFields = L.drop (length fields - n) fields
+              ranTyFields = map (\ty -> case ty of
+                                            PackedTy tycon _ -> let dd = lookupDDef ddfs tycon
+                                                                 in getCursorTypeForDataCon ddfs dd 
+                                            _ -> CursorTy
+                                ) needsRanFields
 
-          rans <- mkRANs needRANsExp
+          rans <- mkRANs ranTyFields needRANsExp
           let ranArgs = L.map (\(v,_,_,_) -> VarE v) rans
           return $ mkLets rans (DataConE loc (toAbsRANDataCon dcon) (ranArgs ++ args))
 
@@ -243,7 +250,7 @@ withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
 withRANDDefs needRANsTyCons ddfs = M.map go ddfs
   where
     -- go :: DDef a -> DDef b
-    go dd@DDef{dataCons} =
+    go dd@DDef{dataCons, memLayout} =
       let dcons' = L.foldr (\(dcon,tys) acc ->
                               case numRANsDataCon ddfs dcon of
                                 0 -> acc
@@ -251,7 +258,8 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
                                      if not (getTyOfDataCon ddfs dcon `S.member` needRANsTyCons)
                                      then acc
                                      else
-                                       let tys'   = [(False,CursorTy) | _ <- [1..n]] ++ tys
+                                       let ranTy = getCursorTypeForDataCon ddfs dd
+                                           tys'   = [(False,ranTy) | _ <- [1..n]] ++ tys
                                            dcon'  = toAbsRANDataCon dcon
 
                                            _tys''  = (False,IntTy) : [(False,IntTy) | _ <- [1..n]] ++ tys
@@ -295,9 +303,9 @@ AddFixed for this purpose.
 'mb_most_recent_ran' in the fold below tracks most recent random access nodes.
 
 -}
-mkRANs :: [Exp1] -> PassM [(Var, [()], Ty1, Exp1)]
-mkRANs needRANsExp =
-  snd <$> foldlM (\(mb_most_recent_ran, acc) arg -> do
+mkRANs :: [(UrTy ())] -> [Exp1] -> PassM [(Var, [()], Ty1, Exp1)]
+mkRANs ranTys needRANsExp =
+  snd <$> foldlM (\(mb_most_recent_ran, acc) (arg, ranTy) -> do
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
           let rhs = case arg of
@@ -310,8 +318,8 @@ mkRANs needRANsExp =
                       FloatE{}  -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy FloatTy)))
                       LitSymE{} -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy SymTy)))
                       oth -> error $ "addRANExp: Expected trivial expression, got: " ++ sdoc oth
-          return (Just i, acc ++ [(i,[],CursorTy, rhs)]))
-  (Nothing, []) needRANsExp
+          return (Just i, acc ++ [(i,[],ranTy, rhs)]))
+  (Nothing, []) (zip needRANsExp ranTys)
 
 --------------------------------------------------------------------------------
 
