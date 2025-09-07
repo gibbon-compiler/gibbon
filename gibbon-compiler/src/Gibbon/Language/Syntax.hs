@@ -14,7 +14,7 @@
 module Gibbon.Language.Syntax
   (
     -- * Datatype definitions
-    DDefs, TyCon, Tag, IsBoxed, DDef(..)
+    DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
@@ -83,6 +83,13 @@ type Tag     = Word8
 
 type IsBoxed = Bool
 
+
+data MemoryLayout = 
+    FullyFactored
+  | Linear
+  | Mixed -- V.S this is not implemented but it would be nice to support mixed layouts.
+    deriving (Read, Show, Eq, Ord, Out, NFData, Generic)
+
 -- | Data type definitions.
 --
 -- Monomorphism: In the extreme case we can strip packed datatypes of
@@ -96,7 +103,9 @@ type IsBoxed = Bool
 -- fields.
 data DDef a = DDef { tyName   :: Var
                    , tyArgs   :: [TyVar]
-                   , dataCons :: [(DataCon,[(IsBoxed,a)])] }
+                   , dataCons :: [(DataCon,[(IsBoxed,a)])]
+                   , memLayout :: MemoryLayout -- | The low level memory layout of the data type
+                    }
   deriving (Read, Show, Eq, Ord, Functor, Generic)
 
 instance NFData a => NFData (DDef a) where

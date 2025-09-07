@@ -31,12 +31,12 @@ freshNames (Prog defs funs main) =
        return $ Prog defs' funs' main'
 
 freshDDef :: DDef Ty0 -> PassM (DDef Ty0)
-freshDDef DDef{tyName,tyArgs,dataCons} = do
+freshDDef DDef{tyName,tyArgs,dataCons,memLayout} = do
   rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tyArgs
   let env :: TyVarEnv Ty0
       env = M.fromList $ zip tyArgs (map TyVar rigid_tyvars)
   dataCons' <- mapM (\(dcon,vs) -> (dcon,) <$> mapM (go (sdoc (dcon,vs)) rigid_tyvars env) vs) dataCons
-  pure (DDef tyName rigid_tyvars dataCons')
+  pure (DDef { tyName = tyName, tyArgs = rigid_tyvars, dataCons= dataCons', memLayout = memLayout})
   where
     go :: String -> [TyVar] -> TyVarEnv Ty0 -> (t, Ty0) -> PassM (t, Ty0)
     go msg bound env (b, ty) = do

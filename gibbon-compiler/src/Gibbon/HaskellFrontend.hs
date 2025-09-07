@@ -154,6 +154,7 @@ data TopLevel
   | HFunDef (FunDef Var Exp0)
   | HMain (Maybe (Exp0, Ty0))
   | HInline Var
+  | MemLayoutTy TyCon MemoryLayout 
   deriving (Show, Eq)
 
 type TopTyEnv = TyEnv Var TyScheme
@@ -170,7 +171,8 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
   imported_progs :: [PassM Prog0] <- mapM (processImport cfg pstate_ref (mod_name : import_route) dir) imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel type_syns funtys) decls
-        let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
+        let (defs,_vars,funs,inlines,main, memlayouts) = foldr classify init_acc toplevels
+            defs' = updateMemoryLayout defs memlayouts
             funs' = foldr (\v acc -> M.update (\fn@(FunDef{funMeta}) -> Just (fn { funMeta = funMeta { funInline = Inline }})) v acc) funs inlines
         imported_progs' <- mapM id imported_progs
         let (defs0,funs0) =
@@ -200,12 +202,12 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
                             ([], []) -> (M.union ddefs defs1,  M.union fundefs funs1)
                             (_x:_xs,_) -> error $ "Conflicting definitions of " ++ show conflicts1 ++ " found in " ++ mod_name
                             (_,_x:_xs) -> error $ "Conflicting definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
-                (defs, funs')
+                (defs', funs')
                 imported_progs'
         pure (Prog defs0 funs0 main)
   pure prog
   where
-    init_acc = (M.empty, M.empty, M.empty, S.empty, Nothing)
+    init_acc = (M.empty, M.empty, M.empty, S.empty, Nothing, M.empty)
     mod_name = moduleName head_mb
 
     moduleName :: Maybe (ModuleHead a) -> String
@@ -213,16 +215,31 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
     moduleName (Just (ModuleHead _ mod_name1 _warnings _exports)) =
       mnameToStr mod_name1
 
-    classify thing (defs,vars,funs,inlines,main) =
+    classify thing (defs,vars,funs,inlines,main, memlayouts) =
       case thing of
-        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, inlines, main)
-        HFunDef f -> (defs, vars, M.insert (funName f) f funs, inlines, main)
+        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, inlines, main, memlayouts)
+        HFunDef f -> (defs, vars, M.insert (funName f) f funs, inlines, main, memlayouts)
         HMain m ->
           case main of
-            Nothing -> (defs, vars, funs, inlines, m)
+            Nothing -> (defs, vars, funs, inlines, m, memlayouts)
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
-        HInline v   -> (defs,vars,funs,S.insert v inlines,main)
+        HInline v   -> (defs,vars,funs,S.insert v inlines,main, memlayouts)
+        MemLayoutTy tycon l -> (defs,vars,funs,inlines,main, M.insert tycon l memlayouts)
+    
+    updateMemoryLayout indefs memlayouts = 
+      let defs'' = M.mapWithKey (\k v -> let tyName = fromVar k
+                                             layout = M.lookup tyName memlayouts
+                                          in case layout of 
+                                                  Just val -> let 
+                                                                v' = v{memLayout=val}
+                                                               in v'  
+                                                  Nothing -> let 
+                                                                v' = v{memLayout=Linear}
+                                                               in v'
+                               ) indefs
+        in defs''
+    
 desugarModule _ _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdlibModules :: [String]
@@ -938,12 +955,20 @@ collectTopLevel type_syns env decl =
     -- 'collectTypeSynonyms'.
     TypeDecl{} -> pure Nothing
 
+    AnnPragma _ annotation -> 
+      case annotation of 
+            TypeAnn _ (Ident _ tycon) (Lit _ (String _ "Factored" _)) -> pure $ Just (MemLayoutTy tycon FullyFactored)
+            TypeAnn _ (Ident _ tycon) (Lit _ (String _ "Linear" _)) -> pure $ Just (MemLayoutTy tycon Linear)
+            _ -> error "Memory Layout not yet supported!"
+
+
     DataDecl _ (DataType _) _ctx decl_head cons _deriving_binds -> do
       let (ty_name,  ty_args) = desugarDeclHead decl_head
           cons' = map (desugarConstr type_syns) cons
       if ty_name `S.member` builtinTys
       then error $ sdoc ty_name ++ " is a built-in type."
-      else pure $ Just $ HDDef (DDef ty_name ty_args cons')
+      -- Default to Linear memory layout but we update it using Ann pragmas if available.
+      else pure $ Just $ HDDef (DDef ty_name ty_args cons' Linear)
 
     -- Reserved for HS.
     PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ _) _binds ->

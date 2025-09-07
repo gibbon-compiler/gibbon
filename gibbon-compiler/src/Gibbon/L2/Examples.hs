@@ -28,7 +28,7 @@ ddtree = fromListDD [DDef (toVar "Tree") []
                       [ ("Leaf",[(False,IntTy)])
                       , ("Node",[ (False,PackedTy "Tree" (Single "l"))
                                 , (False,PackedTy "Tree" (Single "l"))])
-                      ]]
+                      ] Linear]
 
 
 tTypeable :: Exp2
@@ -791,7 +791,7 @@ stree = fromListDD [DDef (toVar "STree") []
                                                 -- for now, 1 is true, 0 is false
                                , (False, PackedTy "STree" (Single "l"))
                                , (False, PackedTy "STree" (Single "l"))])
-                    ]]
+                    ] Linear]
 
 {-
 
@@ -1191,7 +1191,7 @@ ddexpr = fromListDD [DDef (toVar "Expr") []
                       , ("LETE"  , [(False,IntTy),
                                     (False,PackedTy "Expr" (Single "l")),
                                     (False,PackedTy "Expr" (Single "l"))])
-                      ]]
+                      ] Linear]
 
 copyExprFun :: FunDef2
 copyExprFun = FunDef "copyExpr" [ "e700"] copyExprFunTy copyExprFunBod (FunMeta Rec NoInline False)
@@ -1315,7 +1315,7 @@ ddtree' = fromListDD [DDef (toVar "Tree") []
                                    , (False,PackedTy "Tree" (Single "l"))
                                    , (False,PackedTy "Tree" (Single "l"))])
                        , (indirectionTag++"1", [(False,CursorTy)])
-                       ]]
+                       ] Linear]
 
 -- The rightmost function *without* copy-insertion. Gibbon should add and use
 -- indirection pointers to get to the rightmost node of the tree.
@@ -1473,4 +1473,4 @@ ddsnoclist = fromListDD [DDef (toVar "SnocList") []
                          [ ("Nil", [])
                          , ("Snoc" , [(False,PackedTy "SnocList" (Single "l")),
                                       (False,IntTy)])
-                         ]]
+                         ] Linear]

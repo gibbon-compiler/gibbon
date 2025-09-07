@@ -221,15 +221,15 @@ if a thing is a type variable or a data constructor.
      (Ls (A _ "data": A _ tycon  : cs) : rst) -> do
        let tycon' = textToVar tycon
        case cs of
-         [] -> go rst ((DDef tycon' [] []) : dds) fds cds mn
+         [] -> go rst ((DDef tycon' [] [] Linear) : dds) fds cds mn
          (Ls k) : ks ->
            case k of
-             [] -> go rst ((DDef tycon' [] (L.map docasety cs)) : dds) fds cds mn
+             [] -> go rst ((DDef tycon' [] (L.map docasety cs) Linear) : dds) fds cds mn
              (A _ tyvar_or_constr : _) ->
                if isTyVar tyvar_or_constr
                then do let tyargs = L.map (UserTv . getSym) k
-                       go rst (DDef (textToVar tycon) tyargs (L.map docasety ks) : dds) fds cds mn
-               else go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
+                       go rst (DDef (textToVar tycon) tyargs (L.map docasety ks) Linear : dds ) fds cds mn
+               else go rst (DDef (textToVar tycon) [] (L.map docasety cs) Linear : dds) fds cds mn
              _ -> error $ "Unexpected constructor while parsing data: " ++ show k
          _ -> error $ "Unexpected constructors while parsing data: " ++ show cs
 

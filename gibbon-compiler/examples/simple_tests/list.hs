@@ -1,4 +1,6 @@
+
 data List = Cons Int List | Nil 
+{-# ANN type List "Factored" #-}
 
 
 mkList :: Int -> List 
