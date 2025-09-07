@@ -16,7 +16,8 @@ module Gibbon.Language.Syntax
     -- * Datatype definitions
     DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
-  , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
+  , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef, 
+  getCursorTypeForDataCon
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..)
@@ -162,6 +163,30 @@ lkp dds con =
     _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
           ++", in datatypes:\n  "++sdoc dds
 
+getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
+getCursorTypeForDataCon ddefs ddef@DDef{tyName, tyArgs, dataCons, memLayout} =
+  -- remove data constructors introduced by RAN
+  let dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
+                                       then []
+                                       else [e]
+                      ) dataCons
+   in case memLayout of 
+        Linear -> CursorTy 
+        FullyFactored -> 
+          let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
+                                                           c' = foldr (\ty c'' -> case ty of 
+                                                                             PackedTy tycon _ ->
+                                                                                if (toVar tycon) == tyName 
+                                                                                then c'' 
+                                                                                else c'' + 1
+                                                                             CursorTy -> c''
+                                                                             CursorArrayTy _ -> c''
+                                                                             _ -> c'' + 1 
+                                                                      ) c fields
+                                                          in c'
+                               ) 0 dataCons'
+            in CursorArrayTy (numFieldBuffers + 1)
+        _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
 insertDD d = M.insertWith err' (tyName d) d

@@ -669,6 +669,7 @@ getFieldRegFromRegVar (dcon, idx) reg = case reg of
                             SoARv regvar fieldRegs -> case L.lookup (dcon, idx) fieldRegs of 
                                                         Just freg -> freg
                                                         Nothing -> error "getFieldRegFromRegVar: Field location not found!"
+    
 
 -- fromLocVarToRegVar :: LocVar -> RegVar
 -- fromLocVarToRegVar loc = case loc of 

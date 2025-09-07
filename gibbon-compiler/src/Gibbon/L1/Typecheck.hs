@@ -685,9 +685,11 @@ tcExp ddfs env exp =
 
     Ext (StartOfPkdCursor cur) -> do
       ty <- lookupVar env cur exp
-      if isPackedTy ty
-        then pure CursorTy
-        else throwError $ GenericTC "Expected a packed argument" exp
+      case ty of 
+        PackedTy tycon _ -> let dd = lookupDDef ddfs tycon
+                                ranTy = getCursorTypeForDataCon ddfs dd
+                              in pure ranTy
+        _ -> throwError $ GenericTC "Expected a packed argument" exp
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
