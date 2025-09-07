@@ -1283,7 +1283,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let_assign_write_cur <$> LetE (d',[], CursorTy, Ext $ WriteVector write_vector_at rnd' (stripTyLocs el_ty)) <$>
                     go2 marker_added fvarenv' aft_dloc from_rec_end aft_flocs' rst
 
-                _ -> error "TODO: Cursorize: cursorizePackedExp: Not implemented!!"
+                _ -> error $ "TODO: Cursorize: cursorizePackedExp: Ty not implemented!! " ++ show (ty)
 
                 -- -- Write a pointer to a vector
                 -- ListTy el_ty -> do
