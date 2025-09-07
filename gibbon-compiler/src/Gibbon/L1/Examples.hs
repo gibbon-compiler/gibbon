@@ -13,7 +13,7 @@ treeDD :: DDefs (UrTy ())
 treeDD = (fromListDD [DDef "Tree" []
                       [ ("Leaf",[(False,IntTy)])
                       , ("Node",[(False,treeTy)
-                                ,(False,treeTy)])]])
+                                ,(False,treeTy)])] Linear])
 
 mkAdd1Prog :: Exp1 -> Maybe (Exp1, Ty1) -> Prog1
 mkAdd1Prog bod mainExp = Prog treeDD

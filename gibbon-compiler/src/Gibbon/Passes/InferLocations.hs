@@ -276,7 +276,9 @@ convertTyHelperGetLocForField' dcon index nameForLoc = do
 
 convertDDefs :: DDefs Ty1 -> PassM (DDefs Ty2)
 convertDDefs ddefs = traverse f ddefs
-    where f (DDef tyargs n dcs) = do
+    -- VS: TODO, check the layout here instead of making a flag 
+    -- in order to check the layout
+    where f (DDef tyargs n dcs layout) = do
             dflags <- getDynFlags
             let useSoA = gopt Opt_Packed_SoA dflags
             dcs' <- forM dcs $ \(dc,bnds) -> do
@@ -284,7 +286,7 @@ convertDDefs ddefs = traverse f ddefs
                                                ty' <- convertTy ddefs useSoA ty
                                                return (isb, ty')
                              return (dc,bnds')
-            return $ DDef tyargs n dcs'
+            return $ DDef tyargs n dcs' layout
 
 -- Inference algorithm
 --------------------------------------------------------------------------------
