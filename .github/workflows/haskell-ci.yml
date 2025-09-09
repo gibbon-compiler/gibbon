@@ -15,9 +15,6 @@
 name: Haskell-CI
 on:
   - push
-      branches:
-        - main
-        - vidush/soa
   - pull_request
 jobs:
   linux:
@@ -191,7 +188,7 @@ jobs:
           touch cabal.project.local
           echo "packages: ${PKGDIR_gibbon}" >> cabal.project
           echo "package gibbon" >> cabal.project
-          #echo "    ghc-options: -Werror=missing-methods" >> cabal.project
+          echo "    ghc-options: -Werror=missing-methods" >> cabal.project
           cat >> cabal.project <<EOF
           EOF
           $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(gibbon)$/; }' >> cabal.project.local

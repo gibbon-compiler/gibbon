@@ -44,10 +44,6 @@ printContent content =
                 _ = printString n
             in ()
 
-
-
-
-
 gibbon_main = 
 	let content = mkContentText 10
             imageContent = mkContentImage 10

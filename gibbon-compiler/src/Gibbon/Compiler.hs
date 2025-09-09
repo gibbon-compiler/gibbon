@@ -820,7 +820,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 {- VS: This used to be false, why doesn't true work ? -}
+              {- VS: The Argument to simplify loc binds used to be False, why doesn't true work ? -}
+              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               -- l2 <- if gibbon1
               --      then pure l2

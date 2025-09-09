@@ -154,40 +154,25 @@ type Location = Var
 type FieldIndex = Int 
 -- | A data constructor is a String type in the compiler
 type DataCon = String
-
--- | Single: For storing a single location, useful for adding a cursor in a region. 
--- | SoA: A location signature for a structure of arrays representation. 
---        The first location points to a location in the data constructor buffer. 
---        The list includes locations for each field and a tuple storing 
---        information about which data constructor and corresponding index the field 
---        comes from. 
--- TODO: I think the type for an SoA location is not right here 
--- A Location should work for a data constructor buffer 
--- However, imagine if we have a data type definition of 
--- data Foo = A Int List Tree Tree | Leaf
--- here the List would be in its own buffer potentially
--- so we have nesting of SoA locations 
--- Possibly need to change Location in SoA to LocVar, a recursive data type 
--- But for simple data types like data List = Cons Int List | Nil 
--- this should work just fine. 
--- One reason I don't want to make an SoA location recursive is that you might 
--- want to make the level of factoring limited to only depth = 1
--- more factoring than a depth of level one might slow down too much
--- data List2 = Cons2 Int List List2 | Nil2
--- In the SoA representation, it is guaranteed that the data constructors should 
--- Remain in the same buffer. Hence, its fine to have its type as Location instead 
--- of LocVar.
-
-data LocVar = Single Location | SoA Location [((DataCon, FieldIndex), LocVar)]
-                deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
+ 
+data LocVar = 
+              -- | Single: For storing a single location, useful for adding a cursor in a region.  
+              Single Location 
+            | 
+              -- | SoA: A location signature for a structure of arrays representation. 
+              --        The first location points to a location in the data constructor buffer. 
+              --        The list includes locations for each field and a tuple storing 
+              --        information about which data constructor and corresponding index the field 
+              --        comes from.
+              SoA Location [((DataCon, FieldIndex), LocVar)]
+            deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 -- | Abstract region variables.
--- type RegVar = Var
 data RegVar = SingleR Var | SoARv RegVar [((DataCon, FieldIndex), RegVar)]
                 deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 
--- gFreeVars ++ locations ++ region variables
+-- | gFreeVars ++ locations ++ region variables
 data FreeVarsTy = V Var | FL LocVar | R RegVar
         deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
