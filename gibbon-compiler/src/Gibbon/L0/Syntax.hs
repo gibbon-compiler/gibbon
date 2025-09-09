@@ -110,7 +110,7 @@ instance FreeVars (E0Ext l d) where
       PrintPacked _ e1 -> gFreeVars e1
       CopyPacked _ e1  -> gFreeVars e1
       TravPacked _ e1  -> gFreeVars e1
-      Gibbon.L0.Syntax.L _ e1           -> gFreeVars e1
+      L _ e1           -> gFreeVars e1
       LinearExt ext      -> gFreeVars ext
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
@@ -133,7 +133,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       PrintPacked ty e1 -> PrintPacked ty (gSubst old new e1)
       CopyPacked ty e1 -> CopyPacked ty (gSubst old new e1)
       TravPacked ty e1 -> TravPacked ty (gSubst old new e1)
-      Gibbon.L0.Syntax.L p e1   -> Gibbon.L0.Syntax.L p (gSubst old new e1)
+      L p e1   -> L p (gSubst old new e1)
       LinearExt e -> LinearExt (gSubstExt old new e)
 
   gSubstEExt old new ext =
@@ -146,7 +146,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       PrintPacked ty e -> PrintPacked ty $ (gSubstE old new e)
       CopyPacked ty e -> CopyPacked ty $ (gSubstE old new e)
       TravPacked ty e -> TravPacked ty $ (gSubstE old new e)
-      Gibbon.L0.Syntax.L p e    -> Gibbon.L0.Syntax.L p $ (gSubstE old new e)
+      L p e    -> L p $ (gSubstE old new e)
       LinearExt e -> LinearExt (gSubstEExt old new e)
 
 instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
@@ -160,7 +160,7 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       PrintPacked ty e -> PrintPacked ty (gRename env e)
       CopyPacked ty e -> CopyPacked ty (gRename env e)
       TravPacked ty e -> TravPacked ty (gRename env e)
-      Gibbon.L0.Syntax.L p e    -> Gibbon.L0.Syntax.L p (gRename env e)
+      L p e    -> L p (gRename env e)
       LinearExt e -> LinearExt (gRename env e)
     where
       go :: forall a. Renamable a => a -> a
@@ -558,7 +558,7 @@ recoverType ddfs env2 ex =
                          in ProdTy [ty,ty]
             ToLinearE a -> recoverType ddfs env2 a
 
-        Gibbon.L0.Syntax.L _ e    -> recoverType ddfs env2 e
+        L _ e    -> recoverType ddfs env2 e
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0
