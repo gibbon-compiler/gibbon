@@ -345,10 +345,13 @@ placeRegionInwards env scopeSet ex  =
                                          newVals    = map (\key -> M.findWithDefault [] key env) newKeys
                                          tupleList  = zip newKeys newVals
                                          newEnv'    = M.fromList tupleList
-                                     b' <- placeRegionInwards env scopeSet b       -- Recurse on b (Then part)
-                                     c' <- placeRegionInwards env scopeSet c       -- Recurse on c (Else part)
-                                     let (_, a') = dischargeBinds' newEnv' commonVars a
-                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTrace minChatLvl (sdoc (commonVars, keyList, env, newEnv'))-}
+                                         newEnv'' = M.difference env newEnv'
+                                     b' <- placeRegionInwards newEnv' scopeSet b       -- Recurse on b (Then part)
+                                     c' <- placeRegionInwards newEnv' scopeSet c       -- Recurse on c (Else part)
+                                     a' <- placeRegionInwards newEnv' scopeSet a
+                                     let newIf = IfE a' b' c' 
+                                     let (_, newIf') = dischargeBinds' newEnv'' commonVars newIf
+                                     return $ newIf'                             -- Return the new IfE expression {-dbgTrace minChatLvl (sdoc (commonVars, keyList, env, newEnv'))-}
 
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
@@ -363,7 +366,7 @@ placeRegionInwards env scopeSet ex  =
                                         tupleList = zip newKeys newVals
                                         newEnv'   = M.fromList tupleList
                                         in do ex' <- LetE . (v,locs,ty,) <$> placeRegionInwards newEnv' newScope rhs <*> placeRegionInwards newEnv' newScope bod
-                                              let (_, ex'') = dischargeBinds' env (S.fromList free_vars) ex'
+                                              let (_, ex'') = dbgTrace (minChatLvl) "Print env in LetE: " dbgTrace (minChatLvl) (sdoc (v, env, free_vars)) dbgTrace (minChatLvl) "End regionsInwards\n" dischargeBinds' env (S.fromList free_vars) ex'
                                                in return ex''
 
     CaseE scrt brs                -> do

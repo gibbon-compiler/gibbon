@@ -169,3 +169,225 @@ delayExpBody env benv ex = do
     SyncE    -> pure (ex, env)
     MapE{}  -> error $ "threadRegionsExp: TODO MapE"
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
+
+
+collectBoundsCheckExprs :: DelayExprMap -> BoundEnv -> NewL2.Exp2 -> PassM (NewL2.Exp2, DelayExprMap)
+collectBoundsCheckExprs env benv ex = do
+  case ex of
+    AppE f applocs args -> do 
+                           res <- mapM (collectBoundsCheckExprs env benv) args
+                           let args' = map fst res
+                           let envs = map snd res
+                           let env' = mergeDelayExprMaps envs 
+                           return (AppE f applocs args', env')
+    LetE bnd@(_, _, _, rhs) bod -> do
+         case rhs of
+           Ext (BoundsCheck sz bound cur) -> do
+                           let free_vars_in_bound_expr = S.fromList [fromLocVarToFreeVarsTy $ toLocVar cur]
+                           if (S.isSubsetOf free_vars_in_bound_expr benv)
+                           then do
+                            (bod', env') <- collectBoundsCheckExprs env benv bod
+                            return (LetE bnd bod', env')
+                           else do 
+                            let delayBind = BoundsCheckExpr sz bound cur
+                            let env' = M.insert delayBind free_vars_in_bound_expr env
+                            (bod', env'') <- collectBoundsCheckExprs env' benv bod
+                            return (bod', env'')
+           Ext (BoundsCheckVector bounds) -> do
+                           let free_vars_in_bound_expr = S.fromList $ map (\(_, _, cur) -> fromLocVarToFreeVarsTy $ toLocVar cur) bounds
+                           if (S.isSubsetOf free_vars_in_bound_expr benv)
+                            then do
+                              (bod', env') <- collectBoundsCheckExprs env benv bod
+                              return (LetE bnd bod', env')
+                            else do
+                              let delayBind = BoundsCheckVectorExpr bounds
+                              let env' = M.insert delayBind free_vars_in_bound_expr env 
+                              (bod', env'') <- collectBoundsCheckExprs env' benv bod
+                              return (bod', env'') 
+           _ -> do
+               (rhs', env') <- collectBoundsCheckExprs env benv rhs
+               (bod', env'') <- collectBoundsCheckExprs env benv bod
+               return (LetE bnd bod', env'')
+    LetE (v,locs,ty, rhs) bod -> do 
+                                 (rhs', env') <- collectBoundsCheckExprs env benv rhs
+                                 (bod', env'') <- collectBoundsCheckExprs env benv bod
+                                 return (LetE (v,locs,ty, rhs') bod', env'')
+    WithArenaE v e -> do 
+                      (e', env') <- collectBoundsCheckExprs env benv e
+                      return (WithArenaE v e', env')
+    Ext ext ->
+      case ext of
+        AddFixed{} -> return (ex, env)
+        LetLocE loc rhs bod -> do 
+                               (bod', env') <- collectBoundsCheckExprs env benv bod
+                               return (Ext $ LetLocE loc rhs bod', env')
+        LetRegE reg rhs bod -> do 
+                               (bod', env') <- collectBoundsCheckExprs env benv bod
+                               return (Ext $ LetRegE reg rhs bod', env')
+        RetE locs v -> return (ex, env)
+        TagCursor a b -> return (ex, env)
+        LetRegionE r sz ty bod -> do 
+                                  (bod', env') <- collectBoundsCheckExprs env benv bod
+                                  return (Ext $ LetRegionE r sz ty bod', env')
+        LetParRegionE r sz ty bod -> do 
+                                      (bod', env') <- collectBoundsCheckExprs env benv bod
+                                      return (Ext $ LetParRegionE r sz ty bod', env')
+        FromEndE{}    -> return (ex, env)
+        BoundsCheck sz _bound cur -> return (ex, env)
+        IndirectionE{}   -> return (ex, env)
+        GetCilkWorkerNum -> return (ex, env)
+        LetAvail vs bod -> do 
+                            (bod', env') <- collectBoundsCheckExprs env benv bod
+                            return (Ext $ LetAvail vs bod', env')
+        AllocateTagHere{} -> return (ex, env)
+        AllocateScalarsHere{} -> pure (ex, env)
+        SSPush{} -> pure (ex, env)
+        SSPop{} -> pure (ex, env)
+        _ -> pure (ex, env)
+
+    -- Straightforward recursion
+    VarE{}     -> return (ex, env)
+    LitE{}     -> return (ex, env)
+    CharE{}    -> return (ex, env)
+    FloatE{}   -> return (ex, env)
+    LitSymE{}  -> return (ex, env)
+    PrimAppE{} -> return (ex, env)
+    DataConE{} -> return (ex, env)
+    ProjE i e  -> do 
+                  (e', env') <- collectBoundsCheckExprs env benv e
+                  return (ProjE i e', env')
+    IfE a b c  -> do 
+                  (a', env') <- collectBoundsCheckExprs env benv a
+                  (b', env'') <- collectBoundsCheckExprs env benv b
+                  (c', env''') <- collectBoundsCheckExprs env benv c
+                  return (IfE a' b' c', env''')
+    MkProdE ls -> do 
+                  res <- mapM (collectBoundsCheckExprs env benv) ls
+                  let ls' = map fst res
+                  let env' = mergeDelayExprMaps $ map snd res
+                  return (MkProdE ls', env')
+    CaseE scrt mp -> do 
+                     res <- mapM (\(c,args,ae) -> do 
+                                     (ae', env') <- collectBoundsCheckExprs env benv ae
+                                     return ((c,args,ae'), env')) mp
+                     let mp' = map fst res
+                     let env' = mergeDelayExprMaps $ map snd res
+                     return (CaseE scrt mp', env')
+    TimeIt e ty b -> do 
+                     (e', env') <- collectBoundsCheckExprs env benv e
+                     return (TimeIt e' ty b, env')
+    SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
+    SyncE    -> pure (ex, env)
+    MapE{}  -> error $ "threadRegionsExp: TODO MapE"
+    FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
+
+
+collectVarsForBoundsCheck :: S.Set FreeVarsTy -> DelayExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, DelayExprMap)
+collectVarsForBoundsCheck vars env ex = do
+  case ex of
+    AppE f applocs args -> do 
+                           res <- mapM (collectVarsForBoundsCheck vars env) args
+                           let args' = map fst res
+                           let envs = map snd res
+                           let env' = mergeDelayExprMaps envs 
+                           return (AppE f applocs args', env')
+    LetE bnd@(_, _, _, rhs) bod -> do
+         case rhs of
+          --  Ext (BoundsCheck sz bound cur) -> do
+          --                  let free_vars_in_bound_expr = S.fromList [fromLocVarToFreeVarsTy $ toLocVar cur]
+          --                  if (S.isSubsetOf free_vars_in_bound_expr benv)
+          --                  then do
+          --                   (bod', env') <- collectBoundsCheckExprs env benv bod
+          --                   return (LetE bnd bod', env')
+          --                  else do 
+          --                   let delayBind = BoundsCheckExpr sz bound cur
+          --                   let env' = M.insert delayBind free_vars_in_bound_expr env
+          --                   (bod', env'') <- collectBoundsCheckExprs env' benv bod
+          --                   return (bod', env'')
+          --  Ext (BoundsCheckVector bounds) -> do
+          --                  let free_vars_in_bound_expr = S.fromList $ map (\(_, _, cur) -> fromLocVarToFreeVarsTy $ toLocVar cur) bounds
+          --                  if (S.isSubsetOf free_vars_in_bound_expr benv)
+          --                   then do
+          --                     (bod', env') <- collectBoundsCheckExprs env benv bod
+          --                     return (LetE bnd bod', env')
+          --                   else do
+          --                     let delayBind = BoundsCheckVectorExpr bounds
+          --                     let env' = M.insert delayBind free_vars_in_bound_expr env 
+          --                     (bod', env'') <- collectBoundsCheckExprs env' benv bod
+          --                     return (bod', env'') 
+           _ -> do
+               (rhs', env') <- collectVarsForBoundsCheck vars env rhs
+               (bod', env'') <- collectVarsForBoundsCheck vars env bod
+               return (LetE bnd bod', env'')
+    LetE (v,locs,ty, rhs) bod -> do 
+                                 (rhs', env') <- collectVarsForBoundsCheck vars env rhs
+                                 (bod', env'') <- collectVarsForBoundsCheck vars env bod
+                                 return (LetE (v,locs,ty, rhs') bod', env'')
+    WithArenaE v e -> do 
+                      (e', env') <- collectVarsForBoundsCheck vars env e
+                      return (WithArenaE v e', env')
+    Ext ext ->
+      case ext of
+        AddFixed{} -> return (ex, env)
+        LetLocE loc rhs bod -> do 
+                               (bod', env') <- collectBoundsCheckExprs env benv bod
+                               return (Ext $ LetLocE loc rhs bod', env')
+        LetRegE reg rhs bod -> do 
+                               (bod', env') <- collectBoundsCheckExprs env benv bod
+                               return (Ext $ LetRegE reg rhs bod', env')
+        RetE locs v -> return (ex, env)
+        TagCursor a b -> return (ex, env)
+        LetRegionE r sz ty bod -> do 
+                                  (bod', env') <- collectBoundsCheckExprs env benv bod
+                                  return (Ext $ LetRegionE r sz ty bod', env')
+        LetParRegionE r sz ty bod -> do 
+                                      (bod', env') <- collectBoundsCheckExprs env benv bod
+                                      return (Ext $ LetParRegionE r sz ty bod', env')
+        FromEndE{}    -> return (ex, env)
+        BoundsCheck sz _bound cur -> return (ex, env)
+        IndirectionE{}   -> return (ex, env)
+        GetCilkWorkerNum -> return (ex, env)
+        LetAvail vs bod -> do 
+                            (bod', env') <- collectBoundsCheckExprs env benv bod
+                            return (Ext $ LetAvail vs bod', env')
+        AllocateTagHere{} -> return (ex, env)
+        AllocateScalarsHere{} -> pure (ex, env)
+        SSPush{} -> pure (ex, env)
+        SSPop{} -> pure (ex, env)
+        _ -> pure (ex, env)
+
+    -- Straightforward recursion
+    VarE{}     -> return (ex, env)
+    LitE{}     -> return (ex, env)
+    CharE{}    -> return (ex, env)
+    FloatE{}   -> return (ex, env)
+    LitSymE{}  -> return (ex, env)
+    PrimAppE{} -> return (ex, env)
+    DataConE{} -> return (ex, env)
+    ProjE i e  -> do 
+                  (e', env') <- collectBoundsCheckExprs env benv e
+                  return (ProjE i e', env')
+    IfE a b c  -> do 
+                  (a', env') <- collectBoundsCheckExprs env benv a
+                  (b', env'') <- collectBoundsCheckExprs env benv b
+                  (c', env''') <- collectBoundsCheckExprs env benv c
+                  return (IfE a' b' c', env''')
+    MkProdE ls -> do 
+                  res <- mapM (collectBoundsCheckExprs env benv) ls
+                  let ls' = map fst res
+                  let env' = mergeDelayExprMaps $ map snd res
+                  return (MkProdE ls', env')
+    CaseE scrt mp -> do 
+                     res <- mapM (\(c,args,ae) -> do 
+                                     (ae', env') <- collectBoundsCheckExprs env benv ae
+                                     return ((c,args,ae'), env')) mp
+                     let mp' = map fst res
+                     let env' = mergeDelayExprMaps $ map snd res
+                     return (CaseE scrt mp', env')
+    TimeIt e ty b -> do 
+                     (e', env') <- collectBoundsCheckExprs env benv e
+                     return (TimeIt e' ty b, env')
+    SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
+    SyncE    -> pure (ex, env)
+    MapE{}  -> error $ "threadRegionsExp: TODO MapE"
+    FoldE{} -> error $ "threadRegionsExp: TODO FoldE"

@@ -568,7 +568,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
 allFreeVars :: Exp2 -> S.Set FreeVarsTy
 allFreeVars ex =
   case ex of
-    AppE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
+    AppE _ locs args -> S.fromList (map (fromLocArgToFreeVarsTy) locs) `S.union` (S.unions (map allFreeVars args))
     PrimAppE _ args -> (S.unions (map allFreeVars args))
     LetE (v,locs,_,rhs) bod -> (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
                                `S.difference` S.singleton (fromVarToFreeVarsTy v)

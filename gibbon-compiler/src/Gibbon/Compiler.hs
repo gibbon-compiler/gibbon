@@ -96,6 +96,7 @@ import           Gibbon.Passes.AddCastInstructions (addCasts)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Passes.CorrectLocExprs (delayExpr)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
+import           Gibbon.Passes.ReorderLetExprNewL2 (reorderLetExprsL2)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
 import qualified Data.Tree as L2
@@ -837,6 +838,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- l2' <- go "threadRegions"    threadRegions l2'
               l2' <- go "threadRegions2" threadRegions2 l2'
               l2' <- go "delayExprs"  delayExpr l2'
+              --l2' <- go "reorderLetExprs5" reorderLetExprsL2 l2'
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
