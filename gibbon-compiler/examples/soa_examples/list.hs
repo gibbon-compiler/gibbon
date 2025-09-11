@@ -34,9 +34,18 @@ sumList lst = case lst of
                                   in i + sumRst
 
 gibbon_main = let 
+<<<<<<< HEAD:gibbon-compiler/examples/soa_examples/list.hs
 		lst = mkList 100
                 lst' = add1 lst 
 	       in sumList lst'
+=======
+		lst = mkList 20000
+                --lst' = iterate (add1 lst)
+                _ = printPacked lst
+                _ = printsym (quote "NEWLINE")
+                --(val, lst'') = fieldDep lst' 
+	       in sumList lst --() --printPacked lst' --val --sumList lst'
+>>>>>>> f352266b (Hoist BoundsChecking):gibbon-compiler/examples/simple_tests/list.hs
 
 
 
