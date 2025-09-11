@@ -1,9 +1,8 @@
 module Gibbon.Passes.HoistExpressions (hoistBoundsCheckProg) where
 
-import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Foldable ( foldrM, foldlM)
+import Data.Foldable (foldlM)
 
 import Gibbon.Common
 import Gibbon.NewL2.Syntax as NewL2
@@ -19,6 +18,10 @@ data HoistableExpr =   BoundsCheckExpr Int LocArg LocArg
                      | BoundsCheckVectorExpr [(Int, LocArg, LocArg)] 
                      | LetLocExpr LocVar (PreLocExp LocArg) 
                      | LetRegExpr RegVar (PreRegExp LocArg)
+                     | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
+                     | LetRegionExpr Region RegionSize (Maybe RegionType)
+
+
     deriving (Eq, Ord)
 
 -- | Stores all the expressions that can be hoisted to the top of the function
@@ -26,6 +29,16 @@ type HoistAbleExprMap = M.Map HoistableExpr (S.Set FreeVarsTy)
 
 mergeHoistExprMaps :: [HoistAbleExprMap] -> HoistAbleExprMap
 mergeHoistExprMaps = foldr (M.unionWith S.union) M.empty
+
+
+fromLocArgToFreeVarsTy' :: LocArg -> [FreeVarsTy]
+fromLocArgToFreeVarsTy' arg =
+  case arg of
+    Loc lrm        -> [fromLocVarToFreeVarsTy $ lremLoc lrm, fromRegVarToFreeVarsTy $ lremReg lrm]
+    EndWitness _ v -> [fromLocVarToFreeVarsTy v]
+    Reg v _        -> [fromRegVarToFreeVarsTy v]
+    EndOfReg v1 _ v2 -> [fromRegVarToFreeVarsTy v1, fromRegVarToFreeVarsTy v2]
+    EndOfReg_Tagged v -> [fromRegVarToFreeVarsTy v]
 
 collectBoundsCheckExprs :: HoistAbleExprMap -> BoundEnv -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectBoundsCheckExprs env benv ex = do
@@ -39,7 +52,7 @@ collectBoundsCheckExprs env benv ex = do
     LetE bnd@(v, locs, ty, rhs) bod -> do
          case rhs of
            Ext (BoundsCheck sz bound cur) -> do
-                           let free_vars_in_bound_expr = S.fromList [fromLocVarToFreeVarsTy $ toLocVar cur, fromLocArgToFreeVarsTy bound]
+                           let free_vars_in_bound_expr = S.fromList $ concat [fromLocArgToFreeVarsTy' cur, fromLocArgToFreeVarsTy' bound]
                            if (S.isSubsetOf free_vars_in_bound_expr benv)
                            then do
                             (bod', env') <- collectBoundsCheckExprs env benv bod
@@ -50,7 +63,7 @@ collectBoundsCheckExprs env benv ex = do
                             (bod', env'') <- collectBoundsCheckExprs env' benv bod
                             return (bod', env'')
            Ext (BoundsCheckVector bounds) -> do
-                           let free_vars_in_bound_expr = S.fromList $ concatMap (\(_, bound, cur) -> [fromLocArgToFreeVarsTy bound, fromLocVarToFreeVarsTy $ toLocVar cur]) bounds
+                           let free_vars_in_bound_expr = S.fromList $ concatMap (\(_, bound, cur) -> concat [fromLocArgToFreeVarsTy' bound, fromLocArgToFreeVarsTy' cur]) bounds
                            if (S.isSubsetOf free_vars_in_bound_expr benv)
                             then do
                               (bod', env') <- collectBoundsCheckExprs env benv bod
@@ -146,11 +159,17 @@ collectVarsForBoundsCheck vars env ex = do
                            let env' = mergeHoistExprMaps envs 
                            return (AppE f applocs args', env')
     LetE (v, locs, ty, rhs) bod -> do
-         case rhs of
-           _ -> do
-               (rhs', env') <- collectVarsForBoundsCheck vars env rhs
-               (bod', env'') <- collectVarsForBoundsCheck vars env' bod
-               return (LetE (v, locs, ty, rhs') bod', env'')
+        if fromVarToFreeVarsTy v == vars 
+        then do 
+          let delayLetBind = LetExpr (v, locs, ty, rhs)
+              dependentVars = allFreeVars rhs
+              env' = M.insert delayLetBind dependentVars env
+          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+          return (bod', env'')
+        else do
+          (rhs', env') <- collectVarsForBoundsCheck vars env rhs
+          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+          return (LetE (v, locs, ty, rhs') bod', env'')
     WithArenaE v e -> do 
                       (e', env') <- collectVarsForBoundsCheck vars env e
                       return (WithArenaE v e', env')
@@ -183,9 +202,17 @@ collectVarsForBoundsCheck vars env ex = do
                                     return (Ext $ LetRegE reg rhs bod', env')
         RetE{} -> return (ex, env)
         TagCursor{} -> return (ex, env)
-        LetRegionE r sz ty bod -> do 
-                                  (bod', env') <- collectVarsForBoundsCheck vars env bod
-                                  return (Ext $ LetRegionE r sz ty bod', env')
+        LetRegionE r sz ty bod -> do
+                                  if fromRegVarToFreeVarsTy (regionToVar r) == vars
+                                  then do
+                                    let delayLetBind = LetRegionExpr r sz ty
+                                        dependentVars = S.empty 
+                                        env' = M.insert delayLetBind dependentVars env
+                                    (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+                                    return (bod', env'')
+                                  else do 
+                                    (bod', env') <- collectVarsForBoundsCheck vars env bod
+                                    return (Ext $ LetRegionE r sz ty bod', env')
         LetParRegionE r sz ty bod -> do 
                                       (bod', env') <- collectVarsForBoundsCheck vars env bod
                                       return (Ext $ LetParRegionE r sz ty bod', env')
@@ -242,18 +269,18 @@ collectVarsForBoundsCheck vars env ex = do
 
 freeVarsInLocExp :: LocExp -> S.Set FreeVarsTy
 freeVarsInLocExp expr = case expr of
-                    StartOfRegionLE _ -> S.empty
-                    AfterConstantLE _ loc -> S.singleton (fromLocArgToFreeVarsTy loc)
-                    AfterVariableLE v loc _ -> S.fromList [(fromVarToFreeVarsTy v), (fromLocArgToFreeVarsTy loc)]
+                    StartOfRegionLE r -> S.singleton $ fromRegVarToFreeVarsTy (regionToVar r)
+                    AfterConstantLE _ loc -> S.fromList (fromLocArgToFreeVarsTy' loc)
+                    AfterVariableLE v loc _ -> S.fromList $ concat [[fromVarToFreeVarsTy v], (fromLocArgToFreeVarsTy' loc)]
                     InRegionLE _ -> S.empty
                     FreeLE -> S.empty
-                    FromEndLE loc -> S.singleton (fromLocArgToFreeVarsTy loc)
-                    GenSoALoc loc flocs -> let env = S.singleton (fromLocArgToFreeVarsTy loc)
-                                               env' = S.fromList $ map (\(_, l) -> fromLocArgToFreeVarsTy l) flocs
+                    FromEndLE loc -> S.fromList (fromLocArgToFreeVarsTy' loc)
+                    GenSoALoc loc flocs -> let env = S.fromList (fromLocArgToFreeVarsTy' loc)
+                                               env' = S.fromList $ concatMap (\(_, l) -> fromLocArgToFreeVarsTy' l) flocs
                                              in S.union env env'
-                    GetDataConLocSoA loc -> S.singleton (fromLocArgToFreeVarsTy loc)
-                    GetFieldLocSoA _ loc -> S.singleton (fromLocArgToFreeVarsTy loc)
-                    AssignLE loc -> S.singleton (fromLocArgToFreeVarsTy loc)
+                    GetDataConLocSoA loc -> S.fromList (fromLocArgToFreeVarsTy' loc)
+                    GetFieldLocSoA _ loc -> S.fromList (fromLocArgToFreeVarsTy' loc)
+                    AssignLE loc -> S.fromList (fromLocArgToFreeVarsTy' loc)
 
 
 hoistBoundsCheckProg :: NewL2.Prog2 -> PassM NewL2.Prog2
@@ -275,31 +302,40 @@ hoistBoundsCheckFun f@FunDef{funTy,funBody} = do
   return $ f {funBody = funBody'}
 
 
-hoistBoundsCheckHelper :: HoistAbleExprMap -> NewL2.Exp2 -> PassM NewL2.Exp2 
-hoistBoundsCheckHelper env l2exp = do
+hoistBoundsCheckHelper :: S.Set HoistableExpr -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, S.Set HoistableExpr) 
+hoistBoundsCheckHelper visited env l2exp = do
                                     let boundCheckExprs = M.toList env
-                                    exp' <- foldrM (\(boundsCheck, dependentVars) expr -> do 
+                                    (exp', visited') <- foldlM (\(expr, vmap) (boundsCheck, dependentVars)  -> do 
                                                   --recursively release all dependent vars
-                                                  (expr', lets) <- foldrM (\var (exp'', letenv) -> do
+                                                  (expr', lets) <- foldlM (\(exp'', letenv) var -> do
                                                                                             (exp''', lets) <- collectVarsForBoundsCheck var M.empty exp''
                                                                                             let letenv' = M.union letenv lets
                                                                                             pure (exp''', letenv')
                                                                           ) (expr, M.empty) (S.toList dependentVars)
-                                                  let expr'' = case boundsCheck of 
-                                                                          BoundsCheckExpr i bound cur -> LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheck i bound cur)) expr'
-                                                                          BoundsCheckVectorExpr bounds -> LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheckVector bounds)) expr'
-                                                                          LetLocExpr l rhs -> Ext $ LetLocE l rhs expr'
-                                                                          LetRegExpr r rhs -> Ext $ LetRegE r rhs expr'
+                                                  let expr'' = if S.member boundsCheck vmap 
+                                                               then Nothing 
+                                                               else
+                                                                  case boundsCheck of 
+                                                                          BoundsCheckExpr i bound cur -> Just $ LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheck i bound cur)) expr'
+                                                                          BoundsCheckVectorExpr bounds -> Just $ LetE ("_",[],MkTy2 IntTy, (Ext $ BoundsCheckVector bounds)) expr'
+                                                                          LetLocExpr l rhs -> Just $ Ext $ LetLocE l rhs expr'
+                                                                          LetRegExpr r rhs -> Just $ Ext $ LetRegE r rhs expr'
+                                                                          LetRegionExpr r sz ty -> Just $ Ext $ LetRegionE r sz ty expr'
+                                                                          _ -> error "Did not expect expression!"
                                                   -- release all lets 
                                                   -- call function recursively
-                                                  expr''' <- hoistBoundsCheckHelper lets expr''
-                                                  pure expr'''
-                                         ) l2exp boundCheckExprs
-                                    pure exp'
+                                                  let vmap' = S.insert boundsCheck vmap
+                                                  case expr'' of 
+                                                       Nothing -> pure (expr', vmap')
+                                                       Just expression -> do 
+                                                                          expr''' <- hoistBoundsCheckHelper vmap' lets expression
+                                                                          pure $ expr'''
+                                         ) (l2exp, visited) boundCheckExprs
+                                    pure (exp', visited')
 
 
 hoistBoundsCheck :: NewL2.Exp2 -> BoundEnv -> PassM NewL2.Exp2 
 hoistBoundsCheck inexp benv = do 
                             (exp', m) <- collectBoundsCheckExprs M.empty benv inexp
-                            exp'' <- hoistBoundsCheckHelper m exp'
+                            (exp'', _) <- hoistBoundsCheckHelper S.empty m exp'
                             pure exp''
