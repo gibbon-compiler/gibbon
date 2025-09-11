@@ -30,6 +30,7 @@ import L2.Typecheck
 import L2.Interp
 -- import L0.Specialize
 import InferLocations
+import HoistBoundsCheck
 
 main :: IO ()
 main = defaultMain allTests
@@ -46,6 +47,7 @@ main = defaultMain allTests
                    , l1InterpTests
                    , l2InterpTests
                    -- , specializeTests
+                   , hoistBoundsCheckTests
                    ]
 
 tests :: TestTree
