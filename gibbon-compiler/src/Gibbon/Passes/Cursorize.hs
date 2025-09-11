@@ -45,31 +45,30 @@ E.g.
    
     type Tree = Leaf Int | Node Tree Tree
 
-    add1 :: Tree -> Tree
-    add1 tr =
+    add1Tree :: Tree -> Tree
+    add1Tree tr =
       case tr of
         Leaf n   -> Leaf (n + 1)
-        Node l r -> Node (add1 l) (add1 r)
+        Node l r -> Node (add1Tree l) (add1Tree r)
 
 becomes
 
     -- char*
     type Cursor = Ptr Char
 
-    add1 :: Cursor -> Cursor -> (Cursor, (Cursor, Cursor))
-    add1 lout lin =
-      let tag = readTag lin
-      in case tag of
-           Leaf -> let n  = readInt tag
+    add1Tree :: Cursor -> Cursor -> Cursor -> Cursor -> (Cursor,Cursor,Cursor,(Cursor,Cursor))
+    add1Tree end_rin end_rout lout lin =
+      in case lin of
+           Leaf -> let n = readScalar "Int" (lin + 1) 
                        wt = writeTag lout Leaf
-                       wi = writeInt wt   (n+1)
-                   in (lin + 8, (lout, wi))
+                       wi = writeInt wt (n+1)
+                   in (end_rin, end_rout, lin + 9, (lout, wi))
            Node -> ...
 
 Every packed input becomes a read cursor. And it takes additional output cursors
 for every packed type in the return value. Every packed return value becomes a
 (Cursor,Cursor) i.e (start,end). And it returns additional end_of_read cursors
-if the functions "traverses" it's input (more details in the paer).
+if the functions "traverses" it's input (more details in the paper).
 
     [VS]
     -- SoA representation 
