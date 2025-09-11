@@ -695,10 +695,10 @@ void gib_print_timing_array(GibVector *times) {
     for(GibInt i = 0; i < n; i++) {
         d = gib_vector_nth(times, i);
         if (i == (n-1)) {
-            printf("%f",*d);
+            printf("%e",*d);
         }
         else {
-            printf("%f, ",*d);
+            printf("%e, ",*d);
         }
     }
     printf("]\n");
