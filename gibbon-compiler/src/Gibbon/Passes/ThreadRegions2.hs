@@ -218,7 +218,14 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                                                                       _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
                                                                                 
                                                                                                    ) fieldRegs
-                                                                           in (boundsCheckVector, regInst ++ regInst')
+                                                                              -- Just in case the locations are not present, we release them here
+                                                                              locInst = [LetLocE dcLoc (GetDataConLocSoA (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                                                              locInst' = concatMap (\(d, floc) -> case floc of
+                                                                                                                      SoA _ _ -> [LetLocE (floc) (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                                                                                                      _ -> [LetLocE floc (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                                                                
+                                                                                                   ) fieldLocs
+                                                                           in (boundsCheckVector, locInst ++ locInst' ++ regInst ++ regInst')
                                                                         else 
                                                                           let dcreg = regionToVar dcReg
                                                                               dcEndReg = toEndVRegVar dcreg
