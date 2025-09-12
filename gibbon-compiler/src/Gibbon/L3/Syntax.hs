@@ -69,6 +69,8 @@ data E3Ext loc dec =
   | MakeCursorArray Int [Var] -- ^ Make a Cursor Array from a list of Cursors. Returns a new variable for Cursor Array.
   | IndexCursorArray Var Int                       -- ^ Index into a Cursor Array 
   | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
+  | AddrOfCursor (PreExp E3Ext loc dec)            -- ^ Take the address of a Cursor.
+  | DerefMutCursor Var                             -- ^ Explicitly de-reference a mutable cursor
   | CastPtr Var dec                                -- ^ Cast a pointer to the specified type
   | SubPtr Var Var                                 -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
@@ -81,7 +83,7 @@ data E3Ext loc dec =
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
-  | BoundsCheckVector [(Int, Var, Var)] -- ^ Bytes required, region, write cursor but for a vector of cursors and regions
+  | BoundsCheckVector [(Int, Var, Var, (Var, Var))] -- ^ Bytes required, region, write cursor but for a vector of cursors and regions
   | IndirectionBarrier TyCon (Var,Var,Var,Var)
     -- ^ Do one of the following:
     -- (1) If it's a old-to-young indirection, record it in the remembered set.
@@ -288,11 +290,13 @@ cursorizeTy ty =
     PDictTy k v   -> PDictTy (cursorizeTy k) (cursorizeTy v)
     PackedTy _ l    -> case l of 
                            Single _ -> ProdTy [CursorTy, CursorTy]
-			   SoA _ flds -> ProdTy [CursorArrayTy (1 + length flds), CursorArrayTy (1 + length flds)]
+                           SoA _ flds -> ProdTy [CursorArrayTy (1 + length flds), CursorArrayTy (1 + length flds)]
     VectorTy el_ty' -> VectorTy $ cursorizeTy el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    CursorArrayTy sz -> CursorArrayTy sz 
+    MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy

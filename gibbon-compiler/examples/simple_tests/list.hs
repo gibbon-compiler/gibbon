@@ -36,7 +36,8 @@ sumList lst = case lst of
 gibbon_main = let 
 		lst = mkList 20000
                 lst' = iterate (add1 lst)
-                -- _ = printPacked lst'
+                _ = printPacked lst'
+                _ = printsym (quote "NEWLINE")
                 --(val, lst'') = fieldDep lst' 
 	       in sumList lst' --() --printPacked lst' --val --sumList lst'
 

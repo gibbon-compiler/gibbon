@@ -1001,6 +1001,7 @@ mapPacked fn t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     CursorArrayTy size -> CursorArrayTy size
+    MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
     VectorTy elty -> VectorTy elty
     ListTy elty   -> ListTy elty
@@ -1023,6 +1024,7 @@ constPacked c t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     CursorArrayTy size -> CursorArrayTy size
+    MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
     VectorTy el_ty -> VectorTy (constPacked c el_ty)
     ListTy el_ty -> ListTy (constPacked c el_ty)
