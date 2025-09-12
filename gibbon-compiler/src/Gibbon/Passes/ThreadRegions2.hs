@@ -226,7 +226,8 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     --                                                                             in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
                                     --
                                     --                            ) $ zip fieldLocs' fieldRegs'
-                                    boundsCheckDcon = [(1, dcRegArg, dcLocArg)]
+                                    -- VS: 1 byte for constructor, 1 byte for redirection, 8 bytes for pointer + 2 to be safe
+                                    boundsCheckDcon = [(12, dcRegArg, dcLocArg)]
                                     boundsCheckFields =
                                       concatMap
                                         ( \(((dcon, idx), floc), freg) ->
@@ -235,7 +236,9 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                                   PackedTy {} -> []
                                                   _ ->
                                                     let size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
-                                                     in [(size_of_ty, (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
+                                                     -- VS: 1 byte for redirection, 8 for redirection pointer + 2 to be safe
+                                                     -- Some large offset to be safe
+                                                     in [(2 * (size_of_ty + 11), (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
                                         )
                                         $ zip fieldLocs' fieldRegs'
                                     boundsCheckVector = [("_", [], MkTy2 IntTy, Ext $ BoundsCheckVector (boundsCheckDcon ++ boundsCheckFields))]
