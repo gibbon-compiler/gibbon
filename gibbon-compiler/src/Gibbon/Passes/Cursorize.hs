@@ -761,11 +761,20 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                      Nothing -> case bound_reg of 
                                                                      SingleR vr -> vr
                                                                      SoARv _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
+                                   let bound_var_ty = M.lookup bound_var tenv
+                                   (additional_bnds, bound_var') <- do 
+                                                                  case bound_var_ty of 
+                                                                      Just (MkTy2 MutCursorTy) -> do
+                                                                                            dereference_bound_var <- gensym "deref"
+                                                                                            let bnd = [(dereference_bound_var, [], CursorTy, Ext $ DerefMutCursor bound_var)]
+                                                                                            pure (bnd, dereference_bound_var) 
+                                                                      Nothing -> error "expected variable to have type!"
+                                                                      _ -> pure ([], bound_var)
                                    let cur_loc = toLocVar cur
                                    let cur_var = case (M.lookup (fromLocVarToFreeVarsTy cur_loc) freeVarToVarEnv) of 
                                                      Just v -> v 
                                                      Nothing -> error $ "cursorizeExp: BoundsCheck: unexpected location variable" ++ sdoc cur_loc ++ " " ++ show freeVarToVarEnv
-                                   exp' <- return $ Ext $ L3.BoundsCheck i bound_var cur_var
+                                   exp' <- return $ mkLets additional_bnds <$> Ext $ L3.BoundsCheck i bound_var' cur_var
                                    --exp' <- if isBound cur_var tenv
                                    --       then return $ Ext $ L3.BoundsCheck i bound_var cur_var
                                    --       else do 
@@ -774,7 +783,7 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                    return exp'
         
         Gibbon.NewL2.Syntax.BoundsCheckVector bounds -> do
-                                    bounds' <- mapM (\(i, bound, cur) -> do 
+                                    (bounds', lets) <- foldrM (\(i, bound, cur) (b, l) -> do 
                                                                   let bound_loc = toLocVar bound
                                                                   let bound_reg = fromLocVarToRegVar bound_loc
                                                                   let bound_var = case (M.lookup (fromRegVarToFreeVarsTy bound_reg) freeVarToVarEnv) of 
@@ -782,15 +791,24 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                             Nothing -> case bound_reg of
                                                                                                           SingleR vr -> vr
                                                                                                           SoARv _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
+                                                                  let bound_var_ty = M.lookup bound_var tenv
+                                                                  (additional_bnds, bound_var') <- do 
+                                                                                                    case bound_var_ty of 
+                                                                                                          Just (MkTy2 MutCursorTy) -> do
+                                                                                                              dereference_bound_var <- gensym "deref"
+                                                                                                              let bnd = [(dereference_bound_var, [], CursorTy, Ext $ DerefMutCursor bound_var)]
+                                                                                                              pure (bnd, dereference_bound_var) 
+                                                                                                          Nothing -> error "expected variable to have type!"
+                                                                                                          _ -> pure ([], bound_var)
                                                                   let cur_loc = toLocVar cur
                                                                   let cur_var = case (M.lookup (fromLocVarToFreeVarsTy cur_loc) freeVarToVarEnv) of 
                                                                                                           Just v -> v 
                                                                                                           Nothing -> case cur_loc of
                                                                                                                                     Single vr -> vr
                                                                                                                                     SoA _ _ -> error $ "cursorizeExp: BoundsCheck: unexpected region variable " ++ sdoc bound_loc ++ " " ++ show freeVarToVarEnv
-                                                                  return $ (i, bound_var, cur_var)
-                                                        ) bounds
-                                    exp' <- return $ Ext $ L3.BoundsCheckVector bounds'
+                                                                  return (b ++ [(i, bound_var', cur_var, (bound_var, cur_var))], l ++ additional_bnds)
+                                                        ) ([], []) bounds
+                                    exp' <- return $ mkLets lets <$> Ext $ L3.BoundsCheckVector bounds'
                                     return exp'
 
         FromEndE{} -> error $ "cursorizeExp: TODO FromEndE" ++ sdoc ext
@@ -820,9 +838,23 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         {- Right now i just skip the let region, just recurse on the body-}              
         LetRegE loc rhs bod -> do
           --let loc = fromRegVarToLocVar reg_var
+          -- VS: Hack, assume that these are always Mutable cursors.
+          -- TODO: We should have a pass to decide what we should make mutable
+          -- vs: what we should not not make mutable.
+          -- let ty_of_loc = case loc of 
+          --                   SingleR _ -> CursorTy
+          --                   SoARv _ flds -> CursorArrayTy (1 + length flds)
+          -- let ty2_of_loc :: Ty2 = case loc of 
+          --                           SingleR _ -> MkTy2 CursorTy
+          --                           SoARv _ flds -> MkTy2 $ CursorArrayTy (1 + length flds)
+          -- In case we unpack single regions, we make them mutable since they may 
+          -- be updated by bounds check.
           let ty_of_loc = case loc of 
-                            SingleR _ -> CursorTy
+                            SingleR _ -> MutCursorTy
                             SoARv _ flds -> CursorArrayTy (1 + length flds)
+          let ty2_of_loc :: Ty2 = case loc of 
+                                    SingleR _ -> MkTy2 MutCursorTy
+                                    SoARv _ flds -> MkTy2 $ CursorArrayTy (1 + length flds)
           freeVarToVarEnv' <- do 
                               case loc of 
                                     SingleR l -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
@@ -848,8 +880,11 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                 SoARv _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
               case rhs of
                 -- Discharge bindings that were waiting on 'loc'. 
-                _ ->  mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds) <$>
-                       cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
+                _ -> case ty_of_loc of 
+                           MutCursorTy -> mkLets (bnds' ++ [(locs_var,[],ty_of_loc, Ext $ AddrOfCursor rhs')] ++ bnds) <$>
+                                            cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
+                           _ -> mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds) <$>
+                                            cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
                        -- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
             Left denv' -> (mkLets bnds) <$>
                             cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
@@ -1389,9 +1424,15 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         {- Right now i just skip the let region, just recurse on the body-}              
         LetRegE loc rhs bod -> do
           --let loc = fromRegVarToLocVar reg_var
+          -- let ty_of_loc = case loc of 
+          --                   SingleR _ -> CursorTy
+          --                   SoARv _ flds -> CursorArrayTy (1 + length flds)
           let ty_of_loc = case loc of 
-                            SingleR _ -> CursorTy
+                            SingleR _ -> MutCursorTy
                             SoARv _ flds -> CursorArrayTy (1 + length flds)
+          let ty2_of_loc :: Ty2 = case loc of 
+                                    SingleR _ -> MkTy2 MutCursorTy
+                                    SoARv _ flds -> MkTy2 $ CursorArrayTy (1 + length flds)
           freeVarToVarEnv' <- do 
                               case loc of 
                                     SingleR l -> if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
@@ -1417,8 +1458,13 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                 SoARv _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
               case rhs of
                 -- Discharge bindings that were waiting on 'loc'. 
-                _ -> onDi (mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds)) <$>
-                       go freeVarToVarEnv' (M.insert locs_var (MkTy2 CursorTy) tenv''') senv' bod
+                _ -> do
+                     case ty_of_loc of
+                            MutCursorTy -> onDi (mkLets (bnds' ++ [(locs_var,[],ty_of_loc, Ext $ AddrOfCursor rhs')] ++ bnds)) <$>
+                                            go freeVarToVarEnv' (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
+                            _ -> onDi (mkLets (bnds' ++ [(locs_var,[],ty_of_loc,rhs')] ++ bnds)) <$>
+                                  go freeVarToVarEnv' (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
+          
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
           -- case reg_var of
@@ -1702,7 +1748,8 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
             in if isBound reg_var tenv
             then Right (rhs, [], tenv, senv)
             -- CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg))
-            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],CursorTy,rhs)] denv
+            -- VS: Hack: We always want to get a reference to the region.
+            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],MutCursorTy,rhs)] denv
         GetFieldRegSoA i loc ->
           {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
           let loc_from_locarg = toLocVar loc
@@ -1724,7 +1771,7 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
               rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx) {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
             in if isBound loc_var tenv
             then Right (rhs, [], tenv, senv)
-            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],CursorTy,rhs)] denv
+            else Left$ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name,[],MutCursorTy,rhs)] denv
 
 
 

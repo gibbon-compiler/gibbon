@@ -29,6 +29,7 @@ import           Gibbon.DynFlags
 import           Gibbon.L3.Syntax
 import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as T
+import Language.Haskell.Exts.Build (sym)
 
 -- Generating unpack functions from Packed->Pointer representation:
 -------------------------------------------------------------------------------
@@ -528,6 +529,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               MakeCursorArray len vars -> syms
               IndexCursorArray var idx -> syms
               CastPtr var ty -> syms
+              AddrOfCursor rhs -> go rhs
+              DerefMutCursor{} -> syms
               _ -> error $ "Unexpected Ext: " ++ sdoc ex
           MapE{}         -> syms
           FoldE{}        -> syms
@@ -764,6 +767,16 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                                           , triv sym_tbl "index_into_base_pointer" (LitE idx)] <$>
         tail free_reg sym_tbl bod
 
+    LetE (v, _, _, (Ext (AddrOfCursor i@(Ext (IndexCursorArray cur idx))))) bod -> do
+      --i' <- tail free_reg sym_tbl i  
+      T.LetPrimCallT [(v, T.MutCursorTy)] T.AddrOfCursor [triv sym_tbl "addofexpr" i ] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (DerefMutCursor cur))) bod -> 
+      T.LetPrimCallT [(v, T.CursorTy)] T.DerefMutCursor [triv sym_tbl "deref address" (VarE cur)] <$>
+       tail free_reg sym_tbl bod
+    
+
     LetE (v, _, _, (Ext (CastPtr cur ty))) bod ->
       T.LetPrimCallT [(v, T.fromL3Ty ty)] T.CastPtr [triv sym_tbl "cast pointer" (VarE cur)] <$>
         tail free_reg sym_tbl bod
@@ -856,10 +869,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
 
     LetE(_,_,_, (Ext (BoundsCheckVector bounds))) bod -> do 
-      let args = map (\(i, bound, cur) -> 
+      let args = map (\(i, bound, cur, (b', c')) -> 
                         T.ProdTriv [ T.IntTriv (fromIntegral i)
                               , T.VarTriv bound
                               , T.VarTriv cur
+                              , T.ProdTriv [T.VarTriv b', T.VarTriv c']
                               ]
                      ) bounds
       T.LetPrimCallT [] T.BoundsCheckVector args <$> tail free_reg sym_tbl bod
@@ -1096,6 +1110,7 @@ triv sym_tbl msg ( e0) =
     (MkProdE []) -> T.IntTriv 0
     (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
     (ProjE ix e) -> T.ProjTriv ix (triv sym_tbl "proje argument" e)
+    (Ext (IndexCursorArray cur idx)) -> T.IndexCursorArrayTriv idx (triv sym_tbl "index_into" (VarE cur))
     _ | isTrivial e0 -> error $ "lower/triv: this function is written wrong.  "++
                          "It won't handle the following, which satisfies 'isTriv':\n "++sdoc e0++
                          "\nMessage: "++msg
