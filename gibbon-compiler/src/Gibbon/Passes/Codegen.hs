@@ -31,6 +31,7 @@ import qualified Gibbon.Language as GL
 import           Gibbon.DynFlags
 import           Gibbon.L2.Syntax ( Multiplicity(..) )
 import           Gibbon.L4.Syntax
+import Language.Haskell.Exts (var)
 
 --------------------------------------------------------------------------------
 
@@ -480,6 +481,7 @@ codegenTriv venv (ProdTriv ls) =
 codegenTriv venv (ProjTriv i trv) =
   let field = "field" ++ show i
   in [cexp| $(codegenTriv venv trv).$id:field |]
+codegenTriv venv (IndexCursorArrayTriv idx v) = [cexp| $(codegenTriv venv v)[$int:idx] |]
 
 
 -- Type environment
@@ -1072,11 +1074,17 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    --_new_chunk   <- gensym "new_chunk"
                    --_chunk_start <- gensym "chunk_start"
                    --_chunk_end   <- gensym "chunk_end"
-                   ifConds <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
+                   ifConds <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur), _]) -> 
                                            pure [cexp| ($id:cur + $int:i) > $id:bound |]
                                       ) rnds
-                   ifBody <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
-                                       pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
+                   ifBody <- mapM (\(ProdTriv [_, _, _, ProdTriv [(VarTriv b), (VarTriv c)]]) -> do
+                                       {- TODO: VS: Maybe we should check loc too, but i think we desinged this such that it is 
+                                        not needed! -}
+                                       let bty = M.lookup b venv
+                                       case bty of 
+                                            Just CursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:c, & $id:b); |] ]
+                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:c, $id:b); |] ]
+                                            _ -> error "Did not expect variable type in gib_grow_region!\n"
                                   ) rnds
                    let condExpr = foldr1 (\c1 c2 -> [cexp| $exp:c1 || $exp:c2 |]) ifConds
                    let ifBody' = concat ifBody
@@ -1572,6 +1580,18 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         [ptr] = rnds
                         ptr' = codegenTriv venv ptr
                     return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
+                  
+                 AddrOfCursor -> do
+                    let [(outV, outT)] = bnds
+                        [expr] = rnds 
+                        expr' = codegenTriv venv expr
+                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($exp:expr'); |] ] 
+
+                 DerefMutCursor -> do 
+                    let [(outV, outT)] = bnds
+                        [var] = rnds
+                        var' = codegenTriv venv var
+                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = *($exp:var'); |] ]
 
                  _ -> error $ "codegen: " ++ show prm ++ " unhandled."
 
@@ -1654,6 +1674,7 @@ codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
 codegenTy (CursorArrayTy size) = [cty|typename GibCursor* |]
+codegenTy MutCursorTy = [cty|typename GibCursor* |]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
@@ -1679,6 +1700,7 @@ makeName' SymTy       = "GibSym"
 makeName' BoolTy      = "GibBool"
 makeName' CursorTy    = "GibCursor"
 makeName' (CursorArrayTy{}) = "GibCursorPtr"
+makeName' (MutCursorTy) = "GibMutCursor"
 makeName' TagTyPacked = "GibPackedTag"
 makeName' TagTyBoxed  = "GibBoxedTag"
 makeName' PtrTy       = "GibPtr"
