@@ -160,9 +160,11 @@ tcExp isSoA isPacked ddfs env exp = do
           cty <- lookupVar env cur exp
           ensureEqualTyModCursor isSoA exp cty CursorTy
           return IntTy
-        
+
+        {- VS: Ignoring the types of the arguments to gib grow region -}
+        {- Should we check these? -} 
         BoundsCheckVector bounds -> do
-                                    _ <- mapM (\(_, bound, cur) -> do
+                                    _ <- mapM (\(_, bound, cur, _) -> do
                                                                    rty <- lookupVar env bound exp
                                                                    ensureEqualTyModCursor isSoA exp rty CursorTy
                                                                    cty <- lookupVar env cur exp
@@ -248,6 +250,17 @@ tcExp isSoA isPacked ddfs env exp = do
           vty <- lookupVar env v exp
           ensureEqualTyModCursor isSoA exp vty vty
           return CursorTy
+
+        AddrOfCursor expr -> do
+          ety <- go expr
+          ensureEqualTyModCursor isSoA expr ety CursorTy
+          return MutCursorTy
+
+        DerefMutCursor v -> do
+          vty <- lookupVar env v exp
+          ensureEqualTyModCursor isSoA exp vty MutCursorTy
+          return CursorTy
+
 
         MakeCursorArray _ vars -> do 
           tys <- mapM (\v -> lookupVar env v exp) vars

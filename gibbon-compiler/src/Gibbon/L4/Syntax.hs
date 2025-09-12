@@ -31,6 +31,7 @@ import           Gibbon.Common
 import qualified Gibbon.Language  as L
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L3.Syntax (E3Ext(DerefMutCursor))
 
 
 --------------------------------------------------------------------------------
@@ -61,6 +62,7 @@ data Triv
     | SymTriv Word16    -- ^ An index into the symbol table.
     | ProdTriv [Triv]   -- ^ Tuples
     | ProjTriv Int Triv -- ^ Projections
+    | IndexCursorArrayTriv Int Triv -- ^ Indexing operation
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 typeOfTriv :: M.Map Var Ty -> Triv -> Ty
@@ -73,6 +75,7 @@ typeOfTriv env trv =
     BoolTriv{}  -> BoolTy
     TagTriv{}   -> TagTyPacked
     SymTriv{}   -> SymTy
+    IndexCursorArrayTriv{} -> CursorTy
     ProdTriv ts -> ProdTy (map (typeOfTriv env) ts)
     ProjTriv i trv1 -> case typeOfTriv env trv1 of
                          ProdTy tys -> tys !! i
@@ -201,6 +204,7 @@ data Ty
     | RegionTy -- ^ Region start and a refcount
     | ChunkTy  -- ^ Start and end pointers
     | CursorArrayTy Int
+    | MutCursorTy
 
 -- TODO: Make Ptrs more type safe like this:
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
@@ -369,6 +373,8 @@ data Prim
     | IndexCursorArray 
     | MakeCursorArray
     | CastPtr
+    | AddrOfCursor 
+    | DerefMutCursor
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
@@ -449,6 +455,7 @@ fromL3Ty ty =
     L.PtrTy      -> PtrTy
     L.CursorTy   -> CursorTy
     L.CursorArrayTy size -> CursorArrayTy size
+    L.MutCursorTy -> MutCursorTy
     -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
     L.VectorTy el_ty  -> VectorTy (fromL3Ty el_ty)
     _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
