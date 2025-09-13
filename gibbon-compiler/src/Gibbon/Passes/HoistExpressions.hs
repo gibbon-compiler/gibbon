@@ -1,4 +1,4 @@
-module Gibbon.Passes.HoistExpressions (hoistBoundsCheckProg) where
+module Gibbon.Passes.HoistExpressions (hoistBoundsCheckProg, hoistBoundsCheck) where
 
 import Data.Foldable (foldlM)
 import qualified Data.Map as M
@@ -130,7 +130,7 @@ collectBoundsCheckExprs env benv ex = do
     MkProdE ls -> do
       res <- mapM (collectBoundsCheckExprs env benv) ls
       let ls' = map fst res
-      let env' = mergeHoistExprMaps $ map snd res
+      let env' = mergeHoistExprMaps $ (map snd res) ++ [env]
       return (MkProdE ls', env')
     CaseE scrt mp -> do
       res <-
@@ -245,7 +245,7 @@ collectVarsForBoundsCheck vars env ex = do
     MkProdE ls -> do
       res <- mapM (collectVarsForBoundsCheck vars env) ls
       let ls' = map fst res
-      let env' = mergeHoistExprMaps $ map snd res
+      let env' = mergeHoistExprMaps $ (map snd res) ++ [env]
       return (MkProdE ls', env')
     CaseE scrt mp -> do
       res <-
