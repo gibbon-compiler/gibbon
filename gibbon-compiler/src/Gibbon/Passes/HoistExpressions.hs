@@ -142,10 +142,19 @@ collectBoundsCheckExprs env benv ex = do
     TimeIt e ty b -> do
       (e', env') <- collectBoundsCheckExprs env benv e
       return (TimeIt e' ty b, env')
-    SpawnE {} -> error "threadRegionsExp: Unbound SpawnE"
+    SpawnE {} -> error "collectBoundsCheckExprs: TODO SpawnE"
     SyncE -> pure (ex, env)
-    MapE {} -> error $ "threadRegionsExp: TODO MapE"
-    FoldE {} -> error $ "threadRegionsExp: TODO FoldE"
+    MapE {} -> error $ "collectBoundsCheckExprs: TODO MapE"
+    FoldE {} -> error $ "collectBoundsCheckExprs: TODO FoldE"
+
+storeHoistableExpr :: FreeVarsTy -> FreeVarsTy -> S.Set FreeVarsTy -> HoistableExpr -> HoistAbleExprMap -> (HoistAbleExprMap, Bool)
+storeHoistableExpr v1 v2 dependentVars b env =
+  if v1 == v2
+    then
+      let delayLetBind = b
+          env' = M.insert delayLetBind dependentVars env
+       in (env', True)
+    else (env, False)
 
 collectVarsForBoundsCheck :: FreeVarsTy -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectVarsForBoundsCheck vars env ex = do
@@ -157,17 +166,15 @@ collectVarsForBoundsCheck vars env ex = do
       let env' = mergeHoistExprMaps envs
       return (AppE f applocs args', env')
     LetE (v, locs, ty, rhs) bod -> do
-      if fromVarToFreeVarsTy v == vars
+      let (env', store) = storeHoistableExpr (fromVarToFreeVarsTy v) vars (allFreeVars rhs) (LetExpr (v, locs, ty, rhs)) env
+      if store
         then do
-          let delayLetBind = LetExpr (v, locs, ty, rhs)
-              dependentVars = allFreeVars rhs
-              env' = M.insert delayLetBind dependentVars env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           return (bod', env'')
         else do
-          (rhs', env') <- collectVarsForBoundsCheck vars env rhs
-          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
-          return (LetE (v, locs, ty, rhs') bod', env'')
+          (rhs', env'') <- collectVarsForBoundsCheck vars env' rhs
+          (bod', env''') <- collectVarsForBoundsCheck vars env'' bod
+          return (LetE (v, locs, ty, rhs') bod', env''')
     WithArenaE v e -> do
       (e', env') <- collectVarsForBoundsCheck vars env e
       return (WithArenaE v e', env')
@@ -175,40 +182,31 @@ collectVarsForBoundsCheck vars env ex = do
       case ext of
         AddFixed {} -> return (ex, env)
         LetLocE loc rhs bod -> do
-          if fromLocVarToFreeVarsTy loc == vars
+          let (env', store) = storeHoistableExpr (fromLocVarToFreeVarsTy loc) vars (freeVarsInLocExp rhs) (LetLocExpr loc rhs) env
+          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+          if store
             then do
-              let delayLetBind = LetLocExpr loc rhs
-                  dependentVars = freeVarsInLocExp rhs
-                  env' = M.insert delayLetBind dependentVars env
-              (bod', env'') <- collectVarsForBoundsCheck vars env' bod
               return (bod', env'')
             else do
-              (bod', env') <- collectVarsForBoundsCheck vars env bod
-              return (Ext $ LetLocE loc rhs bod', env')
+              return (Ext $ LetLocE loc rhs bod', env'')
         LetRegE reg rhs bod -> do
-          if fromRegVarToFreeVarsTy reg == vars
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy reg) vars S.empty (LetRegExpr reg rhs) env
+          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+          if store
             then do
-              let delayLetBind = LetRegExpr reg rhs
-                  dependentVars = S.empty
-                  env' = M.insert delayLetBind dependentVars env
-              (bod', env'') <- collectVarsForBoundsCheck vars env' bod
               return (bod', env'')
             else do
-              (bod', env') <- collectVarsForBoundsCheck vars env bod
-              return (Ext $ LetRegE reg rhs bod', env')
+              return (Ext $ LetRegE reg rhs bod', env'')
         RetE {} -> return (ex, env)
         TagCursor {} -> return (ex, env)
         LetRegionE r sz ty bod -> do
-          if fromRegVarToFreeVarsTy (regionToVar r) == vars
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (regionToVar r)) vars S.empty (LetRegionExpr r sz ty) env
+          (bod', env'') <- collectVarsForBoundsCheck vars env' bod
+          if store
             then do
-              let delayLetBind = LetRegionExpr r sz ty
-                  dependentVars = S.empty
-                  env' = M.insert delayLetBind dependentVars env
-              (bod', env'') <- collectVarsForBoundsCheck vars env' bod
               return (bod', env'')
             else do
-              (bod', env') <- collectVarsForBoundsCheck vars env bod
-              return (Ext $ LetRegionE r sz ty bod', env')
+              return (Ext $ LetRegionE r sz ty bod', env'')
         LetParRegionE r sz ty bod -> do
           (bod', env') <- collectVarsForBoundsCheck vars env bod
           return (Ext $ LetParRegionE r sz ty bod', env')
@@ -261,9 +259,9 @@ collectVarsForBoundsCheck vars env ex = do
       (e', env') <- collectVarsForBoundsCheck vars env e
       return (TimeIt e' ty b, env')
     SyncE -> pure (ex, env)
-    SpawnE {} -> error "threadRegionsExp: Unbound SpawnE"
-    MapE {} -> error $ "threadRegionsExp: TODO MapE"
-    FoldE {} -> error $ "threadRegionsExp: TODO FoldE"
+    SpawnE {} -> error "collectVarsForBoundsCheck: TODO SpawnE"
+    MapE {} -> error $ "collectVarsForBoundsCheck: TODO MapE"
+    FoldE {} -> error $ "collectVarsForBoundsCheck: TODO FoldE"
 
 freeVarsInLocExp :: LocExp -> S.Set FreeVarsTy
 freeVarsInLocExp expr = case expr of
@@ -323,15 +321,13 @@ hoistBoundsCheckHelper visited env l2exp = do
                     LetLocExpr l rhs -> Just $ Ext $ LetLocE l rhs expr'
                     LetRegExpr r rhs -> Just $ Ext $ LetRegE r rhs expr'
                     LetRegionExpr r sz ty -> Just $ Ext $ LetRegionE r sz ty expr'
-                    _ -> error "Did not expect expression!"
+                    _ -> error "hoistBoundsCheckHelper: Did not expect expression!"
           -- release all lets
           -- call function recursively
           let vmap' = S.insert boundsCheck vmap
           case expr'' of
             Nothing -> pure (expr', vmap')
-            Just expression -> do
-              expr''' <- hoistBoundsCheckHelper vmap' lets expression
-              pure $ expr'''
+            Just expression -> hoistBoundsCheckHelper vmap' lets expression
       )
       (l2exp, visited)
       boundCheckExprs
