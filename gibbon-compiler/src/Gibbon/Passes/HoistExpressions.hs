@@ -37,6 +37,10 @@ fromLocArgToFreeVarsTy' arg =
     EndOfReg v1 _ v2 -> [fromRegVarToFreeVarsTy v1, fromRegVarToFreeVarsTy v2]
     EndOfReg_Tagged v -> [fromRegVarToFreeVarsTy v]
 
+-- | In order to move all bounds check expressions, we store them in the env.
+-- In addition, we also need to store all dependent variables the bounds check
+-- depends on in the env.
+-- We reuturn the updated expression and map.
 collectBoundsCheckExprs :: HoistAbleExprMap -> BoundEnv -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectBoundsCheckExprs env benv ex = do
   case ex of
@@ -147,15 +151,14 @@ collectBoundsCheckExprs env benv ex = do
     MapE {} -> error $ "collectBoundsCheckExprs: TODO MapE"
     FoldE {} -> error $ "collectBoundsCheckExprs: TODO FoldE"
 
+-- | store a expression that needs to be hoisted in the env.
+-- We return the updated map and weather the bind was needed or not
 storeHoistableExpr :: FreeVarsTy -> FreeVarsTy -> S.Set FreeVarsTy -> HoistableExpr -> HoistAbleExprMap -> (HoistAbleExprMap, Bool)
-storeHoistableExpr v1 v2 dependentVars b env =
-  if v1 == v2
-    then
-      let delayLetBind = b
-          env' = M.insert delayLetBind dependentVars env
-       in (env', True)
-    else (env, False)
+storeHoistableExpr v1 v2 dependentVars hoistableExpr env
+  | v1 == v2 = (M.insert hoistableExpr dependentVars env, True)
+  | otherwise = (env, False)
 
+-- | Function that stores all defined vars in the env and returns an expression without the defined variable.
 collectVarsForBoundsCheck :: FreeVarsTy -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectVarsForBoundsCheck vars env ex = do
   case ex of
@@ -296,6 +299,8 @@ hoistBoundsCheckFun f@FunDef {funTy, funBody} = do
   funBody' <- hoistBoundsCheck funBody initBoundEnv
   return $ f {funBody = funBody'}
 
+-- | recursive function to make sure we release all dependencies for a particular hoistable expression.
+-- We return the new expression and updates map (removed binds that were released)
 hoistBoundsCheckHelper :: S.Set HoistableExpr -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, S.Set HoistableExpr)
 hoistBoundsCheckHelper visited env l2exp = do
   let boundCheckExprs = M.toList env
