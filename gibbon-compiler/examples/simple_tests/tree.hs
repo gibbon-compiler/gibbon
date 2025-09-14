@@ -30,7 +30,7 @@ sumTree tr =
 
 gibbon_main = 
    let tree = mkTree 10
-       -- _ = printPacked tree
+       --_ = printPacked tree
        tree' = add1Tree tree 
        --_ =  printPacked tree'
        val = sumTree tree'
@@ -40,4 +40,4 @@ gibbon_main =
        rmost = rightmost tree'
        _ = printint rmost
        _ = printsym (quote ")\n\n")
-     in sumTree tree'
+     in () --sumTree tree
