@@ -745,7 +745,37 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         -- Exactly same as cursorizePackedExp
         LetRegionE reg sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False reg sz
-          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv' lenv  ddfs fundefs denv tenv senv bod
+          let reg_var = regionToVar reg
+          let reg_ty = case reg_var of 
+                            SingleR{} -> MkTy2 CursorTy 
+                            SoARv _ flr -> MkTy2 $ CursorArrayTy (1 + length flr)
+                            
+          reg_var_name <- case (M.lookup (fromRegVarToFreeVarsTy reg_var) freeVarToVarEnv') of 
+                                      Just var -> return var
+                                      Nothing -> do 
+                                                  case reg_var of 
+                                                      SingleR v -> return v 
+                                                      SoARv{} -> do  
+                                                                n <- gensym "region_cursor_ptr"
+                                                                return n
+
+          -- For end of the region 
+          reg_var_name_end <- case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar reg_var)) freeVarToVarEnv') of 
+                                      Just var -> return var
+                                      Nothing -> do 
+                                                  case reg_var of
+                                                      SingleR v -> return $ toEndV v 
+                                                      SoARv{} -> do  
+                                                                n <- gensym "region_cursor_ptr_end"
+                                                                return n
+
+          let freeVarToVarEnv'' = M.insert (fromRegVarToFreeVarsTy reg_var) reg_var_name freeVarToVarEnv'
+          let freeVarToVarEnv''' = M.insert (fromRegVarToFreeVarsTy (toEndVRegVar reg_var)) reg_var_name_end freeVarToVarEnv''
+
+
+          let tenv' = M.insert reg_var_name reg_ty tenv
+          let tenv'' = M.insert reg_var_name_end reg_ty tenv'
+          mkLets (region_lets) <$> cursorizeExp freeVarToVarEnv''' lenv  ddfs fundefs denv tenv'' senv bod
 
         LetParRegionE reg sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True reg sz
@@ -768,7 +798,7 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                             dereference_bound_var <- gensym "deref"
                                                                                             let bnd = [(dereference_bound_var, [], CursorTy, Ext $ DerefMutCursor bound_var)]
                                                                                             pure (bnd, dereference_bound_var) 
-                                                                      Nothing -> error "expected variable to have type!"
+                                                                      Nothing -> error $  "expected variable to have type!: " ++ show bound_var 
                                                                       _ -> pure ([], bound_var)
                                    let cur_loc = toLocVar cur
                                    let cur_var = case (M.lookup (fromLocVarToFreeVarsTy cur_loc) freeVarToVarEnv) of 
@@ -1501,7 +1531,37 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
 
         LetRegionE r sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False r sz
-          onDi (mkLets (region_lets)) <$> go freeVarToVarEnv' tenv senv bod
+          let reg_var = regionToVar r
+          let reg_ty = case reg_var of 
+                            SingleR{} -> MkTy2 CursorTy 
+                            SoARv _ flr -> MkTy2 $ CursorArrayTy (1 + length flr)
+                            
+          reg_var_name <- case (M.lookup (fromRegVarToFreeVarsTy reg_var) freeVarToVarEnv') of 
+                                      Just var -> return var
+                                      Nothing -> do 
+                                                  case reg_var of 
+                                                      SingleR v -> return v 
+                                                      SoARv{} -> do  
+                                                                n <- gensym "region_cursor_ptr"
+                                                                return n
+
+          -- For end of the region 
+          reg_var_name_end <- case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar reg_var)) freeVarToVarEnv') of 
+                                      Just var -> return var
+                                      Nothing -> do 
+                                                  case reg_var of
+                                                      SingleR v -> return $ toEndV v 
+                                                      SoARv{} -> do  
+                                                                n <- gensym "region_cursor_ptr_end"
+                                                                return n
+
+          let freeVarToVarEnv'' = M.insert (fromRegVarToFreeVarsTy reg_var) reg_var_name freeVarToVarEnv'
+          let freeVarToVarEnv''' = M.insert (fromRegVarToFreeVarsTy (toEndVRegVar reg_var)) reg_var_name_end freeVarToVarEnv''
+
+
+          let tenv' = M.insert reg_var_name reg_ty tenv
+          let tenv'' = M.insert reg_var_name_end reg_ty tenv'
+          onDi (mkLets (region_lets)) <$> go freeVarToVarEnv''' tenv'' senv bod
 
         LetParRegionE r sz _ bod -> do
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True r sz
