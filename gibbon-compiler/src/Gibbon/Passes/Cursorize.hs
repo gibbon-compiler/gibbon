@@ -2707,7 +2707,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                    (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))]
 
                           --generate binds for all fields.
-                          binds_flields = L.foldr (\((_, idx), var) (index, res) -> let read_cursor_f = if isIndirectionTag dcon || isRedirectionTag dcon
+                          binds_flields = L.foldl (\(index, res) ((_, idx), var) -> let read_cursor_f = if isIndirectionTag dcon || isRedirectionTag dcon
                                                                                                          then Ext (ReadTaggedCursor (vars_next_fields !! index))
                                                                                                          else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                                                                                         tmpf = tmp_flds !! index          
