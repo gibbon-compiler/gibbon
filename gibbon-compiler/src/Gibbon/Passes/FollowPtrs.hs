@@ -59,6 +59,14 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                               [] funArgs
               let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((indir_ptrloc) : acc) else (loc : acc)) [] (inLocVars funTy)
               let out_locs = outLocVars funTy
+              -- [VS: 09/14/2025]
+              -- In case an output location, that's passed to the function call. 
+              -- for an SoA location, we cannot simply pass this directly. 
+              -- Since we do this by value, we need to update the SoA location, 
+              -- because bounds checking may have updated the value of the location.
+              -- Note that we only need to update the non packed locations + the data constructor buffer.
+              -- Other packed types will be updated by the function that traverses it.
+              
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
                               LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
