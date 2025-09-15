@@ -64,7 +64,7 @@ case_t1 = expected @=? actual
 
 
 case_t2 :: Assertion
-case_t2 = assertBool "Output matches one of the expected variants" $ actual `elem` [expected1, expected2, expected3, expected4]
+case_t2 = actual @=? expected3
   where
     actual = fst $ defaultPackedRunPassM $ hoistBoundsCheck test2 S.empty
 
