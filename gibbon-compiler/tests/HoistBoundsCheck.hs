@@ -64,7 +64,7 @@ case_t1 = expected @=? actual
 
 
 case_t2 :: Assertion
-case_t2 = actual @=? expected3
+case_t2 = expected1 @=? actual
   where
     actual = fst $ defaultPackedRunPassM $ hoistBoundsCheck test2 S.empty
 
