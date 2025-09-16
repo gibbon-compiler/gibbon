@@ -77,6 +77,10 @@ addCastsExp fundef cenv env ex =
                   let cast_ins = Ext $ CastPtr var cursory_ty3
                   let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins)]
                   pure (insts ++ cast_inst, nfcenv, nfenv, nvars ++ [casted_var])
+                MutCursorTy -> do 
+                                name_for_deref <- gensym "deref"
+                                let derefMuteCursor = LetE (name_for_deref, [], CursorTy, Ext $ DerefMutCursor var)
+                                pure (insts ++ [derefMuteCursor], fcenv, fenv, nvars ++ [name_for_deref])
                 _ -> error $ "Unexpected type!" ++ show ex
           )
           ([], cenv, new_env, [])
