@@ -161,7 +161,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | Colobus
+data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | Colobus1 | Colobus2
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -179,13 +179,15 @@ readMode s =
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
-        "colobus" -> Colobus
+        "colobus1" -> Colobus1
+        "colobus2" -> Colobus2
         "mpl" -> MPL
         _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
 modeRunFlags :: Mode -> [String]
-modeRunFlags Colobus  = ["--run", "--packed", "--gibbon1", "--SoA"]
+modeRunFlags Colobus1  = ["--run", "--packed", "--gibbon1", "--SoA"]
+modeRunFlags Colobus2  = ["--run", "--packed", "--no-rcopies", "--no-ran", "--SoA"]
 modeRunFlags Gibbon3  = ["--run", "--packed", "--gen-gc"]
 modeRunFlags Gibbon2  = ["--run", "--packed"]
 modeRunFlags Pointer = ["--run", "--pointer"]
@@ -195,7 +197,8 @@ modeRunFlags MPL = ["--mpl-run"]
 
 -- Must match the flag expected by Gibbon.
 modeExeFlags :: Mode -> [String]
-modeExeFlags Colobus  = ["--to-exe", "--packed", "--gibbon1", "--SoA"]
+modeExeFlags Colobus1  = ["--to-exe", "--packed", "--gibbon1", "--SoA"]
+modeExeFlags Colobus2  = ["--to-exe", "--packed", "--no-rcopies", "--no-ran", "--SoA"]
 modeExeFlags Gibbon3 = ["--to-exe", "--packed", "--gen-gc"]
 modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
@@ -204,7 +207,8 @@ modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
 modeExeFlags MPL = ["--mpl-exe"]
 
 modeFileSuffix :: Mode -> String
-modeFileSuffix Colobus =  "_colobus"
+modeFileSuffix Colobus1 =  "_colobus1"
+modeFileSuffix Colobus2 =  "_colobus2"
 modeFileSuffix Gibbon3  = "_gibbon3"
 modeFileSuffix Gibbon2  = "_gibbon2"
 modeFileSuffix Pointer = "_ptr"
