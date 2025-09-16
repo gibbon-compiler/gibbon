@@ -42,11 +42,9 @@ sumList lst = case lst of
 
 gibbon_main = let 
                 pi = mkPackedInt 10
-                lst = mkList 10
+                lst = mkList 100
                 lst' = add1 lst
-                -- _ = printPacked lst'
-                --(val, lst'') = fieldDep lst'
-               in (sumList lst') --printPacked lst' --val --sumList lst'
+               in (sumList lst')
 
 
 

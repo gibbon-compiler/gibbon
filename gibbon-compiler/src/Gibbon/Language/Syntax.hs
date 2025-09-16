@@ -631,7 +631,9 @@ data UrTy loc
         | CursorArrayTy Int -- ^ An array of cursors for reading or writing multiple cursors. 
                             -- ^ The cursor may point to an unkwown type or to a fraction of a complete value.
                             -- ^ It is a machine pointer that can point to any byte.
-                            -- ^ The Int is the number of cursors in the array. 
+                            -- ^ The Int is the number of cursors in the array.
+        | MutCursorTy -- ^ A reference to a CursorTy. This can be mutated in place.
+                        
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable, Out)
 

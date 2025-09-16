@@ -49,6 +49,18 @@ addCastsExp fundef cenv env ex =
       bod' <- addCastsExp fundef cenv' env' bod
       let ex' = foldr (\expr acc -> expr acc) bod' let_expr
       pure $ ex'
+      
+    LetE (v, locs, ty, rhs@(Ext (AddrOfCursor (Ext (IndexCursorArray _ _)))) ) bod -> do
+      let new_env = extendVEnv v ty env
+      (let_expr, cenv', env') <- case ty of
+        MutCursorTy -> return $ ([LetE (v, locs, ty, rhs)], cenv, new_env) 
+        CursorTy -> error "Did not expect lhs of address of expression to be a cursor."
+        CursorArrayTy _ -> error "Cannot take address of a CursorArray!\n"
+        _ -> error "addCastsExp: Casting expressions others than cursors hot handled!\n"
+      bod' <- addCastsExp fundef cenv' env' bod
+      let ex' = foldr (\expr acc -> expr acc) bod' let_expr
+      pure $ ex'
+
     LetE (v, locs, ty, (Ext (MakeCursorArray len vars))) bod -> do
       let new_env = extendVEnv v ty env
       (new_insts, cenv', env', vars') <-
@@ -65,7 +77,11 @@ addCastsExp fundef cenv env ex =
                   let cast_ins = Ext $ CastPtr var cursory_ty3
                   let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins)]
                   pure (insts ++ cast_inst, nfcenv, nfenv, nvars ++ [casted_var])
-                _ -> error "Unexpected type!"
+                MutCursorTy -> do 
+                                name_for_deref <- gensym "deref"
+                                let derefMuteCursor = LetE (name_for_deref, [], CursorTy, Ext $ DerefMutCursor var)
+                                pure (insts ++ [derefMuteCursor], fcenv, fenv, nvars ++ [name_for_deref])
+                _ -> error $ "Unexpected type!" ++ show ex
           )
           ([], cenv, new_env, [])
           vars
@@ -301,6 +317,11 @@ addCastsExp fundef cenv env ex =
             Nothing -> v
       e' <- go e
       pure (Ext $ AddCursor nv e')
+    Ext (DerefMutCursor v) -> do 
+      let nv = case (M.lookup v cenv) of
+            Just v' -> v' 
+            Nothing -> v
+      pure (Ext $ DerefMutCursor nv)
     Ext (SubPtr a b) -> do
       let na = case (M.lookup a cenv) of
             Just v' -> v'
@@ -343,14 +364,20 @@ addCastsExp fundef cenv env ex =
     Ext (BoundsCheckVector bounds) -> do
       bounds' <-
         mapM
-          ( \(i, a, b) -> do
+          ( \(i, a, b, (a', b')) -> do
               let na = case (M.lookup a cenv) of
                     Just v' -> v'
                     Nothing -> a
               let nb = case (M.lookup b cenv) of
                     Just v' -> v'
                     Nothing -> b
-              return $ (i, na, nb)
+              let na' = case (M.lookup a' cenv) of
+                        Just v' -> v'
+                        Nothing -> a'
+              let nb' = case (M.lookup b' cenv) of
+                        Just v' -> v'
+                        Nothing -> b'
+              return $ (i, na, nb, (na', nb'))
           )
           bounds
       pure $ Ext (BoundsCheckVector bounds')
