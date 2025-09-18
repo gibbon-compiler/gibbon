@@ -3,6 +3,7 @@ module Gibbon.Passes.HoistExpressions (hoistBoundsCheckProg, hoistBoundsCheck) w
 import Data.Foldable (foldlM)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.List as L
 import Gibbon.Common
 import Gibbon.NewL2.Syntax as NewL2
 
@@ -23,10 +24,10 @@ data HoistableExpr
   deriving (Eq, Ord)
 
 -- | Stores all the expressions that can be hoisted to the top of the function
-type HoistAbleExprMap = M.Map HoistableExpr (S.Set FreeVarsTy)
+type HoistAbleExprMap = [(HoistableExpr, (S.Set FreeVarsTy))]
 
 mergeHoistExprMaps :: [HoistAbleExprMap] -> HoistAbleExprMap
-mergeHoistExprMaps = foldr (M.unionWith S.union) M.empty
+mergeHoistExprMaps = L.nub . concat
 
 fromLocArgToFreeVarsTy' :: LocArg -> [FreeVarsTy]
 fromLocArgToFreeVarsTy' arg =
@@ -60,7 +61,7 @@ collectBoundsCheckExprs env benv ex = do
               return (LetE bnd bod', env')
             else do
               let delayBind = BoundsCheckExpr sz bound cur
-              let env' = M.insert delayBind free_vars_in_bound_expr env
+              let env' = env ++ [(delayBind, free_vars_in_bound_expr)]
               (bod', env'') <- collectBoundsCheckExprs env' benv bod
               return (bod', env'')
         Ext (BoundsCheckVector bounds) -> do
@@ -71,7 +72,7 @@ collectBoundsCheckExprs env benv ex = do
               return (LetE bnd bod', env')
             else do
               let delayBind = BoundsCheckVectorExpr bounds
-              let env' = M.insert delayBind free_vars_in_bound_expr env
+              let env' = env ++ [(delayBind , free_vars_in_bound_expr)]
               (bod', env'') <- collectBoundsCheckExprs env' benv bod
               return (bod', env'')
         _ -> do
@@ -155,7 +156,7 @@ collectBoundsCheckExprs env benv ex = do
 -- We return the updated map and weather the bind was needed or not
 storeHoistableExpr :: FreeVarsTy -> FreeVarsTy -> S.Set FreeVarsTy -> HoistableExpr -> HoistAbleExprMap -> (HoistAbleExprMap, Bool)
 storeHoistableExpr v1 v2 dependentVars hoistableExpr env
-  | v1 == v2 = (M.insert hoistableExpr dependentVars env, True)
+  | v1 == v2 = (env ++ [(hoistableExpr, dependentVars)], True)
   | otherwise = (env, False)
 
 -- | Function that stores all defined vars in the env and returns an expression without the defined variable.
@@ -303,7 +304,7 @@ hoistBoundsCheckFun f@FunDef {funTy, funBody} = do
 -- We return the new expression and updates map (removed binds that were released)
 hoistBoundsCheckHelper :: S.Set HoistableExpr -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, S.Set HoistableExpr)
 hoistBoundsCheckHelper visited env l2exp = do
-  let boundCheckExprs = M.toList env
+  let boundCheckExprs = env
   (exp', visited') <-
     foldlM
       ( \(expr, vmap) (boundsCheck, dependentVars) -> do
@@ -311,11 +312,11 @@ hoistBoundsCheckHelper visited env l2exp = do
           (expr', lets) <-
             foldlM
               ( \(exp'', letenv) var -> do
-                  (exp''', lets) <- collectVarsForBoundsCheck var M.empty exp''
-                  let letenv' = M.union letenv lets
+                  (exp''', lets) <- collectVarsForBoundsCheck var [] exp''
+                  let letenv' = mergeHoistExprMaps [letenv, lets]
                   pure (exp''', letenv')
               )
-              (expr, M.empty)
+              (expr, [])
               (S.toList dependentVars)
           let expr'' =
                 if S.member boundsCheck vmap
@@ -340,6 +341,6 @@ hoistBoundsCheckHelper visited env l2exp = do
 
 hoistBoundsCheck :: NewL2.Exp2 -> BoundEnv -> PassM NewL2.Exp2
 hoistBoundsCheck inexp benv = do
-  (exp', m) <- collectBoundsCheckExprs M.empty benv inexp
+  (exp', m) <- collectBoundsCheckExprs [] benv inexp
   (exp'', _) <- hoistBoundsCheckHelper S.empty m exp'
   pure exp''
