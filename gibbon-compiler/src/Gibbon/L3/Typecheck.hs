@@ -162,7 +162,7 @@ tcExp isSoA isPacked ddfs env exp = do
           return IntTy
 
         {- VS: Ignoring the types of the arguments to gib grow region -}
-        {- Should we check these? -} 
+        {- gib_grow_region is not in the IR, we always pass reference to it -} 
         BoundsCheckVector bounds -> do
                                     _ <- mapM (\(_, bound, cur, _) -> do
                                                                    rty <- lookupVar env bound exp
