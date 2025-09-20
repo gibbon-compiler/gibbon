@@ -94,7 +94,7 @@ import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.AddCastInstructions (addCasts)
 import           Gibbon.Passes.Fusion2        (fusion2)
-import           Gibbon.Passes.CorrectLocExprs (delayExpr)
+import           Gibbon.Passes.HoistBoundsCheck (hoistBoundsCheckProg)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
@@ -836,7 +836,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- typechecker doesn't know how to handle.
               -- l2' <- go "threadRegions"    threadRegions l2'
               l2' <- go "threadRegions2" threadRegions2 l2'
-              l2' <- go "delayExprs"  delayExpr l2'
+              l2' <- go "hoistBoundsCheck" hoistBoundsCheckProg l2'
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
