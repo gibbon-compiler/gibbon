@@ -2737,63 +2737,106 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                     -- An indirection or redirection pointer.
                     -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
                     CursorTy -> do
-                      tmp <- dbgTrace (minChatLvl) "Print field_cur: " dbgTrace (minChatLvl) (sdoc (dcur, _field_cur)) dbgTrace (minChatLvl) "End FieldCur\n" gensym "readcursor_indir"
-                      tmp_flds <- mapM (\((dcon, idx), _) -> gensym "readcursor_indir_flds") _field_cur
-                      loc_var <- lookupVariable loc fenv
-                      var_dcon_next <- gensym "dcon_next"
-                      vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
-                      redirection_var_dcon <- gensym "dcon_redir"
-                      redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
-                      --let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
-                      --let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
-                      let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                      if isRedirectionTag dcon
+                      then do
+                        tmp <- dbgTrace (minChatLvl) "Print field_cur: " dbgTrace (minChatLvl) (sdoc (dcur, _field_cur)) dbgTrace (minChatLvl) "End FieldCur\n" gensym "readcursor_indir"
+                        tmp_flds <- mapM (\((dcon, idx), _) -> gensym "readcursor_indir_flds") _field_cur
+                        loc_var <- lookupVariable loc fenv
+                        var_dcon_next <- gensym "dcon_next"
+                        vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
+                        redirection_var_dcon <- gensym "dcon_redir"
+                        redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
+                        --let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                        --let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
+                        let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
                                                       --((loc_var)     , MkTy2 CursorTy),
                                                        (redirection_var_dcon       , MkTy2 CursorTy),
                                                       (toEndV redirection_var_dcon, MkTy2 CursorTy),
                                                        (toTagV redirection_var_dcon, MkTy2 IntTy),
                                                        (toEndFromTaggedV redirection_var_dcon, MkTy2 CursorTy)])
-                                  tenv
-                          read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
-                                        then Ext (ReadTaggedCursor var_dcon_next)
-                                        else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                          -- v is the variable i want to send to the call. 
-                          -- In this case v is the soa variable where all redirections are unpacked.              
-                          binds = [(var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
-                                   (tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                                   ((loc_var)     , [], CursorTy, VarE dcur),
-                                   (redirection_var_dcon       , [], CursorTy, ProjE 0 (VarE tmp)),
-                                   (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
-                                   (toTagV redirection_var_dcon, [], IntTy   , ProjE 2 (VarE tmp)),
-                                   (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))]
+                                    tenv
+                            read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
+                                          then Ext (ReadTaggedCursor var_dcon_next)
+                                          else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                            -- v is the variable i want to send to the call. 
+                            -- In this case v is the soa variable where all redirections are unpacked.              
+                            binds = [(var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                     (tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                     ((loc_var)     , [], CursorTy, VarE dcur),
+                                     (redirection_var_dcon       , [], CursorTy, ProjE 0 (VarE tmp)),
+                                     (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
+                                     (toTagV redirection_var_dcon, [], IntTy   , ProjE 2 (VarE tmp)),
+                                     (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))]
 
-                          --generate binds for all fields.
-                          binds_flields = L.foldl (\(index, res) ((dcon', idx), var) -> let read_cursor_f = if isIndirectionTag dcon || isRedirectionTag dcon
-                                                                                                         then Ext (ReadTaggedCursor (vars_next_fields !! index))
-                                                                                                         else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                                                                            tmpf = tmp_flds !! index
-                                                                                            ty_of_field = (lookupDataCon ddfs dcon') !! idx
-                                                                                          in case ty_of_field of 
-                                                                                              (MkTy2 PackedTy{}) -> let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
-                                                                                                                        in (index + 1, res ++ new_binds)
-                                                                                              (MkTy2 CursorArrayTy{}) -> let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                            --generate binds for all fields.
+                            binds_flields = L.foldl (\(index, res) ((dcon', idx), var) -> let read_cursor_f = if isIndirectionTag dcon || isRedirectionTag dcon
+                                                                                                           then Ext (ReadTaggedCursor (vars_next_fields !! index))
+                                                                                                           else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                                                                                              tmpf = tmp_flds !! index
+                                                                                              ty_of_field = (lookupDataCon ddfs dcon') !! idx
+                                                                                            in case ty_of_field of 
+                                                                                                (MkTy2 PackedTy{}) -> let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                                                          in (index + 1, res ++ new_binds)
+                                                                                                (MkTy2 CursorArrayTy{}) -> let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                                                                in (index + 1, res ++ new_binds)
+                                                                                                _ -> let new_binds = [(vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                                                                        (tmpf     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                                                                        --((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                                                                        ((redirection_var_flds !! index)       , [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy   , ProjE 2 (VarE tmpf)),
+                                                                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))]
                                                                                                                               in (index + 1, res ++ new_binds)
-                                                                                              _ -> let new_binds = [(vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                                                                                      (tmpf     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
-                                                                                                                                      --((loc_var)     , [], CursorTy, VarE dcur),
-                                                                                                                                      ((redirection_var_flds !! index)       , [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                                                                                      (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                                                                                      (toTagV (redirection_var_flds !! index), [], IntTy   , ProjE 2 (VarE tmpf)),
-                                                                                                                                      (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))]
-                                                                                                                            in (index + 1, res ++ new_binds)
 
-                                                 )  (0, []) _field_cur
-                          soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
-                          tenv'' = M.union (M.fromList [ (v, MkTy2 $ CursorArrayTy (1 + length (redirection_var_flds)))
-                                                       ] )
-                                  tenv
-                      bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
-                      return $ mkLets (binds ++ (snd binds_flields) ++ soa_redir_bind) bod
+                                                    )  (0, []) _field_cur
+                            soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
+                            tenv'' = M.union (M.fromList [ (v, MkTy2 $ CursorArrayTy (1 + length (redirection_var_flds)))
+                                                         ] )
+                                   tenv
+                        bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
+                        return $ mkLets (binds ++ (snd binds_flields) ++ soa_redir_bind) bod
+                      else if isIndirectionTag dcon 
+                        then
+                        do
+                          tmp <- gensym "readcursor_indir"
+                          loc_var <- lookupVariable loc fenv
+                          let locs_ty = case (loc) of 
+                                         FL (Single _) -> CursorTy
+                                         FL (SoA _ flds) -> CursorArrayTy (1 + length (flds))
+                                         _ -> error "Expected location!"
 
+                          let locs_ty3 :: Ty3 = case (loc) of 
+                                          FL (Single _) -> CursorTy
+                                          FL (SoA _ flds) -> CursorArrayTy (1 + length (flds))
+                                          _ -> error "Expected location!"
+
+                          --let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                          --let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
+                          var_dcon_next <- gensym "dcon_next"
+
+                          let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                                                           ((loc_var)     , MkTy2 locs_ty),
+                                                           (v       , MkTy2 locs_ty)
+                                                           --(toEndV v, MkTy2 CursorTy),
+                                                           --(toTagV v, MkTy2 IntTy),
+                                                           --(toEndFromTaggedV v, MkTy2 CursorTy)
+                                                           ])
+                                              tenv
+                              read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
+                                            then Ext (ReadTaggedCursor var_dcon_next)
+                                            else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                              binds = [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                        (tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                        (v       , [], CursorTy, ProjE 0 (VarE tmp)),
+                                        -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                        -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                        -- End of region needs to be calculated differently
+                                        -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                        ((loc_var)     , [], locs_ty3, VarE v)
+                                        ]
+                          bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
+                          return $ mkLets binds bod
+                      else error $ "unpackRegularDataCon: cursorty without indirection/redirection."               
 
                     VectorTy el_ty -> do
                       tmp <- gensym "read_vec_tuple"
