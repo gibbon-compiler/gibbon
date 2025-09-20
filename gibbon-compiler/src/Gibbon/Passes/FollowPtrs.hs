@@ -98,7 +98,6 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                                                                                   -- no need to update single location variables
                                                                                   Single{} -> return $ (nl ++ [locvar], bnds)
                                                      ) ([], [])  out_locs
-              
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
                               LetE (callv,endofs,out_ty,AppE funName (in_locs ++ new_out_locs) args) $
@@ -144,24 +143,73 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               -- Get data con loc of scrut (indir_ptrloc)
               -- Bump this up by 8 
               -- Make the new SoA location with the data con loc 
-              -- Field locs will all be the same.
-              let data_con_let = LetLocE (getDconLoc indir_ptrloc) (GetDataConLocSoA indir_ptrloc)
-              let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE 8 ((getDconLoc indir_ptrloc)))
-              let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) indir_ptrloc)]) [] (getAllFieldLocsSoA indir_ptrloc)
+              -- Field locs will all be the same
+              indir_br <- case scrt_loc of 
+                  SoA{} -> do 
+                    let data_con_let = LetLocE (getDconLoc scrt_loc) (GetDataConLocSoA scrt_loc)
+                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE 9 ((getDconLoc scrt_loc)))
+                    let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) scrt_loc)]) [] (getAllFieldLocsSoA scrt_loc)
 
-              let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA indir_ptrloc) ) $
-                              (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
-                              LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
-                              Ext (RetE ret_endofs callv)
-              let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets)
-              let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
-              let indir_br = (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod')
+                    let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA scrt_loc) ) $
+                                 (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
+                                 LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                                 Ext (RetE ret_endofs callv)
+                    let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets)
+                    let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
+                    return $ (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod')
+                  Single{} -> do
+                    let indir_bod = Ext $ LetLocE (jump) (AfterConstantLE 8 (indir_ptrloc)) $
+                            (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
+                            LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                            Ext (RetE ret_endofs callv)
+                    let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
+                    return $ (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod)
+                    
               ----------------------------------------
+              -- [VS: 09/14/2025]
+              -- In case an output location, that's passed to the function call. 
+              -- for an SoA location, we cannot simply pass this directly. 
+              -- Since we do this by value, we need to update the SoA location, 
+              -- because bounds checking may have updated the value of the location.
+              -- Note that we only need to update the non packed locations + the data constructor buffer.
+              -- Other packed types will be updated by the function that traverses it.
+              (new_out_locs, new_loc_bnds) <- foldrM (\locvar (nl, bnds) -> case locvar of 
+                                                                                  SoA dloc flocs -> do 
+                                                                                              -- unpack all locations in the SoA location. 
+                                                                                              let unpack_dcon = LetLocE (singleLocVar dloc) (GetDataConLocSoA locvar)
+                                                                                              let unpack_flds = map (\((dcon, idx), floc) -> do 
+                                                                                                                                              let flet = LetLocE floc (GetFieldLocSoA (dcon, idx) locvar) 
+                                                                                                                                               in flet
+                                                                                                                    ) flocs
+                                                                                              -- make a new name for this loc_var
+                                                                                              new_locvar <- freshCommonLoc "copy" locvar
+                                                                                              let new_don_loc = getDconLoc new_locvar
+                                                                                              -- The data con loc should be unpacked and updated by bounds check. 
+                                                                                              -- from design of the compiler 
+                                                                                              let new_don_let = LetLocE new_don_loc (AfterConstantLE 0 (singleLocVar dloc))
+                                                                                              let new_fld_locs = getAllFieldLocsSoA new_locvar
+                                                                                              new_fld_lets <- foldrM (\((dcon, idx), nfloc) flts -> do 
+                                                                                                                                                let ty = (lookupDataCon ddefs dcon) !! idx
+                                                                                                                                                  in case (ty) of
+                                                                                                                                                            PackedTy{} -> do 
+                                                                                                                                                                  let let_for_fld = LetLocE nfloc (GetFieldLocSoA (dcon, idx) locvar)
+                                                                                                                                                                   in pure $ flts ++ [let_for_fld]
+                                                                                                                                                            _ -> do 
+                                                                                                                                                                  let let_for_fld = LetLocE nfloc (AfterConstantLE 0 (getFieldLoc (dcon, idx) locvar))
+                                                                                                                                                                    in pure $ flts ++ [let_for_fld]
+                                                                                                                                                       ) [] new_fld_locs
+                                                                                              let new_soa_loc_let = LetLocE new_locvar (GenSoALoc new_don_loc new_fld_locs)
+                                                                                              return $ (nl ++ [new_locvar], bnds ++ [unpack_dcon] ++ unpack_flds ++ [new_don_let] ++ new_fld_lets ++ [new_soa_loc_let]) 
+                                                                                         
+                                                                                  -- no need to update single location variables
+                                                                                  Single{} -> return $ (nl ++ [locvar], bnds)
+                                                     ) ([], [])  out_locs
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                             LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                             LetE (callv,endofs,out_ty,AppE funName (in_locs ++ new_out_locs) args) $
                              Ext (RetE endofs callv)
-              let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod)
+              let redir_bod' = foldr (\bnd bod -> Ext $ bnd bod) redir_bod new_loc_bnds
+              let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod')
               ----------------------------------------
               (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
           IfE a b c -> do

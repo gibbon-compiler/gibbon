@@ -39,7 +39,7 @@ id lst = lst
 gibbon_main = let 
 		lst = mkList 100
                 lst' = (add1 lst) 
-	       in () --sumList lst'
+	       in sumList lst'
 
 
 
