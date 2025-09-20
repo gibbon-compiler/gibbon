@@ -40,10 +40,14 @@ sumList lst = case lst of
                                        sumRst = sumList rst
                                      in j + i' + sumRst
 
+id :: List -> List
+id lst = lst
+
+
 gibbon_main = let 
                 pi = mkPackedInt 10
                 lst = mkList 100
-                lst' = add1 lst
+                lst' = id (add1 lst)
                in (sumList lst')
 
 

@@ -687,13 +687,17 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
           wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (NewL2.locsInTy ty)
       bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env' region_locs ran_env indirs redirs bod
-      let boundscheck =
-            let locarg = a'
-                regarg = b'
-                -- bc = boundsCheck ddefs tcon
-                bc = 18
-             in LetE ("_", [], MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)
-      pure $ boundscheck $ LetE (v, locs, ty, (Ext (IndirectionE tcon dcon (a', b') (c', d') cpy))) bod'
+      -- VS: 09/20/2025
+      -- Removing bounds check for now since assuming that the function should do this and may not need this. 
+      -- TODO: this might not be true though
+      --let boundscheck =
+      --      let locarg = a'
+      --          regarg = b'
+      --          -- bc = boundsCheck ddefs tcon
+      --          bc = 18
+      --       in LetE ("_", [], MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)
+      --pure $ boundscheck $ LetE (v, locs, ty, (Ext (IndirectionE tcon dcon (a', b') (c', d') cpy))) bod'
+      pure $ LetE (v, locs, ty, (Ext (IndirectionE tcon dcon (a', b') (c', d') cpy))) bod'
     Ext (StartOfPkdCursor cur) -> do
       let (PackedTy _ loc) = unTy2 (lookupVEnvLocVar (fromVarToFreeVarsTy cur) env2)
       case M.lookup loc pkd_env of

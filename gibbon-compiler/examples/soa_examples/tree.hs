@@ -28,9 +28,12 @@ sumTree tr =
     Leaf n m   -> n
     Node i j k _ l r ll rr -> i + j + k + (sumTree l) + (sumTree r) + (sumTree ll) + (sumTree rr)
 
+id :: Tree -> Tree 
+id tree = tree
+
 gibbon_main = 
-   let tree = mkTree 7
-       tree' = add1Tree tree
+   let tree = id (mkTree 7)
+       tree' = id (add1Tree tree)
        val = sumTree tree'
        _ = printsym (quote "(sum: ")
        _ = printint val 
@@ -38,4 +41,4 @@ gibbon_main =
        rmost = rightmost tree'
        _ = printint rmost
        _ = printsym (quote ")\n\n")
-     in ()
+     in val
