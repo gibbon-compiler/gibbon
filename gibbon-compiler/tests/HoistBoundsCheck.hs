@@ -64,7 +64,7 @@ case_t1 = expected @=? actual
 
 
 case_t2 :: Assertion
-case_t2 = assertBool "Output matches one of the expected variants" $ actual `elem` [expected1, expected2, expected3, expected4]
+case_t2 = expected @=? actual
   where
     actual = fst $ defaultPackedRunPassM $ hoistBoundsCheck test2 S.empty
 
@@ -104,8 +104,8 @@ case_t2 = assertBool "Output matches one of the expected variants" $ actual `ele
           )
           (MkProdE [])
 
-    expected1 :: L2.Exp2
-    expected1 =
+    expected :: L2.Exp2
+    expected =
       Ext
         $ LetRegionE (VarR "r2") Undefined Nothing
         $ Ext
@@ -114,118 +114,6 @@ case_t2 = assertBool "Output matches one of the expected variants" $ actual `ele
         $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
         $ Ext 
         $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
-        $ LetE
-          ( "_",
-            [],
-            MkTy2 IntTy,
-            Ext $
-              BoundsCheckVector 
-              [
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)),
-                  (EndOfReg (SingleR "r1") Output (SingleR "end_r1"))
-                )
-                ,
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l2") (SingleR "r2") (SingleR "end_r2") Output)),
-                  (EndOfReg (SingleR "r2") Output (SingleR "end_r2"))
-                )
-              ]
-          )
-        $ LetE ("b", [], MkTy2 BoolTy, LitE 1)
-        $ IfE
-          (VarE "b")
-          (MkProdE [])
-          (MkProdE [])
-
-    
-    --multiple correct answers here 
-    expected2 :: L2.Exp2
-    expected2 =
-      Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
-        $ Ext
-        $ LetRegionE (VarR "r2") Undefined Nothing
-        $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
-        $ Ext 
-        $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
-        $ LetE
-          ( "_",
-            [],
-            MkTy2 IntTy,
-            Ext $
-              BoundsCheckVector 
-              [
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)),
-                  (EndOfReg (SingleR "r1") Output (SingleR "end_r1"))
-                )
-                ,
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l2") (SingleR "r2") (SingleR "end_r2") Output)),
-                  (EndOfReg (SingleR "r2") Output (SingleR "end_r2"))
-                )
-              ]
-          )
-        $ LetE ("b", [], MkTy2 BoolTy, LitE 1)
-        $ IfE
-          (VarE "b")
-          (MkProdE [])
-          (MkProdE [])
-
-    --multiple correct answers here 
-    expected3 :: L2.Exp2
-    expected3 =
-      Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
-        $ Ext
-        $ LetRegionE (VarR "r2") Undefined Nothing
-        $ Ext 
-        $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
-        $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
-        $ LetE
-          ( "_",
-            [],
-            MkTy2 IntTy,
-            Ext $
-              BoundsCheckVector 
-              [
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)),
-                  (EndOfReg (SingleR "r1") Output (SingleR "end_r1"))
-                )
-                ,
-                (
-                  10,
-                  (Loc (LREM (singleLocVar "l2") (SingleR "r2") (SingleR "end_r2") Output)),
-                  (EndOfReg (SingleR "r2") Output (SingleR "end_r2"))
-                )
-              ]
-          )
-        $ LetE ("b", [], MkTy2 BoolTy, LitE 1)
-        $ IfE
-          (VarE "b")
-          (MkProdE [])
-          (MkProdE [])
-
-    --multiple correct answers here 
-    expected4 :: L2.Exp2
-    expected4 =
-      Ext
-        $ LetRegionE (VarR "r2") Undefined Nothing
-        $ Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
-        $ Ext 
-        $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
-        $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
         $ LetE
           ( "_",
             [],
