@@ -33,19 +33,13 @@ sumList lst = case lst of
 		   Cons i rst -> let sumRst = sumList rst 
                                   in i + sumRst
 
+id :: List -> List 
+id lst = lst
+
 gibbon_main = let 
-<<<<<<< HEAD:gibbon-compiler/examples/soa_examples/list.hs
-		lst = mkList 100
-                lst' = add1 lst 
-	       in sumList lst'
-=======
-		lst = mkList 20000
-                --lst' = iterate (add1 lst)
-                _ = printPacked lst
-                _ = printsym (quote "NEWLINE")
-                --(val, lst'') = fieldDep lst' 
-	       in sumList lst --() --printPacked lst' --val --sumList lst'
->>>>>>> f352266b (Hoist BoundsChecking):gibbon-compiler/examples/simple_tests/list.hs
+				 lst = mkList 100
+              	 lst' = id (add1 lst) 
+	       	    in sumList lst'
 
 
 
