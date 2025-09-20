@@ -74,8 +74,11 @@ sumFloatList lst = case lst of
 			FNil -> 0 
                         FCons x rst -> 1 + (sumFloatList rst)
 
+id :: Tree -> Tree 
+id tree = tree
+
 gibbon_main = 
       let tree = mkTree 5
-          tree' = add1Tree tree
+          tree' = id (add1Tree tree)
        in sumTree tree'
 
