@@ -29,15 +29,13 @@ sumTree tr =
     Node i j k _ l r ll rr -> i + j + k + (sumTree l) + (sumTree r) + (sumTree ll) + (sumTree rr)
 
 gibbon_main = 
-   let tree = mkTree 10
-       -- _ = printPacked tree
-       tree' = add1Tree tree 
-       --_ =  printPacked tree'
+   let tree = mkTree 7
+       tree' = add1Tree tree
        val = sumTree tree'
-       _ = printsym (quote "\n\n(sum: ")
+       _ = printsym (quote "(sum: ")
        _ = printint val 
        _ = printsym (quote ", rightmost: ")
        rmost = rightmost tree'
        _ = printint rmost
        _ = printsym (quote ")\n\n")
-     in sumTree tree'
+     in ()

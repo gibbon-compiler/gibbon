@@ -33,12 +33,13 @@ sumList lst = case lst of
 		   Cons i rst -> let sumRst = sumList rst 
                                   in i + sumRst
 
+id :: List -> List 
+id lst = lst
+
 gibbon_main = let 
-		lst = mkList 20000
-                lst' = iterate (add1 lst)
-                -- _ = printPacked lst'
-                --(val, lst'') = fieldDep lst' 
-	       in sumList lst' --() --printPacked lst' --val --sumList lst'
+		lst = mkList 100
+                lst' = (add1 lst) 
+	       in sumList lst'
 
 
 

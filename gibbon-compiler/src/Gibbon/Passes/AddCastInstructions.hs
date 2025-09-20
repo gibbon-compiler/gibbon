@@ -1,6 +1,6 @@
 module Gibbon.Passes.AddCastInstructions (addCasts) where
 
-import Data.Foldable (foldrM)
+import Data.Foldable (foldrM, foldlM)
 import qualified Data.List as L
 import qualified Data.Map as M
 import Gibbon.Common
@@ -49,6 +49,36 @@ addCastsExp fundef cenv env ex =
       bod' <- addCastsExp fundef cenv' env' bod
       let ex' = foldr (\expr acc -> expr acc) bod' let_expr
       pure $ ex'
+
+    LetE (v, locs, ty, rhs@(VarE v')) bod -> do
+      let new_env = extendVEnv v ty env
+      let tyv' = lookupVEnv v' env
+      (let_expr, cenv', env') <- case (ty == tyv') of
+        True -> return $ ([LetE (v, locs, ty, rhs)], cenv, new_env)
+        False -> do
+          casted_var <- gensym "cast"
+          let ncenv = M.insert v' v cenv
+          let cursory_ty3 :: Ty3 = CursorTy
+          let nenv = extendVEnv casted_var cursory_ty3 new_env
+          let cast_ins = Ext $ CastPtr casted_var ty
+          -- let new_inst = [LetE (v, locs, ty, rhs)] ++ [LetE (casted_var, [], CursorTy, cast_ins)]
+          let new_inst = [LetE (casted_var, locs, CursorTy, rhs)] ++ [LetE (v, [], ty, cast_ins)]
+          pure $ (new_inst, ncenv, nenv)
+      bod' <- addCastsExp fundef cenv' env' bod
+      let ex' = foldr (\expr acc -> expr acc) bod' let_expr
+      pure $ ex'
+      
+    LetE (v, locs, ty, rhs@(Ext (AddrOfCursor (Ext (IndexCursorArray _ _)))) ) bod -> do
+      let new_env = extendVEnv v ty env
+      (let_expr, cenv', env') <- case ty of
+        MutCursorTy -> return $ ([LetE (v, locs, ty, rhs)], cenv, new_env) 
+        CursorTy -> error "Did not expect lhs of address of expression to be a cursor."
+        CursorArrayTy _ -> error "Cannot take address of a CursorArray!\n"
+        _ -> error "addCastsExp: Casting expressions others than cursors hot handled!\n"
+      bod' <- addCastsExp fundef cenv' env' bod
+      let ex' = foldr (\expr acc -> expr acc) bod' let_expr
+      pure $ ex'
+
     LetE (v, locs, ty, (Ext (MakeCursorArray len vars))) bod -> do
       let new_env = extendVEnv v ty env
       (new_insts, cenv', env', vars') <-
@@ -65,7 +95,11 @@ addCastsExp fundef cenv env ex =
                   let cast_ins = Ext $ CastPtr var cursory_ty3
                   let cast_inst = [LetE (casted_var, [], CursorTy, cast_ins)]
                   pure (insts ++ cast_inst, nfcenv, nfenv, nvars ++ [casted_var])
-                _ -> error "Unexpected type!"
+                MutCursorTy -> do 
+                                name_for_deref <- gensym "deref"
+                                let derefMuteCursor = LetE (name_for_deref, [], CursorTy, Ext $ DerefMutCursor var)
+                                pure (insts ++ [derefMuteCursor], fcenv, fenv, nvars ++ [name_for_deref])
+                _ -> error $ "Unexpected type!" ++ show ex
           )
           ([], cenv, new_env, [])
           vars
@@ -188,7 +222,25 @@ addCastsExp fundef cenv env ex =
     CharE {} -> pure ex
     FloatE {} -> pure ex
     LitSymE {} -> pure ex
-    AppE f locs args -> AppE f locs <$> mapM go args
+    AppE f locs args -> do
+      let funTy = lookupFEnv f env
+      let args_zip_ty = zip args (fst funTy ++ [snd funTy])
+      (lets, new_args) <- foldlM (\(l, args') zipped -> case zipped of 
+                                                        (VarE arg, ty) -> do
+                                                            let argTy = lookupVEnv arg env
+                                                            if argTy == ty
+                                                            then
+                                                              return $ (l, args' ++ [VarE arg])
+                                                            else do
+                                                              let new_arg = case (M.lookup arg cenv) of
+                                                                                  Just v' -> VarE v'
+                                                                                  Nothing -> error "TODO : Cast not found in env!!"
+                                                              return $ (l, args' ++ [new_arg])
+                                                        _ -> return $ (l, args' ++ [fst zipped]) 
+                                 ) ([], []) args_zip_ty
+      -- Expecting AppE to be flat, so only variables are present in AppE.
+      return $ AppE f locs new_args
+
     PrimAppE pr args -> PrimAppE pr <$> mapM go args
     IfE a b c -> do
       a' <- go a
@@ -301,6 +353,11 @@ addCastsExp fundef cenv env ex =
             Nothing -> v
       e' <- go e
       pure (Ext $ AddCursor nv e')
+    Ext (DerefMutCursor v) -> do 
+      let nv = case (M.lookup v cenv) of
+            Just v' -> v' 
+            Nothing -> v
+      pure (Ext $ DerefMutCursor nv)
     Ext (SubPtr a b) -> do
       let na = case (M.lookup a cenv) of
             Just v' -> v'
@@ -343,14 +400,20 @@ addCastsExp fundef cenv env ex =
     Ext (BoundsCheckVector bounds) -> do
       bounds' <-
         mapM
-          ( \(i, a, b) -> do
+          ( \(i, a, b, (a', b')) -> do
               let na = case (M.lookup a cenv) of
                     Just v' -> v'
                     Nothing -> a
               let nb = case (M.lookup b cenv) of
                     Just v' -> v'
                     Nothing -> b
-              return $ (i, na, nb)
+              let na' = case (M.lookup a' cenv) of
+                        Just v' -> v'
+                        Nothing -> a'
+              let nb' = case (M.lookup b' cenv) of
+                        Just v' -> v'
+                        Nothing -> b'
+              return $ (i, na, nb, (na', nb'))
           )
           bounds
       pure $ Ext (BoundsCheckVector bounds')
