@@ -33,10 +33,13 @@ sumList lst = case lst of
 		   Cons i rst -> let sumRst = sumList rst 
                                   in i + sumRst
 
+id :: List -> List 
+id lst = lst
+
 gibbon_main = let 
 		lst = mkList 100
-                lst' = add1 lst 
-	       in sumList lst'
+                lst' = (add1 lst) 
+	       in () --sumList lst'
 
 
 

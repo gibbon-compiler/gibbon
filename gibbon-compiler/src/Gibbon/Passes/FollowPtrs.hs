@@ -109,37 +109,59 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               (pure (CaseE scrt (brs ++ [redir_br])))
             else do
               indir_ptrv <- gensym "indr"
-              indir_ptrloc <- gensym "case"
-              jump <- gensym "jump"
+              indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
+              indir_ptrloc <- freshCommonLoc "case" scrt_loc
+              jump <- freshCommonLoc "jump" scrt_loc
               callv <- gensym "call"
               let _effs = arrEffs funTy
-              endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
-              let endofs' = map Single endofs
+              endofs <- mapM (\lr -> case lr of
+                                            EndOf lrm -> do 
+                                                         let loc = lrmLoc lrm 
+                                                         freshCommonLoc "endof" loc
+                              ) (locRets funTy)
+              --let endofs' = map Single endofs
               let ret_endofs = foldr (\(end, (EndOf (LRM loc _ _))) acc ->
                                         if loc == scrt_loc
-                                        then (Single jump) : acc
+                                        then (jump) : acc
                                         else end : acc)
                               []
-                               (zip endofs' (locRets funTy))
+                               (zip endofs (locRets funTy))
               let args = foldr (\v acc -> if v == scrtv
                                           then ((VarE indir_ptrv) : acc)
                                           else (VarE v : acc))
                               [] funArgs
-              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((Single indir_ptrv) : acc) else (loc : acc)) [] (inLocVars funTy)
+              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((indir_ptrloc) : acc) else (loc : acc)) [] (inLocVars funTy)
               let out_locs = outLocVars funTy
               wc <- gensym "wildcard"
-              let indir_bod = Ext $ LetLocE (Single jump) (AfterConstantLE 8 (Single indir_ptrloc)) $
+              -- TODO, VS: the jump location should change
+              -- We need to unpack the SoA location of the scrut
+              -- We only need to do this for the data constructor.
+              -- the assumption is that the SoA cursor will be 
+              -- written after the tag. So its going to be a 
+              -- Cursor Array. We will cast pass this to the
+              -- call a cast should be added automatically.
+              
+              -- Get data con loc of scrut (indir_ptrloc)
+              -- Bump this up by 8 
+              -- Make the new SoA location with the data con loc 
+              -- Field locs will all be the same.
+              let data_con_let = LetLocE (getDconLoc indir_ptrloc) (GetDataConLocSoA indir_ptrloc)
+              let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE 8 ((getDconLoc indir_ptrloc)))
+              let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) indir_ptrloc)]) [] (getAllFieldLocsSoA indir_ptrloc)
+
+              let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA indir_ptrloc) ) $
                               (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
-                              LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
+                              LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
                               Ext (RetE ret_endofs callv)
+              let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets)
               let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
-              let indir_br = (indir_dcon,[(indir_ptrv,(Single indir_ptrloc))],indir_bod)
+              let indir_br = (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod')
               ----------------------------------------
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                             LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
-                             Ext (RetE endofs' callv)
-              let redir_br = (redir_dcon,[(indir_ptrv,(Single indir_ptrloc))],redir_bod)
+                             LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                             Ext (RetE endofs callv)
+              let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod)
               ----------------------------------------
               (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
           IfE a b c -> do
