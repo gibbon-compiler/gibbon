@@ -1362,7 +1362,12 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 CursorTy -> do
                    rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                    after_indirection <- gensym "aft_indirection"
-                   LetE (d',[], CursorTy, Ext $ WriteTaggedCursor aft_dloc rnd') <$>
+                   casted_var <- gensym "cast"
+                   let rnd_var = case rnd' of 
+                                VarE v -> v
+                                _ -> error "Did not expected variable!"
+                   LetE (casted_var, [], CursorTy, Ext $ CastPtr rnd_var CursorTy) <$>
+                    LetE (d',[], CursorTy, Ext $ WriteTaggedCursor aft_dloc (VarE casted_var)) <$>
                     LetE (after_indirection,[], CursorTy, VarE d') <$> --Ext $ AddCursor aft_dloc (L3.LitE 8)
                     go2 marker_added freeVarToVarEnv after_indirection from_rec_end aft_flocs rst
                 
@@ -1587,13 +1592,34 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                         Just var -> var 
             go freeVarToVarEnv tenv senv (DataConE from dcon [VarE locs_var])
           else do
-            start <- gensym "start"
-            end <- gensym "end"
-            return $ Di $
-              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon (((unwrapLocVar . toLocVar) from),((unwrapLocVar . toLocVar) from_reg),((unwrapLocVar . toLocVar) to),((unwrapLocVar . toLocVar) to_reg)))),
-                       (start, [], CursorTy, VarE ((unwrapLocVar . toLocVar) from)),
-                       (end, [], CursorTy, Ext $ AddCursor ((unwrapLocVar . toLocVar) from) (L3.LitE 9))]
-                 (MkProdE [VarE start, VarE end]))
+            case (toLocVar from) of 
+              Single{} -> do
+                start <- gensym "start"
+                end <- gensym "end"
+                let from_var = case M.lookup (fromLocArgToFreeVarsTy from) freeVarToVarEnv of 
+                                               Nothing -> error "Did not find variable for location!"
+                                               Just var -> var
+                let to_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of 
+                                              Nothing -> error "Did not find variable for location!"
+                                              Just var -> var
+                let reg_from_reg = fromLocVarToRegVar (toLocVar from_reg)
+                let reg_to_reg = fromLocVarToRegVar (toLocVar to_reg)
+                let from_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_from_reg) freeVarToVarEnv of 
+                                            Nothing -> error "Did not find variable for location!"
+                                            Just var -> var
+                let to_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_to_reg) freeVarToVarEnv of 
+                                            Nothing -> error "Did not find variable for location!"
+                                            Just var -> var
+                -- VS : [09/20/2025 -- For SoA case, indirection with gc need a bit more thinking]
+                -- One way could be to call indirection barrier seperately on every buffer/region 
+                -- Then follow them seperately for every region in the case.
+                -- For now i'm erroring out but this needs more thought.
+                return $ Di $
+                    (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon ((from_var),(from_reg_var),(to_var),(to_reg_var)))),
+                             (start, [], CursorTy, VarE (from_var)),
+                             (end, [], CursorTy, Ext $ AddCursor (from_var) (L3.LitE 9))]
+                             (MkProdE [VarE start, VarE end]))
+              SoA _ flds -> error "Indirection when GC is enabled is not implemented for SoA! Please turn off the GC!"
 
         AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."
 

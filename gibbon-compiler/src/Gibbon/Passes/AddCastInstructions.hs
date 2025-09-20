@@ -456,6 +456,7 @@ addCastsExp fundef cenv env ex =
     Ext (Assert e) -> do
       e' <- go e
       pure $ Ext $ Assert e'
+    Ext (CastPtr v ty) -> pure ex
     Ext {} -> error $ "addCastsExp : Unexpected instruction " ++ show ex
     MapE {} -> error "addCastsExp: MapE TODO"
     FoldE {} -> error "addCastsExp: FoldE TODO"
