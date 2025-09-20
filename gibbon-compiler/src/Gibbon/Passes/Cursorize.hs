@@ -1348,7 +1348,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let_assign_write_cur <$> LetE (d',[], CursorTy, Ext $ WriteVector write_vector_at rnd' (stripTyLocs el_ty)) <$>
                     go2 marker_added fvarenv' aft_dloc from_rec_end aft_flocs' rst
 
-                _ -> error $ "TODO: Cursorize: cursorizePackedExp: Ty not implemented!! " ++ show (ty)
+                -- _ -> error $ "TODO: Cursorize: cursorizePackedExp: Ty not implemented!! " ++ show (ty)
 
                 -- -- Write a pointer to a vector
                 -- ListTy el_ty -> do
@@ -1356,12 +1356,17 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 --   LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                 --     go2 marker_added d' rst
 
-                -- -- shortcut pointer
-                -- CursorTy -> do
-                --   rnd' <- cursorizeExp freeVarToVarEnv ddfs fundefs denv tenv senv rnd
-                --   LetE (d',[], CursorTy, Ext $ WriteTaggedCursor d rnd') <$>
-                --     go2 marker_added d' rst
-                -- _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty 
+                -- shortcut pointer
+                -- SoA case
+                -- Fix case for indirection/shortcut pointers
+                CursorTy -> do
+                   rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                   after_indirection <- gensym "aft_indirection"
+                   LetE (d',[], CursorTy, Ext $ WriteTaggedCursor aft_dloc rnd') <$>
+                    LetE (after_indirection,[], CursorTy, VarE d') <$> --Ext $ AddCursor aft_dloc (L3.LitE 8)
+                    go2 marker_added freeVarToVarEnv after_indirection from_rec_end aft_flocs rst
+                
+                _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty 
 
 
               
@@ -1576,7 +1581,11 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           if gopt Opt_DisableGC dflags
              -- || (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
              -- [2022.03.02]: ckoparkar:WTH does this hack enable?
-          then go freeVarToVarEnv tenv senv (DataConE from dcon [VarE (((unwrapLocVar . toLocVar)) to)])
+          then do
+            let locs_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of 
+                                        Nothing -> error "Did not find variable for location!"
+                                        Just var -> var 
+            go freeVarToVarEnv tenv senv (DataConE from dcon [VarE locs_var])
           else do
             start <- gensym "start"
             end <- gensym "end"
