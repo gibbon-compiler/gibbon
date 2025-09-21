@@ -683,7 +683,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
 
-      LetE (v, _ls, ty, e1@(AppE f _ls1 _)) e2 -> do
+      LetE (v, _ls, ty, e1@(AppE _f _ls1 _)) e2 -> do
         (ty1,tstate1) <- recur tstatein e1
         ensureEqualTyNoLoc exp ty1 ty
         let zipped = zip _ls _ls1
@@ -874,6 +874,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                         -- get region for the data constructor buffer
                                         let r' = case r of 
                                                     SoAR dreg _ -> dreg
+                                                    _ -> error $ "L2.Typecheck.tcExp: GetDataConLocSoA: Expected SoAR region, got " ++ show r
+
                                         -- LetLocE dconLoc = getDataConLocSoA soa_loc
                                         -- dbgTraceIt "print reg: " dbgTraceIt (sdoc r') dbgTraceIt "end print reg.\n" 
                                         let tstate1 = extendTS loc (Output,True) $ tstatein
@@ -886,7 +888,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                               r <- getRegion exp constrs soa_loc
                                               -- get the region of the field location 
                                               let Just r' = case r of 
-                                                             SoAR dreg fieldRegions -> lookup key fieldRegions
+                                                             SoAR _dreg fieldRegions -> lookup key fieldRegions
+                                                             _ -> error $ "L2.Typecheck.tcExp: GetFieldLocSoA: Expected SoAR region, got " ++ show r
                                               let tstate1 = extendTS loc (Output, True) $ tstatein 
                                               let constrs1 = extendConstrs (InRegionC loc r') $ constrs
                                               (ty, tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
@@ -942,6 +945,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
         -- (ty,tstate1) <- recur tstatein (VarE v)
         -- ensureEqualTy (VarE v) ty CursorTy
         return (ProdTy [], tstatein)
+
+      Ext (LetRegE _ _ _) -> throwError $ GenericTC "LetRegE not handled" exp
+
+      Ext (BoundsCheckVector _) -> throwError $ GenericTC "BoundsCheckVector not handled" exp
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
           checkListElemTy el_ty =
@@ -1098,10 +1105,10 @@ getRegion exp (ConstraintSet cs) l = go $ S.toList cs
 -- | Get the regions mentioned in the location bindings in a function type.
 funRegs :: [LRM] -> RegionSet
 funRegs ((LRM _l r _m):lrms) =
-    let (RegionSet rs) = funRegs lrms
-    in case r of 
-         _ -> RegionSet $ S.insert r rs
-         SoAR _ _ -> error "TODO: Typecheck: implement SoA Region."
+    let
+      (RegionSet rs) = funRegs lrms
+    in
+      RegionSet $ S.insert r rs
 funRegs [] = RegionSet $ S.empty
 
 globalReg :: Region
@@ -1130,7 +1137,7 @@ funTState [] = LocationTypeState $ M.empty
 -- | Look up the type of a variable from the environment
 -- Includes an expression for error reporting.
 lookupVar :: Env2 FreeVarsTy Ty2 -> FreeVarsTy -> Exp -> TcM Ty2
-lookupVar env l exp =
+lookupVar env l _exp =
     case M.lookup l $ vEnv env of
       Nothing -> error $ "L2/Typecheck.hs: lookupVar: Variable not found in env."++ sdoc l
       Just ty -> return ty
@@ -1226,7 +1233,7 @@ ensurePackedLoc exp ty l =
 -- Includes an expression for error reporting.
 ensureDataCon :: Exp -> TyCon -> DataCon -> LocVar -> [Ty2] -> ConstraintSet -> TcM ()
 ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
-                                       Single location -> (go Nothing linit0 tys)
+                                       Single _location -> (go Nothing linit0 tys)
                                           where 
                                             go Nothing linit ((PackedTy dc2 l):tys) = do
                                               ensureAfterConstant exp cs linit l
@@ -1267,13 +1274,13 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                 
                                                                       ) tys  
                                               -- Not self recursive fields
-                                              let unselfTys = L.foldl (\a idx-> a ++ [tys !! idx]
+                                              let _unselfTys = L.foldl (\a idx-> a ++ [tys !! idx]
                                                                                     ) [] unself_idxs
                                               -- Self recursive fields
                                               let selfTys = L.foldl (\a idx -> a ++ [tys !! idx]
                                                                                     ) [] self_idxs
 
-                                              let unselfWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs) unself_idxs
+                                              let _unselfWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs) unself_idxs
                                               -- ensure after Constant with head of selfTys
                                               _ <- do 
                                                   case selfTys of 
@@ -1286,13 +1293,14 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                               _ <- do 
                                                   case selfTys of 
                                                     [] -> return () 
-                                                    x:rst -> case x of 
-                                                               PackedTy _ l@(SoA dcloc' fieldLocs') -> do
+                                                    x:_ -> case x of
+                                                               PackedTy _ (SoA _dcloc' fieldLocs') -> do
                                                                                                         --let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
-                                                                                                        let aliasLocs = L.map (\idx -> case (lookup (dc, idx) fieldLocs) of 
+                                                                                                        let _aliasLocs = L.map (\idx -> case (lookup (dc, idx) fieldLocs) of
                                                                                                                                                           Just l -> getAfterConstantAlias cs l
+                                                                                                                                                          Nothing -> error "enusreDataCon: Did not expect Nothing!"
                                                                                                                                     ) unself_idxs
-                                                                                                        let nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
+                                                                                                        let _nextWriteAtLocs = L.map (\idx -> lookup (dc, idx) fieldLocs') unself_idxs
                                                                                                         -- dbgTraceIt "Print line 1241: " dbgTraceIt (sdoc (aliasLocs)) dbgTraceIt "End\n"
                                                                                                         {- VS typechecking fails? Why is this not working ??? -}
                                                                                                         -- _ <- mapM (\(Just l1, Just l2, ty) -> case ty of 
@@ -1303,6 +1311,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                         --                                           PackedTy{} -> ensureAfterPacked exp cs l1 l2
                                                                                                         --                                           _ -> ensureAfterConstant exp cs l1 l2) (zip3 aliasLocs nextWriteAtLocs unselfTys)
                                                                                                         return ()
+                                                               _ -> error "ensureDataCon: Did not expected unpacked type!"
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()
 

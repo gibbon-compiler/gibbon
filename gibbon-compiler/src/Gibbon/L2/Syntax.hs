@@ -224,9 +224,9 @@ data PreLocExp loc = StartOfRegionLE Region
                    -- | AfterVectorLE (PreLocExp loc) [PreLocExp loc] loc
                      -- Compute new SoA location from an old SoA location
                      -- Not sure this is fully needed 
-								     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer 
-								     -- [PreLocExp loc] -> expressions for arithmetic on each field location 
-								     -- loc, store the old loc, why? -- capture more metadata, also style
+                     -- (PreLocExp loc) -> expression for arithmetic on data constructor buffer
+                     -- [PreLocExp loc] -> expressions for arithmetic on each field location
+                     -- loc, store the old loc, why? -- capture more metadata, also style
   deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 
 
@@ -265,6 +265,8 @@ instance FreeVars (E2Ext l d) where
      AllocateScalarsHere{}  -> S.empty
      SSPush{} -> S.empty
      SSPop{} -> S.empty
+     LetRegE{} -> error "gFreeVars: LetRegE not implemented yet"
+     BoundsCheckVector{} -> error "gFreeVars: BoundsCheckVector not implemented yet"
 
 instance FreeVars LocExp where
   gFreeVars e =
@@ -275,7 +277,7 @@ instance FreeVars LocExp where
       --GetDataConLocSoA loc -> S.fromList $ varsInLocVar loc
       --GetFieldLocSoA _ loc -> S.fromList $ varsInLocVar loc
       --GenSoALoc loc flocs -> S.fromList (varsInLocVar loc) `S.union` (S.fromList $ L.concatMap (\(_, loc) -> varsInLocVar loc) flocs)
-      AfterVariableLE v loc _ -> S.fromList [v]
+      AfterVariableLE v _loc _ -> S.fromList [v]
       _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -299,6 +301,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       AllocateScalarsHere{} -> False
       SSPush{} -> False
       SSPop{} -> False
+      LetRegE{} -> error "isTrivial: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "isTrivial: BoundsCheckVector not implemented yet"
 
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
@@ -321,6 +325,8 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       AllocateScalarsHere{} -> ProdTy []
       SSPush{} -> ProdTy []
       SSPop{} -> ProdTy []
+      LetRegE{} -> error "gRecoverType: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gRecoverType: BoundsCheckVector not implemented yet"
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
@@ -342,6 +348,8 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       AllocateScalarsHere{} -> ProdTy []
       SSPush{} -> ProdTy []
       SSPop{} -> ProdTy []
+      LetRegE{} -> error "gRecoverTypeLoc: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gRecoverTypeLoc: BoundsCheckVector not implemented yet"
 
 instance (Typeable (E2Ext l d),
           Expression (E2Ext l d),
@@ -375,6 +383,8 @@ instance (Typeable (E2Ext l d),
           AllocateScalarsHere{} -> return ([],ex)
           SSPush{} -> return ([],ex)
           SSPop{} -> return ([],ex)
+          LetRegE{} -> error "gFlattenGatherBinds: LetRegE not implemented yet"
+          BoundsCheckVector{} -> error "gFlattenGatherBinds: BoundsCheckVector not implemented yet"
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -401,6 +411,8 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      LetRegE{} -> error "gInlineTrivExt: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gInlineTrivExt: BoundsCheckVector not implemented yet"
 
 
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
@@ -422,6 +434,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      LetRegE{} -> error "gSubstExt: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gSubstExt: BoundsCheckVector not implemented yet"
 
   gSubstEExt old new ext =
     case ext of
@@ -441,6 +455,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      LetRegE{} -> error "gSubstEExt: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gSubstEExt: BoundsCheckVector not implemented yet"
 
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
@@ -461,6 +477,8 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      LetRegE{} -> error "gRename: LetRegE not implemented yet"
+      BoundsCheckVector{} -> error "gRename: BoundsCheckVector not implemented yet"
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
@@ -607,7 +625,6 @@ regionToVar r = case r of
                   VarR  v   -> SingleR v
                   MMapR v   -> SingleR v
                   SoAR reg fieldRegs -> SoARv (regionToVar reg) (L.map (\(k, freg) -> (k, regionToVar freg)) fieldRegs)
-                  _ -> error "L2/Syntax.hs: regionToVar: unexpected case."
 
 getAllRegions :: Region -> [Region]
 getAllRegions r = case r of 
@@ -746,13 +763,13 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
 
 outRegVars :: ArrowTy2 ty2 -> [RegVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
-                                          SoAR rr fieldRegions -> [regionToVar r]
+                                          SoAR _rr _fieldRegions -> [regionToVar r]
                                           _ -> [regionToVar r] 
                       ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [RegVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
-                                                SoAR rr fieldRegions -> [regionToVar r]
+                                                SoAR _rr _fieldRegions -> [regionToVar r]
                                                 _ -> [regionToVar r]
                       ) $ L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
@@ -912,6 +929,8 @@ revertExp ex =
         AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
         SSPush{} -> error "revertExp: TODO SSPush."
         SSPop{} -> error "revertExp: TODO SSPop."
+        LetRegE{} -> error "revertExp: TODO LetRegE"
+        BoundsCheckVector{} -> error "revertExp: TODO BoundsCheckVector"
     MapE{}  -> error $ "revertExp: TODO MapE"
     FoldE{} -> error $ "revertExp: TODO FoldE"
   where
@@ -981,6 +1000,8 @@ occurs w ex =
         AllocateScalarsHere{} -> False
         SSPush{} -> False
         SSPop{} -> False
+        LetRegE{} -> error "occurs: TODO LetRegE"
+        BoundsCheckVector{} -> error "occurs: TODO BoundsCheckVector"
     MapE{}  -> error "occurs: TODO MapE"
     FoldE{} -> error "occurs: TODO FoldE"
   where
@@ -1108,6 +1129,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               SSPop{} -> acc
               StartOfPkdCursor w -> go acc (VarE w)
               TagCursor a b -> go (go acc (VarE a)) (VarE b)
+              LetRegE{} -> error "depList: TODO LetRegE"
+              BoundsCheckVector{} -> error "depList: TODO BoundsCheckVector"
 
       dep :: PreLocExp LocVar -> [FreeVarsTy]
       dep ex =
@@ -1118,6 +1141,10 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           InRegionLE r  -> [fromRegVarToFreeVarsTy (regionToVar r)]
           FromEndLE loc -> [fromLocVarToFreeVarsTy loc]
           FreeLE -> []
+          GenSoALoc{} -> error "dep: TODO GenSoALoc"
+          GetDataConLocSoA{} -> error "dep: TODO GenDataConLocSoA"
+          GetFieldLocSoA{} -> error "dep: TODO GetFieldLocSoA"
+          AssignLE{} -> error "dep: TODO AssignLE"
 
 -- TODO: VS: I don't think region vars are handled properly here. 
 allFreeVars :: Exp2 -> S.Set FreeVarsTy
@@ -1145,7 +1172,7 @@ allFreeVars ex =
         LetParRegionE r _ _ bod -> S.delete (R $ regionToVar r) (allFreeVars bod)
         LetLocE loc locexp bod -> let locs_locexp = case locexp of 
                                                       AfterConstantLE _ loc   -> S.singleton $ fromLocVarToFreeVarsTy loc
-                                                      AfterVariableLE v loc _ -> S.fromList [fromLocVarToFreeVarsTy loc]
+                                                      AfterVariableLE _ loc _ -> S.fromList [fromLocVarToFreeVarsTy loc]
                                                       -- All the locations inside an SoA loc are also free. 
                                                       -- TODO this works since locvar is not recursive but this needs to change
                                                       GetDataConLocSoA loc -> S.fromList $ L.map (fromLocVarToFreeVarsTy . singleLocVar) (varsInLocVar loc)
@@ -1172,6 +1199,8 @@ allFreeVars ex =
         AllocateScalarsHere loc -> S.singleton (fromLocVarToFreeVarsTy loc)
         SSPush _ a b _ -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
         SSPop _ a b -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
+        LetRegE{} -> error "allFreeVars: TODO LetRegE"
+        BoundsCheckVector{} -> error "allFreeVars: TODO BoundsCheckVector"
     _ -> S.map V (gFreeVars ex)
 
 allFreeVars' :: Exp2 -> S.Set Var 
@@ -1231,6 +1260,8 @@ changeAppToSpawn v args2 ex1 =
         AllocateScalarsHere{} -> ex1
         SSPush{} -> ex1
         SSPop{} -> ex1
+        LetRegE{} -> error "changeAppToSpawn: TODO LetRegE"
+        BoundsCheckVector{} -> error "changeAppToSpawn: TODO BoundsCheckVector"
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
 
@@ -1249,4 +1280,4 @@ fromRegVarToLocVar reg = case reg of
 fromLocVarToRegVar :: LocVar -> RegVar
 fromLocVarToRegVar loc = case loc of 
   Single v -> SingleR v
-  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)  
+  SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)

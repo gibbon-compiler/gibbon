@@ -56,7 +56,6 @@ import           Gibbon.L2.Interp ( Store, emptyStore )
 -- Compiler passes
 import qualified Gibbon.L0.Typecheck as L0
 import qualified Gibbon.L0.Specialize2 as L0
-import qualified Gibbon.L0.ElimNewtype as L0
 import qualified Gibbon.L1.Typecheck as L1
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L3.Typecheck as L3
@@ -80,7 +79,6 @@ import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.FollowPtrs     (followPtrs)
 import           Gibbon.NewL2.FromOldL2       (fromOldL2)
-import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.ThreadRegions2  (threadRegions2)
 import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
@@ -98,7 +96,6 @@ import           Gibbon.Passes.HoistBoundsCheck (hoistBoundsCheckProg)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
-import qualified Data.Tree as L2
 -- Configuring and launching the compiler.
 --------------------------------------------------------------------------------
 

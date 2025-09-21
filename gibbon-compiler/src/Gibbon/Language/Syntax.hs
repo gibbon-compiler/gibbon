@@ -164,7 +164,7 @@ lkp dds con =
           ++", in datatypes:\n  "++sdoc dds
 
 getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
-getCursorTypeForDataCon ddefs ddef@DDef{tyName, tyArgs, dataCons, memLayout} =
+getCursorTypeForDataCon ddefs DDef{tyName, dataCons, memLayout} =
   -- remove data constructors introduced by RAN
   let dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
                                        then []
