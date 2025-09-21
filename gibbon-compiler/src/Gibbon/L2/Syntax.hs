@@ -973,8 +973,10 @@ occurs w ex =
         FromEndE{}    -> False
         BoundsCheck{} -> False
         AddFixed v _  -> v `S.member` w
-        IndirectionE _ _ (_,v1) (_,v2) ib ->
-          (unwrapLocVar v1) `S.member` w  || (unwrapLocVar v2) `S.member` w || go ib
+
+        -- (unwrapLocVar v1) `S.member` w  || (unwrapLocVar v2) `S.member` w ||
+        -- v1, v2 are not strictly variables, these are regions.  
+        IndirectionE _ _ (_,v1) (_,v2) ib -> go ib
         GetCilkWorkerNum -> False
         LetAvail _ bod -> go bod
         AllocateTagHere{} -> False
