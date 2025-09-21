@@ -539,7 +539,7 @@ truePrinted = "#t"
 falsePrinted :: String
 falsePrinted = "#f"
 
-unwrapLocVar :: LocVar -> Var
+unwrapLocVar :: HasCallStack => LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
                             SoA dcon fieldLocs -> 

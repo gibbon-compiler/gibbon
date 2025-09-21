@@ -49,7 +49,6 @@ addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
             tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> case (lrmReg lrm) of 
-                                                      SoAR _ _ -> error "TODO: addTraversalsFn structure of arrays not implemented yet."
                                                       _ -> (lrmLoc lrm, regionToVar (lrmReg lrm))
 
                                       )
@@ -104,6 +103,19 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
+                      GetDataConLocSoA lc -> 
+                        let rlc = renv # lc
+                         in getDataConRegFromRegVar rlc
+                      GetFieldLocSoA (dcon, idx) lc -> 
+                        let rlc = renv # lc
+                         in getFieldRegFromRegVar (dcon, idx) rlc 
+                      AssignLE lc -> renv # lc
+                      GenSoALoc dconLoc fieldLocs -> 
+                         let dconReg = renv # dconLoc
+                             fldRegs = L.map (\((dcon, idx), fl) -> let rl = renv # fl
+                                                                   in ((dcon, idx), rl)
+                                           ) fieldLocs
+                           in SoARv dconReg fldRegs
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod
         _ -> return ex

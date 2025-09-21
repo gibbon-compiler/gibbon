@@ -76,12 +76,12 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
           let reg_lout = case (lenv # lout) of 
-                                  SingleR v -> v
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+                                  SingleR vr -> fromRegVarToLocVar $ (SingleR vr)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
           let reg_lin = case (lenv # lin) of 
-                                  SingleR v -> v
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
-          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg) <$>
+                                  SingleR vr -> fromRegVarToLocVar $ (SingleR vr)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
+          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , reg_lout) (lin, reg_lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
@@ -100,6 +100,19 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
                       AfterConstantLE _ lc   -> lenv # lc
                       AfterVariableLE _ lc _ -> lenv # lc
                       FromEndLE lc           -> lenv # lc -- TODO: This needs to be fixed
+                      GetDataConLocSoA lc -> 
+                        let rlc = lenv # lc
+                         in getDataConRegFromRegVar rlc
+                      GetFieldLocSoA (dcon, idx) lc -> 
+                        let rlc = lenv # lc
+                         in getFieldRegFromRegVar (dcon, idx) rlc 
+                      AssignLE lc -> lenv # lc
+                      GenSoALoc dconLoc fieldLocs -> 
+                         let dconReg = lenv # dconLoc
+                             fldRegs = map (\((dcon, idx), fl) -> let rl = lenv # fl
+                                                                   in ((dcon, idx), rl)
+                                           ) fieldLocs
+                           in SoARv dconReg fldRegs
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion
