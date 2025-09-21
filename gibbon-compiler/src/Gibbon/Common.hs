@@ -542,18 +542,18 @@ falsePrinted = "#f"
 unwrapLocVar :: LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
-                            SoA dcon fieldLocs -> 
+                            SoA _dcon _fieldLocs ->
                                error $  "unwrapLocVar : Did not expect an SoA location! " ++ (show locvar)
                                 --dcon {- Bad, unsafe !! -}
 
 locsInLocVar :: LocVar -> [LocVar]
 locsInLocVar loc = case loc of 
-			Single _ -> [loc]
-			SoA dcon fieldLocs -> [(singleLocVar dcon)] ++ L.map (\(_, l) -> l) fieldLocs
+                        Single _ -> [loc]
+                        SoA dcon fieldLocs -> [(singleLocVar dcon)] ++ L.map (\(_, l) -> l) fieldLocs
 
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
-                        Single loc -> [loc]
+                        Single loc' -> [loc']
                         SoA dcon fieldLocs -> dcon : L.concatMap (varsInLocVar . snd) fieldLocs
 
 varsInRegVar :: RegVar -> [Var]
@@ -565,20 +565,20 @@ varsInRegVar reg = case reg of
 -- | Ideally we should not need this
 getDconLoc :: LocVar -> LocVar 
 getDconLoc loc = case loc of 
-                    SoA dcon fieldLocs -> Single dcon 
-                    Single lc -> loc 
+                    SoA dcon _fieldLocs -> Single dcon
+                    Single _lc -> loc
                             
 getFieldLoc :: (DataCon, FieldIndex) -> LocVar -> LocVar
 getFieldLoc (dcon, idx) loc = case loc of 
                                 SoA _ fieldLocs -> case Prelude.lookup (dcon, idx) fieldLocs of 
-                                                          Just loc -> loc
+                                                          Just loc' -> loc'
                                                           Nothing -> error "getFieldLoc : Field location not found!"
-                                Single lc -> error "getFieldLoc : Did not expect a non SoA location!"
+                                Single _sloc -> error "getFieldLoc : Did not expect a non SoA location!"
 
 getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), LocVar)]
 getAllFieldLocsSoA loc = case loc of 
-                    SoA dcon fieldLocs -> fieldLocs
-                    Single lc -> error "getFieldLocs : Did not expect a non SoA location!"
+                    SoA _dcon fieldLocs -> fieldLocs
+                    Single _lc -> error "getFieldLocs : Did not expect a non SoA location!"
 
 freshSingleLocVar :: String -> PassM LocVar
 freshSingleLocVar m = do v <- gensym (toVar m)
@@ -600,7 +600,7 @@ freshSoALoc pfix lc = do
                      Single _ -> do 
                                   l' <- freshSingleLocVar (pfix ++"_loc")
                                   return l'
-                     SoA dbuf rst -> do 
+                     SoA _dbuf rst -> do
                                      dbuf' <- freshSingleLocVar (pfix ++ "_dloc")
                                      rst' <- freshFieldLocsSoA pfix rst
                                      let newSoALoc = SoA (unwrapLocVar dbuf') rst'
@@ -619,7 +619,7 @@ singleLocVar loc = Single loc
 
 appendNameToLocVar :: Var -> LocVar -> LocVar
 appendNameToLocVar v loc = case loc of 
-                            Single loc -> Single (v `varAppend` loc)
+                            Single sloc -> Single (v `varAppend` sloc)
                             SoA dcon fieldLocs -> SoA (v `varAppend` dcon) fieldLocs
 
 getLocVarFromFreeVarsTy :: FreeVarsTy -> LocVar
@@ -645,13 +645,13 @@ fromRegVarToFreeVarsTy reg = R reg
 
 getDataConRegFromRegVar :: RegVar -> RegVar
 getDataConRegFromRegVar reg = case reg of 
-                            SingleR v -> error "Common.hs: getDataConRegFromRegVar: unexpected case."
-                            SoARv regvar fieldRegs -> regvar
+                            SingleR _v -> error "Common.hs: getDataConRegFromRegVar: unexpected case."
+                            SoARv regvar _fieldRegs -> regvar
 
 getFieldRegFromRegVar :: (DataCon, Int) -> RegVar -> RegVar
 getFieldRegFromRegVar (dcon, idx) reg = case reg of 
-                            SingleR v -> error "Common.hs: getFieldRegFromRegVar: unexpected case."
-                            SoARv regvar fieldRegs -> case L.lookup (dcon, idx) fieldRegs of 
+                            SingleR _v -> error "Common.hs: getFieldRegFromRegVar: unexpected case."
+                            SoARv _regvar fieldRegs -> case L.lookup (dcon, idx) fieldRegs of
                                                         Just freg -> freg
                                                         Nothing -> error "getFieldRegFromRegVar: Field location not found!"
     

@@ -442,8 +442,8 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           --AfterVectorLE dexp fexps s -> lparen <> text "afterVectorOfLocs(" <+> pprint dexp <+> "," <+> (brackets $ hcat (punctuate "," (map pprint fexps))) <+> ")" <+> pprint s <> rparen
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc b -> if b
-				     then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
-				     else parens $ pprint loc <+> text "+" <+> doc v
+            then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
+            else parens $ pprint loc <+> text "+" <+> doc v
           InRegionLE r  -> lparen <> text "inRegion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromEnd" <+> pprint loc <> rparen
           AssignLE loc -> lparen <> text "assignLoc" <+> pprint loc <> rparen
@@ -455,7 +455,6 @@ instance Pretty l => Pretty (L2.PreRegExp l) where
         case re of
           L2.GetDataConRegSoA loc -> lparen <> text "getDataConRegSoA" <+> pprint loc <> rparen
           L2.GetFieldRegSoA (dcon, idx) loc -> lparen <> text "getFieldRegSoA" <+> lparen <> text dcon <+> "," <+> int idx <> rparen <+> pprint loc <> rparen
-		
 
 instance Pretty RegionSize where
     pprintWithStyle _ (BoundedSize x) = parens $ text "Bounded" <+> int x

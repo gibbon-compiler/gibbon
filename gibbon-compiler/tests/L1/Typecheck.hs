@@ -44,11 +44,14 @@ ddfs = M.fromList
           DDef {tyName = "Foo",
                 tyArgs = [],
                 dataCons = [("A", [(False, IntTy)]),
-                            ("B", [(False, IntTy),(False, IntTy)])]}),
+                            ("B", [(False, IntTy),(False, IntTy)])],
+                 memLayout = Linear}),
          ("Nat",
            DDef {tyName = "Nat",
                  tyArgs = [],
-                 dataCons = [("Zero", []),("Suc", [(False, PackedTy "Nat" ())])]})]
+                 dataCons = [("Zero", []),("Suc", [(False, PackedTy "Nat" ())])],
+                 memLayout = Linear})
+        ]
 
 l1TypecheckerTests :: TestTree
 l1TypecheckerTests = $(testGroupGenerator)
