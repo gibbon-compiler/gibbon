@@ -76,8 +76,8 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
           error "gibbon: Cannot compile parallel allocations in Gibbon1 mode."
 
         let initRegEnv = M.fromList $ map (\(LRM lc r _) -> case r of 
+                                                              SoAR _ _ -> error "TODO: parAlloc structure of arrays not implemented yet."
                                                               _ -> (lc, regionToVar r)
-                                                              SoAR _ _ -> error "TODO: parAlloc structure of arrays not implemented yet."  
                                           ) (locVars funTy)
             funArgs' = L.map fromVarToFreeVarsTy funArgs
             initTyEnv  = M.fromList $ zip funArgs' (arrIns funTy)

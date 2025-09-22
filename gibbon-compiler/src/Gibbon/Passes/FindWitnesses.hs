@@ -217,5 +217,5 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
   where funEnv = initFunEnv' fundefs
 
 ex_freeVars :: Exp2 -> Set.Set FreeVarsTy
-ex_freeVars exp = allFreeVars exp
+ex_freeVars ex = allFreeVars ex
 -- ex_freeVars = gFreeVars

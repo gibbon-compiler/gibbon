@@ -72,5 +72,7 @@ inferExp fenv expr =
     Ext (AllocateScalarsHere{}) -> False
     Ext (SSPush{})              -> False
     Ext (SSPop{})               -> False
+    Ext (LetRegE{}) -> error "inferFunAllocs: LetRegE not handled"
+    Ext (BoundsCheckVector{}) -> error "inferFunAllocs: BoundsCheckVector not handled"
   where
     go = inferExp fenv

@@ -131,12 +131,12 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                                                      lrem_end_reg = New.lremEndReg lrem
                                                      New.Loc lrem' = case lrem_reg of 
                                                                   SingleR _ -> New.Loc $ lrem { New.lremLoc = loc }
-                                                                  SoARv dcreg fregs -> case L.lookup (dcon, idx) fregs of 
+                                                                  SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
                                                                                             Just fr -> New.Loc $ lrem { New.lremLoc = loc, New.lremReg = fr }
                                                                                             Nothing -> New.Loc $ lrem { New.lremLoc = loc }
                                                      New.Loc lrem'' = case lrem_end_reg of 
                                                                       SingleR _ -> New.Loc lrem' 
-                                                                      SoARv dcreg fregs -> case L.lookup (dcon, idx) fregs of
+                                                                      SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
                                                                                                 Just fr -> New.Loc $ lrem' { New.lremEndReg = fr} 
                                                                                                 Nothing -> New.Loc lrem'
                                                     in New.Loc lrem''   
@@ -228,6 +228,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
         SSPop mode loc end_loc -> do
           pure $ Ext $ SSPop mode loc end_loc
+        LetRegE {} -> error "fromOldL2Exp: LetRegE not handled"
+        BoundsCheckVector {} -> error "fromOldL2Exp: BoundsCheckVector not handled"
 
     -- straightforward recursion
     VarE v -> pure $ VarE v
@@ -285,7 +287,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
         in New.Loc (New.LREM loc fieldRegVar fieldEndRegVar modality)
       GenSoALoc dloc fieldsLocs ->
         -- Get the single locs and build this part
-        let soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, flc)) fieldsLocs)  
+        let _soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, flc)) fieldsLocs)
             (New.Loc dlrem) = locenv0 # dloc
             dloc_reg = New.lremReg dlrem 
             dloc_end_reg = New.lremEndReg dlrem
@@ -301,6 +303,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
             modality = New.lremMode dlrem
             lrem = New.LREM loc soa_reg soa_end_reg modality
          in New.Loc lrem
+      AssignLE {} -> error "toLocArg: AssignLE not handled"
 
 
   updModality :: Ty2 -> LocEnv -> LocEnv
@@ -436,6 +439,8 @@ toOldL2Exp ex =
 
         SSPop mode loc end_loc -> do
           pure $ Ext $ SSPop mode loc end_loc
+        LetRegE {} -> error "toOldL2Exp: LetRegE not handled"
+        BoundsCheckVector {} -> error "toOldL2Exp: BoundsCheckVector not handled"
 
     -- straightforward recursion
     VarE v -> pure $ VarE v

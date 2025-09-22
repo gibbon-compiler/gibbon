@@ -292,6 +292,8 @@ interpExt :: SizeEnv -> RunConfig -> ValEnv Var Exp2 -> DDefs Ty2 -> M.Map Var (
            -> E2Ext LocVar Ty2 -> InterpM Store Exp2 (Value Exp2, Size)
 interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
+    LetRegE{} -> error "L2.Interp: LetRegE not handled."
+    BoundsCheckVector{} -> error "L2.Interp: BoundsCheckVector not handled."
     LetRegionE reg _ _ bod -> do
       let regVar = case (regionToVar reg) of 
                              SingleR v -> v
@@ -304,6 +306,10 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
     LetLocE loc locexp bod ->
       case locexp of
+        GenSoALoc{} -> error "L2.Interp: GenSoALoc not handled."
+        GetDataConLocSoA{} -> error "L2.Interp: GetDataConLocSoA not handled."
+        GetFieldLocSoA{} -> error "L2.Interp: GetFieldLocSoA not handled."
+        AssignLE{} -> error "L2.Interp: AssignLE not handled."
         StartOfRegionLE reg -> do
           let regVar = case (regionToVar reg) of 
                              SingleR v -> v

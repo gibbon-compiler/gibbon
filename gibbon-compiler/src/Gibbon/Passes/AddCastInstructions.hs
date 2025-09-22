@@ -113,7 +113,7 @@ addCastsExp fundef cenv env ex =
           ([], cenv, new_env, [])
           (zip es tys_of_es)
       bod' <- addCastsExp fundef cenv' env' bod
-      let ex' = foldr (\ex acc -> ex acc) (LetE (v, locs, ty, ((MkProdE (L.reverse vars')))) bod') new_insts
+      let ex' = foldr (\e acc -> e acc) (LetE (v, locs, ty, ((MkProdE (L.reverse vars')))) bod') new_insts
       pure $ ex'
 
     -- LetE (v, locs, ty, rhs@(Ext (AppE f _locs args))) bod -> do

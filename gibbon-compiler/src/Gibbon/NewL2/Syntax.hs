@@ -114,6 +114,7 @@ toRegVar arg =
     Reg v _        -> v
     EndOfReg _ _ v -> v
     EndOfReg_Tagged v -> v
+    EndWitness {} -> error "toRegVar: EndWitness not handled"
 
 fromVarToSingleRegVar :: Var -> RegVar
 fromVarToSingleRegVar v = SingleR v
@@ -124,11 +125,9 @@ toLocVar arg =
   case arg of
     Loc lrm        -> lremLoc lrm
     EndWitness _ v -> v
-    Loc lrm        -> Old.fromRegVarToLocVar $ lremReg lrm
     Reg v _        -> Old.fromRegVarToLocVar v
     EndOfReg _ _ v -> Old.fromRegVarToLocVar v
     EndOfReg_Tagged v -> Old.fromRegVarToLocVar v
-    _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
 
 
 fromLocArgToFreeVarsTy :: LocArg -> FreeVarsTy
@@ -136,11 +135,9 @@ fromLocArgToFreeVarsTy arg =
   case arg of
     Loc lrm        -> fromLocVarToFreeVarsTy $ lremLoc lrm
     EndWitness _ v -> fromLocVarToFreeVarsTy v
-    Loc lrm        -> fromRegVarToFreeVarsTy $ lremReg lrm
     Reg v _        -> fromRegVarToFreeVarsTy v
     EndOfReg _ _ v -> fromRegVarToFreeVarsTy v
     EndOfReg_Tagged v -> fromRegVarToFreeVarsTy v
-    _ -> error "NewL2/Syntax.hs, toLocVar: unexpected case."
 
 
 -- Returns the data constructor 
@@ -186,8 +183,8 @@ instance FreeVars LocExp where
     case e of
       -- Old.AfterConstantLE _ loc  -> S.singleton $ unwrapLocVar (toLocVar loc)
       -- Old.AfterVariableLE v loc _ -> S.fromList [v, unwrapLocVar (toLocVar loc)]
-      Old.AfterConstantLE _ loc  -> S.empty
-      Old.AfterVariableLE v loc _ -> S.fromList [v] 
+      Old.AfterConstantLE _ _loc  -> S.empty
+      Old.AfterVariableLE v _loc _ -> S.fromList [v]
       _ -> S.empty
 
 
@@ -212,6 +209,8 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.AllocateScalarsHere{} -> MkTy2 $ ProdTy []
       Old.SSPush{}              -> MkTy2 $ ProdTy []
       Old.SSPop{}               -> MkTy2 $ ProdTy []
+      Old.LetRegE{}             -> error "gRecoverType: LetRegE not handled"
+      Old.BoundsCheckVector{}   -> error "gRecoverType: BoundsCheckVector not handled"
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
@@ -233,6 +232,8 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.AllocateScalarsHere{} -> MkTy2 $ ProdTy []
       Old.SSPush{}              -> MkTy2 $ ProdTy []
       Old.SSPop{}               -> MkTy2 $ ProdTy []
+      Old.LetRegE{}             -> error "gRecoverTypeLoc: LetRegE not handled"
+      Old.BoundsCheckVector{}   -> error "gRecoverTypeLoc: BoundsCheckVector not handled"
 
 
 
@@ -476,6 +477,8 @@ revertExp ex =
         Old.AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
         Old.SSPush{} -> error "revertExp: TODO SSPush."
         Old.SSPop{} -> error "revertExp: TODO SSPop."
+        Old.LetRegE {} -> error "revertExp: LetRegE not handled"
+        Old.BoundsCheckVector {} -> error "revertExp: BoundsCheckVector not handled"
     MapE{}  -> error $ "revertExp: TODO MapE"
     FoldE{} -> error $ "revertExp: TODO FoldE"
   where
@@ -552,6 +555,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.SSPop{} -> acc
               Old.StartOfPkdCursor cur -> M.insertWith (++) (fromVarToFreeVarsTy cur) [(fromVarToFreeVarsTy cur)] acc
               Old.TagCursor a b -> M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
+              Old.LetRegE {} -> error "depList: LetRegE not handled"
+              Old.BoundsCheckVector {} -> error "depList: BoundsCheckVector not handled"
 
       dep :: Old.PreLocExp LocArg -> [FreeVarsTy]
       dep ex =
@@ -562,6 +567,10 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           Old.InRegionLE r  -> [fromRegVarToFreeVarsTy $ Old.regionToVar r]
           Old.FromEndLE loc -> [fromLocVarToFreeVarsTy $ toLocVar loc]
           Old.FreeLE -> []
+          Old.GenSoALoc {} -> error "depList: GenSoALoc not handled"
+          Old.GetDataConLocSoA {} -> error "depList: GetDataConLocSoA not handled"
+          Old.GetFieldLocSoA {} -> error "depList: GetFieldLocSoA not handled"
+          Old.AssignLE {} -> error "depList: AssignLE not handled"
 
 -- gFreeVars ++ locations ++ region variables
 allFreeVars :: Exp2 -> S.Set FreeVarsTy
@@ -600,6 +609,8 @@ allFreeVars ex =
         Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy loc
         Old.SSPush _ a b _ -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
         Old.SSPop _ a b -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
+        Old.LetRegE {} -> error "allFreeVars: LetRegE not handled"
+        Old.BoundsCheckVector {} -> error "allFreeVars: BoundsCheckVector not handled"
     _ -> (S.map fromVarToFreeVarsTy $ gFreeVars ex)
 
 freeLocVars :: Exp2 -> [LocVar]

@@ -104,6 +104,10 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
+                      GenSoALoc {}           -> error "addTraversalsExp: GenSoALoc not handled"
+                      GetDataConLocSoA {}    -> error "addTraversalsExp: GetDataConLocSoA not handled"
+                      GetFieldLocSoA {}      -> error "addTraversalsExp: GetFieldLocSoA not handled"
+                      AssignLE {}            -> error "addTraversalsExp: AssignLE not handled"
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod
         _ -> return ex

@@ -87,21 +87,21 @@ inferRegScopeExpHelper ex rhs r env =
         let (g,_,vtxF) = graphFromEdges deps
           in case r of 
             -- VS: TODO: Handle case then field Regions also contain more factored out SoA regions.
-            SoAR dcr fieldRegs -> let regVLoc = R $ regionToVar r 
-                                      regVertex = case vtxF regVLoc of
-                                        Just x  -> x
-                                        Nothing -> error $ "No vertex for:" ++ sdoc r
-                                      retVertex = case vtxF retVar of
-                                        Just x  -> x
-                                        Nothing -> error $ "No vertex for:" ++ sdoc retVar
-                                      -- The value in the region  escapes the current scope if there's
-                                      -- a path between the region variable and the thing returned.
+            SoAR _dcr _fieldRegs -> let regVLoc = R $ regionToVar r
+                                        regVertex = case vtxF regVLoc of
+                                          Just x  -> x
+                                          Nothing -> error $ "No vertex for:" ++ sdoc r
+                                        retVertex = case vtxF retVar of
+                                          Just x  -> x
+                                          Nothing -> error $ "No vertex for:" ++ sdoc retVar
+                                        -- The value in the region  escapes the current scope if there's
+                                        -- a path between the region variable and the thing returned.
                                     in do dflags <- getDynFlags 
                                           let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
                                                        (gopt Opt_Gibbon1 dflags)
                                                     then BigInfinite
                                                     else Infinite
-                                          let isPath = path g retVertex regVertex
+                                          let _isPath = path g retVertex regVertex
                                           -- Not handling recursive SoA Regions
                                           -- let scopedDcr = case dcr of 
                                           --                     VarR dcrVar -> GlobR dcrVar defaultMul
@@ -163,7 +163,7 @@ inferRegScopeExp env ex =
 
         LetParRegionE r sz ty rhs ->
           case r of
-            SoAR dcr fieldRegs -> error "Did not handle SoAR in inferRegScopeExp."
+            SoAR _dcr _fieldRegs -> error "Did not handle SoAR in inferRegScopeExp."
             MMapR{} -> Ext . LetParRegionE r sz ty <$> go rhs
             _ ->
               let deps = depList ex
@@ -222,6 +222,8 @@ inferRegScopeExp env ex =
         AllocateScalarsHere{} -> return ex
         SSPush{} -> return ex
         SSPop{} -> return ex
+        LetRegE {} -> error "inferRegScopeExp: LetRegE not handled"
+        BoundsCheckVector {} -> error "inferRegScopeExp: BoundsCheckVector not handled"
 
     -- Straightforward recursion ...
     VarE{}     -> return ex
