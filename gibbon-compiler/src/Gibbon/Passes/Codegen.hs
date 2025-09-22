@@ -1075,7 +1075,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    ifConds <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
                                            pure [cexp| ($id:cur + $int:i) > $id:bound |]
                                       ) rnds
-                   ifBody <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur)]) -> 
+                   ifBody <- mapM (\(ProdTriv [(IntTriv _i),(VarTriv bound), (VarTriv cur)]) ->
                                        pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
                                   ) rnds
                    let condExpr = foldr1 (\c1 c2 -> [cexp| $exp:c1 || $exp:c2 |]) ifConds
@@ -1573,7 +1573,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         ptr' = codegenTriv venv ptr
                     return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
 
-                 _ -> error $ "codegen: " ++ show prm ++ " unhandled."
+
 
        return $ pre ++ bod'
 
@@ -1653,7 +1653,7 @@ codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
-codegenTy (CursorArrayTy size) = [cty|typename GibCursor* |]
+codegenTy (CursorArrayTy _size) = [cty|typename GibCursor* |]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]

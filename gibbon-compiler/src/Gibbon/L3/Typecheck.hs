@@ -242,6 +242,8 @@ tcExp isSoA isPacked ddfs env exp = do
           ety <- go rhs
           ensureEqualTyModCursor isSoA rhs ety BoolTy
           return (ProdTy [])
+
+        CastPtr{} -> error "tcExp: CastPtr not handled"
         
         {- VS: TODO: we should check the bounds of index cursory array -}
         IndexCursorArray v _ -> do
@@ -784,7 +786,7 @@ tcExp isSoA isPacked ddfs env exp = do
         _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     
-    LetE (v, _, ty, Ext rhs@(CastPtr v' ty')) e -> do
+    LetE (v, _, ty, Ext rhs@(CastPtr _v' ty')) e -> do
        if (ty /= ty')
        then throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
        else do  
@@ -933,7 +935,12 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
     tyEq CursorArrayTy{} PackedTy{} = True
     tyEq ty1 ty2 =
       case ty1 of
-        PackedTy{}  -> ty2 == ProdTy [CursorTy,CursorTy] || ty2 == ProdTy [CursorArrayTy{}, CursorArrayTy{}] || ty1 == ty2
+        PackedTy{}  ->
+          ty1 == ty2 ||
+          case ty2 of
+            ProdTy [CursorTy,CursorTy] -> True
+            ProdTy [CursorArrayTy _, CursorArrayTy _] -> True
+            _ -> False
         ProdTy tys2 -> let ProdTy tys1 = ty1
                        in  all (\(a,b) -> tyEq a b) (zip tys1 tys2)
         _ -> ty1 == ty2
@@ -995,8 +1002,6 @@ ensureEqualTyModCursor False _exp IntTy CursorTy = return CursorTy
 ensureEqualTyModCursor False _exp CursorTy IntTy = return CursorTy
 ensureEqualTyModCursor False exp (ProdTy ls1) (ProdTy ls2) =
   sequence_ [ ensureEqualTyModCursor False exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor False (ProdTy ls1))
-ensureEqualTyModCursor s exp a b = ensureEqualTy exp a b
-
 
 ensureEqualTyModCursor True _exp (CursorArrayTy sz) (PackedTy _ _) = return (CursorArrayTy sz)
 ensureEqualTyModCursor True _exp (PackedTy _ _) (CursorArrayTy sz) = return (CursorArrayTy sz)
@@ -1004,17 +1009,15 @@ ensureEqualTyModCursor True _exp IntTy (CursorArrayTy sz) = return (CursorArrayT
 ensureEqualTyModCursor True _exp (CursorArrayTy sz) IntTy = return (CursorArrayTy sz)
 ensureEqualTyModCursor True exp (ProdTy ls1) (ProdTy ls2) =
   sequence_ [ ensureEqualTyModCursor True exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor True (ProdTy ls1))
-ensureEqualTyModCursor s exp a b = ensureEqualTy exp a b
+ensureEqualTyModCursor _s exp a b = ensureEqualTy exp a b
 
 {- This assumes that The CursorArrayTy always has size 2 -}
 {- VS: we should ideally update the PackedTy type to have more information on its layout -}
 packedToCursor :: Bool -> Ty3 -> Ty3
 packedToCursor False (PackedTy _ _) = CursorTy
-packedToCursor False (PackedTy _ _) = CursorTy
-packedToCursor True  (PackedTy _ _) = CursorArrayTy 2
 packedToCursor True  (PackedTy _ _) = CursorArrayTy 2
 packedToCursor s (ProdTy tys) = ProdTy $ map (\ty -> packedToCursor s ty) tys
-packedToCursor s ty = ty
+packedToCursor _s ty = ty
 
 compareModCursor :: Ty3 -> Ty3 -> Bool
 compareModCursor CursorTy (PackedTy _ _) = True

@@ -4,7 +4,7 @@ module Gibbon.Passes.Cursorize
 import           Control.Monad (forM)
 import qualified Data.List as L
 import qualified Data.Map as M
-import           Data.Maybe (fromJust, listToMaybe)
+import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
 import           Data.Foldable ( foldlM, foldrM )
 
@@ -16,7 +16,7 @@ import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, 
                                            TagCursor )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
-import Data.Set (Set)
+
 
 {-
 
@@ -225,7 +225,7 @@ cursorizeFunDef useSoA ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funMet
                                                                                                   Nothing -> error "cursorizeFunDef: unexpected location variable"
                                                                packed_cursor_ty = case l of 
                                                                                          Single _ -> Just l 
-                                                                                         SoA _ fields -> Just l
+                                                                                         SoA _ _fields -> Just l
                                                                loc_entry = (var_for_loc, packed_cursor_ty)
                                                                var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv') of 
                                                                                                   Just v -> v 
@@ -320,15 +320,15 @@ This is used to create bindings for input location variables.
            _ -> acc
 
     cursorizeArrowTy :: Bool -> ArrowTy2 Ty2 -> ([Ty3] , Ty3)
-    cursorizeArrowTy useSoA ty@ArrowTy2{arrIns,arrOut,locVars,locRets} =
+    cursorizeArrowTy useSoA' ty@ArrowTy2{arrIns,arrOut,locVars,locRets} =
       let
           -- Regions corresponding to ouput cursors. (See [Threading regions])
-          numOutRegs = length (outRegVars ty)
+          _numOutRegs = length (outRegVars ty)
           --outRegs = L.map (\_ -> CursorTy) [1..numOutRegs]
 
           outRegs = L.map (\r -> case r of
-                                   SingleR v -> CursorTy
-                                   SoARv dcr frs -> CursorArrayTy (1 + length frs)
+                                   SingleR _v -> CursorTy
+                                   SoARv _dcr frs -> CursorArrayTy (1 + length frs)
                           ) (outRegVars ty)
 
 
@@ -341,7 +341,7 @@ This is used to create bindings for input location variables.
           ret_curs = L.map (\lret -> case lret of
                                           EndOf (LRM l _ _) -> case l of 
                                                                   Single _ -> CursorTy 
-                                                                  SoA dcl flocs -> CursorArrayTy (1 + length flocs)
+                                                                  SoA _dcl flocs -> CursorArrayTy (1 + length flocs)
                                   
                            ) locRets
 
@@ -351,7 +351,7 @@ This is used to create bindings for input location variables.
                      _  -> ProdTy $ out_curs ++ [unTy2 arrOut]
 
           -- Packed types in the output then become end-cursors for those same destinations.
-          newOut = mapPacked (\var loc -> case loc of 
+          newOut = mapPacked (\_var loc -> case loc of
                                                Single _  -> ProdTy [CursorTy, CursorTy]
                                                SoA _ fields -> ProdTy [CursorArrayTy (1 + length fields), CursorArrayTy (1 + length fields)]
                            
@@ -376,7 +376,7 @@ This is used to create bindings for input location variables.
 
           -- Packed types in the input now become (read-only) cursors.
 
-          newIns = if useSoA 
+          newIns = if useSoA'
                    then map (cursorizeInTy) in_tys
                    else map (constPacked CursorTy) in_tys
 

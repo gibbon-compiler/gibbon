@@ -826,7 +826,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
              -> (DataCon, [(Var,())], Exp1) ->
              TiM ((DataCon, [(Var,LocVar)], L2.Exp2), Ty2, [Constraint])
       doCase ddfs env src dst (con,vars,rhs) = do
-        let (tyc, (don, flds)) = lkp ddfs con
+        let (_tyc, (_don, flds)) = lkp ddfs con
         dflags <- getDynFlags
         let useSoA = gopt Opt_Packed_SoA dflags
         let zippedVars = zip vars flds
@@ -1179,7 +1179,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                             Just $ AfterCopyL loc1 v v' loc2 f lvs
                           afterVar _ = Nothing
                           -- dbgTrace minChatLvl "Print DataConE SoA case argsLs: " dbgTrace minChatLvl (sdoc (d, argLs, newLocs)) dbgTrace minChatLvl "End DataConE SoA case argLs.\n"
-                      let dataBufferLoc = Single dataBufferVar
+                      let _dataBufferLoc = Single dataBufferVar
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
                           -- the same datatype. 
@@ -1195,7 +1195,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           -- dbgTrace minChatLvl "Print tuple line: 1023" dbgTrace minChatLvl (sdoc (idxsWriteDconBuf, idxsFields)) dbgTrace minChatLvl "End line 1023\n"
                           idxsWriteDconBuf' = L.reverse idxsWriteDconBuf  
                           idxsFields' = L.reverse idxsFields                                       
-                          argsLsDconBuf = L.map (\(Just idx) -> ls' !! idx) idxsWriteDconBuf'
+                          _argsLsDconBuf = L.map (\(Just idx) -> ls' !! idx) idxsWriteDconBuf'
                           dcArgDconBuf = L.map (\(Just idx) -> argLs !! idx) idxsWriteDconBuf'
                           locsDconBuf =  L.map (\(Just idx) -> locs !! idx) idxsWriteDconBuf' 
                           -- Other fields need to have constraints with their own output region.

@@ -250,7 +250,7 @@ withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
 withRANDDefs needRANsTyCons ddfs = M.map go ddfs
   where
     -- go :: DDef a -> DDef b
-    go dd@DDef{dataCons, memLayout} =
+    go dd@DDef{dataCons} =
       let dcons' = L.foldr (\(dcon,tys) acc ->
                               case numRANsDataCon ddfs dcon of
                                 0 -> acc
@@ -437,6 +437,10 @@ we need random access for that type.
                         AfterConstantLE _ lc   -> renv # lc
                         AfterVariableLE _ lc _ -> renv # lc
                         FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
+                        GenSoALoc {}           -> error "needsRANExp: GenSoALoc not handled"
+                        GetDataConLocSoA {}    -> error "needsRANExp: GetDataConLocSoA not handled"
+                        GetFieldLocSoA {}      -> error "needsRANExp: GetFieldLocSoA not handled"
+                        AssignLE {}            -> error "needsRANExp: AssignLE not handled"
             in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) tcenv parlocss bod
         _ -> S.empty
     MapE{}     -> S.empty

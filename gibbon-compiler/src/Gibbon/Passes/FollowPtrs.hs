@@ -40,7 +40,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
             if no_copies
             then do
               indir_ptrv <- gensym "indr"
-              indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
+              _indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
               callv <- gensym "call"
               wc <- gensym "wildcard"
               indir_ptrloc <- freshCommonLoc "case" scrt_loc
