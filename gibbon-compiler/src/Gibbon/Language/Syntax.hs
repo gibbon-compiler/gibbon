@@ -72,6 +72,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 --import qualified Data.Typeable as Typeable
 
 import           Gibbon.Common
+import GHC.Stack (HasCallStack)
 
 --------------------------------------------------------------------------------
 -- Data type definitions
@@ -356,7 +357,7 @@ extendsVEnv mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 extendsVEnvLocVar :: M.Map FreeVarsTy a -> Env2 FreeVarsTy a -> Env2 FreeVarsTy a 
 extendsVEnvLocVar mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 
-lookupVEnv :: Out a => Var -> Env2 Var a -> a
+lookupVEnv :: (HasCallStack, Out a) => Var -> Env2 Var a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
 lookupVEnvLocVar :: Out a => FreeVarsTy -> Env2 FreeVarsTy a -> a 

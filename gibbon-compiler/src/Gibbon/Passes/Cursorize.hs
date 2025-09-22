@@ -17,6 +17,7 @@ import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, 
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
 import Data.Set (Set)
+import GHC.RTS.Flags (MiscFlags(generateCrashDumpFile))
 
 {-
 
@@ -1202,10 +1203,10 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
             sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of 
                            Just v -> v 
                            Nothing -> error $ "cursorizeExp(1056): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
-            sloc_dcon = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
-                           Just v -> v 
-                           Nothing -> case dcon_loc of
-                                            Single l -> l
+            (sloc_dcon, present) = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
+                                Just v -> (v, True) 
+                                Nothing -> case dcon_loc of
+                                            Single l -> (l, False)
                                             _ -> error $ "cursorizeExp(1059): DataConE: unexpected dcon location variable" ++ "(" ++ show (dcon, dcon_loc) ++ ")" ++ show freeVarToVarEnv
             -- Return (start,end) cursors
             -- The final return value lives at the position of the out cursors:
@@ -1389,13 +1390,37 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                         loc = L.lookup key field_locs
                                                       in (key, loc, e)
                            ) exp_f_tys
+        let additional_bnds = if present
+                              then []
+                              else [(sloc_dcon, [], CursorTy, Ext $ IndexCursorArray sloc 0)]
+        (additional_bnds', freeVarToVarEnv', _) <- foldlM (\(b, env, idx') ((dcon, _), loc) -> do
+                                                            (var_for_loc, present, env') <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of 
+                                                                                                    Just v -> return $ (v, True, env)
+                                                                                                    Nothing -> case loc of 
+                                                                                                                    Single l -> return $ (l, False, env)
+                                                                                                                    SoA{} -> do 
+                                                                                                                              new_name <- gensym "field_cursor"
+                                                                                                                              let env'' = M.insert (fromLocVarToFreeVarsTy loc) new_name env
+                                                                                                                              return $ (new_name, False, env'')
+                                                            let b' = if present 
+                                                                     then b
+                                                                     else b ++ [(var_for_loc, [], CursorTy, Ext $ IndexCursorArray sloc idx')]
+                                                            pure (b', env', idx' + 1)
+                                                            
+          
+                                   ) (additional_bnds, freeVarToVarEnv, 1) field_locs
+
         dl <$>
+          -- Make sure that the field locations and data locations are released here
+          -- We can clean them up later.
+          -- data con location
+          mkLets additional_bnds' <$>
           LetE (start_tag_alloc,[],ProdTy [], Ext $ StartTagAllocation (sloc)) <$>
           LetE (writetag,[], CursorTy, Ext $ WriteTag dcon (sloc_dcon)) <$>
           LetE (end_tag_alloc,[],ProdTy [], Ext $ EndTagAllocation (sloc)) <$>
           LetE (start_scalars_alloc,[],ProdTy [], Ext $ StartScalarsAllocation (sloc)) <$>
           LetE (after_tag,[], CursorTy, Ext $ AddCursor (sloc_dcon) (L3.LitE 1)) <$>
-          go2 False freeVarToVarEnv after_tag Nothing field_locs locs_tys  
+          go2 False freeVarToVarEnv' after_tag Nothing field_locs locs_tys  
 
           -- go2 :: Bool -> M.Map FreeVarsTy Var -> Var -> [((DataCon, Int), Location, (Exp2, Ty2))] -> [((DataCon, Int), Location, (Exp2, Ty2))] -> PassM Exp3
           -- go2 False after_tag (zip args (lookupDataCon ddfs dcon))
