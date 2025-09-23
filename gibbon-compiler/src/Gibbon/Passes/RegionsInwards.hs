@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 module Gibbon.Passes.RegionsInwards (regionsInwards) where
 
 import Data.Foldable as F

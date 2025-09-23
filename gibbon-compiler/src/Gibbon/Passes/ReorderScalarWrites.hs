@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Gibbon.Passes.ReorderScalarWrites

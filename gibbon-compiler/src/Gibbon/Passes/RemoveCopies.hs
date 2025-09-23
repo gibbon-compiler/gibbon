@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 -- | Replace calls to copy functions with tagged indirection nodes
 module Gibbon.Passes.RemoveCopies where
 

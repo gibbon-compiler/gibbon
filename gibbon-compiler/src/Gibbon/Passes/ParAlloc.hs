@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 {-| Do all things necessary to compile parallel allocations to a single region.
 
 In the sequential semantics, (letloc-after x) can only run after x is written to
