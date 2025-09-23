@@ -1203,10 +1203,10 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
             sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of 
                            Just v -> v 
                            Nothing -> error $ "cursorizeExp(1056): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
-            (sloc_dcon, present) = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
-                                Just v -> (v, True) 
+            (sloc_dcon, present, freeVarToVarEnv') = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
+                                Just v -> (v, True, freeVarToVarEnv) 
                                 Nothing -> case dcon_loc of
-                                            Single l -> (l, False)
+                                            Single l -> (l, False, (M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv))
                                             _ -> error $ "cursorizeExp(1059): DataConE: unexpected dcon location variable" ++ "(" ++ show (dcon, dcon_loc) ++ ")" ++ show freeVarToVarEnv
             -- Return (start,end) cursors
             -- The final return value lives at the position of the out cursors:
@@ -1291,7 +1291,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let cur_ty = case l of 
                               Single _ -> CursorTy
                               SoA _ fields -> CursorArrayTy (1 + length (fields))
-                  rnd' <- go freeVarToVarEnv tenv senv rnd
+                  rnd' <- go freeVarToVarEnv' tenv senv rnd
                   end_scalars_alloc <- gensym "end_scalars_alloc"
                   (if not marker_added
                     then LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation (sloc))
@@ -1300,7 +1300,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                     go2 True fvarenv aft_dloc (Just d') aft_flocs rst
 
                 _ | isScalarTy ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv rnd
                   -- get the location variable where the scalar must be written
                   let floc_loc = case floc of 
                                        Just l -> l 
@@ -1326,7 +1326,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 
                     -- Write a pointer to a vector
                 VectorTy el_ty -> do
-                  rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                  rnd' <- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv rnd
                   -- get the location variable where the scalar must be written
                   let floc_loc = case floc of 
                                        Just l -> l 
@@ -1361,7 +1361,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 -- SoA case
                 -- Fix case for indirection/shortcut pointers
                 CursorTy -> do
-                   rnd' <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                   rnd' <- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv tenv senv rnd
                    after_indirection <- gensym "aft_indirection"
                    casted_var <- gensym "cast"
                    let rnd_var = case rnd' of 
@@ -1370,7 +1370,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                    LetE (casted_var, [], CursorTy, Ext $ CastPtr rnd_var CursorTy) <$>
                     LetE (d',[], CursorTy, Ext $ WriteTaggedCursor aft_dloc (VarE casted_var)) <$>
                     LetE (after_indirection,[], CursorTy, VarE d') <$> --Ext $ AddCursor aft_dloc (L3.LitE 8)
-                    go2 marker_added freeVarToVarEnv after_indirection from_rec_end aft_flocs rst
+                    go2 marker_added freeVarToVarEnv' after_indirection from_rec_end aft_flocs rst
                 
                 _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty 
 
@@ -1393,8 +1393,8 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         let additional_bnds = if present
                               then []
                               else [(sloc_dcon, [], CursorTy, Ext $ IndexCursorArray sloc 0)]
-        (additional_bnds', freeVarToVarEnv', _) <- foldlM (\(b, env, idx') ((dcon, _), loc) -> do
-                                                            (var_for_loc, present, env') <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of 
+        (additional_bnds', freeVarToVarEnv'', _) <- foldlM (\(b, env, idx') ((_, _), loc) -> do
+                                                            (var_for_loc, present', env') <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of 
                                                                                                     Just v -> return $ (v, True, env)
                                                                                                     Nothing -> case loc of 
                                                                                                                     Single l -> return $ (l, False, env)
@@ -1402,13 +1402,13 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                                               new_name <- gensym "field_cursor"
                                                                                                                               let env'' = M.insert (fromLocVarToFreeVarsTy loc) new_name env
                                                                                                                               return $ (new_name, False, env'')
-                                                            let b' = if present 
+                                                            let b' = if present' 
                                                                      then b
                                                                      else b ++ [(var_for_loc, [], CursorTy, Ext $ IndexCursorArray sloc idx')]
                                                             pure (b', env', idx' + 1)
                                                             
           
-                                   ) (additional_bnds, freeVarToVarEnv, 1) field_locs
+                                   ) (additional_bnds, freeVarToVarEnv', 1) field_locs
 
         dl <$>
           -- Make sure that the field locations and data locations are released here
@@ -1420,7 +1420,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           LetE (end_tag_alloc,[],ProdTy [], Ext $ EndTagAllocation (sloc)) <$>
           LetE (start_scalars_alloc,[],ProdTy [], Ext $ StartScalarsAllocation (sloc)) <$>
           LetE (after_tag,[], CursorTy, Ext $ AddCursor (sloc_dcon) (L3.LitE 1)) <$>
-          go2 False freeVarToVarEnv' after_tag Nothing field_locs locs_tys  
+          go2 False freeVarToVarEnv'' after_tag Nothing field_locs locs_tys  
 
           -- go2 :: Bool -> M.Map FreeVarsTy Var -> Var -> [((DataCon, Int), Location, (Exp2, Ty2))] -> [((DataCon, Int), Location, (Exp2, Ty2))] -> PassM Exp3
           -- go2 False after_tag (zip args (lookupDataCon ddfs dcon))

@@ -535,12 +535,22 @@ inferExp' ddefs env exp bound dest=
                                                                                                                        ) get_loc_keys
                                                                                                          dconLoc = LetLocE lv1 (AfterConstantLE 1 lv2)
                                                                                                          exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++ exprs ++ [dconLoc]
-                                                                                                         fieldLocExps = P.map (\c -> case c of 
-                                                                                                                                AfterConstantL lv1 v lv2 -> LetLocE lv1 (AfterConstantLE v lv2)
-                                                                                                                                AfterVariableL lv1 v lv2 -> LetLocE lv1 (AfterVariableLE v lv2 True)
-                                                                                                                                AssignL lv1 lv2 -> LetLocE lv1 (AssignLE lv2)  
-                                                                                                                                _ -> error "InferLocations : bindAllLocations : AfterSoALE: unexpected locatin constraint."
-                                                                                                                              ) flst
+                                                                                                         (fieldLocExps, a') = L.foldl (\(acc, ba) c -> case c of 
+                                                                                                                                AfterConstantL lv1 v lv2 -> (acc ++ [LetLocE lv1 (AfterConstantLE v lv2)], ba)
+                                                                                                                                AfterVariableL lv1 v lv2 -> (acc ++ [LetLocE lv1 (AfterVariableLE v lv2 True)], ba)
+                                                                                                                                AssignL lv1 lv2 -> (acc ++ [LetLocE lv1 (AssignLE lv2)], ba)
+                                                                                                                                AfterCopyL lv1 v1 v' lv2 f lvs ->
+                                                                                                                                    let arrty = arrOut $ lookupFEnv f env
+                                                                                                                                    -- Substitute the location occurring at the call site
+                                                                                                                                    -- in place of the one in the function's return type
+                                                                                                                                        copyRetTy = case arrty of
+                                                                                                                                                      PackedTy _ loc -> substLoc (M.singleton loc lv2) arrty
+                                                                                                                                                      _ -> error "bindAllLocations: Not a packed type"
+                                                                                                                                        a' = subst v1 (VarE v') a
+                                                                                                                                        bod = Ext $ (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
+                                                                                                                                      in (acc, LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) bod)
+                                                                                                                                _ -> error $ "InferLocations : bindAllLocations : AfterSoALE: unexpected locatin constraint: " ++ show c 
+                                                                                                                              ) ([], a) flst
                                                                                                          --new_field_locs = P.foldr (\c accum -> case c of 
                                                                                                          --                                 AfterConstantL lv1 v lv2 -> let flcs = (getFieldLocs slv2)
                                                                                                          --                                                                  -- This is wrong!!
@@ -561,12 +571,13 @@ inferExp' ddefs env exp bound dest=
                                                                                                          exprs'' = exprs' ++ fieldLocExps ++ [LetLocE slv1 (GenSoALoc lv1 flcs')] -- [LetSoALocE slv1]
                                                                                                          lambda  = (\lst base -> case lst of 
                                                                                                                                        [] -> base 
-                                                                                                                                       x:rst -> let rst' = lambda rst base
-                                                                                                                                                 in Ext (x rst')
-                                                                                                         
+                                                                                                                                       x:rst -> let rst' = lambda rst base 
+                                                                                                                                                 in Ext $ x rst'
                                                                                                                    )
+
+                                                                                                          
                                                                                                             
-                                                                                                         returned = lambda exprs'' a
+                                                                                                         returned = lambda exprs'' a'
                                                                                                       in dbgTrace minChatLvl " BindAllLocations: " dbgTrace minChatLvl (sdoc (get_loc_keys, returned)) dbgTrace minChatLvl "End bindAllLocations.\n" returned
                                                                           _ -> error "bindAllLocations: AfterSoALE: unexpected tag constraint."                                       
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
@@ -644,26 +655,25 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    b3 <- notFixedLoc lv2'
                    b3' <- notFixedLoc lv2'                    
                    if b1 && b2 && b3
-                   then do cs' <- tryInRegion' fcs cs 
+                   then do cs' <- dbgTrace minChatLvl "tryInRegion' AfterSoAL: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2', fcs)) dbgTrace minChatLvl "End tryInRegion' AfterSoAL.\n"  tryInRegion' fcs cs 
                            r <- getNewRegion lv2'
                            let c' = StartRegionL lv2' r
                            return (c':c:cs')
-                   else do cs' <- tryInRegion' fcs cs
+                   else do cs' <- dbgTrace minChatLvl "tryInRegion' AfterSoAL: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2', fcs)) dbgTrace minChatLvl "End tryInRegion' AfterSoAL.\n" tryInRegion' fcs cs
                            return (c:cs')
             AfterTagL lv1 lv2 ->
                 do lv1' <- finalLocVar lv1
                    lv2' <- finalLocVar lv2
                    b1 <- noBeforeLoc lv2' fcs
                    b2 <- noRegionStart lv2' fcs
-                   b3 <- notFixedLoc lv2'
-                   -- dbgTrace minChatLvl "tryInRegion' aftertag: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2')) dbgTrace minChatLvl "End tryInRegion' afterTag.\n" 
+                   b3 <- notFixedLoc lv2 
                    b3' <- notFixedLoc lv2'
                    if b1 && b2 && b3
-                   then do cs' <- tryInRegion' fcs cs
+                   then do cs' <- dbgTrace minChatLvl "tryInRegion' aftertag: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2')) dbgTrace minChatLvl "End tryInRegion' afterTag.\n" tryInRegion' fcs cs
                            r <- lift $ lift $ freshRegVar
                            let c' = StartRegionL lv2' r
                            return (c':c:cs')
-                   else do cs' <- tryInRegion' fcs cs
+                   else do cs' <- dbgTrace minChatLvl "tryInRegion' aftertag: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2')) dbgTrace minChatLvl "End tryInRegion' afterTag.\n" tryInRegion' fcs cs
                            return (c:cs')
             _ -> do cs' <- tryInRegion' fcs cs
                     return (c:cs')
@@ -1283,16 +1293,15 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                                      Single _ ->  AfterConstantL loc_new 0 loc_old
                                                                                                                                      _ -> AssignL loc_new loc_old
                                                                                                          ) pair_new_old
-
-                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed) d
                                                                         let afvarc = (mapMaybe afterVar $ zip3 
                                                                                                     dcArgDconBuf 
                                                                                                     ((map Just rstlocs) ++ [Nothing])
                                                                                                     (map Just locsDconBuf)
                                                                                      )
+                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed ++ afvarc) d
                                                                         -- , locsFields, fieldLocVarsAfter
                                                                         -- dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n"
-                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', ls', fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
+                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', afvarc, fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
                           -- dbgTrace minChatLvl "Print tuple line: 1061" dbgTrace minChatLvl (sdoc (fieldLocVars, fieldConstraints)) dbgTrace minChatLvl "End line 1061\n"
                       let constrs = concat $ [c | (_,_,c) <- ls']
