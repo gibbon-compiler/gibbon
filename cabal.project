@@ -1,8 +1,4 @@
 packages: gibbon-compiler
 
-if (impl(ghc >= 9.8))
-    program-options
-        ghc-options: -Werror=x-no-partial
-else
-    program-options
-        ghc-options: -Werror
+program-options
+    ghc-options: -Werror
