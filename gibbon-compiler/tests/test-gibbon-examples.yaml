@@ -357,7 +357,7 @@ tests:
     dir: examples
     answer-file: examples/test_printpacked.ans
     # gibbon3 and gibbon2: Inferlocations bug.
-    failing: [interp1,gibbon1,pointer, colobus1, colobus2, colobus3]
+    failing: [interp1,gibbon1,pointer, colobus1, colobus2]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
