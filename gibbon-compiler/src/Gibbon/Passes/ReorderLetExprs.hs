@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 module Gibbon.Passes.ReorderLetExprs (reorderLetExprs) where
 
 import qualified Data.List as L 

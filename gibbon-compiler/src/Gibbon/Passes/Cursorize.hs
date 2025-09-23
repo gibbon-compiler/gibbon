@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wwarn #-}
 module Gibbon.Passes.Cursorize
   (cursorize) where
 

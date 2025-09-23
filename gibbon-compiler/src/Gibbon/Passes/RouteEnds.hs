@@ -1,7 +1,8 @@
+{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP              #-}
 {-# LANGUAGE RecordWildCards  #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 -- | Insert end witnesses in an L2 program by changing function types,
 -- and updating expressions to pass (second-class) end locations around
