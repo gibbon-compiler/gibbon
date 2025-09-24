@@ -1,6 +1,4 @@
 #!/bin/bash
-# Helper script to regenerate haskell-ci.yml with correct triggers
-# This script runs haskell-ci regenerate and fixes the on: section
 
 set -e
 
@@ -25,6 +23,8 @@ on:\
   push:\
     branches:\
       - main\
-  pull_request:' .github/workflows/haskell-ci.yml
+  pull_request:\
+concurrency:\
+  group: ${{ github.workflow }}-${{ github.ref }}\
+  cancel-in-progress: true' .github/workflows/haskell-ci.yml
 
-echo "✅ Fixed haskell-ci.yml triggers to avoid duplicate runs"
