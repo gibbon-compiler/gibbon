@@ -2,6 +2,10 @@
 
 ![test-gibbon](https://github.com/iu-parfunc/gibbon/workflows/test-gibbon/badge.svg?branch=master)
 
+## CI Workflow Management
+
+The `haskell-ci.yml` workflow is auto-generated but requires post-processing to avoid duplicate CI runs. See [`scripts/README.md`](scripts/README.md) for details on regenerating workflows.
+
 *Gibbon* is an experimental compiler that transforms high-level functional programs
 to operate on _serialized data._
 
