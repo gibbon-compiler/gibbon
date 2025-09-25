@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-| Do all things necessary to compile parallel allocations to a single region.
 
 In the sequential semantics, (letloc-after x) can only run after x is written to
@@ -136,10 +136,10 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                                        Nothing (M.elems (vEnv env2))
                         indr_dcon = Sf.headErr $ filter isIndirectionTag $ getConOrdering ddefs tycon
                         reg_from = case (reg_env # from) of
-                                          SingleR v -> v
+                                          SingleR v' -> v'
                                           SoARv _ _ -> error "parAlloc: did not expect an SoA region!"
                         reg_to = case (reg_env # to) of 
-                                          SingleR v -> v
+                                          SingleR v' -> v'
                                           SoARv _ _ -> error "parAlloc: did not expect an SoA region!"
                         rhs = Ext $ IndirectionE tycon indr_dcon (from, singleLocVar reg_from) (to, singleLocVar reg_to) (AppE "nocopy" [] [])
                     pure $ LetE (indr, [], PackedTy tycon from, rhs) acc)

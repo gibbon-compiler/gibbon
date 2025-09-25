@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 -- | Replace calls to copy functions with tagged indirection nodes
 module Gibbon.Passes.RemoveCopies where
 
@@ -38,7 +38,6 @@ removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
 removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initLocEnv = M.fromList $ map (\(LRM lc r _) -> case r of 
                                                           _ -> (lc, regionToVar r)
-                                                          SoAR _ _ -> error "TODO: removeCopiesFn structure of arrays not implemented yet."
                                     ) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
@@ -78,10 +77,10 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
           let reg_lout = case (lenv # lout) of 
-                                  SingleR v -> v
+                                  SingleR v' -> v'
                                   SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
           let reg_lin = case (lenv # lin) of 
-                                  SingleR v -> v
+                                  SingleR v' -> v'
                                   SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
           LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod

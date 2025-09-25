@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-matches  #-}
 module Gibbon.Passes.RegionsInwards (regionsInwards) where
 
 import Data.Foldable as F
@@ -7,7 +8,6 @@ import qualified Data.Map as M
 import Data.Maybe ()
 import qualified Data.Maybe as S
 import qualified Data.Set as S
-import Data.Text.Array (new)
 import Gibbon.Common
 import Gibbon.L2.Syntax
 import Text.PrettyPrint.GenericPretty
@@ -673,10 +673,10 @@ removeAliasedLocations env definedLocs ex =
               rhs' <- removeAliasedLocations env definedLocs' rhs
               let nloc = case loc of
                     Single _ -> getAliasLoc env loc
-                    SoA dcl fieldLocs ->
+                    SoA dcl fieldLocs' ->
                       let dcl' = getAliasLoc env (Single dcl)
-                          fieldLocs' = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs
-                       in SoA (unwrapLocVar dcl') fieldLocs'
+                          fieldLocs'' = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs'
+                       in SoA (unwrapLocVar dcl') fieldLocs''
                   ndconl = getAliasLoc env dconl
                   nfieldLocs = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs
               case existsLetForLoc of

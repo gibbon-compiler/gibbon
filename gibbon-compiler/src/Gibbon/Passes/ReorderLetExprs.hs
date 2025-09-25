@@ -1,9 +1,9 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-overlapping-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-matches  #-}
 module Gibbon.Passes.ReorderLetExprs (reorderLetExprs) where
 
-import qualified Data.List as L 
 import qualified Data.Set as S
-
 import qualified Data.Map as M
 
 import Data.Foldable as F
@@ -12,7 +12,6 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.Common
 import Gibbon.L2.Syntax
 import Data.Maybe ()
-import qualified Data.Maybe as S
 
 data DelayedExpr = LetExpr (Var, [LocVar], Ty2, Exp2)
                  | LetLocExpr LocVar LocExp 
@@ -201,10 +200,6 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
 
         FoldE _ _ _ -> error "reorderLetExprsFunBody: FoldE not supported!"
 
-        WithArenaE v e -> do
-            (e', delayedExprMap')  <- reorderLetExprsFunBody definedVars delayedExprMap e
-            pure $ (WithArenaE v e', delayedExprMap')
-
         Ext (LetLocE loc rhs bod) -> do
             let freeVarsRhs = freeVarsInLocExp rhs
                 --freeVarsRhs' = S.map (fromVarToFreeVarsTy) freeVarsRhs
@@ -293,7 +288,6 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
             pure $ (Ext $ LetRegionE r sz ty bod', delayedExprMap')
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
-        _ -> pure (ex, delayedExprMap)
 
 
 {- We also need to release let expressions which are defined -}
@@ -445,7 +439,6 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
             pure $ Ext $ LetRegionE r sz ty bod'
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
-        _ -> pure ex
         where
             releaseAllLetLocE :: DefinedVars -> DelayedExprMap -> [Exp2] -> PassM (DefinedVars, DelayedExprMap, [Exp2])
             releaseAllLetLocE envDefinedVars envDelayedExprMap letsToBeReleased = do
@@ -610,8 +603,7 @@ ensureLocationsAreDefinedForWrite definedVars ex = do
             pure $ Ext $ LetRegionE r sz ty bod'
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
-        _ -> pure ex
-    where 
+    where
         go = ensureLocationsAreDefinedForWrite definedVars
 
 
