@@ -187,7 +187,7 @@ data E2Ext loc dec
 
   | StartOfPkdCursor Var -- Cursor to a packed value, created by AddRAN.
 
-  | TagCursor Var Var    -- Create a tagged cursor.
+  | TagCursor loc loc    -- Create a tagged cursor.
 
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
@@ -253,7 +253,7 @@ instance FreeVars (E2Ext l d) where
                            `S.union`
                            gFreeVars bod
      StartOfPkdCursor cur -> S.singleton cur
-     TagCursor a b      -> S.fromList [a,b]
+     TagCursor _ _      -> S.empty
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
      AddFixed vr _      -> S.singleton vr
@@ -900,7 +900,7 @@ revertExp ex =
         LetParRegionE _ _ _ bod -> revertExp bod
         LetLocE _ _ bod  -> revertExp bod
         StartOfPkdCursor cur -> Ext (L1.StartOfPkdCursor cur)
-        TagCursor a _b -> Ext (L1.StartOfPkdCursor a)
+        TagCursor a _b -> error "revertExp: Cannot revert TagCursor!" --Ext (L1.StartOfPkdCursor a)
         RetE _ v -> VarE v
         AddFixed{} -> error "revertExp: TODO AddFixed."
         FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -968,7 +968,7 @@ occurs w ex =
             FromEndLE{}         -> oc_bod
             _ -> oc_bod
         StartOfPkdCursor v -> v `S.member` w
-        TagCursor a b -> a `S.member` w || b `S.member` w
+        TagCursor a b -> False --a `S.member` w || b `S.member` w
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
         BoundsCheck{} -> False
@@ -1111,7 +1111,10 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               SSPush{} -> acc
               SSPop{} -> acc
               StartOfPkdCursor w -> go acc (VarE w)
-              TagCursor a b -> go (go acc (VarE a)) (VarE b)
+              TagCursor a b -> let
+                                acc' = M.insertWith (++) (fromLocVarToFreeVarsTy a) [fromLocVarToFreeVarsTy a] acc
+                                acc'' = M.insertWith (++) (fromLocVarToFreeVarsTy b) [fromLocVarToFreeVarsTy b] acc'
+                               in acc''
 
       dep :: PreLocExp LocVar -> [FreeVarsTy]
       dep ex =
@@ -1164,7 +1167,7 @@ allFreeVars ex =
                                       vars_locexp = S.map fromVarToFreeVarsTy (gFreeVars locexp)
                                     in S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars bod `S.union` locs_locexp `S.union` vars_locexp)
         StartOfPkdCursor cur -> S.singleton (V cur)
-        TagCursor a b -> S.fromList [V a, V b]
+        TagCursor a b -> S.fromList [FL a, FL b]
         RetE locs v     -> S.insert (V v) (S.fromList (map fromLocVarToFreeVarsTy locs))
         FromEndE loc    -> S.singleton (fromLocVarToFreeVarsTy loc)
         BoundsCheck _ reg cur -> S.fromList [(fromLocVarToFreeVarsTy reg),(fromLocVarToFreeVarsTy cur)]

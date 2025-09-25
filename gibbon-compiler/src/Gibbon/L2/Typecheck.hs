@@ -901,7 +901,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
       Ext (TagCursor a _b) -> do
-        case M.lookup (fromVarToFreeVarsTy a) (vEnv env) of
+        case M.lookup (fromLocVarToFreeVarsTy a) (vEnv env) of
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 

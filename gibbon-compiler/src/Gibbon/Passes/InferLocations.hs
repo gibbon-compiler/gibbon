@@ -193,6 +193,26 @@ getSoARegionFromLocVar loc = do
                                                         let region = SoAR (VarR (dcRegionVariable)) fieldRegions
                                                         return region
 
+
+filterRanDcons :: [DataCon] -> [DataCon]
+filterRanDcons dcons = let to_ignore = map (\dcon -> if L.isSuffixOf "^" dcon
+                                                     then Just $ init dcon
+                                                     else Nothing
+                                           ) dcons
+                           ignored_set = catMaybes to_ignore
+                           buffered_dcon = map (\dcon -> if L.elem dcon ignored_set then Nothing else Just dcon) dcons
+                         in catMaybes buffered_dcon
+
+filterRanDatacons :: [(DataCon, [(IsBoxed, a)])] -> [(DataCon, [(IsBoxed, a)])]
+filterRanDatacons dcons = let to_ignore = map (\(dcon, ty) -> if L.isSuffixOf "^" dcon
+                                                              then Just $ init dcon
+                                                              else Nothing
+                                           ) dcons
+                              ignored_set = catMaybes to_ignore
+                              buffered_dcon = map (\(dcon, ty) -> if L.elem dcon ignored_set then Nothing else Just (dcon, ty)) dcons
+                           in catMaybes buffered_dcon
+
+
 convertTy :: DDefs1 -> Bool -> Ty1 -> PassM Ty2
 convertTy ddefs useSoA ty = case useSoA of 
                             False -> traverse (const (freshLocVar "loc")) ty 
@@ -200,11 +220,8 @@ convertTy ddefs useSoA ty = case useSoA of
                                         PackedTy tycon _ -> do 
                                                              dconBuff <- freshLocVar "loc"
                                                              let dcons = getConOrdering ddefs tycon
-                                                            --  let dcons' = concatMap (\dcon -> if ('^' `elem` dcon)
-                                                            --                                   then []
-                                                            --                                   else [dcon]
-                                                            --                          ) dcons
-                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons
+                                                             let dcons' = filterRanDcons dcons
+                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons'
                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
                                                              dbgTrace minChatLvl "Print ty: " dbgTrace minChatLvl (sdoc (PackedTy tycon soaLocation)) dbgTrace minChatLvl "End ty.\n" return $ PackedTy tycon soaLocation
                                         _ -> traverse (const (freshLocVar "loc")) ty
@@ -246,13 +263,13 @@ convertTyHelperSoAChild tycon ddefs dcon = do
                                                                                              then return (flds, idx + 1)
                                                                                              else do 
                                                                                               dconBuff <- freshLocVar "loc"
-                                                                                              let dcons = getConOrdering ddefs tycon'
+                                                                                              let dcons = filterRanDcons $ getConOrdering ddefs tycon'
                                                                                               locsForFields <- convertTyHelperSoAParent tycon' ddefs dcons
                                                                                               let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
                                                                                               return (flds ++ [((dcon, idx), soaLocation)], idx + 1)  
-
-                                                                        CursorTy -> return (flds, idx+1)
-                                                                        CursorArrayTy _ -> return (flds, idx+1)
+                                                                        -- For ran pointers, we are skipping making buffers for them.
+                                                                        CursorTy -> return (flds, idx + 1)
+                                                                        CursorArrayTy _ -> return (flds, idx + 1)
                                                                         _ -> do 
                                                                              info <- convertTyHelperGetLocForField' dcon idx (show f) 
                                                                              return (flds ++ [info], idx + 1)
@@ -433,8 +450,8 @@ freshTyLocs ty ddefs = do
                                             --let newSoALoc = SoA (unwrapLocVar dbuf') rst'
                                             --return $ PackedTy tc newSoALoc
                                             dbuf' <- fresh
-                                            let dcons = getConOrdering ddefs tc
-                                            locsForFields <- lift $ lift $convertTyHelperSoAParent tc ddefs dcons
+                                            let dcons = filterRanDcons $ getConOrdering ddefs tc
+                                            locsForFields <- lift $ lift $ convertTyHelperSoAParent tc ddefs dcons
                                             let soaLocation = SoA (unwrapLocVar dbuf') locsForFields
                                             return $ PackedTy tc soaLocation
                             Single _ -> do
@@ -461,7 +478,7 @@ fixType_ ty =
       _ -> return ()
 
 -- | get the field locs from the SoA locs
-getFieldLocs :: LocVar -> [((DataCon, FieldIndex), LocVar)]
+getFieldLocs :: HasCallStack => LocVar -> [((DataCon, FieldIndex), LocVar)]
 getFieldLocs loc = case loc of 
                     SoA dcon fieldLocs -> fieldLocs
                     Single lc -> error $ "InferLocations : getFieldLocs : Did not expect a non SoA location!" ++ show loc
@@ -506,7 +523,7 @@ inferExp' ddefs env exp bound dest=
       bindAllLocations (expr,ty,constrs) = return $ (expr',ty,[])
           where constrs' = L.nub $ constrs
                 expr' = foldr addLetLoc expr constrs'
-                addLetLoc i a =
+                addLetLoc i a = dbgTrace (minChatLvl) "Print constraints in bindAllLocation!" dbgTrace (minChatLvl) (sdoc constrs') dbgTrace (minChatLvl) "End in bindAllLocations!\n"
                     case i of
                       -- AfterSoALE (PreLocExp loc) [PreLocExp loc] loc
                       -- TODO: This might need to better capture the handling of SoA location. 
@@ -520,7 +537,7 @@ inferExp' ddefs env exp bound dest=
                       --                                                                        ) fieldConstrs
                       --                                               in Ext (LetLocE lv1 (AfterVectorLE dataConExpression fieldLocExprs lv2) a)    
                       AfterSoAL slv1 dconConstr fieldConstrs slv2 -> case (dconConstr, fieldConstrs) of 
-                                                                          (AfterTagL lv1 lv2, flst) -> -- First let use get all the locations from the fieldConstrs
+                                                                          (dconstr, flst) -> -- First let use get all the locations from the fieldConstrs
                                                                                                      let used_field_locs = P.map (\c -> case c of 
                                                                                                                                           AfterConstantL lv1 v lv2 -> lv2  
                                                                                                                                           AfterVariableL lv1 v lv2 -> lv2
@@ -533,8 +550,11 @@ inferExp' ddefs env exp bound dest=
                                                                                                                               ) (getFieldLocs slv2)
                                                                                                          exprs = P.map (\(key, l) -> LetLocE l (GetFieldLocSoA key slv2)
                                                                                                                        ) get_loc_keys
-                                                                                                         dconLoc = LetLocE lv1 (AfterConstantLE 1 lv2)
-                                                                                                         exprs' = [LetLocE lv2 (GetDataConLocSoA slv2)] ++ exprs ++ [dconLoc]
+                                                                                                         (lv1, lv2, dconLoc) = case dconstr of
+                                                                                                                          AfterTagL lv1 lv2 -> (lv1, lv2, LetLocE lv1 (AfterConstantLE 1 lv2))
+                                                                                                                          AfterConstantL lv1 i lv2 -> (lv1, lv2, LetLocE lv1 (AfterConstantLE i lv2))
+                                                                                                                          _ -> error "Not implemented!"
+                                                                                                         exprs' = [LetLocE (getDconLoc slv2) (GetDataConLocSoA slv2)] ++ exprs ++ [dconLoc]
                                                                                                          (fieldLocExps, a') = L.foldl (\(acc, ba) c -> case c of 
                                                                                                                                 AfterConstantL lv1 v lv2 -> (acc ++ [LetLocE lv1 (AfterConstantLE v lv2)], ba)
                                                                                                                                 AfterVariableL lv1 v lv2 -> (acc ++ [LetLocE lv1 (AfterVariableLE v lv2 True)], ba)
@@ -584,7 +604,11 @@ inferExp' ddefs env exp bound dest=
                       AssignL lv1 lv2 -> Ext (LetLocE lv1 (AssignLE lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
                       StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
-                      AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a) {- VS: I think it may be fine to hardcode [] since AfterTagL is reserved for a Tag loc?-}
+                      AfterTagL lv1 lv2 -> case lv2 of 
+                                              Single{} -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
+                                              SoA dloc flds -> let get_dcon_loc = LetLocE (Single dloc) (GetDataConLocSoA lv2)
+                                                                   after_tag_let = LetLocE lv1 (AfterConstantLE 1 (Single dloc))
+                                                                in Ext (get_dcon_loc (Ext $ after_tag_let a)) 
                       FreeL lv -> Ext (LetLocE lv FreeLE a)
                       AfterCopyL lv1 v1 v' lv2 f lvs ->
                         let arrty = arrOut $ lookupFEnv f env
@@ -1146,7 +1170,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
                         case arg of
                           (VarE v) -> case lookupVEnv v env of
-                                                 CursorTy -> return $ ArgFixed 0
+                                                 -- both, cursor array and cursorArrty 
+                                                 -- are reserved for shortcut pointers 
+                                                 CursorTy -> return $ ArgFixed 8
+                                                 CursorArrayTy{} -> return $ ArgFixed 8
                                                --CursorTy -> return $ ArgFixed 8
                                                  IntTy -> return $ ArgFixed 0
                                                --IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
@@ -1190,9 +1217,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           afterVar _ = Nothing
                           -- dbgTrace minChatLvl "Print DataConE SoA case argsLs: " dbgTrace minChatLvl (sdoc (d, argLs, newLocs)) dbgTrace minChatLvl "End DataConE SoA case argLs.\n"
                       let dataBufferLoc = Single dataBufferVar
+                          -- VS: September 24th, 2025
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
-                          -- the same datatype. 
+                          -- the same datatype.
+                          -- In addition, we want the random access pointers to reside 
+                          -- inside the data constructor buffer as well.
                           (idxsWriteDconBuf, idxsFields) = L.foldr (\(res@(_, ty, _), idx) (w, f) -> case ty of 
                                                                       PackedTy tycon _ -> if tycon == tyConOfDataCon
                                                                                           then (w ++ [Just idx], f)
@@ -1235,12 +1265,22 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                 (fieldLocVars)
                                              )
                           -- AfterTagConstraints
-                      (aftagc, sc, aftvarc) <- case locsDconBuf of
+                          (shortcut_ptr_ctrs, locsDconBuf') = foldl (\(s, dcs) l -> case l of 
+                                                                                  Single{} -> (s ++ [l], dcs)
+                                                                                  SoA{} -> (s, dcs ++ [l])                  
+                                                                        ) ([], []) locsDconBuf
+                          (shortcut_ptr_dcargs, dcArgDconBuf') = foldl (\(s, dcs) (l, arg) -> case l of 
+                                                                                                Single{} -> (s ++ [arg], dcs)
+                                                                                                SoA{} -> (s, dcs ++ [arg])
+                                                                       ) ([], []) (zip locsDconBuf dcArgDconBuf)
+
+                      (aftagc, sc, aftvarc) <- case (shortcut_ptr_ctrs, locsDconBuf') of
                                                         -- No recursion in the data type
                                                         -- dbgTrace minChatLvl "Found a DataConE with no recursion." dbgTrace minChatLvl (sdoc (k)) dbgTrace minChatLvl "End line 1134.\n"      
-                                                        [] -> do                                                        
+                                                        ([], []) -> do                                                        
                                                               return ([],fieldConstraints, [])
-                                                        hloc:rstlocs -> do
+                                                        (sptrs, []) -> error "TODO: add constraints for all the shotcut pointers!\n"
+                                                        ([], hloc:rstlocs) -> do
                                                                         let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
                                                                         let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
                                                                                                                         in case fldloc of 
@@ -1293,15 +1333,95 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                                      Single _ ->  AfterConstantL loc_new 0 loc_old
                                                                                                                                      _ -> AssignL loc_new loc_old
                                                                                                          ) pair_new_old
+
+                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed) d
                                                                         let afvarc = (mapMaybe afterVar $ zip3 
-                                                                                                    dcArgDconBuf 
+                                                                                                    dcArgDconBuf' 
                                                                                                     ((map Just rstlocs) ++ [Nothing])
-                                                                                                    (map Just locsDconBuf)
+                                                                                                    (map Just locsDconBuf')
                                                                                      )
-                                                                        let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed ++ afvarc) d
                                                                         -- , locsFields, fieldLocVarsAfter
                                                                         -- dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n"
-                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', afvarc, fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
+                                                                        dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', ls', fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [soac], afvarc)
+                                                                              
+                                                        (sptrs, hloc:rstlocs) -> do
+                                                                            -- make after tag constraint for the first
+                                                                            let first_shortcut = Sf.headErr sptrs
+                                                                            let tail_shortcut = tail sptrs
+                                                                            let last_shortcut = last sptrs
+                                                                            let tagc_shortcut_first_c = AfterTagL (first_shortcut) d
+                                                                            let fields_d = getFieldLocs d
+                                                                            -- let after_shortcut_soa = SoA (unwrapLocVar last_shortcut) fields_d
+                                                                            let constratints_short_cut_rst = (mapMaybe afterVar $ zip3 
+                                                                                                                          shortcut_ptr_dcargs 
+                                                                                                                          ((map Just tail_shortcut) ++ [Nothing])
+                                                                                                                          (map Just sptrs)
+                                                                                                             )
+
+                                                                            -- let after_shortcut_all_dcon = AfterConstantL last_shortcut (8 * length sptrs) (getDconLoc d)                                 
+                                                                            -- let after_shorcut_constr = AfterSoAL after_shortcut_soa after_shortcut_all_dcon [] d
+
+                                                                            -- The tag constraint will change to an after constant constraint
+                                                                            let tagc = AfterConstantL (getDconLoc hloc) (8) (last_shortcut)
+                                                                            let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
+                                                                                                                        in case fldloc of 
+                                                                                                                            Just location -> Just location
+                                                                                                                            Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
+                                                                                                          ) idxsFields'
+                                                                            argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
+                                                                                      case arg of
+                                                                                          (VarE v) -> case lookupVEnv v env of
+                                                                                                          CursorTy -> return $ ArgFixed 8
+                                                                                                          IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                                                                                          FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                                                                                          SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                                                                                          BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                                          CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
+                                                                                                          VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
+                                                                                                          ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                                                                                          PackedTy ttyy loccc -> return $ ArgVar v 
+                                                                                                          --if ttyy == tyConOfDataCon
+                                                                                                          --                       then return $ ArgVar v
+                                                                                                          --                       else return $ ArgFixed 0
+                                                                                                          _ -> return $ ArgVar v --error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
+                                                                                          -- TODO: fix these to get the correct offset for an SoA loc.
+                                                                                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                                                                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                                                                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                                                                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                                                                          (AppE f lvs [(VarE v)]) -> do 
+                                                                                                    v' <- lift $ lift $ freshLocVar "cpy"
+                                                                                                    return $ ArgCopy v (unwrapLocVar v') f lvs
+                                                                                          _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                                                                            let fieldConstraints' = (mapMaybe afterVar $ zip3 
+                                                                                                      argLsAfterSoALoc
+                                                                                                      ((fieldLocVarsAfter))
+                                                                                                     (map Just locsFields)
+                                                                                                   )
+                                                                            -- handle field of other data constructors in the final SoA loc passed to the recursive call.
+                                                                            let fields_hloc = getFieldLocs hloc
+                                                                            let pair_new_old = concatMap (\(ks@(dcon, idx), loc1) -> if dcon /= k
+                                                                                                                             then 
+                                                                                                                              let loc2 = case (L.lookup (dcon, idx) fields_d) of 
+                                                                                                                                        Just loc2 -> loc2
+                                                                                                                                        Nothing -> error "inferExp: fieldLocVars did not expect Nothing!"
+                                                                                                                                in [(ks, loc1, loc2)]
+                                                                                                                             else [] 
+                                                                                                         ) fields_hloc
+                                                                            let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> case loc_new of 
+                                                                                                                                          Single _ ->  AfterConstantL loc_new 0 loc_old
+                                                                                                                                          _ -> AssignL loc_new loc_old
+                                                                                                             ) pair_new_old
+                                                                            let afvarc = (mapMaybe afterVar $ zip3 
+                                                                                                       dcArgDconBuf' 
+                                                                                                       ((map Just rstlocs) ++ [Nothing])
+                                                                                                       (map Just locsDconBuf')
+                                                                                         )
+                                                                            let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed ++ afvarc) d
+                                                                            -- , locsFields, fieldLocVarsAfter
+                                                                            -- dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n"
+                                                                            dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', afvarc, fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [tagc_shortcut_first_c] ++ constratints_short_cut_rst ++ [soac], afvarc)
                           -- Generate the constraints around the field buffers. 
                           -- dbgTrace minChatLvl "Print tuple line: 1061" dbgTrace minChatLvl (sdoc (fieldLocVars, fieldConstraints)) dbgTrace minChatLvl "End line 1061\n"
                       let constrs = concat $ [c | (_,_,c) <- ls']
@@ -2365,6 +2485,9 @@ freshSoALocHelper ddefs tyvar lst = do
                                                                                                   newLoc <- freshSoALoc2 ddefs tyc
                                                                                                   let Just idx = L.elemIndex e flds
                                                                                                   return $ [((a, idx), newLoc)]
+                                                                                -- no new buffers for shortcut pointers
+                                                                                CursorTy -> return []
+                                                                                CursorArrayTy{} -> return []
                                                                                 _ -> do
                                                                                      newLoc <- fresh
                                                                                      let Just idx = L.elemIndex e flds
@@ -2377,7 +2500,8 @@ freshSoALoc2 :: DDefs Ty2 -> TyCon -> TiM LocVar
 freshSoALoc2 ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
-                       fields <- freshSoALocHelper ddfs tyc dataCons
+                       let dataCons' = filterRanDatacons dataCons
+                       fields <- freshSoALocHelper ddfs tyc dataCons'
                        newdcLoc <- fresh
                        return $ SoA (unwrapLocVar newdcLoc) fields
 
@@ -2399,6 +2523,9 @@ freshSoALocHelper3 ddefs tyvar lst = do
                                                                                                   newLoc <- freshSoALoc3 "new" Nothing ddefs tyc 
                                                                                                   --let Just idx = L.elemIndex e flds
                                                                                                   return $ [((a, idx), newLoc)]
+                                                                                -- shortcut pointers
+                                                                                CursorTy -> return []
+                                                                                CursorArrayTy{} -> return [] 
                                                                                 _ -> do
                                                                                      newLoc <- fresh
                                                                                      --let Just idx = L.elemIndex e flds
@@ -2411,7 +2538,8 @@ freshSoALoc3 :: Var -> Maybe DataCon -> DDefs Ty1 -> TyCon -> TiM LocVar
 freshSoALoc3 str (Just currDcon) ddfs tyc = do
                        -- let (tyc, (don, flds)) = lkp ddfs con
                        let DDef{dataCons} = lookupDDef ddfs tyc
-                       let curr_dcon_info = L.lookup currDcon dataCons
+                       let dataCons' = filterRanDatacons dataCons
+                       let curr_dcon_info = L.lookup currDcon dataCons'
                         in case curr_dcon_info of 
                                Nothing -> error "Expected data con information!"
                                Just dinfo -> do        
@@ -2419,8 +2547,9 @@ freshSoALoc3 str (Just currDcon) ddfs tyc = do
                                              newdcLoc <- lift $ lift $ gensym str
                                              dbgTrace minChatLvl "Print in freshSoALoc3: " dbgTrace minChatLvl (sdoc (fields, currDcon, dinfo)) dbgTrace minChatLvl "End freshSoALoc3.\n" return $ SoA newdcLoc fields
 freshSoALoc3 str Nothing ddfs tyc = do
-                         let DDef{dataCons} = lookupDDef ddfs tyc     
-                         fields <- freshSoALocHelper3 ddfs tyc dataCons
+                         let DDef{dataCons} = lookupDDef ddfs tyc
+                         let dataCons' = filterRanDatacons dataCons
+                         fields <- freshSoALocHelper3 ddfs tyc dataCons'
                          newdcLoc <- lift $ lift $ gensym str
                          return $ SoA newdcLoc fields
 

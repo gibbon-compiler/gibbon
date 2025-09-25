@@ -195,7 +195,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
         AddFixed v i -> pure $ Ext $ AddFixed v i
 
-        TagCursor a b -> pure $ Ext $ TagCursor a b
+        TagCursor a b -> pure $ Ext $ TagCursor (locenv # a) (locenv # b)
 
         StartOfPkdCursor cur -> pure $ Ext $ StartOfPkdCursor cur
 
@@ -397,7 +397,7 @@ toOldL2Exp ex =
           pure $ Ext $ StartOfPkdCursor cur
 
         TagCursor a b -> do
-          pure $ Ext $ TagCursor a b
+          pure $ Ext $ TagCursor (New.toLocVar a) (New.toLocVar b)
 
         RetE locs v -> do
           let locargs = map New.toLocVar locs

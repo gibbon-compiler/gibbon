@@ -568,11 +568,11 @@ getDconLoc loc = case loc of
                     SoA dcon fieldLocs -> Single dcon 
                     Single lc -> loc 
                             
-getFieldLoc :: (DataCon, FieldIndex) -> LocVar -> LocVar
+getFieldLoc :: HasCallStack => (DataCon, FieldIndex) -> LocVar -> LocVar
 getFieldLoc (dcon, idx) loc = case loc of 
                                 SoA _ fieldLocs -> case Prelude.lookup (dcon, idx) fieldLocs of 
                                                           Just loc -> loc
-                                                          Nothing -> error "getFieldLoc : Field location not found!"
+                                                          Nothing -> error $ "getFieldLoc : Field location not found!" ++ show (dcon, idx, loc)
                                 Single lc -> error "getFieldLoc : Did not expect a non SoA location!"
 
 getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), LocVar)]

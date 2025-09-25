@@ -678,7 +678,19 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
 
         StartOfPkdCursor cur -> return (VarE cur)
 
-        TagCursor a b -> return $ Ext $ L3.TagCursor a b
+        TagCursor a b ->  do
+          let a_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar a)) freeVarToVarEnv) of 
+                                Just v -> v 
+                                Nothing -> case (toLocVar a) of 
+                                                Single l -> l
+                                                SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
+          let b_var = case (M.lookup (fromRegVarToFreeVarsTy ((fromLocVarToRegVar . toLocVar) b)) freeVarToVarEnv) of 
+                                Just v -> v 
+                                Nothing -> case (toLocVar b) of 
+                                                Single l -> l
+                                                SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
+          
+          return $ Ext $ L3.TagCursor a_var b_var
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -1538,7 +1550,19 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
 
         StartOfPkdCursor cur -> return $ dl $ VarE cur
 
-        TagCursor a b -> return $ dl $ Ext $ L3.TagCursor a b
+        TagCursor a b -> do
+          let a_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar a)) freeVarToVarEnv) of 
+                                Just v -> v 
+                                Nothing -> case (toLocVar a) of 
+                                                Single l -> l
+                                                SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
+          let b_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar b)) freeVarToVarEnv) of 
+                                Just v -> v 
+                                Nothing -> case (toLocVar b) of 
+                                                Single l -> l
+                                                SoA _ _ ->  error "cursorizeExp: LetLocE: unexpected location variable"
+          
+          return $ dl $ Ext $ L3.TagCursor a_var b_var
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions

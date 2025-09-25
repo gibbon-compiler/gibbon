@@ -464,7 +464,7 @@ revertExp ex =
         Old.LetRegionE _ _ _ bod -> revertExp bod
         Old.LetParRegionE _ _ _ bod -> revertExp bod
         Old.LetLocE _ _ bod  -> revertExp bod
-        Old.TagCursor a _b -> Ext (L1.StartOfPkdCursor a)
+        Old.TagCursor a _b -> error "revertExp cannot revert TagCursor" --Ext (L1.StartOfPkdCursor a)
         Old.StartOfPkdCursor v -> Ext (L1.StartOfPkdCursor v)
         Old.RetE _ v -> VarE v
         Old.AddFixed{} -> error "revertExp: TODO AddFixed."
@@ -552,7 +552,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.SSPush{} -> acc
               Old.SSPop{} -> acc
               Old.StartOfPkdCursor cur -> M.insertWith (++) (fromVarToFreeVarsTy cur) [(fromVarToFreeVarsTy cur)] acc
-              Old.TagCursor a b -> M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
+              Old.TagCursor a b -> acc --M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
 
       dep :: Old.PreLocExp LocArg -> [FreeVarsTy]
       dep ex =
@@ -589,7 +589,7 @@ allFreeVars ex =
         Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetLocE loc locexp bod -> S.difference ((S.singleton . fromLocVarToFreeVarsTy) loc) (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
         Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)
-        Old.TagCursor a b-> S.fromList [(fromVarToFreeVarsTy a),(fromVarToFreeVarsTy b)]
+        Old.TagCursor a b-> S.fromList [((fromLocVarToFreeVarsTy . toLocVar)  a),((fromLocVarToFreeVarsTy . toLocVar) b)]
         Old.RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
         Old.FromEndE loc    -> S.singleton ((fromLocVarToFreeVarsTy . toLocVar) loc)
         Old.BoundsCheck _ reg cur -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) [reg, cur])
