@@ -128,8 +128,6 @@ library
                      , language-c-quote         >= 0.12.1    &&  < 1
                      , mainland-pretty          >= 0.6.1     &&  < 1
                      , safe
-                     , uuid
-                     , hashable                 >= 1.4.5.0
 -- Brings in lots of ekmett dependencies:
 --                     , either
 
