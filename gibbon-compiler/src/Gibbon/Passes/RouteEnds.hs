@@ -384,9 +384,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                   tyconOfDataCon = getTyOfDataCon ddefs dc
                                   argtys = lookupDataCon ddefs dc
                                   env2' = extendsVEnvLocVar (M.fromList (zip (L.map fromLocVarToFreeVarsTy locs) argtys ++ zip varsToFreeVarsTy argtys)) env2
-                                  lx = case M.lookup (fromVarToFreeVarsTy x) lenv of
-                                          Nothing -> error $ "Failed to find " ++ (show x)
-                                          Just l -> l
+                                  lx = scrutloc
                                   -- we know lx and need have the same end, since
                                   -- lx is the whole packed thing and need is its
                                   -- last field, so when we look up the end of lx
