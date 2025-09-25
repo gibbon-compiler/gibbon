@@ -1,4 +1,7 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-local-binds  #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Gibbon.Passes.Cursorize
   (cursorize) where
 
@@ -858,7 +861,6 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
           -- SoARv dv _ -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
 
-        _ -> error $ "Unpexected Expression: " ++ show ext
 
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"

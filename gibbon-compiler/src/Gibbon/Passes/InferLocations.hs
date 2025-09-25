@@ -1,5 +1,4 @@
-{-# OPTIONS_GHC -Wwarn #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 {-# LANGUAGE BlockArguments #-}
 
@@ -435,7 +434,7 @@ freshTyLocs ty ddefs = do
                                             --return $ PackedTy tc newSoALoc
                                             dbuf' <- fresh
                                             let dcons = getConOrdering ddefs tc
-                                            locsForFields <- lift $ lift $convertTyHelperSoAParent tc ddefs dcons
+                                            locsForFields <- lift $ lift $ convertTyHelperSoAParent tc ddefs dcons
                                             let soaLocation = SoA (unwrapLocVar dbuf') locsForFields
                                             return $ PackedTy tc soaLocation
                             Single _ -> do
@@ -1891,6 +1890,8 @@ finishExp e =
       Ext (AllocateScalarsHere{}) -> err $ "todo: " ++ sdoc e
       Ext (SSPush{})              -> err $ "todo: " ++ sdoc e
       Ext (SSPop{})               -> err $ "todo: " ++ sdoc e
+      Ext (LetRegE{})             -> err $ "todo: " ++ sdoc e
+      Ext (BoundsCheckVector{})   -> err $ "todo: " ++ sdoc e
       MapE{}  -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -2015,21 +2016,18 @@ cleanExp e =
                                               in if S.member s s'
                                                  then let ls = case lex of
                                                                   GenSoALoc dcloc flocs -> [dcloc] ++ P.map (\(_, ll) -> ll) flocs
-                                                                  oth -> []
                                                        in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
                                                  else (e',s')
       Ext (LetLocE s@(SoA dloc flcs) lex@(AssignLE _) e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
                                                  then let ls = case lex of
                                                                   AssignLE loc -> [loc]
-                                                                  oth -> []
                                                        in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
                                                  else (e' ,s')
       Ext (LetLocE s@(SoA dloc flcs) lex@(GetFieldLocSoA _ loc) e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
                                                  then let ls = case lex of
                                                                   GetFieldLocSoA _ loc -> [loc]
-                                                                  oth -> []
                                                        in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
                                                  else (e' ,s')
       Ext (LetLocE s@(SoA dloc flcs) lex e) -> let (e',s') = cleanExp e
@@ -2054,6 +2052,8 @@ cleanExp e =
       Ext (AllocateScalarsHere{}) -> err $ "todo: " ++ sdoc e
       Ext (SSPush{})              -> err $ "todo: " ++ sdoc e
       Ext (SSPop{})               -> err $ "todo: " ++ sdoc e
+      Ext (LetRegE{})             -> err $ "todo: " ++ sdoc e
+      Ext (BoundsCheckVector{})   -> err $ "todo: " ++ sdoc e
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -2128,6 +2128,7 @@ fixProj renam pvar proj e =
 moveProjsAfterSync :: LocVar -> Exp2 -> Exp2
 moveProjsAfterSync sv ex = case sv of 
                                 l@(Single loc) -> go [] (S.singleton $ fromLocVarToFreeVarsTy l) ex
+                                SoA {} -> error "moveProjsAfterSync: unexpected SoA location"
   where
     go :: [Binds (Exp2)] -> S.Set FreeVarsTy -> Exp2 -> Exp2
     go acc1 pending ex =
@@ -2685,6 +2686,9 @@ fixRANs prg@(Prog defs funs main) = do
                      AllocateScalarsHere{} -> return ([],e0)
                      SSPush{}              -> return ([],e0)
                      SSPop{}               -> return ([],e0)
+                     LetRegE{}             -> return ([],e0)
+                     BoundsCheckVector{}   -> return ([],e0)
+
 
         LitE{}    -> return ([],e0)
         CharE{}   -> return ([],e0)

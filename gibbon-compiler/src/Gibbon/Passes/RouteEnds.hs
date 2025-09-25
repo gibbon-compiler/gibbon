@@ -1,5 +1,6 @@
-{-# OPTIONS_GHC -Wwarn #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-matches  #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-binds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP              #-}
 {-# LANGUAGE RecordWildCards  #-}
@@ -36,13 +37,11 @@ import Data.Map as M
 import Data.Set as S
 import Control.Monad
 
-import Data.Foldable ( foldrM, foldlM )
+import Data.Foldable ( foldlM )
 
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
 import Gibbon.L1.Syntax as L1
-import Control.Arrow (Arrow(first))
-import Gibbon.L0.Typecheck (instDataConTy)
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
 
@@ -176,6 +175,8 @@ bindReturns ex =
         AllocateScalarsHere{} -> pure ex
         SSPush{} -> pure ex
         SSPop{} -> pure ex
+        LetRegE {} -> error "bindReturns: LetRegE not handled"
+        BoundsCheckVector {} -> error "bindReturns: BoundsCheckVector not handled"
     MapE{}  -> error $ "bindReturns: TODO MapE"
     FoldE{} -> error $ "bindReturns: TODO FoldE"
 
@@ -415,7 +416,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                      in case self_recursive_locs_in_order of 
                                                                                   [] -> L.foldr f afterenv $ zip (L.map (fromLocVarToFreeVarsTy . snd) vls) (Sf.tailErr $ L.map snd vls)
                                                                                   _ -> let 
-                                                                                         first_self_rec = L.head self_recursive_locs_in_order  
+                                                                                         first_self_rec:_ = self_recursive_locs_in_order
                                                                                          (afterenv_self_rec', _) = L.foldl (\(acc, seen) tup@(v, l) -> if (l /= first_self_rec)
                                                                                                                                                        then
                                                                                                                                                          if seen == True
@@ -811,6 +812,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                                                     let_to_release = case (M.lookup l1 inst_waiting_on_loc) of
                                                                                                                                                                                             Just lets -> let lets' = L.map (\exp -> case exp of 
                                                                                                                                                                                                                                           LetLocExpr a b -> LetLocE a b
+                                                                                                                                                                                                                                          LetExpr {} -> error "RouteEnds: unexpected LetExpr in inst_waiting_on_loc"
                                                                                                                                                                                                                           ) lets
                                                                                                                                                                                             
                                                                                                                                                                                                            in lets' ++ alias_same

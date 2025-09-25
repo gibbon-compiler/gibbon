@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Gibbon.Passes.ThreadRegions where
 
 import qualified Data.List as L

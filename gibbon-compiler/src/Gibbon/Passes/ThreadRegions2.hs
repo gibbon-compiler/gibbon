@@ -1,10 +1,11 @@
-{-# OPTIONS_GHC -Wwarn #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-local-binds  #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
 
 module Gibbon.Passes.ThreadRegions2 where
 
-import Control.Monad.IO.Class (liftIO)
 import Data.Foldable (foldrM)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -17,7 +18,6 @@ import Gibbon.DynFlags
 import Gibbon.L2.Syntax as Old
 import Gibbon.NewL2.Syntax as NewL2
 import qualified Safe as Sf
-import System.IO (hPutStrLn, stderr)
 
 --------------------------------------------------------------------------------
 
@@ -168,7 +168,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                     packed_outs
                 regInsts =
                   concatMap
-                    ( \(LRM loc reg mode) ->
+                    ( \(LRM _loc reg mode) ->
                         case reg of
                           SoAR dcReg fieldRegs ->
                             let dcreg = regionToVar dcReg
@@ -895,7 +895,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
       --                                        in acc'
       mp' <-
         mapM
-          ( \tup@(dcon, b, c) -> do
+          ( \tup@(dcon, b, _c) -> do
               let locs_case = dbgTrace (minChatLvl) "Print ty of Scrut: " dbgTrace (minChatLvl) (sdoc (reg)) dbgTrace (minChatLvl) "End scrut ty.\n" map (toLocVar . snd) b
               let region_locs' = case reg of
                     SingleR _ -> region_locs
