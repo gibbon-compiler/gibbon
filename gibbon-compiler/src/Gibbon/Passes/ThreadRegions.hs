@@ -446,14 +446,14 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         {-Unsafe : unwrapLocVar loc, semantics for L3 need to change-}
         Just reg -> do  
           {-Undafe, what if this is an SoA region? Terrible hack-}
-          let reg' = case reg of
-                       SingleR v -> v
-                       SoARv _ _ -> error "threadRegionsExp: (StartOfPkdCursor) SoARv not implemented yet."
+          let end_reg = toEndVRegVar reg
           -- TagCursor's type is TagCuror Var Var 
           -- This is too narrow to represent a SoA region at the moment.
           -- I also don't think this is used in the L2 IR atm. 
           -- I but in case it is, then its type needs to be changed.
-          dbgTraceIt "Print TagCursor: " dbgTraceIt (sdoc(loc)) dbgTraceIt "End TagCursor\n" return $ Ext $ TagCursor (unwrapLocVar loc) (toEndV reg')
+          let locarg = NewL2.Loc (LREM loc reg end_reg Output)
+          let regarg = NewL2.EndOfReg reg Output end_reg
+          dbgTraceIt "Print TagCursor: " dbgTraceIt (sdoc(loc)) dbgTraceIt "End TagCursor\n" return $ Ext $ TagCursor (locarg) (regarg)
 
         Nothing -> error $ "threadRegionsExp: unbound " ++ sdoc (loc, pkd_env)
 
@@ -854,7 +854,7 @@ allFreeVars_sans_datacon_args ex =
         LetParRegionE r _sz _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetLocE loc locexp bod -> S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars_sans_datacon_args bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
         StartOfPkdCursor cur   -> S.singleton (fromVarToFreeVarsTy cur)
-        TagCursor a b-> S.fromList [fromVarToFreeVarsTy a, fromVarToFreeVarsTy b]
+        TagCursor a b-> S.fromList [(fromLocVarToFreeVarsTy . toLocVar) a, (fromLocVarToFreeVarsTy . toLocVar) b]
         RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
         FromEndE loc    -> S.singleton ((fromLocVarToFreeVarsTy . toLocVar) loc)
         BoundsCheck _ reg cur -> S.fromList [(fromLocVarToFreeVarsTy . toLocVar) reg, (fromLocVarToFreeVarsTy . toLocVar) cur]

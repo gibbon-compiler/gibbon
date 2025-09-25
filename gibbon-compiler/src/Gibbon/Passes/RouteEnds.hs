@@ -494,6 +494,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                         else do
                                                                                                                           return (eorr, ee, seen, bnds)
                                                                                                     -- PackedTy tycon _ -> return (eorr, ee, seen)
+                                                                                                    -- shortcut pointers.. 
+                                                                                                    CursorTy -> return (eorr, ee, seen, bnds)
+                                                                                                    CursorArrayTy{} -> return (eorr, ee, seen, bnds)
                                                                                                     _ -> do
                                                                                                         let jump_loc = getFieldLoc (dc, idx) final_soa_loc
                                                                                                         -- let l2loc = l2
