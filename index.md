@@ -34,6 +34,8 @@ similar to Typed Racket, and a small subset of Haskell.
 
 ## Publications
 
+### Peer-reviewed papers
+
 |||
 |--- |--- |
 |ECOOP'17|**Compiling Tree Transforms to Operate on Packed Representations:** <br/> Michael Vollmer, Sarah Spall, Buddhika Chamith, Laith Sakka, Chaitanya Koparkar, Milind Kulkarni, Sam Tobin-Hochstadt, Ryan Newton [[PDF][ecoop17]]|
@@ -49,3 +51,22 @@ similar to Typed Racket, and a small subset of Haskell.
 [ismm24]:  ./public/ismm24.pdf
 [ecoop24]: https://drops.dagstuhl.de/storage/00lipics/lipics-vol313-ecoop2024/LIPIcs.ECOOP.2024.38/LIPIcs.ECOOP.2024.38.pdf
 [ecoop24ext]: https://arxiv.org/pdf/2405.17590
+
+
+### Dissertations
+
+* [A Language-based Approach to Programming with Serialized Data](https://recurial.com/thesis.pdf) by Michael Vollmer (2021)
+
+* [Mostly-Serialized Data Structures for Parallel and General-Purpose Programming](./public/chaitanya_thesis23.pdf) by Chaitanya Koparkar (2023)
+
+## Videos
+
+* ECOOP 2017: [Compiling tree transforms to operate on packed representations](https://youtu.be/YDa60NpXp6Q?si=Y8TThFGqxJctw9ih) (Michael Vollmer)
+
+* FHPC 2018: [Gibbon: A Compiler for Recursive Functions on mostly Serialized Data](https://youtu.be/E-LRy7YJu3o?si=j8yV9YqwHfQ8BxAy) (Chaitanya Koparkar)
+
+* PLDI 2019: [LoCal: A Language for Programs Operating on Serialized Data](https://youtu.be/aDIr-D5Lx08?si=qVdKPY2uG-3_Feku) (Michael Vollmer)
+
+* ICFP 2021: [Efficient Tree-Traversals: Reconciling Parallelism and Dense Data Representations](https://youtu.be/eeHYCq46nhE?si=xOt7ebV0EEiCHwE0) (Chaitanya Koparkar)
+
+* ISMM 2024: [Garbage Collection for Mostly Serialized Heaps](https://youtu.be/8Glj9HUgkxo?si=UCEAwZpICHiYoXD3) (Ryan Newton)
