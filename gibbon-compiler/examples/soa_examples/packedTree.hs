@@ -18,6 +18,13 @@ mkTree d = if (d <= 0)
 	   then Leaf
            else Node d 1.0 (mkFloatList d) (mkList d) (mkTree (d - 1)) (mkTree (d - 1)) (mkTree (d - 1))
 
+
+rightMostTree :: Tree -> Int
+rightMostTree tree = case tree of 
+                         Node a b c d e f g -> rightMostTree g
+                         Leaf -> 0
+
+
 add1List :: List -> List
 add1List lst = case lst of 
 		 Nil -> Nil 
@@ -80,5 +87,6 @@ id tree = tree
 gibbon_main = 
       let tree = mkTree 5
           tree' = id (add1Tree tree)
-       in sumTree tree'
+          val = rightMostTree tree'
+       in val
 
