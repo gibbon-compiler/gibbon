@@ -4,12 +4,13 @@ module MonoTree where
 data Tree = Leaf Int
           | Node Int Tree Tree
   deriving Show
+{-# ANN type Tree "Factored" #-}
 
-mkTree :: Int -> Tree
-mkTree d =
+mkTree :: Int -> Int -> Tree
+mkTree d acc =
   if d == 0
-  then Leaf 1
-  else Node d (mkTree (d-1)) (mkTree (d-1))
+  then Leaf (acc)
+  else Node d (mkTree (d-1) (d+acc)) (mkTree (d-1) (d+acc))
 
 add1Tree :: Tree -> Tree
 add1Tree t =
@@ -28,7 +29,7 @@ sumTree tr =
     Leaf n    -> n
     Node d l r -> d + (sumTree l) + (sumTree r)
 
-gibbon_main = rightMost (mkTree 18) --sumTree (add1Tree (mkTree 18))
+gibbon_main = rightMost (mkTree 18 0) --sumTree (add1Tree (mkTree 18))
 
 main :: IO ()
 main = print gibbon_main

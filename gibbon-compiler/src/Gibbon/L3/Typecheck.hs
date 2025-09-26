@@ -54,13 +54,15 @@ tcExp isSoA isPacked ddfs env exp = do
           vty  <- lookupVar env v exp
           ensureEqualTyModCursor isSoA exp vty CursorTy
           return CursorTy
-
+        
+        -- VS: the semantics of Tag cursor have changed.
         TagCursor a b -> do
           aty <- lookupVar env a exp
-          ensureEqualTyModCursor isSoA exp aty CursorTy
+          --ensureEqualTyModCursor isSoA exp aty CursorTy
           bty <- lookupVar env b exp
-          ensureEqualTyModCursor isSoA exp bty CursorTy
-          return CursorTy
+          --ensureEqualTyModCursor isSoA exp bty CursorTy
+          ensureEqualTyModCursor isSoA exp aty bty
+          return aty
 
         ReadTaggedCursor v -> do
           vty <- lookupVar env v exp
