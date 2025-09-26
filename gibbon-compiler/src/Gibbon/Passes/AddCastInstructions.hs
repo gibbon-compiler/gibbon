@@ -234,7 +234,7 @@ addCastsExp fundef cenv env ex =
                                                             else do
                                                               let new_arg = case (M.lookup arg cenv) of
                                                                                   Just v' -> VarE v'
-                                                                                  Nothing -> error "TODO : Cast not found in env!!"
+                                                                                  Nothing -> error $ "TODO : Cast not found in env!!" ++ show arg
                                                               return $ (l, args' ++ [new_arg])
                                                         _ -> return $ (l, args' ++ [fst zipped]) 
                                  ) ([], []) args_zip_ty

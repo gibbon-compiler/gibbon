@@ -360,7 +360,7 @@ extendsVEnvLocVar mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 lookupVEnv :: (HasCallStack, Out a) => Var -> Env2 Var a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
-lookupVEnvLocVar :: Out a => FreeVarsTy -> Env2 FreeVarsTy a -> a 
+lookupVEnvLocVar :: (HasCallStack, Out a) => FreeVarsTy -> Env2 FreeVarsTy a -> a 
 lookupVEnvLocVar v env2 = (vEnv env2) # v
 
 mblookupVEnv :: Var -> Env2 Var a -> Maybe a
