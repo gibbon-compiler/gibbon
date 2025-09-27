@@ -296,13 +296,13 @@ addCastsExp fundef cenv env ex =
             Nothing -> v
       pure (Ext $ WriteTag dcon nv)
     Ext (TagCursor a b) -> do
-      let na = case (M.lookup a cenv) of
-            Just v' -> v'
-            Nothing -> a
-      let nb = case (M.lookup b cenv) of
-            Just v' -> v'
-            Nothing -> b
-      pure (Ext $ TagCursor na nb)
+      -- let na = case (M.lookup a cenv) of
+      --       Just v' -> v'
+      --       Nothing -> a
+      -- let nb = case (M.lookup b cenv) of
+      --       Just v' -> v'
+      --       Nothing -> b
+      pure (Ext $ TagCursor a b)
     Ext (WriteTaggedCursor v e) -> do
       let nv = case (M.lookup v cenv) of
             Just v' -> v'
