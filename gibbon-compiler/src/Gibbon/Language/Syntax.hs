@@ -28,7 +28,7 @@ module Gibbon.Language.Syntax
 
     -- * Environments
   , TyEnv, Env2(..), emptyEnv2
-  , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv, lookupFEnv,
+  , extendVEnv, extendsVEnv, lookupVEnv, mblookupVEnv, extendFEnv, lookupFEnv,
     lookupFEnvLocVar, extendVEnvLocVar, extendsVEnvLocVar, lookupVEnvLocVar
 
     -- * Expresssions and thier types
@@ -171,22 +171,25 @@ getCursorTypeForDataCon ddefs ddef@DDef{tyName, tyArgs, dataCons, memLayout} =
                                        then []
                                        else [e]
                       ) dataCons
-   in case memLayout of 
-        Linear -> CursorTy 
-        FullyFactored -> 
-          let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
-                                                           c' = foldr (\ty c'' -> case ty of 
-                                                                             PackedTy tycon _ ->
-                                                                                if (toVar tycon) == tyName 
-                                                                                then c'' 
-                                                                                else c'' + 1
-                                                                             CursorTy -> c''
-                                                                             CursorArrayTy _ -> c''
-                                                                             _ -> c'' + 1 
-                                                                      ) c fields
-                                                          in c'
-                               ) 0 dataCons'
-            in CursorArrayTy (numFieldBuffers + 1)
+   in case memLayout of
+       -- VS: For now, in the design we just always ensure 
+       -- that a random access node is a CursorTy. 
+        _ -> CursorTy
+        -- Linear -> CursorTy 
+        -- FullyFactored -> 
+        --   let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
+        --                                                    c' = foldr (\ty c'' -> case ty of 
+        --                                                                      PackedTy tycon _ ->
+        --                                                                         if (toVar tycon) == tyName 
+        --                                                                         then c'' 
+        --                                                                         else c'' + 1
+        --                                                                      CursorTy -> c''
+        --                                                                      CursorArrayTy _ -> c''
+        --                                                                      _ -> c'' + 1 
+        --                                                               ) c fields
+        --                                                   in c'
+        --                        ) 0 dataCons'
+        --     in CursorArrayTy (numFieldBuffers + 1)
         _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
