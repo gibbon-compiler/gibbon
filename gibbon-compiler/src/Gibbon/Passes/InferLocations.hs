@@ -100,6 +100,7 @@ import GHC.Stack (HasCallStack)
 
 import Gibbon.Common
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
+import Gibbon.Passes.AddRAN (numRANsDataCon)
 import qualified Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -645,7 +646,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       tryBindReg :: Result -> TiM Result
       tryBindReg (e,ty,((StartRegionL lv r) : cs)) =
           do lv' <- finalLocVar lv
-             (e',ty',cs') <- tryBindReg (e,ty,cs)
+             (e',ty',cs') <- dbgTrace minChatLvl "Print tryBindReg (l, lv): " dbgTrace minChatLvl (sdoc (lv, lv')) dbgTrace minChatLvl "End tryBindReg lv'\n" tryBindReg (e,ty,cs)
              b1 <- noAfterLoc lv' cs' cs'
              if b1
              then do (e'',ty'',cs'') <- bindTrivialAfterLoc lv' (e',ty',cs')
@@ -694,7 +695,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                    b3' <- notFixedLoc lv2'
                    if b1 && b2 && b3
                    then do cs' <- dbgTrace minChatLvl "tryInRegion' aftertag: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2')) dbgTrace minChatLvl "End tryInRegion' afterTag.\n" tryInRegion' fcs cs
-                           r <- lift $ lift $ freshRegVar
+                           r <- getNewRegion lv2'
                            let c' = StartRegionL lv2' r
                            return (c':c:cs')
                    else do cs' <- dbgTrace minChatLvl "tryInRegion' aftertag: " dbgTrace minChatLvl (sdoc (b1, b2, b3, lv2, lv2')) dbgTrace minChatLvl "End tryInRegion' afterTag.\n" tryInRegion' fcs cs
@@ -722,8 +723,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       tryNeedRegion :: [LocVar] -> Ty2 -> [Constraint] -> TiM [Constraint]
       tryNeedRegion (l:ls) ty cs =
           do lv <- finalLocVar l
-             -- dbgTrace minChatLvl "Print (l, lv): " dbgTrace minChatLvl (sdoc (l, lv)) dbgTrace minChatLvl "End lv\n"
-             vls <- mapM finalLocVar (locsInTy ty)
+             vls <- dbgTrace minChatLvl "Print (l, lv): " dbgTrace minChatLvl (sdoc (l, lv)) dbgTrace minChatLvl "End lv\n" mapM finalLocVar (locsInTy ty)
              if not (lv `L.elem` vls)
              then do b1 <- noBeforeLoc lv cs
                      b2 <- noRegionStart lv cs
@@ -1166,6 +1166,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
                       let tyConOfDataCon = getTyOfDataCon ddefs k
+                      let allDataCons = getConOrdering ddefs tyConOfDataCon
+                      let dc' = foldr (\x dc -> if (x == k ++ "^") then Just x else dc) Nothing allDataCons
+                      let k' = case dc' of 
+                                 Nothing -> k
+                                 Just dc -> dc
+                      let numRanNodes = if (("^" `L.isSuffixOf` k') && (not ("^" `L.isSuffixOf` k)) ) then ((numRANsDataCon ddefs k)) else 0
                       -- dbgTrace minChatLvl "inferExp SoA case: " dbgTrace minChatLvl (sdoc ((ls, locs, ls'))) dbgTrace minChatLvl "End SoA ls'.\n"
                       argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
                         case arg of
@@ -1254,10 +1260,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           --                                                             )
                           --                                      in [afterTagConstraint] ++ afterTagConstrsTmp
                           -- dbgTrace minChatLvl "Print tuple line: 1040" dbgTrace minChatLvl (sdoc (argsLsDconBuf, dcArgDconBuf, locsDconBuf, argsLsFields, dcArgFields, locsFields)) dbgTrace minChatLvl "End line 1040\n"
-                          fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k, idx) fieldLocs
+                          fieldLocVars = P.map (\(Just idx) -> let fldloc = lookup (k', idx + numRanNodes) fieldLocs
                                                                  in case fldloc of 
                                                                            Just location -> Just location
-                                                                           Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ show (k, idx) ++ " ," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
+                                                                           Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ show (k', idx + numRanNodes) ++ " ," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
                                                ) idxsFields'
                           fieldConstraints = (mapMaybe afterVar $ zip3 
                                                 dcArgFields
@@ -1282,10 +1288,10 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                         (sptrs, []) -> error "TODO: add constraints for all the shotcut pointers!\n"
                                                         ([], hloc:rstlocs) -> do
                                                                         let tagc = AfterTagL (getDconLoc hloc) (getDconLoc d)
-                                                                        let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
+                                                                        let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k', idx + numRanNodes) (getFieldLocs hloc)
                                                                                                                         in case fldloc of 
                                                                                                                             Just location -> Just location
-                                                                                                                            Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
+                                                                                                                            Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k' ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
                                                                                                       ) idxsFields'
                                                                         argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
                                                                                   case arg of
@@ -1321,7 +1327,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                         -- handle field of other data constructors in the final SoA loc passed to the recursive call.
                                                                         let fields_hloc = getFieldLocs hloc
                                                                         let fields_d = getFieldLocs d
-                                                                        let pair_new_old = concatMap (\(ks@(dcon, idx), loc1) -> if dcon /= k
+                                                                        let pair_new_old = concatMap (\(ks@(dcon, idx), loc1) -> if dcon /= k'
                                                                                                                            then 
                                                                                                                             let loc2 = case (L.lookup (dcon, idx) fields_d) of 
                                                                                                                                       Just loc2 -> loc2

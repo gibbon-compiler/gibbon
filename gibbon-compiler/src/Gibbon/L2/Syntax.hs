@@ -1125,6 +1125,14 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           InRegionLE r  -> [fromRegVarToFreeVarsTy (regionToVar r)]
           FromEndLE loc -> [fromLocVarToFreeVarsTy loc]
           FreeLE -> []
+          GetDataConLocSoA loc -> [fromLocVarToFreeVarsTy loc]
+          GetFieldLocSoA key loc -> case loc of 
+                                        SoA _ flocs -> let floc = lookup key flocs 
+                                                         in case floc of 
+                                                               Nothing -> []
+                                                               Just floc' -> [fromLocVarToFreeVarsTy floc']
+          GenSoALoc floc flocs -> let loc = SoA (unwrapLocVar floc) flocs 
+                                   in [fromLocVarToFreeVarsTy loc]
 
 -- TODO: VS: I don't think region vars are handled properly here. 
 allFreeVars :: Exp2 -> S.Set FreeVarsTy

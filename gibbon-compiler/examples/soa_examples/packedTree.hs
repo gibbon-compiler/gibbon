@@ -87,6 +87,6 @@ id tree = tree
 gibbon_main = 
       let tree = mkTree 5
           tree' = id (add1Tree tree)
-          val = rightMostTree tree'
+          val = sumTree tree'
        in val
 

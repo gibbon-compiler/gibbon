@@ -84,6 +84,7 @@ import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.ThreadRegions2  (threadRegions2)
 import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
+import           Gibbon.Passes.OptimizeL3      (removeReDefs)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
@@ -710,13 +711,13 @@ passes config@Config{dynflags} l0 = do
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
               l2 <- goE2 "reorderLetExprs2" reorderLetExprs l2
-              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
-              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else do l2 <- go "removeCopies" removeCopies l2
-                            --l2 <- go "L2.typecheck" L2.tcProg l2
+                            l2 <- go "L2.typecheck" L2.tcProg l2
                             return l2
               l2 <- goE2 "inferEffects" inferEffects  l2
 
@@ -751,9 +752,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                 if gibbon1 || noRAN
                 then do
                   l2 <- goE2 "addTraversals" addTraversals l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "inferEffects2"  inferEffects l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "repairProgram"  (pure . id)  l2
                   pure l2
                 else do
@@ -773,24 +774,24 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   --l2 <- go "regionsInwards" regionsInwards l2
                   --l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
-                  --l2 <- go   "L2.typecheck"  L2.tcProg     l2
+                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   -- VS : This pass is causing a bug 
                   l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- if no_rcopies
                         then return l2                          
                         else
                           do 
                           l2 <- goE2 "removeCopies" removeCopies l2
                           return l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "inferEffects2" inferEffects  l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "addTraversals" addTraversals l2
-                  -- l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "repairProgram" (pure . id)   l2
                   pure l2
 
@@ -806,20 +807,20 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                     then pure l2 
                     else goE2 "parAlloc"   parAlloc  l2
               lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
-              --l2 <- go "L2.typecheck" L2.tcProg l2
+              l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
-              --l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
-              --l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
-              --l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- goE2 "L2.flatten" flattenL2 l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- goE2 "reorderLetExprs5" reorderLetExprs l2
-              --l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
-              --l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
               {- VS: The Argument to simplify loc binds used to be False, why doesn't true work ? -}
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 
@@ -856,6 +857,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               return l3
 
       l3 <- go "unariser"       unariser                l3
+      l3 <- go "removeReDefinitions"     removeReDefs            l3 
       l3 <- go "L3.typecheck"   tcProg3                 l3
       l3 <- go "L3.flatten"     flattenL3               l3
       l3 <- go "L3.typecheck"   tcProg3                 l3

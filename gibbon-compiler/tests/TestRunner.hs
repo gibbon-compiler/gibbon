@@ -161,7 +161,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | Colobus1 | Colobus2 | Colobus3
+data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | Colobus1 | Colobus2 | Colobus3 | Colobus4
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -182,6 +182,7 @@ readMode s =
         "colobus1" -> Colobus1
         "colobus2" -> Colobus2
         "colobus3" -> Colobus3
+        "colobus4" -> Colobus4
         "mpl" -> MPL
         _ -> error $ "readMode: " ++ show s
 
@@ -190,6 +191,7 @@ modeRunFlags :: Mode -> [String]
 modeRunFlags Colobus1  = ["--run", "--packed", "--gibbon1", "--SoA"]
 modeRunFlags Colobus2  = ["--run", "--packed", "--no-rcopies", "--no-ran", "--SoA"]
 modeRunFlags Colobus3  = ["--run", "--packed", "--no-gc", "--no-ran", "--SoA"]
+modeRunFlags Colobus4  = ["--run", "--packed", "--no-gc", "--SoA"]
 modeRunFlags Gibbon3  = ["--run", "--packed", "--gen-gc"]
 modeRunFlags Gibbon2  = ["--run", "--packed"]
 modeRunFlags Pointer = ["--run", "--pointer"]
@@ -201,7 +203,8 @@ modeRunFlags MPL = ["--mpl-run"]
 modeExeFlags :: Mode -> [String]
 modeExeFlags Colobus1  = ["--to-exe", "--packed", "--gibbon1", "--SoA"]
 modeExeFlags Colobus2  = ["--to-exe", "--packed", "--no-rcopies", "--no-ran", "--SoA"]
-modeExeFlags Colobus2  = ["--to-exe", "--packed", "--no-gc", "--no-ran", "--SoA"]
+modeExeFlags Colobus3  = ["--to-exe", "--packed", "--no-gc", "--no-ran", "--SoA"]
+modeExeFlags Colobus4  = ["--to-exe", "--packed", "--no-gc", "--SoA"]
 modeExeFlags Gibbon3 = ["--to-exe", "--packed", "--gen-gc"]
 modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
@@ -213,6 +216,7 @@ modeFileSuffix :: Mode -> String
 modeFileSuffix Colobus1 =  "_colobus1"
 modeFileSuffix Colobus2 =  "_colobus2"
 modeFileSuffix Colobus3 =  "_colobus3"
+modeFileSuffix Colobus4 =  "_colobus4"
 modeFileSuffix Gibbon3  = "_gibbon3"
 modeFileSuffix Gibbon2  = "_gibbon2"
 modeFileSuffix Pointer = "_ptr"
