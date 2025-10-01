@@ -589,3 +589,8 @@ tests:
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
     failing: [pointer, gibbon1, interp1, gibbon3, gibbon2, colobus]
     run-modes: ["gibbon2"]
+
+  - name: test_303.hs
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
+
+
