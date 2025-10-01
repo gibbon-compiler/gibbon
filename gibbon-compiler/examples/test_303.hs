@@ -1,7 +1,7 @@
 module Main where
 
 data Tree = Leaf Int
-          | Node Tree {-# NOUNPACK #-} Tree
+          | Node Tree Tree
 
 
 gibbon_main :: Int
