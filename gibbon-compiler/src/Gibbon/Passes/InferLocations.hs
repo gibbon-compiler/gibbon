@@ -2012,30 +2012,22 @@ cleanExp e =
                                                     oth -> []
                                          in (Ext (LetLocE loc lex e'), S.delete loc (S.union s' $ S.fromList ls))
                                     else (e',s')
-      Ext (LetLocE s@(SoA dloc flcs) lex@(GenSoALoc _ _) e) -> let (e',s') = cleanExp e
+      Ext (LetLocE s@(SoA dloc flcs) lex@(GenSoALoc dcloc flocs) e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
-                                                 then let ls = case lex of
-                                                                  GenSoALoc dcloc flocs -> [dcloc] ++ P.map (\(_, ll) -> ll) flocs
+                                                 then let ls = [dcloc] ++ P.map (\(_, ll) -> ll) flocs
                                                        in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
                                                  else (e',s')
-      Ext (LetLocE s@(SoA dloc flcs) lex@(AssignLE _) e) -> let (e',s') = cleanExp e
+      Ext (LetLocE s@(SoA dloc flcs) lex@(AssignLE loc) e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
-                                                 then let ls = case lex of
-                                                                  AssignLE loc -> [loc]
-                                                       in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
+                                                 then (Ext (LetLocE s lex e'), S.delete s (loc `S.insert` s'))
                                                  else (e' ,s')
       Ext (LetLocE s@(SoA dloc flcs) lex@(GetFieldLocSoA _ loc) e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
-                                                 then let ls = case lex of
-                                                                  GetFieldLocSoA _ loc -> [loc]
-                                                       in (Ext (LetLocE s lex e'), S.delete s (S.union s' $ S.fromList ls))
+                                                 then (Ext (LetLocE s lex e'), S.delete s (loc `S.insert` s'))
                                                  else (e' ,s')
       Ext (LetLocE s@(SoA dloc flcs) lex e) -> let (e',s') = cleanExp e
                                               in if S.member s s'
-                                                 then let ls = case lex of
-                                                                  oth -> []
-                                                       in (Ext (LetLocE s lex e'), 
-                                                              S.delete s (S.union s' $ S.fromList ls))
+                                                 then (Ext (LetLocE s lex e'), S.delete s s')
                                                  else (e',s')
       --Ext (LetSoALocE loc e) -> let (e',s') = cleanExp e
       --                           in (Ext $ LetSoALocE loc e',s')
