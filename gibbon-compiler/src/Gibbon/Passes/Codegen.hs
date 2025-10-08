@@ -559,6 +559,8 @@ codegenTail _ _ _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $
 codegenTail venv fenv sort_fns (LetTrivT (vr,rty,rhs) body) ty sync_deps =
     do let venv' = M.insert vr rty venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
+       {-Bad assumption?-}
+       {-If it is a statically sized array -}
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
                 ++ tal
 
@@ -1672,7 +1674,7 @@ codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
-codegenTy (CursorArrayTy _size) = [cty|typename GibCursor* |]
+codegenTy (CursorArrayTy size) = [cty| typename GibCursor[$int:size] |]
 codegenTy MutCursorTy = [cty|typename GibCursor* |]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
