@@ -96,3 +96,4 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         SymHashTy -> SymHashTy
         IntHashTy -> IntHashTy
         CursorArrayTy {} -> error "directL3: CursorArrayTy not handled"
+        MutCursorTy {} -> error "directL3: MutCursorTy not handled"

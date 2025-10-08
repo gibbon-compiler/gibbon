@@ -1,8 +1,5 @@
 module Gibbon.Passes.OptimizeL3 (removeReDefs) where
 
-
-import Data.Foldable (foldrM, foldlM)
-import qualified Data.List as L
 import qualified Data.Map as M
 import Gibbon.Common
 import Gibbon.L1.Syntax
@@ -169,7 +166,6 @@ removeReDefsExp env ex =
     Ext (AddrOfCursor bod) -> do 
                                 bod' <- go bod
                                 return $ Ext (AddrOfCursor bod')
-    Ext {} -> error $ "addCastsExp : Unexpected instruction " ++ show ex
     MapE {} -> error "addCastsExp: MapE TODO"
     FoldE {} -> error "addCastsExp: FoldE TODO"
   where

@@ -533,6 +533,7 @@ hasPacked t =
     SymHashTy      -> False
     IntHashTy      -> False
     CursorArrayTy{} -> False
+    MutCursorTy -> False
 
 
 -- | Get all packed types in a type.
@@ -557,6 +558,7 @@ getPackedTys t =
     SymHashTy      -> []
     IntHashTy      -> []
     CursorArrayTy{} -> []
+    MutCursorTy -> []
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
@@ -580,6 +582,7 @@ sizeOfTy t =
     SymHashTy     -> error "sizeOfTy: SymHashTy not handled."
     IntHashTy     -> error "sizeOfTy: IntHashTy not handled."
     CursorArrayTy{} -> error "sizeOfTy: CursorArrayTy not handled."
+    MutCursorTy -> error "sizeOfTy: MutCursorTy not handled."
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
@@ -794,6 +797,7 @@ stripTyLocs ty =
     SymHashTy -> SymHashTy
     IntHashTy -> IntHashTy
     ArenaTy   -> ArenaTy
+    MutCursorTy -> MutCursorTy
 
 -- | Get the data constructor type from a type, failing if it's not packed
 tyToDataCon :: Show a => UrTy a -> DataCon

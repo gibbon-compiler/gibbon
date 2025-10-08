@@ -154,6 +154,8 @@ instance FreeVars (E3Ext l d) where
       IndexCursorArray {} -> error "gFreeVars: IndexCursorArray not handled"
       CastPtr {} -> error "gFreeVars: CastPtr not handled"
       BoundsCheckVector {} -> error "gFreeVars: BoundsCheckVector not handled"
+      AddrOfCursor{} -> error "gFreeVars: AddrOfCursor not handled"
+      DerefMutCursor{} -> error "gFreeVars: DerefMutCursor not handled"
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -265,6 +267,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       IndexCursorArray{} -> error "gRename: IndexCursorArray not handled"
       CastPtr{} -> error "gRename: CastPtr not handled"
       BoundsCheckVector{} -> error "gRename: BoundsCheckVector not handled"
+      AddrOfCursor{} -> error "gRename: AddrOfCursor not handled"
+      DerefMutCursor{} -> error "gRename: DerefMutCursor not handled"
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -325,7 +329,6 @@ cursorizeTy ty =
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
     IntHashTy-> IntHashTy
-    CursorArrayTy {} -> error "cursorizeTy: CursorArrayTy not handled"
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before

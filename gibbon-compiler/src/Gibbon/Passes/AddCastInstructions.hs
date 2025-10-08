@@ -225,7 +225,7 @@ addCastsExp fundef cenv env ex =
     AppE f locs args -> do
       let funTy = lookupFEnv f env
       let args_zip_ty = zip args (fst funTy ++ [snd funTy])
-      (lets, new_args) <- foldlM (\(l, args') zipped -> case zipped of 
+      (_, new_args) <- foldlM (\(l, args') zipped -> case zipped of 
                                                         (VarE arg, ty) -> do
                                                             let argTy = lookupVEnv arg env
                                                             if argTy == ty
@@ -456,7 +456,7 @@ addCastsExp fundef cenv env ex =
     Ext (Assert e) -> do
       e' <- go e
       pure $ Ext $ Assert e'
-    Ext (CastPtr v ty) -> pure ex
+    Ext (CastPtr _v _ty) -> pure ex
     Ext {} -> error $ "addCastsExp : Unexpected instruction " ++ show ex
     MapE {} -> error "addCastsExp: MapE TODO"
     FoldE {} -> error "addCastsExp: FoldE TODO"

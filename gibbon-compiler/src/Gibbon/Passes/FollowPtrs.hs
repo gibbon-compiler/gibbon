@@ -12,7 +12,6 @@ import           Gibbon.Common
 import           Gibbon.Language
 import           Gibbon.L2.Syntax as L2
 import Gibbon.DynFlags
-import Gibbon.L3.Syntax (E3Ext(AddCursor))
 
 --------------------------------------------------------------------------------
 
@@ -108,7 +107,6 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               (pure (CaseE scrt (brs ++ [redir_br])))
             else do
               indir_ptrv <- gensym "indr"
-              indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
               indir_ptrloc <- freshCommonLoc "case" scrt_loc
               jump <- freshCommonLoc "jump" scrt_loc
               callv <- gensym "call"

@@ -164,10 +164,10 @@ lkp dds con =
     _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
           ++", in datatypes:\n  "++sdoc dds
 
-getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
-getCursorTypeForDataCon ddefs DDef{tyName, dataCons, memLayout} =
+getCursorTypeForDataCon :: DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
+getCursorTypeForDataCon _ddefs DDef{dataCons, memLayout} =
   -- remove data constructors introduced by RAN
-  let dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
+  let _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
                                        then []
                                        else [e]
                       ) dataCons
@@ -190,7 +190,7 @@ getCursorTypeForDataCon ddefs DDef{tyName, dataCons, memLayout} =
         --                                                   in c'
         --                        ) 0 dataCons'
         --     in CursorArrayTy (numFieldBuffers + 1)
-        _ -> error "Memory Layout is not implemented!"
+        -- _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
 insertDD d = M.insertWith err' (tyName d) d
