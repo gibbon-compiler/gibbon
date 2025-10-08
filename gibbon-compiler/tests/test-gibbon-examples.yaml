@@ -610,8 +610,8 @@ tests:
     dir: examples/soa_examples
     failing: []
     answer-file: examples/soa_examples/test_packed_tree.ans
-
-
-
+    
+  - name: test_303.hs
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, colobus]
 
 

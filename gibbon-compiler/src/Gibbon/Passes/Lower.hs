@@ -782,7 +782,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         tail free_reg sym_tbl bod
 
 
-    LetE (v, _, ty, (Ext (MakeCursorArray size vars))) bod ->
+    LetE (v, _, _, (Ext (MakeCursorArray size vars))) bod ->
       T.LetPrimCallT [(v, T.CursorArrayTy size)] T.MakeCursorArray [triv sym_tbl ("MakeCursorArray arg" ++ (show $ fromJust $ L.elemIndex var vars)) (VarE var) | var <- vars] <$>
         tail free_reg sym_tbl bod
     

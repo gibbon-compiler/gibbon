@@ -150,6 +150,10 @@ instance FreeVars (E3Ext l d) where
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
       Assert a -> gFreeVars a
+      MakeCursorArray {} -> error "gFreeVars: MakeCursorArray not handled"
+      IndexCursorArray {} -> error "gFreeVars: IndexCursorArray not handled"
+      CastPtr {} -> error "gFreeVars: CastPtr not handled"
+      BoundsCheckVector {} -> error "gFreeVars: BoundsCheckVector not handled"
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -160,11 +164,19 @@ instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
 instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext l (UrTy l)) where
     gRecoverType _ddfs _env2 NullCursor = CursorTy
     gRecoverType ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverType ddfs env2) ls
+    gRecoverType _ _ (MakeCursorArray {}) = error "gRecoverType: MakeCursorArray not handled"
+    gRecoverType _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
+    gRecoverType _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
+    gRecoverType _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
 
     gRecoverTypeLoc _ddfs _env2 NullCursor = CursorTy
     gRecoverTypeLoc ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverTypeLoc ddfs env2) ls
+    gRecoverTypeLoc _ _ (MakeCursorArray {}) = error "gRecoverType: MakeCursorArray not handled"
+    gRecoverTypeLoc _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
+    gRecoverTypeLoc _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
+    gRecoverTypeLoc _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
     gRecoverTypeLoc _ _ _ = error "L3.gRecoverTypeLoc"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
@@ -187,6 +199,10 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
       SubPtr v w           -> SubPtr v w
       LetAvail ls bod      -> LetAvail ls (gSubst old new bod)
+      MakeCursorArray{}    -> ext
+      IndexCursorArray{}   -> ext
+      CastPtr{}            -> ext
+      BoundsCheckVector{}  -> ext
       _ -> ext
 
   gSubstEExt old new ext =
@@ -196,6 +212,10 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
       SubPtr v w        -> SubPtr v w
       LetAvail ls b     -> LetAvail ls (gSubstE old new b)
+      MakeCursorArray{}    -> ext
+      IndexCursorArray{}   -> ext
+      CastPtr{}            -> ext
+      BoundsCheckVector{}  -> ext
       _ -> ext
 
 instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
@@ -241,6 +261,10 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       SSPush a b c d -> SSPush a (go b) (go c) d
       SSPop a b c -> SSPop a (go b) (go c)
       Assert e -> Assert (go e)
+      MakeCursorArray{} -> error "gRename: MakeCursorArray not handled"
+      IndexCursorArray{} -> error "gRename: IndexCursorArray not handled"
+      CastPtr{} -> error "gRename: CastPtr not handled"
+      BoundsCheckVector{} -> error "gRename: BoundsCheckVector not handled"
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -301,6 +325,7 @@ cursorizeTy ty =
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
     IntHashTy-> IntHashTy
+    CursorArrayTy {} -> error "cursorizeTy: CursorArrayTy not handled"
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before

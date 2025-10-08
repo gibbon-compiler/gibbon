@@ -1593,7 +1593,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         var' = codegenTriv venv var
                     return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = *($exp:var'); |] ]
 
-                 _ -> error $ "codegen: " ++ show prm ++ " unhandled."
+
 
        return $ pre ++ bod'
 
