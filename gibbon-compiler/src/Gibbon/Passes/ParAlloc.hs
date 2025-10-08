@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-| Do all things necessary to compile parallel allocations to a single region.
 
 In the sequential semantics, (letloc-after x) can only run after x is written to
@@ -76,8 +77,8 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
           error "gibbon: Cannot compile parallel allocations in Gibbon1 mode."
 
         let initRegEnv = M.fromList $ map (\(LRM lc r _) -> case r of 
+                                                              SoAR _ _ -> error "TODO: parAlloc structure of arrays not implemented yet."
                                                               _ -> (lc, regionToVar r)
-                                                              SoAR _ _ -> error "TODO: parAlloc structure of arrays not implemented yet."  
                                           ) (locVars funTy)
             funArgs' = L.map fromVarToFreeVarsTy funArgs
             initTyEnv  = M.fromList $ zip funArgs' (arrIns funTy)
@@ -135,10 +136,10 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                                        Nothing (M.elems (vEnv env2))
                         indr_dcon = Sf.headErr $ filter isIndirectionTag $ getConOrdering ddefs tycon
                         reg_from = case (reg_env # from) of
-                                          SingleR v -> v
+                                          SingleR v' -> v'
                                           SoARv _ _ -> error "parAlloc: did not expect an SoA region!"
                         reg_to = case (reg_env # to) of 
-                                          SingleR v -> v
+                                          SingleR v' -> v'
                                           SoARv _ _ -> error "parAlloc: did not expect an SoA region!"
                         rhs = Ext $ IndirectionE tycon indr_dcon (from, singleLocVar reg_from) (to, singleLocVar reg_to) (AppE "nocopy" [] [])
                     pure $ LetE (indr, [], PackedTy tycon from, rhs) acc)

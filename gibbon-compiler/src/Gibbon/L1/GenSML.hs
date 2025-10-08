@@ -369,6 +369,7 @@ ppTy1 ty1 = case ty1 of
   SymTy -> _
   PtrTy -> _
   CursorTy -> _
+  _ -> error "ppTy1: unexpected type"
 
 printerTy1 :: Ty1 -> Doc -> Doc
 printerTy1 ty1 d = case ty1 of
@@ -432,6 +433,7 @@ printerTy1 ty1 d = case ty1 of
   IntHashTy -> _
   PtrTy -> _
   CursorTy -> _
+  _ -> error "printerTy1: unexpected type"
 
 printer :: Doc -> Doc -> Doc
 printer p d = parens $ "print" <> parens (p <> ".toString" <> parens d)

@@ -1,4 +1,9 @@
-module Gibbon.Passes.Cursorize (cursorize) where
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-local-binds  #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+module Gibbon.Passes.Cursorize
+  (cursorize) where
 
 import Control.Monad (forM)
 import Data.Foldable (foldlM, foldrM)

@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Gibbon.Passes.ReorderScalarWrites
@@ -60,7 +62,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                                                                             let aenvl = M.insert reg (RegionLocs [loc] S.empty) aenv
                                                                               in case loc of 
                                                                                     Single _ -> aenvl
-                                                                                    SoA dcloc fieldLocs -> 
+                                                                                    SoA _dcloc fieldLocs ->
                                                                                          let aenvl' = foldr (\(k, floc) acc -> do
                                                                                                                                let freg = case lookup k fieldRegs of 
                                                                                                                                              Just freg -> freg

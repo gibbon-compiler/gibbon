@@ -33,10 +33,12 @@ calculateBoundsFun ddefs env2 varSzEnv f@FunDef { funName, funBody, funTy, funAr
   if "_" `L.isPrefixOf` fromVar funName
     then return f
     else do
-      let locRegEnv = M.fromList $ map (\lv -> case (lrmReg lv) of 
-                                                      _ -> (lrmLoc lv, regionToVar (lrmReg lv))
-                                                      SoAR _ _ -> error "TODO: calculateBoundsFn SoA region not implemented."
-                                       ) (locVars funTy)
+      let locRegEnv = M.fromList $ map
+                        (
+                          \lv -> case (lrmReg lv) of
+                              SoAR _ _ -> error "TODO: calculateBoundsFn SoA region not implemented."
+                              _ -> (lrmLoc lv, regionToVar (lrmReg lv))
+                        ) (locVars funTy)
       let locTyEnv  = M.map (const $ BoundedSize 0) locRegEnv
       let argTys    = M.fromList $ zip funArgs (arrIns funTy)
       let env2'     = env2 { vEnv = argTys }
@@ -189,6 +191,10 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                           (InRegionLE r         ) -> (regionToVar r, Undefined)
                           (FromEndLE  l         ) -> (locRegEnv # l, Undefined)
                           FreeLE                  -> undefined
+                          GenSoALoc {}            -> error "calculateBoundsExp: GenSoALoc not handled"
+                          GetDataConLocSoA {}     -> error "calculateBoundsExp: GetDataConLocSoA not handled"
+                          GetFieldLocSoA {}       -> error "calculateBoundsExp: GetFieldLocSoA not handled"
+                          AssignLE {}             -> error "calculateBoundsExp: AssignLE not handled"
                     let lre = M.insert loc re locRegEnv
                     let loe = M.insert loc off locOffEnv
                     (ex1', re', rt') <- calculateBoundsExp ddefs env2 varSzEnv varLocEnv lre loe regSzEnv regTyEnv ex1
@@ -208,3 +214,5 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
               AllocateScalarsHere{} -> error $ "todo: " ++ sdoc ex
               SSPush{}              -> error $ "todo: " ++ sdoc ex
               SSPop{}               -> error $ "todo: " ++ sdoc ex
+              LetRegE {}            -> error "calculateBoundsExp: LetRegE not handled"
+              BoundsCheckVector {}  -> error "calculateBoundsExp: BoundsCheckVector not handled"

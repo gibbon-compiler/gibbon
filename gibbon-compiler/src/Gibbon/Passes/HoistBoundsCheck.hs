@@ -21,7 +21,7 @@ data HoistableExpr
   | LetRegExpr RegVar (PreRegExp LocArg)
   | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
   | LetRegionExpr Region RegionSize (Maybe RegionType)
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 -- | Stores all the expressions that can be hoisted to the top of the function
 type HoistAbleExprMap = [(HoistableExpr, (S.Set FreeVarsTy))]
@@ -327,7 +327,7 @@ hoistBoundsCheckHelper visited env l2exp = do
                     LetLocExpr l rhs -> Just $ Ext $ LetLocE l rhs expr'
                     LetRegExpr r rhs -> Just $ Ext $ LetRegE r rhs expr'
                     LetRegionExpr r sz ty -> Just $ Ext $ LetRegionE r sz ty expr'
-                    _ -> error "hoistBoundsCheckHelper: Did not expect expression!"
+                    LetExpr bnds -> Just $ LetE bnds expr'
           -- release all lets
           -- call function recursively
           let vmap' = S.insert boundsCheck vmap

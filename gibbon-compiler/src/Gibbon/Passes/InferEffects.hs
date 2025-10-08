@@ -179,6 +179,8 @@ inferExp ddfs fenv env dps expr =
     Ext (AllocateScalarsHere{}) -> (S.empty, Nothing)
     Ext (SSPush{}) -> (S.empty, Nothing)
     Ext (SSPop{}) -> (S.empty, Nothing)
+    Ext (LetRegE{}) -> error "inferEffects: LetRegE not handled"
+    Ext (BoundsCheckVector{}) -> error "inferEffects: BoundsCheckVector not handled"
 
   where
     packedLoc :: Ty2 -> Maybe LocVar

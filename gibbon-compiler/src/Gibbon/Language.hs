@@ -532,6 +532,7 @@ hasPacked t =
     SymSetTy       -> False
     SymHashTy      -> False
     IntHashTy      -> False
+    CursorArrayTy{} -> False
 
 
 -- | Get all packed types in a type.
@@ -555,6 +556,7 @@ getPackedTys t =
     SymSetTy       -> []
     SymHashTy      -> []
     IntHashTy      -> []
+    CursorArrayTy{} -> []
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
@@ -576,7 +578,8 @@ sizeOfTy t =
     ArenaTy       -> Just 8
     SymSetTy      -> error "sizeOfTy: SymSetTy not handled."
     SymHashTy     -> error "sizeOfTy: SymHashTy not handled."
-    IntHashTy     -> error "sizeOfTy: SymHashTy not handled."
+    IntHashTy     -> error "sizeOfTy: IntHashTy not handled."
+    CursorArrayTy{} -> error "sizeOfTy: CursorArrayTy not handled."
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
