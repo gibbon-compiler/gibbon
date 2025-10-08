@@ -917,7 +917,7 @@ revertExp ex =
         LetParRegionE _ _ _ bod -> revertExp bod
         LetLocE _ _ bod  -> revertExp bod
         StartOfPkdCursor cur -> Ext (L1.StartOfPkdCursor cur)
-        TagCursor a _b -> error "revertExp: Cannot revert TagCursor!" --Ext (L1.StartOfPkdCursor a)
+        TagCursor _a _b -> error "revertExp: Cannot revert TagCursor!" --Ext (L1.StartOfPkdCursor a)
         RetE _ v -> VarE v
         AddFixed{} -> error "revertExp: TODO AddFixed."
         FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -987,7 +987,7 @@ occurs w ex =
             FromEndLE{}         -> oc_bod
             _ -> oc_bod
         StartOfPkdCursor v -> v `S.member` w
-        TagCursor a b -> False --a `S.member` w || b `S.member` w
+        TagCursor _a _b -> False --a `S.member` w || b `S.member` w
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
         BoundsCheck{} -> False
@@ -995,7 +995,7 @@ occurs w ex =
 
         -- (unwrapLocVar v1) `S.member` w  || (unwrapLocVar v2) `S.member` w ||
         -- v1, v2 are not strictly variables, these are regions.  
-        IndirectionE _ _ (_,v1) (_,v2) ib -> go ib
+        IndirectionE _ _ (_,_v1) (_,_v2) ib -> go ib
         GetCilkWorkerNum -> False
         LetAvail _ bod -> go bod
         AllocateTagHere{} -> False
@@ -1149,7 +1149,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FromEndLE loc -> [fromLocVarToFreeVarsTy loc]
           FreeLE -> []
           GetDataConLocSoA loc -> [fromLocVarToFreeVarsTy loc]
-          GetFieldLocSoA key loc -> case loc of 
+          GetFieldLocSoA key loc -> case loc of
+                                        Single{} -> error "Did not expect a single location!" 
                                         SoA _ flocs -> let floc = lookup key flocs 
                                                          in case floc of 
                                                                Nothing -> []

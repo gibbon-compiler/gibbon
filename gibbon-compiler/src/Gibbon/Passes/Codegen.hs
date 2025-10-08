@@ -31,7 +31,6 @@ import qualified Gibbon.Language as GL
 import           Gibbon.DynFlags
 import           Gibbon.L2.Syntax ( Multiplicity(..) )
 import           Gibbon.L4.Syntax
-import Language.Haskell.Exts (var)
 
 --------------------------------------------------------------------------------
 
@@ -1673,7 +1672,7 @@ codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
-codegenTy (CursorArrayTy size) = [cty|typename GibCursor* |]
+codegenTy (CursorArrayTy _size) = [cty|typename GibCursor* |]
 codegenTy MutCursorTy = [cty|typename GibCursor* |]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]

@@ -551,7 +551,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                                               ) (getFieldLocs slv2)
                                                                                                          exprs = P.map (\(key, l) -> LetLocE l (GetFieldLocSoA key slv2)
                                                                                                                        ) get_loc_keys
-                                                                                                         (lv1, lv2, dconLoc) = case dconstr of
+                                                                                                         (lv1, _lv2, dconLoc) = case dconstr of
                                                                                                                           AfterTagL lv1 lv2 -> (lv1, lv2, LetLocE lv1 (AfterConstantLE 1 lv2))
                                                                                                                           AfterConstantL lv1 i lv2 -> (lv1, lv2, LetLocE lv1 (AfterConstantLE i lv2))
                                                                                                                           _ -> error "Not implemented!"
@@ -600,7 +600,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                             
                                                                                                          returned = lambda exprs'' a'
                                                                                                       in dbgTrace minChatLvl " BindAllLocations: " dbgTrace minChatLvl (sdoc (get_loc_keys, returned)) dbgTrace minChatLvl "End bindAllLocations.\n" returned
-                                                                          _ -> error "bindAllLocations: AfterSoALE: unexpected tag constraint."                                       
+                                                                          --_ -> error "bindAllLocations: AfterSoALE: unexpected tag constraint."                                       
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AssignL lv1 lv2 -> Ext (LetLocE lv1 (AssignLE lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
@@ -1222,7 +1222,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                             Just $ AfterCopyL loc1 v v' loc2 f lvs
                           afterVar _ = Nothing
                           -- dbgTrace minChatLvl "Print DataConE SoA case argsLs: " dbgTrace minChatLvl (sdoc (d, argLs, newLocs)) dbgTrace minChatLvl "End DataConE SoA case argLs.\n"
-                      let dataBufferLoc = Single dataBufferVar
+                      let _dataBufferLoc = Single dataBufferVar
                           -- VS: September 24th, 2025
                           -- Some locs need to be sequentialized with respect to the 
                           -- data contructor buffer. These are the recursive fields, 
@@ -1353,7 +1353,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                         (sptrs, hloc:rstlocs) -> do
                                                                             -- make after tag constraint for the first
                                                                             let first_shortcut = Sf.headErr sptrs
-                                                                            let tail_shortcut = tail sptrs
+                                                                            let tail_shortcut = Sf.tailErr sptrs
                                                                             let last_shortcut = last sptrs
                                                                             let tagc_shortcut_first_c = AfterTagL (first_shortcut) d
                                                                             let fields_d = getFieldLocs d

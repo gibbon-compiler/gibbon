@@ -31,7 +31,6 @@ import           Gibbon.Common
 import qualified Gibbon.Language  as L
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
-import Gibbon.L3.Syntax (E3Ext(DerefMutCursor))
 
 
 --------------------------------------------------------------------------------

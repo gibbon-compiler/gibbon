@@ -1317,6 +1317,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                         return ()
                                                                -- TODO: implement for ran access pointers.
                                                                CursorTy -> return ()
+                                                               _ -> error "Not implemented!"
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()
 

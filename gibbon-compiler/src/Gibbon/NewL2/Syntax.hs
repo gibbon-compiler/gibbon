@@ -464,7 +464,7 @@ revertExp ex =
         Old.LetRegionE _ _ _ bod -> revertExp bod
         Old.LetParRegionE _ _ _ bod -> revertExp bod
         Old.LetLocE _ _ bod  -> revertExp bod
-        Old.TagCursor a _b -> error "revertExp cannot revert TagCursor" --Ext (L1.StartOfPkdCursor a)
+        Old.TagCursor _a _b -> error "revertExp cannot revert TagCursor" --Ext (L1.StartOfPkdCursor a)
         Old.StartOfPkdCursor v -> Ext (L1.StartOfPkdCursor v)
         Old.RetE _ v -> VarE v
         Old.AddFixed{} -> error "revertExp: TODO AddFixed."
@@ -554,13 +554,9 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.SSPush{} -> acc
               Old.SSPop{} -> acc
               Old.StartOfPkdCursor cur -> M.insertWith (++) (fromVarToFreeVarsTy cur) [(fromVarToFreeVarsTy cur)] acc
-<<<<<<< HEAD
-              Old.TagCursor a b -> acc --M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
-=======
-              Old.TagCursor a b -> M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
+              Old.TagCursor _a _b -> acc --M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
               Old.LetRegE {} -> error "depList: LetRegE not handled"
               Old.BoundsCheckVector {} -> error "depList: BoundsCheckVector not handled"
->>>>>>> main
 
       dep :: Old.PreLocExp LocArg -> [FreeVarsTy]
       dep ex =

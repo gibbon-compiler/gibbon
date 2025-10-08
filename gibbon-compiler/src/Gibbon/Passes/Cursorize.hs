@@ -9,9 +9,7 @@ import Control.Monad (forM)
 import Data.Foldable (foldlM, foldrM)
 import qualified Data.List as L
 import qualified Data.Map as M
-import Data.Maybe (fromJust, listToMaybe, fromMaybe)
-import Data.Set (Set)
-import GHC.RTS.Flags (MiscFlags (generateCrashDumpFile))
+import Data.Maybe (fromJust)
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.L3.Syntax hiding
@@ -1083,7 +1081,6 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
         -- SoARv dv _ -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
 
-        _ -> error $ "Unpexected Expression: " ++ show ext
     MapE {} -> error $ "TODO: cursorizeExp MapE"
     FoldE {} -> error $ "TODO: cursorizeExp FoldE"
   where
@@ -1973,9 +1970,6 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                               (from_var, fvl) <- case M.lookup (fromLocVarToFreeVarsTy fl) freeVarToVarEnv of
                                                                 Nothing -> case fl of 
                                                                               Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray flp (fromJust (L.elemIndex r b_args)))])
-                                                                              SoA{} -> do 
-                                                                                        field_name <- gensym "field_cursor"
-                                                                                        return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray flp (fromJust (L.elemIndex r b_args)))])
                                                                 Just var -> return $ (var, [])
                                               (to_var, tvl) <- do 
                                                                case M.lookup (fromLocVarToFreeVarsTy to_loc) freeVarToVarEnv of
@@ -2062,7 +2056,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                               
                                                 let barrier_args' = L.zip4 from_locs' to_locs' from_reg_vars' to_reg_vars'
                                                 (let_exprs', range_s', parents, _) <- foldlM handle_indrs_rec ([], [], (fl_var, to_loc_var', from_reg_var', to_reg_var'), barrier_args') barrier_args'
-                                                error "SoA: Packed indirections with GC does not work! Please turn off GC for now!"
+                                                _ <- error "SoA: Packed indirections with GC does not work! Please turn off GC for now!"
                                                 return (fvl ++ tvl ++ frl ++ trl ++ let_exprs', range_s', parents, barrier_args)
                                         )
 
