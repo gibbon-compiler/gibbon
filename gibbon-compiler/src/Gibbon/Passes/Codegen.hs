@@ -522,10 +522,24 @@ codegenTail venv _ _ (RetValsT [tr]) ty _ =
           return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' arg noLoc); |] ]
       _ -> return [ C.BlockStm [cstm| return $(codegenTriv venv tr); |] ]
 -- Multiple return:
-codegenTail venv _ _ (RetValsT ts) ty _ =
-    return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' args noLoc); |] ]
-    where args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ts
-          ty' = codegenTy ty
+codegenTail venv _ _ (RetValsT ts) ty _ = do 
+    return_var <- gensym "return"
+    let ty' = codegenTy ty
+    let flds = foldl (\(vars, idx) _ -> 
+                        let n = toVar ((fromVar return_var) ++ ".field"  ++ (show idx))
+                         in (vars ++ [n], idx + 1) 
+                     ) ([], 0) ts
+    let init_ret = [ C.BlockDecl [cdecl| $ty:ty' $id:return_var; |]  ]
+    let mem_copies = map (\(a, fld) -> let ty = typeOfTriv venv a
+                                           a' = codegenTriv venv a
+                                           ty' = codegenTy ty
+                                         in case ty of 
+                                              CursorArrayTy{} -> C.BlockStm  [cstm| memcpy($id:fld, $exp:a', sizeof($ty:ty')); |]
+                                              --CursorTy -> C.BlockStm  [cstm| memcpy($id:fld, $exp:a', sizeof($ty:ty')); |] 
+                                              --_ -> C.BlockStm  [cstm| memcpy(&$id:fld, &$exp:a', sizeof($ty:ty')); |]
+                                              _ -> C.BlockStm [cstm| $id:fld = $exp:a'; |]
+                         ) (zip ts (fst flds))
+    return $ init_ret ++ mem_copies ++ [ C.BlockStm [cstm| return $id:return_var; |] ]
 
 codegenTail venv fenv sort_fns (AssnValsT ls bod_maybe) ty sync_deps = do
     case bod_maybe of
@@ -533,9 +547,15 @@ codegenTail venv fenv sort_fns (AssnValsT ls bod_maybe) ty sync_deps = do
         let venv' = (M.fromList $ map (\(a,b,_) -> (a,b)) ls)
                     `M.union` venv
         bod' <- codegenTail venv' fenv sort_fns bod ty sync_deps
-        return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ] ++ bod'
+        return $ [ case ty of 
+                       CursorArrayTy{} -> memcpy (codegenTy ty) vr (codegenTriv venv triv)
+                       _ -> mut (codegenTy ty) vr (codegenTriv venv triv) 
+                  | (vr,ty,triv) <- ls ] ++ bod'
       Nothing  ->
-        return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ]
+        return $ [ case ty of 
+                        CursorArrayTy{} -> memcpy (codegenTy ty) vr (codegenTriv venv triv)
+                        _ -> mut (codegenTy ty) vr (codegenTriv venv triv) 
+                   | (vr,ty,triv) <- ls ]
 
 codegenTail venv fenv sort_fns (Switch lbl tr alts def) ty sync_deps =
     case def of
@@ -561,7 +581,12 @@ codegenTail venv fenv sort_fns (LetTrivT (vr,rty,rhs) body) ty sync_deps =
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        {-Bad assumption?-}
        {-If it is a statically sized array -}
-       return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
+       -- if we have an array type that's being assigned 
+       -- we can do a memcpy instead
+       case rty of 
+          CursorArrayTy _size -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr; |], 
+            C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ] ++ tal
+          _ -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
                 ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
@@ -631,7 +656,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
        rhs'' <- codegenTail venv fenv sort_fns rhs' ty sync_deps
-       itertime  <- gensym "itertime"
+       itertime  <- dbgTrace (minChatLvl) "Print rhs''" dbgTrace (minChatLvl) (sdoc (show (rhs'', rhs', rhs))) dbgTrace (minChatLvl) "End printing rhs''\n" gensym "itertime"
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
        times <- gensym "times"
@@ -656,7 +681,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                                          } |]
                                        , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
                                        ] ++
-                                       rhs''++
+                                       rhs'' ++
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
                                                          gib_list_bumpalloc_restore_state();
@@ -705,12 +730,14 @@ codegenTail venv fenv sort_fns (LetCallT False bnds ratr rnds body) ty sync_deps
                          -- Copied from the otherwise case below.
                          ProdTy [_one] -> do
                            nam <- gensym $ toVar "tmp_struct"
-                           let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+                           let bind (v,t) f = case t of 
+                                                 CursorArrayTy{} -> initVarItems (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+                                                 _ -> [assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)]
                                fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
                                ty0 = ProdTy $ map snd bnds
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
                            tal <- codegenTail venv' fenv sort_fns body ty sync_deps
-                           return $ init ++ zipWith bind bnds fields ++ tal
+                           return $ init ++ (concat $ zipWith bind bnds fields) ++ tal
                          ProdTy [] -> do
                            -- nam <- gensym "tmp"
                            let init = [ C.BlockDecl [cdecl| $ty:(codegenTy fn_ret_ty) $id:(fst bnd) = $(fnexp); |] ]
@@ -722,13 +749,15 @@ codegenTail venv fenv sort_fns (LetCallT False bnds ratr rnds body) ty sync_deps
                            return $ [call] ++ tal
     | otherwise = do
        nam <- gensym $ toVar "tmp_struct"
-       let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+       let bind (v,t) f = case t of 
+                            CursorArrayTy{} -> initVarItems (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+                            _ -> [assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)]
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
            venv' = (M.fromList bnds) `M.union` venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
-       return $ init ++ zipWith bind bnds fields ++ tal
+       return $ init ++ (concat $ zipWith bind bnds fields) ++ tal
   where
     fncall =
       let rnds' = map (codegenTriv venv) rnds
@@ -1555,14 +1584,16 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                          This way, we just allocate once, instead of allocating multiple times.                  
                   -}
                  MakeCursorArray -> do 
-                                    let [(outV, outT)] = bnds
-                                    let outVtmp = toVar $ (fromVar outV) ++ "_tmp"
+                                    let [(outV, _outT)] = bnds
+                                    --let outVtmp = toVar $ (fromVar outV) ++ "_tmp"
                                     let args = rnds
                                     let size = length args
                                     let initList = map (\exp -> C.ExpInitializer exp (noLoc)) (map (codegenTriv venv) args)
-                                    let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outVtmp[$int:size] = { $inits:initList }; |]
-                                    let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
-                                    pure [C.BlockDecl arrayInit, C.BlockDecl arrayMalloc]
+                                    --let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outVtmp[$int:size] = { $inits:initList }; |]
+                                    let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outV[$int:size] = { $inits:initList }; |]
+                                    --let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
+                                    --pure [C.BlockDecl arrayInit, C.BlockDecl arrayMalloc]
+                                    pure [C.BlockDecl arrayInit]
                                     --let arrayInit = [cdecl| $ty:(codegenTy CursorTy) $id:outV[$int:size] = { $inits:initList }; |]
                                     -- let arrayMalloc = [cdecl|  $ty:(codegenTy outT) $id:outV = gib_array_alloc($id:outVtmp, $int:size); |]
                                     --pure [C.BlockDecl arrayInit]
@@ -1578,9 +1609,15 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  CastPtr -> do
                     let [(outV, outT)] = bnds
+                        outT' = case outT of 
+                                     CursorArrayTy{} -> MutCursorTy
+                                     _ -> outT
                         [ptr] = rnds
                         ptr' = codegenTriv venv ptr
-                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
+                    -- In case it is a cusory array, we need to do an additional memcpy
+                        init_array = C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV; |]
+                        -- C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
+                    return [ init_array, C.BlockStm [cstm| memcpy($id:outV, ($ty:(codegenTy outT')) $exp:ptr', sizeof($ty:(codegenTy outT'))) ;|] ]
                   
                  AddrOfCursor -> do
                     let [(outV, outT)] = bnds
@@ -1741,10 +1778,25 @@ cid v = C.Var (C.toIdent v noLoc) noLoc
 toStmt :: C.Exp -> C.BlockItem
 toStmt x = C.BlockStm [cstm| $exp:x; |]
 
+-- toMemCpyStmt :: C.Exp -> C.BlockItem 
+-- toMemCpyStmt x = C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
+
 -- | Create a NEW lexical binding.
 assn :: (C.ToIdent v, C.ToExp e) => C.Type -> v -> e -> C.BlockItem
 assn t x y = C.BlockDecl [cdecl| $ty:t $id:x = $exp:y; |]
 
+-- initVar :: (C.ToIdent v) => C.Type -> v -> C.BlockItem
+-- initVar t x = C.BlockDecl [cdecl| $ty:t $id:x; |]
+
+initVarItems :: (C.ToIdent v, C.ToExp e) => C.Type -> v -> e -> [C.BlockItem]
+initVarItems t x y =
+  [ C.BlockDecl [cdecl| $ty:t $id:x; |]
+  , C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
+  ]
+ 
 -- | Mutate an existing binding:
 mut :: (C.ToIdent v, C.ToExp e) => C.Type -> v -> e -> C.BlockItem
 mut _t x y = C.BlockStm [cstm| $id:x = $exp:y; |]
+
+memcpy :: (C.ToIdent v, C.ToExp e) => C.Type -> v -> e -> C.BlockItem
+memcpy t x y = C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
