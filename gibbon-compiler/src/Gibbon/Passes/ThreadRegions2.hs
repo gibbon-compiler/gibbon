@@ -242,6 +242,15 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                                      in [(2 * (size_of_ty + 11), (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
                                         )
                                         $ zip fieldLocs' fieldRegs'
+                                    -- end_of_regions = S.fromList $ map (\(_, reg, _) -> case reg of 
+                                    --                                           NewL2.EndOfReg _ _ endr -> endr
+                                    --                                           _ -> error "Did not expect anything else than EndOfRegion!"                                     
+                                    --                      ) (boundsCheckDcon ++ boundsCheckFields)
+                                    
+                                    ends_fields = map (\(i, floc) -> (i, toEndVRegVar $ regionToVar floc)) fieldRegs
+                                    regen_region = SoARv dcEndReg ends_fields
+                                    ends_fields' = map (\(ind, floc) -> (ind, (NewL2.EndOfReg (regionToVar floc) mode (toEndVRegVar (regionToVar floc))))) fieldRegs
+                                    new_reg_Inst = [LetRegE regen_region (GenSoAReg (NewL2.EndOfReg dcreg mode (dcEndReg)) ends_fields')]
                                     boundsCheckVector = [("_", [], MkTy2 IntTy, Ext $ BoundsCheckVector (boundsCheckDcon ++ boundsCheckFields))]
                                     regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
                                     regInst' =
@@ -260,7 +269,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                             _ -> [LetLocE floc (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
                                         )
                                         fieldLocs
-                                 in (boundsCheckVector, locInst ++ locInst' ++ regInst ++ regInst')
+                                 in ((boundsCheckVector, new_reg_Inst), locInst ++ locInst' ++ regInst ++ regInst')
                               else
                                 let dcreg = regionToVar dcReg
                                     dcEndReg = toEndVRegVar dcreg
@@ -273,7 +282,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                             _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
                                         )
                                         fieldRegs
-                                 in ([], regInst ++ regInst')
+                                 in (([], []), regInst ++ regInst')
                           _ ->
                             if mode == Output
                               then
@@ -285,20 +294,23 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     regarg = NewL2.EndOfReg rv mode end_rv
                                  in -- dbgTrace (minChatLvl) ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
                                     -- maintain shadowstack in no eager promotion mode
-                                    ([("_", [], MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)], [])
-                              else ([], [])
+                                    (([("_", [], MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)], []), [])
+                              else (([], []), [])
                     )
                     (locVars funTy)
-                boundschecks = concatMap fst results
+                boundschecks = concatMap (fst . fst) results
+                instrs_after = concatMap (snd . fst) results
                 regInsts = concatMap snd results
              in -- If eager promotion is disabled, growing a region can also trigger a GC.
                 if no_eager_promote && funCanTriggerGC funMeta
                   then
-                    let lets = mkLets (rpush ++ wpush ++ boundschecks ++ wpop ++ rpop) bod'
+                    let lets_aft = L.foldr (\i acc -> Ext $ i acc) bod' instrs_after
+                        lets = mkLets (rpush ++ wpush ++ boundschecks ++ wpop ++ rpop) lets_aft
                         bod'' = L.foldr (\i acc -> Ext $ i acc) lets regInsts
                      in bod''
                   else
-                    let lets = mkLets boundschecks bod'
+                    let lets_aft = L.foldr (\i acc -> Ext $ i acc) bod' instrs_after
+                        lets = mkLets boundschecks lets_aft
                         bod'' = L.foldr (\i acc -> Ext $ i acc) lets regInsts
                      in bod''
 

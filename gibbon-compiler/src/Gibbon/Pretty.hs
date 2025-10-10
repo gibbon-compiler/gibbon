@@ -456,6 +456,7 @@ instance Pretty l => Pretty (L2.PreRegExp l) where
         case re of
           L2.GetDataConRegSoA loc -> lparen <> text "getDataConRegSoA" <+> pprint loc <> rparen
           L2.GetFieldRegSoA (dcon, idx) loc -> lparen <> text "getFieldRegSoA" <+> lparen <> text dcon <+> "," <+> int idx <> rparen <+> pprint loc <> rparen
+          L2.GenSoAReg loc flocs -> lparen <> text "genSoALoc" <+> pprint loc <+> (brackets $ hcat (punctuate "," (map (\((dc, x), l) -> lparen <> lparen <> text dc <+> "," <+> int x <> rparen <+> "," <+> pprint l <> rparen) flocs))) <> rparen
 
 instance Pretty RegionSize where
     pprintWithStyle _ (BoundedSize x) = parens $ text "Bounded" <+> int x

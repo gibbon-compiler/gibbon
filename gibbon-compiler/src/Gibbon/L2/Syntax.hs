@@ -232,6 +232,7 @@ data PreLocExp loc = StartOfRegionLE Region
 
 data PreRegExp loc = GetDataConRegSoA loc
                   |  GetFieldRegSoA (DataCon, FieldIndex) loc
+                  |  GenSoAReg loc [((DataCon, FieldIndex), loc)]
   deriving (Read, Show, Eq, Ord, Functor, Generic, NFData) 
 
 type LocExp = PreLocExp LocVar

@@ -1053,7 +1053,10 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   else return $ M.insert (fromRegVarToFreeVarsTy loc) l freeVarToVarEnv
               SoARv _ _ ->
                 if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
-                  then return $ freeVarToVarEnv
+                  -- overwrite this location with a new variable
+                  then do
+                    name <- gensym "overwrite_reg" 
+                    return $ M.insert (fromRegVarToFreeVarsTy loc) name freeVarToVarEnv
                   else do
                     name <- gensym "cursor_ptr"
                     return $ M.insert (fromRegVarToFreeVarsTy loc) name freeVarToVarEnv
@@ -1759,7 +1762,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   else return $ M.insert (fromRegVarToFreeVarsTy loc) l freeVarToVarEnv
               SoARv _ _ ->
                 if M.member (fromRegVarToFreeVarsTy loc) freeVarToVarEnv
-                  then return $ freeVarToVarEnv
+                  then do
+                    name <- gensym "overwrite_reg" 
+                    return $ M.insert (fromRegVarToFreeVarsTy loc) name freeVarToVarEnv
                   else do
                     name <- gensym "cursor_ptr"
                     return $ M.insert (fromRegVarToFreeVarsTy loc) name freeVarToVarEnv
@@ -2338,6 +2343,21 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
        in if isBound loc_var tenv
             then Right (rhs, [], tenv, senv)
             else Left $ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name, [], MutCursorTy, rhs)] denv
+    GenSoAReg dloc flocs ->
+      {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
+      let dcloc_var = case (M.lookup (fromRegVarToFreeVarsTy (fromLocVarToRegVar $ toLocVar dloc)) freeVarToVarEnv) of
+            Just v -> v
+            Nothing -> error "cursorizeRegExp: GenSoAReg: unexpected data constructor location variable"
+          field_vars =
+            map
+              ( \(_, loc) -> case (M.lookup (fromRegVarToFreeVarsTy (fromLocVarToRegVar $ toLocVar loc)) freeVarToVarEnv) of
+                  Just v -> v
+                  Nothing -> error "cursorizeRegExp: GenSoAReg: unexpected field location variable"
+              )
+              flocs
+          rhs = Ext $ MakeCursorArray (1 + length flocs) ([dcloc_var] ++ field_vars)
+       in dbgTrace (minChatLvl) "Print freeVarEnv GenSoAReg:" dbgTrace (minChatLvl) (sdoc (freeVarToVarEnv)) dbgTrace (minChatLvl) "End freeVarEnv\n" Right (rhs, [], tenv, senv)
+   
 
 findSoAParent :: FreeVarsTy -> M.Map FreeVarsTy Var -> Maybe FreeVarsTy
 findSoAParent fvar freeVarEnv = case fvar of
