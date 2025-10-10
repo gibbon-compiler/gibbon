@@ -1609,15 +1609,20 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  CastPtr -> do
                     let [(outV, outT)] = bnds
-                        outT' = case outT of 
-                                     CursorArrayTy{} -> MutCursorTy
-                                     _ -> outT
+                        --outT' = case outT of 
+                        --             CursorArrayTy{} -> MutCursorTy
+                        --             _ -> outT
                         [ptr] = rnds
                         ptr' = codegenTriv venv ptr
-                    -- In case it is a cusory array, we need to do an additional memcpy
-                        init_array = C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV; |]
-                        -- C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
-                    return [ init_array, C.BlockStm [cstm| memcpy($id:outV, ($ty:(codegenTy outT')) $exp:ptr', sizeof($ty:(codegenTy outT'))) ;|] ]
+                    case outT of 
+                        CursorArrayTy{} -> do 
+                                            -- In case it is a cusory array, we need to do an additional memcpy
+                                            let init_array = C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV; |]
+                                            -- C.BlockStm  [cstm| memcpy($id:x, $exp:y, sizeof($ty:t)); |]
+                                            -- return [ init_array, C.BlockStm [cstm| memcpy($id:outV, ($ty:(codegenTy outT)) $exp:ptr', sizeof($ty:(codegenTy outT))) ;|] ]
+                                            return [ init_array, C.BlockStm [cstm| memcpy($id:outV, $exp:ptr', sizeof($ty:(codegenTy outT))) ;|] ] 
+                        _ -> return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
+                    
                   
                  AddrOfCursor -> do
                     let [(outV, outT)] = bnds
