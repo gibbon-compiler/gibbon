@@ -997,6 +997,13 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
               )
               ([], [])
               bounds
+          let end_regs = map (\(_, bound, _) _ -> let bound_loc = toLocVar bound
+                                                      bound_reg = fromLocVarToRegVar bound_loc
+                                                    in bound_reg
+                             ) bounds
+          -- Now i need to find the parent region of these single regs. 
+          -- Update these regions in the parent 
+          -- and propgate the new region in the environment.    
           exp' <- return $ mkLets lets <$> Ext $ L3.BoundsCheckVector bounds'
           return (exp', freeVarToVarEnv)
         FromEndE {} -> error $ "cursorizeExp: TODO FromEndE" ++ sdoc ext
@@ -1033,10 +1040,10 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           -- In case we unpack single regions, we make them mutable since they may
           -- be updated by bounds check.
           let ty_of_loc = case loc of
-                SingleR _ -> MutCursorTy
+                SingleR _ -> CursorTy
                 SoARv _ flds -> CursorArrayTy (1 + length flds)
           let ty2_of_loc :: Ty2 = case loc of
-                SingleR _ -> MkTy2 MutCursorTy
+                SingleR _ -> MkTy2 CursorTy
                 SoARv _ flds -> MkTy2 $ CursorArrayTy (1 + length flds)
           freeVarToVarEnv' <- do
             case loc of
@@ -1739,10 +1746,10 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           --                   SingleR _ -> CursorTy
           --                   SoARv _ flds -> CursorArrayTy (1 + length flds)
           let ty_of_loc = case loc of
-                SingleR _ -> MutCursorTy
+                SingleR _ -> CursorTy
                 SoARv _ flds -> CursorArrayTy (1 + length flds)
           let ty2_of_loc :: Ty2 = case loc of
-                SingleR _ -> MkTy2 MutCursorTy
+                SingleR _ -> MkTy2 CursorTy
                 SoARv _ flds -> MkTy2 $ CursorArrayTy (1 + length flds)
           freeVarToVarEnv' <- do
             case loc of

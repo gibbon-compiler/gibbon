@@ -38,8 +38,8 @@ id lst = lst
 
 gibbon_main = let 
 		lst = mkList 100
-                lst' = id (add1 lst) 
-	       in sumList lst'
+                lst' = iterate (add1 lst) 
+	       in printPacked lst'--sumList lst'
 
 
 
