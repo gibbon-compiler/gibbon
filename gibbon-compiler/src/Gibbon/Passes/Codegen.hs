@@ -460,6 +460,8 @@ rewriteReturns tl bnds =
 -- dummyLoc = (SrcLoc (Loc (Pos "" 0 0 0) (Pos "" 0 0 0)))
 
 codegenTriv :: VEnv -> Triv -> C.Exp
+codegenTriv _ (SizeOf ty) = [cexp| sizeof($ty:(codegenTy ty)) |]
+codegenTriv _ (UninitTriv{}) = [cexp|  (void)0  |] -- noop
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
 codegenTriv _ (CharTriv i) = [cexp| $char:i |]
@@ -583,11 +585,15 @@ codegenTail venv fenv sort_fns (LetTrivT (vr,rty,rhs) body) ty sync_deps =
        {-If it is a statically sized array -}
        -- if we have an array type that's being assigned 
        -- we can do a memcpy instead
-       case rty of 
-          CursorArrayTy _size -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr; |], 
-            C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ] ++ tal
-          _ -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
-                ++ tal
+       case rty of
+          CursorArrayTy _size -> case rhs of 
+                                    UninitTriv{} -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr; |] ] ++ tal
+                                    _ -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr; |], 
+                                                    C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ] ++ tal
+          _ -> case rhs of 
+                    UninitTriv{} -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr; |] ] ++ tal
+                    _ -> return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
+                            ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
 codegenTail venv fenv sort_fns (LetArenaT vr body) ty sync_deps =
@@ -1039,6 +1045,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                     tagged_t = [cty| typename uintptr_t |] in pure
                                  [ C.BlockStm [cstm| *( $ty:tagged_t  *)($id:cur) = ($ty:tagged_t) $(codegenTriv venv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
+
+                 MemCpy -> let [(VarTriv copy_to), (VarTriv copy_from), size] = rnds in pure
+                             [ C.BlockStm [cstm| memcpy($id:copy_to, $id:copy_from, $(codegenTriv venv size)); |] ]
+
+                --  MemCpy -> let [(UninitTriv copy_to _ _), (VarTriv copy_from), size] = rnds in pure
+                --              [ C.BlockStm [cstm| memcpy($id:copy_to, $id:copy_from, $(codegenTriv venv size)); |] ]
 
                  ReadCursor -> let [(next,CursorTy),(afternext,CursorTy)] = bnds
                                    [(VarTriv cur)] = rnds in pure

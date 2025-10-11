@@ -19,7 +19,8 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
                     -- RemoveCopies might run more than once (b/c repairProgram), so
                     -- we ensure that we add the Indirection constructor only once.
                     let datacons = filter (not . isIndirectionTag . fst) dataCons
-                    return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]} )
+                    let ty_of_indirection = getCursorTypeForDataCon ddefs ddf  
+                    return ddf {dataCons = datacons ++ [(dcon, [(False, ty_of_indirection)])]} )
             ddefs
   -- Don't process copy* functions
   fds' <- mapM (\fn -> if isCopyFunName (funName fn)

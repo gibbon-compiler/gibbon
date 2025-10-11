@@ -75,6 +75,10 @@ tcExp isSoA isPacked ddfs env exp = do
           valty <- go val
           ensureEqualTyModCursor isSoA exp valty CursorTy
           return CursorTy
+        
+        -- does this require typecheking
+        MemCpy{} -> do
+          return $ ProdTy []
 
         ReadCursor v -> do
           vty <- lookupVar env v exp
@@ -193,6 +197,7 @@ tcExp isSoA isPacked ddfs env exp = do
           pure (ProdTy tys)
 
         NullCursor -> return CursorTy
+        InitCursor ty -> return ty
 
         GetCilkWorkerNum -> return IntTy
 

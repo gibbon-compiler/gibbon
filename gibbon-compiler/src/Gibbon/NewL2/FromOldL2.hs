@@ -87,6 +87,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                                                PackedTy _ loc -> (loc:acc)
                                                -- For indirection/redirection pointers.
                                                CursorTy -> ((Single w):acc)
+                                               CursorArrayTy{} -> ((Single w):acc)
                                                _ -> acc
                                            _ -> acc)
                                       []

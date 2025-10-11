@@ -101,6 +101,7 @@ removeReDefsExp env ex =
     Ext (WriteTaggedCursor v e) -> do
       e' <- go e
       pure (Ext $ WriteTaggedCursor v e')
+    Ext (MemCpy{}) -> return ex    
     Ext (ReadTaggedCursor v) -> do
       pure (Ext $ ReadTaggedCursor v)
     Ext (ReadCursor v) -> do
@@ -142,6 +143,7 @@ removeReDefsExp env ex =
     Ext (IndirectionBarrier _ (_, _, _, _)) -> pure ex
     Ext (BumpArenaRefCount _ _) -> pure ex
     Ext NullCursor -> pure ex
+    Ext InitCursor{} -> pure ex
     Ext GetCilkWorkerNum -> pure ex
     Ext (AllocateTagHere v tycon) -> do
       pure $ (Ext $ AllocateTagHere v tycon)
