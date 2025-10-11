@@ -16,8 +16,8 @@ gibbon_main =
           t2 = foo 50
           t3 = make_node t1 t2
           t4 = foo' t3
-          t4' = Node 12 (Leaf 1) (Leaf 2)
-          t5 = Node 10 (Node 12 t4 t4') t1
+          --t4' = Node 12 (Leaf 1) (Leaf 2)
+          t5 = Node 12 (Leaf 1) t4 --Node 10 (Node 12 t4 t4') (Node 12 (Leaf 1) (Leaf 1))
         in printPacked t5
 
  

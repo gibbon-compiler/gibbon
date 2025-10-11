@@ -59,6 +59,7 @@ data E3Ext loc dec =
   | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
   | TagCursor Var Var                      -- ^ Create a tagged cursor
   | WriteTaggedCursor Var (PreExp E3Ext loc dec) -- ^ Write a tagged cursor
+  | MemCpy Var Var dec                           -- ^ Do a mem copy from right address into left address of type dec
   | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
@@ -93,6 +94,7 @@ data E3Ext loc dec =
   | NullCursor                      -- ^ Constant null cursor value (hack?).
                                     --   Used for dict lookup, which returns a packed value but
                                     --   no end witness.
+  | InitCursor dec                  -- ^ Initialize a cursor without a rhs value.
   | RetE [(PreExp E3Ext loc dec)]   -- ^ Analogous to L2's RetE.
   | GetCilkWorkerNum                -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
@@ -118,6 +120,7 @@ instance FreeVars (E3Ext l d) where
       TagCursor a b      -> S.fromList [a,b]
       ReadTaggedCursor v -> S.singleton v
       WriteTaggedCursor v ex -> S.insert v (gFreeVars ex)
+      MemCpy a b _ -> S.fromList [a, b]
       ReadCursor v       -> S.singleton v
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       ReadList v _       -> S.singleton v
@@ -135,6 +138,7 @@ instance FreeVars (E3Ext l d) where
       BoundsCheck{}      -> S.empty
       IndirectionBarrier _tycon (l1,r1,l2,r2) -> S.fromList [l1,r1,l2,r2]
       NullCursor         -> S.empty
+      InitCursor{} -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
       RetE ls -> S.unions (L.map gFreeVars ls)
       GetCilkWorkerNum   -> S.empty
@@ -228,6 +232,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       TagCursor a b      -> TagCursor (go a) (go b)
       ReadTaggedCursor v -> ReadTaggedCursor (go v)
       WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
+      MemCpy a b ty -> MemCpy (go a) (go b) ty 
       ReadCursor v       -> ReadCursor (go v)
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
@@ -251,6 +256,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
         IndirectionBarrier tycon (go a, go b, go c, go d)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
+      InitCursor{} -> ext
       RetE ls            -> RetE (L.map go ls)
       GetCilkWorkerNum   -> GetCilkWorkerNum
       LetAvail ls b      -> LetAvail (L.map go ls) (go b)

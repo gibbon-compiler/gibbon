@@ -143,9 +143,11 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               -- Make the new SoA location with the data con loc 
               -- Field locs will all be the same
               indir_br <- case scrt_loc of 
-                  SoA{} -> do 
+                  SoA _d flocs -> do
+                    let arr_elems = 1 + length flocs 
                     let data_con_let = LetLocE (getDconLoc scrt_loc) (GetDataConLocSoA scrt_loc)
-                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE 9 ((getDconLoc scrt_loc)))
+                    -- assuming 8 byte pointer size
+                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE (1 + 8 * arr_elems) ((getDconLoc scrt_loc)))
                     let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) scrt_loc)]) [] (getAllFieldLocsSoA scrt_loc)
 
                     let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA scrt_loc) ) $

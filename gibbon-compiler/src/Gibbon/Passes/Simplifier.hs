@@ -239,6 +239,7 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                                  Just t2 -> t2
                 L4.ProdTriv ls -> L4.ProdTriv (map (gotriv env) ls)
                 L4.ProjTriv i t -> L4.ProjTriv i (gotriv env t)
+                L4.UninitTriv v _ _ -> L4.VarTriv v
                 _ -> trv
 
         goalts env alts =
@@ -261,6 +262,7 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                            L4.VarTriv w -> case M.lookup w env of
                                             Nothing -> go (M.insert v trv env) bod
                                             Just trv' -> go (M.insert v trv' env) bod
+                           L4.UninitTriv _ _ _ -> L4.LetTrivT (v, _ty, trv) (go env bod)
                            _ -> go (M.insert v (gotriv env trv) env) bod
                    L4.LetIfT binds (trv,tl1,tl2) bod ->
                        L4.LetIfT binds (gotriv env trv, go env tl1, go env tl2) (go env bod)

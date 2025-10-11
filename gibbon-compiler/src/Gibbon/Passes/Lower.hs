@@ -509,9 +509,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
               BoundsCheckVector{} -> syms
               ReadCursor{}       -> syms
               WriteTaggedCursor{}-> syms
+              MemCpy{} -> syms
               ReadTaggedCursor{} -> syms
               IndirectionBarrier{} -> syms
               NullCursor         -> syms
+              InitCursor{}       -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
               RetE ls -> gol ls
               GetCilkWorkerNum -> syms
@@ -896,6 +898,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteTaggedCursor [triv sym_tbl "WriteTaggedCursor arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
+    LetE (_, _, _, (Ext (MemCpy a b (CursorArrayTy sz)))) bod ->
+      T.LetPrimCallT [] T.MemCpy [T.VarTriv a, T.VarTriv b, T.SizeOf (T.CursorArrayTy sz)] <$> tail free_reg sym_tbl bod
+    
+    LetE (_, _, _, (Ext (MemCpy a b (CursorTy)))) bod ->
+      T.LetPrimCallT [] T.MemCpy [T.VarTriv a, T.VarTriv b, T.SizeOf (T.CursorTy)] <$> tail free_reg sym_tbl bod
+
     LetE(v,_,_,  (Ext (ReadCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
       ctmp <- gensym $ toVar "tmpaftercur"
@@ -949,6 +957,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v, _, _,  (Ext NullCursor)) bod ->
       T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (InitCursor (CursorArrayTy sz)))) bod -> 
+      T.LetTrivT (v, T.CursorArrayTy sz, T.UninitTriv v (T.CursorArrayTy sz) sz) <$> tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (InitCursor (CursorTy)))) bod -> 
+      T.LetTrivT (v, T.CursorTy, T.UninitTriv v (T.CursorTy) 1) <$> tail free_reg sym_tbl bod
 
     LetE (v, _, ty, (Ext GetCilkWorkerNum)) bod ->
       T.LetPrimCallT [(v,typ ty)] T.GetCilkWorkerNum [] <$> tail free_reg sym_tbl bod

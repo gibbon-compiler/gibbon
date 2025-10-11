@@ -62,11 +62,15 @@ data Triv
     | ProdTriv [Triv]   -- ^ Tuples
     | ProjTriv Int Triv -- ^ Projections
     | IndexCursorArrayTriv Int Triv -- ^ Indexing operation
+    | UninitTriv Var Ty Int -- ^ uninitialized values
+    | SizeOf Ty         -- ^ Size of a type
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 typeOfTriv :: M.Map Var Ty -> Triv -> Ty
 typeOfTriv env trv =
   case trv of
+    SizeOf{} -> IntTy
+    UninitTriv _ ty _ -> ty
     VarTriv v   -> env M.! v
     IntTriv{}   -> IntTy
     CharTriv{}  -> CharTy
@@ -205,6 +209,7 @@ data Ty
     | CursorArrayTy Int
     | MutCursorTy
 
+
 -- TODO: Make Ptrs more type safe like this:
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
 
@@ -313,6 +318,8 @@ data Prim
     | ReadTaggedCursor
 
     | WriteTaggedCursor
+
+    | MemCpy
 
     | ReadCursor
     -- ^ Read and return a cursor
@@ -486,6 +493,7 @@ inlineTrivL4 (Prog info_tbl sym_tbl fundefs mb_main) =
             VarTriv w -> case M.lookup w env of
                            Nothing -> inline_tail (M.insert v trv env) bod
                            Just pr -> inline_tail (M.insert v pr env) bod
+            UninitTriv{} -> inline_tail env bod 
             _         -> inline_tail (M.insert v trv env) bod
         LetIfT{ife,bod} -> tl { ife = (\(a,b,c) -> (inline env a,
                                                     go b,

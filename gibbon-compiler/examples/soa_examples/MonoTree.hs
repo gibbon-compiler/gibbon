@@ -29,8 +29,11 @@ sumTree tr =
     Leaf n    -> n
     Node d l r -> d + (sumTree l) + (sumTree r)
 
+id :: Tree -> Tree 
+id tree = tree
+
 gibbon_main = let 
-                tree = mkTree 23 0 
+                tree = id (mkTree 23 0) 
                 tree' = iterate (add1Tree tree) 
                in sumTree tree'
 
