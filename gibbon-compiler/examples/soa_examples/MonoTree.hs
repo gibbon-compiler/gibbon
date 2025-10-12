@@ -18,10 +18,10 @@ add1Tree t =
     Leaf x -> Leaf (x + 1)
     Node d x1 x2 -> Node (d + 1) (add1Tree x1) (add1Tree x2)
 
---rightMost :: Tree -> Int
---rightMost t = case t of
---                  Leaf x -> x
---                  Node d x1 x2 -> rightMost x2
+rightMost :: Tree -> Int
+rightMost t = case t of
+                  Leaf x -> x
+                  Node d x1 x2 -> rightMost x2
 
 sumTree :: Tree -> Int
 sumTree tr =
@@ -35,7 +35,7 @@ id tree = tree
 gibbon_main = let 
                 tree = id (mkTree 23 0) 
                 tree' = iterate (add1Tree tree) 
-               in sumTree tree'
+               in rightMost tree'
 
 main :: IO ()
 main = print gibbon_main

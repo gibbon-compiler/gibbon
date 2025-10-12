@@ -32,7 +32,7 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = 
-   let tree = id (mkTree 13)
+   let tree = id (mkTree 5)
        tree' = iterate (add1Tree tree)
        val = sumTree tree'
        _ = printsym (quote "(sum: ")
