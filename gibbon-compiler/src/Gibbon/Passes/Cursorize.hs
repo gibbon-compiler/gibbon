@@ -817,17 +817,18 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   SoA _ _ -> error $ "cursorizeExp: LetLocE: unexpected location variable " ++ show ((fromLocVarToRegVar . toLocVar) b)
 
           tag_cur_var <- gensym "tag_cur"
-          casted_var <- gensym "cast"
+          --casted_var <- gensym "cast"
           let ty3_of_field = case (toLocVar a) of
                                       Single _ -> CursorTy
                                       SoA _ fl -> CursorArrayTy (1 + length fl)
           let ty3_of_field2 :: Ty3 = case (toLocVar a) of
                                              Single _ -> CursorTy
                                              SoA _ fl -> CursorArrayTy (1 + length fl)
-          let tag_inst = (tag_cur_var, [], ty3_of_field, Ext $ L3.TagCursor a_var b_var)                                   
-          let cast_inst = (casted_var, [], CursorTy, Ext $ CastPtr tag_cur_var CursorTy)
-          let let_bnd = mkLets $ [tag_inst] ++ [cast_inst]
-          return (let_bnd (VarE casted_var), freeVarToVarEnv)
+          let tag_inst = (tag_cur_var, [], ty3_of_field, Ext $ L3.TagCursor a_var b_var) 
+          -- should not need to case anymore                                  
+          --let cast_inst = (casted_var, [], CursorTy, Ext $ CastPtr tag_cur_var CursorTy)
+          let let_bnd = mkLets $ [tag_inst] -- ++ [cast_inst]
+          return (let_bnd (VarE tag_cur_var), freeVarToVarEnv)
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -4315,6 +4316,43 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                           let curw' = SoAWin (toEndV v) _field_cur 
                           bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
                           return $ mkLets binds bod
+
+                        CursorArrayTy sz -> do
+                          tmp <- gensym "readcursor_shortcut"
+                          locs_var <- lookupVariable loc fenv
+                          let tenv' =
+                                M.union
+                                  ( M.fromList
+                                      [ (tmp, MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                                        (locs_var, MkTy2 (CursorArrayTy sz)),
+                                        (v, MkTy2 (CursorArrayTy sz)),
+                                        (toEndV v, MkTy2 CursorTy),
+                                        (toTagV v, MkTy2 IntTy),
+                                        (toEndFromTaggedV v, MkTy2 CursorTy)
+                                      ]
+                                  )
+                                  tenv
+                              --dcur_end is where i want to read the shortcut pointer from
+                              -- we'd just do a memcpy and copy the random access pointer out
+                              --read_cursor = Ext (ReadTaggedCursor dcur_end)
+                              --binds =
+                              --  [ (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                              --    (locs_var, [], CursorTy, VarE dcur_end),
+                              --    (v, [], CursorTy, ProjE 0 (VarE tmp)),
+                              --    (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                              --    (toTagV v, [], IntTy, ProjE 2 (VarE tmp)),
+                              --    (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))
+                              --  ]
+                              binds = [  
+                                        (v, [], (CursorArrayTy sz), Ext $ InitCursor (CursorArrayTy sz)),
+                                        --(locs_var, [], (CursorArrayTy sz), VarE dcur_end),
+                                        ("_", [], ProdTy [], Ext (MemCpy v dcur_end (CursorArrayTy sz))),
+                                        (toEndV v, [], CursorTy, Ext $ AddCursor dcur_end (LitE (8 * sz)))
+                                      ]
+                          let curw' = SoAWin (toEndV v) _field_cur 
+                          bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
+                          return $ mkLets binds bod
+
 
                         -- Int, Sym, or Bool
                         _ | isScalarTy ty -> do

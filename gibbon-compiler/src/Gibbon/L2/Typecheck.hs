@@ -31,6 +31,7 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.L2.Syntax as L2
+
 -- import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
@@ -900,7 +901,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       Ext (StartOfPkdCursor cur) -> do
         case M.lookup (fromVarToFreeVarsTy cur) (vEnv env) of
-          Just (PackedTy{}) -> pure (CursorTy, tstatein)
+          Just (PackedTy ty _) -> do 
+                                  let ddef = lookupDDef ddfs ty
+                                  let cursorType = getCursorTypeForDataCon ddfs ddef
+                                  pure (cursorType, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
       Ext (TagCursor a _b) -> do
@@ -1273,6 +1277,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                   then [fromJust (L.elemIndex ty tys)]
                                                                                                   else []
                                                                                   CursorTy -> [fromJust (L.elemIndex ty tys)]
+                                                                                  CursorArrayTy{} -> [fromJust (L.elemIndex ty tys)]
                                                                                   _ -> []
                                                 
                                                                       ) tys  
@@ -1291,6 +1296,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                     x:_ -> case x of 
                                                              PackedTy _ l -> ensureAfterConstant exp cs (Single dcloc) (getDconLoc l)
                                                              CursorTy -> return () 
+                                                             CursorArrayTy{} -> return ()
                                                              _ -> error "Did not expected unpacked type!"
                                               -- TODO: ensure after constant for all scalar not self recursive fields, with offset 0
                                               -- TODO: ensure after constant for all locs in dest with the next self recursive field. 
@@ -1317,6 +1323,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                         return ()
                                                                -- TODO: implement for ran access pointers.
                                                                CursorTy -> return ()
+                                                               CursorArrayTy{} -> return ()
                                                                _ -> error "Not implemented!"
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()

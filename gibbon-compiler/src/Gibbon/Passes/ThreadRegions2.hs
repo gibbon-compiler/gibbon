@@ -386,6 +386,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                           case unTy2 argty of
                             -- Indirection or redirection cursor.
                             CursorTy -> [singleLocVar w]
+                            CursorArrayTy{} -> [singleLocVar w]
                             _ -> NewL2.locsInTy argty
                         _ -> NewL2.locsInTy argty
               )

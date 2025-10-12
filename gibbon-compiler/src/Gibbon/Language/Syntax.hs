@@ -164,10 +164,8 @@ lkp dds con =
     _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
           ++", in datatypes:\n  "++sdoc dds
 
---tyName,
---Out a => 
-getCursorTypeForDataCon :: DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
-getCursorTypeForDataCon _ddefs DDef{ dataCons, memLayout} =
+getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
+getCursorTypeForDataCon _ddefs DDef{tyName, dataCons, memLayout} =
   -- remove data constructors introduced by RAN
   let _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
                                        then []
@@ -176,23 +174,23 @@ getCursorTypeForDataCon _ddefs DDef{ dataCons, memLayout} =
    in case memLayout of
        -- VS: For now, in the design we just always ensure 
        -- that a random access node is a CursorTy. 
-        _ -> CursorTy
-        --  Linear -> CursorTy 
-        --  FullyFactored -> 
-        --    let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon _ddefs dcon 
-        --                                                     c' = foldr (\ty c'' -> case ty of 
-        --                                                                       PackedTy tycon _ ->
-        --                                                                          if (toVar tycon) == tyName 
-        --                                                                          then c'' 
-        --                                                                          else c'' + 1
-        --                                                                       CursorTy -> c''
-        --                                                                       CursorArrayTy _ -> c''
-        --                                                                       _ -> c'' + 1 
-        --                                                                ) c fields
-        --                                                    in c'
-        --                         ) 0 _dataCons'
-        --      in CursorArrayTy (numFieldBuffers + 1)
-        -- _ -> error "Memory Layout is not implemented!"
+        --_ -> CursorTy
+         Linear -> CursorTy 
+         FullyFactored -> 
+           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon _ddefs dcon 
+                                                            c' = foldr (\ty c'' -> case ty of 
+                                                                              PackedTy tycon _ ->
+                                                                                 if (toVar tycon) == tyName 
+                                                                                 then c'' 
+                                                                                 else c'' + 1
+                                                                              CursorTy -> c''
+                                                                              CursorArrayTy _ -> c''
+                                                                              _ -> c'' + 1 
+                                                                       ) c fields
+                                                           in c'
+                                ) 0 _dataCons'
+             in CursorArrayTy (numFieldBuffers + 1)
+         _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
 insertDD d = M.insertWith err' (tyName d) d
