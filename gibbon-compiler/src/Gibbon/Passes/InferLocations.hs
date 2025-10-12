@@ -1898,7 +1898,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
         Ext (L1.StartOfPkdCursor cur) -> do
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr CursorTy env) bod dest
-          return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.StartOfPkdCursor cur)) bod', ty', cs')
+          let bty' = case bty of 
+                      CursorTy -> L2.CursorTy
+                      CursorArrayTy sz -> L2.CursorArrayTy sz
+                      _ -> error "InferExp: Did not expect any other type!"
+          return (L2.LetE (vr,[],bty',L2.Ext (L2.StartOfPkdCursor cur)) bod', ty', cs')
 
         Ext(BenchE{}) -> error "inferExp: BenchE not handled."
 
@@ -2780,7 +2784,11 @@ fixRANs prg@(Prog defs funs main) = do
                Nothing -> error $ show v ++ " not found in any datacon args, " ++ show bnd2
                Just (dcon, ls) -> do
                  let tys = lookupDataCon ddfs dcon
-                     n = length [ ty | ty <- tys, ty == CursorTy ]
+                     n = length [ ty | ty <- tys, case ty of 
+                                                      CursorTy -> True 
+                                                      CursorArrayTy{} -> True
+                                                      _ -> False        
+                                ]
                      rans = L.take n ls
                      needRANsExp = L.reverse $ L.take n (reverse ls)
                      ran_pairs = M.fromList $ fragileZip rans needRANsExp
