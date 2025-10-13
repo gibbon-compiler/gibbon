@@ -228,7 +228,8 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     --
                                     --                            ) $ zip fieldLocs' fieldRegs'
                                     -- VS: 1 byte for constructor, 1 byte for redirection, 8 bytes for pointer + 2 to be safe
-                                    boundsCheckDcon = [(12, dcRegArg, dcLocArg)]
+                                    spaceDcon = boundsCheckDconSoa ddefs (locs_tycons M.! loc)
+                                    boundsCheckDcon = [(spaceDcon, dcRegArg, dcLocArg)]
                                     boundsCheckFields =
                                       concatMap
                                         ( \(((dcon, idx), floc), freg) ->
@@ -237,9 +238,8 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                                   PackedTy {} -> []
                                                   _ ->
                                                     let size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
-                                                     -- VS: 1 byte for redirection, 8 for redirection pointer + 2 to be safe
-                                                     -- Some large offset to be safe
-                                                     in [(2 * (size_of_ty + 11), (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
+                                                     -- VS: 1 byte for redirection, 8 for redirection pointer + size of type
+                                                     in [((size_of_ty + 9), (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
                                         )
                                         $ zip fieldLocs' fieldRegs'
                                     -- end_of_regions = S.fromList $ map (\(_, reg, _) -> case reg of 
@@ -1213,6 +1213,25 @@ boundsCheck ddefs tycon =
       num_bytes = (1 + maximum vals)
    in -- Reserve additional space for a redirection node or a forwarding pointer.
       dbgTrace (minChatLvl) "Print boundsCheck: " dbgTrace (minChatLvl) (sdoc (dcons, vals, tyss)) dbgTrace (minChatLvl) "End boundsCheck.\n" num_bytes + 9
+
+
+boundsCheckDconSoa :: NewL2.DDefs2 -> TyCon -> Int
+boundsCheckDconSoa ddefs tycon = 
+  let dcons = getConOrdering ddefs tycon 
+      spaceReqd tys = 
+        foldl (\bytes ty -> 
+                     case (unTy2 ty) of 
+                         CursorTy -> (bytes + (fromJust $ sizeOfTy (unTy2 ty))) 
+                         CursorArrayTy _sz -> (bytes + (fromJust $ sizeOfTy (unTy2 ty)))
+                         PackedTy ty _ -> if ty == tycon 
+                                        then (bytes + 1)
+                                        else (bytes)
+                         _ -> bytes
+          
+              ) 0 tys 
+      tyss = map (lookupDataCon ddefs) dcons
+      num_bytes = 1 + (maximum $ map (spaceReqd) tyss)
+   in num_bytes + 9
 
 -- Not making a seperate function for bounds checking an SoA location at the moment.
 -- For a data constructor region -- it is 1 byte

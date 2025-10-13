@@ -1,6 +1,6 @@
 
 data List = Cons Int List | Nil 
-{-# ANN type List "Factored" #-}
+{-# ANN type List "Linear" #-}
 
 
 mkList :: Int -> List 
@@ -37,8 +37,8 @@ id :: List -> List
 id lst = lst
 
 gibbon_main = let 
-		lst = id (mkList 10000000)
-                lst' = iterate (id (add1 lst)) 
+		lst = (mkList 10000000)
+                lst' = iterate ((add1 lst))
 	       in sumList lst'
 
 

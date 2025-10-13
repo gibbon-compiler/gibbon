@@ -34,8 +34,10 @@ id tree = tree
 
 gibbon_main = let 
                 tree = id (mkTree 23 0) 
-                tree' = iterate (add1Tree tree) 
-               in rightMost tree'
+                tree' = (add1Tree tree)
+                tree'' = (add1Tree tree')
+                val = iterate (rightMost tree'') 
+               in (sumTree tree'') + val
 
 main :: IO ()
 main = print gibbon_main

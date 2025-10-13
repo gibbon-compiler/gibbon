@@ -824,10 +824,14 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           let ty3_of_field2 :: Ty3 = case (toLocVar a) of
                                              Single _ -> CursorTy
                                              SoA _ fl -> CursorArrayTy (1 + length fl)
-          let tag_inst = (tag_cur_var, [], ty3_of_field, Ext $ L3.TagCursor a_var b_var) 
+          let tag_inst = case (toLocVar a) of 
+                                 Single _ -> [(tag_cur_var, [], ty3_of_field, Ext $ L3.TagCursor a_var b_var)]
+                                 -- in case its an SoA cursor, we mempcpy it. 
+                                 SoA{} ->  [ (tag_cur_var, [], ty3_of_field, Ext $ InitCursor ty3_of_field),
+                                            ("_", [], ProdTy [], Ext $ MemCpy tag_cur_var a_var ty3_of_field)]
           -- should not need to case anymore                                  
           --let cast_inst = (casted_var, [], CursorTy, Ext $ CastPtr tag_cur_var CursorTy)
-          let let_bnd = mkLets $ [tag_inst] -- ++ [cast_inst]
+          let let_bnd = mkLets $ tag_inst -- ++ [cast_inst]
           return (let_bnd (VarE tag_cur_var), freeVarToVarEnv)
 
         -- All locations are transformed into cursors here. Location arithmetic
@@ -1612,6 +1616,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                 LetE (d', [], CursorTy, Ext $ AddCursor aft_dloc (LitE (8 * num_curs)))  
                                 <$> LetE (after_indirection, [], CursorTy, VarE d')
                                 <$> go2 marker_added fvarenv' after_indirection from_rec_end aft_flocs rst -- Ext $ AddCursor aft_dloc (L3.LitE 8)
+                    -- This is a shortcut pointer.
                     else do
                       LetE (d', [], CursorTy, Ext $ WriteTaggedCursor aft_dloc rnd')
                                 <$> LetE (after_indirection, [], CursorTy, VarE d')
@@ -1644,12 +1649,17 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                      -- --LetE (d', [], CursorTy, Ext $ WriteTaggedCursor aft_dloc (VarE rnd_var))
                          LetE ("_", [], ProdTy [], Ext (MemCpy aft_dloc rnd_var rnd_ty)) <$> 
                                 LetE (d', [], CursorTy, Ext $ AddCursor aft_dloc (LitE (8 * _size)))  
+                                -- Vidush : can get rid of after_indirection here.
                                 <$> LetE (after_indirection, [], CursorTy, VarE d')
                                 <$> go2 marker_added fvarenv' after_indirection from_rec_end aft_flocs rst -- Ext $ AddCursor aft_dloc (L3.LitE 8)
+                    -- shortcut pointer
                     else do
-                      LetE (d', [], CursorTy, Ext $ WriteTaggedCursor aft_dloc rnd')
-                                <$> LetE (after_indirection, [], CursorTy, VarE d')
-                                <$> go2 marker_added fvarenv' after_indirection from_rec_end aft_flocs rst -- Ext $ AddCursor aft_dloc (L3.LitE 8)
+                      -- LetE (d', [], CursorTy, Ext $ WriteTaggedCursor aft_dloc rnd')
+                      --           <$> LetE (after_indirection, [], CursorTy, VarE d')
+                      --           <$> go2 marker_added fvarenv' after_indirection from_rec_end aft_flocs rst -- Ext $ AddCursor aft_dloc (L3.LitE 8)
+                      LetE ("_", [], ProdTy [], Ext (MemCpy aft_dloc rnd_var rnd_ty))
+                        <$> LetE (d', [], CursorTy, Ext $ AddCursor aft_dloc (LitE (8 * _size)))
+                        <$> go2 marker_added fvarenv' d' from_rec_end aft_flocs rst
 
 
                   _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty

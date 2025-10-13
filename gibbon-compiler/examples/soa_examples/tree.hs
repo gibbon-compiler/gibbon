@@ -20,7 +20,7 @@ add1Tree t =
 rightmost :: Tree -> Int
 rightmost tree = case tree of 
 		      Leaf i _ -> i
-                      Node _ _ _ _ l r ll rr -> rightmost rr
+                      Node a b c d l r ll rr -> rightmost r 
 
 sumTree :: Tree -> Int
 sumTree tr =
@@ -32,13 +32,14 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = 
-   let tree = id (mkTree 5)
-       tree' = iterate (add1Tree tree)
-       val = sumTree tree'
+   let tree = id (mkTree 10)
+       tree' = (add1Tree tree)
+       tree'' = id (add1Tree tree')
+       val = iterate (sumTree tree'')
        _ = printsym (quote "(sum: ")
        _ = printint val 
        _ = printsym (quote ", rightmost: ")
-       rmost = (rightmost tree')
+       rmost = (rightmost tree'')
        _ = printint rmost
        _ = printsym (quote ")\n\n")
-     in ()
+     in val --printPacked tree'' --rmost --()
