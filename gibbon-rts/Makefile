@@ -26,8 +26,8 @@
 # ======================================================================
 
 
-CC        := clang
-AR        := llvm-ar
+CC        := gcc
+AR        := gcc-ar
 CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -std=gnu11 -flto
 RSC       := cargo
 RSFLAGS   := -v

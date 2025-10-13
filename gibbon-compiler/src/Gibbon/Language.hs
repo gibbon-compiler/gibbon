@@ -581,7 +581,7 @@ sizeOfTy t =
     SymSetTy      -> error "sizeOfTy: SymSetTy not handled."
     SymHashTy     -> error "sizeOfTy: SymHashTy not handled."
     IntHashTy     -> error "sizeOfTy: IntHashTy not handled."
-    CursorArrayTy{} -> error "sizeOfTy: CursorArrayTy not handled."
+    CursorArrayTy sz -> Just (8 * sz)
     MutCursorTy -> error "sizeOfTy: MutCursorTy not handled."
 
 -- | Type of the arguments for a primitive operation.

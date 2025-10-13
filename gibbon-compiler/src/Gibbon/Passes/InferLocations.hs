@@ -1179,7 +1179,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                  -- both, cursor array and cursorArrty 
                                                  -- are reserved for shortcut pointers 
                                                  CursorTy -> return $ ArgFixed 8
-                                                 CursorArrayTy{} -> return $ ArgFixed 8
+                                                 CursorArrayTy sz -> return $ ArgFixed (8 * sz)
                                                --CursorTy -> return $ ArgFixed 8
                                                  IntTy -> return $ ArgFixed 0
                                                --IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
@@ -1297,6 +1297,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                   case arg of
                                                                                       (VarE v) -> case lookupVEnv v env of
                                                                                                         CursorTy -> return $ ArgFixed 8
+                                                                                                        CursorArrayTy sz -> return $ ArgFixed (8 * sz)
                                                                                                         IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                                                                                                         FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                                                                                                         SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
@@ -1368,7 +1369,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                             -- let after_shorcut_constr = AfterSoAL after_shortcut_soa after_shortcut_all_dcon [] d
 
                                                                             -- The tag constraint will change to an after constant constraint
-                                                                            let tagc = AfterConstantL (getDconLoc hloc) (8) (last_shortcut)
+                                                                            -- TODO: For NESTED SoA, one approach is to linerize in Cursorize?
+                                                                            let last_shortcut_arg = last shortcut_ptr_dcargs
+                                                                            let last_shortcut_size = case last_shortcut_arg of 
+                                                                                                          ArgFixed sz -> sz 
+                                                                                                          _ -> error "Did not expected anything else than a fixed size argument!"
+                                                                            let tagc = AfterConstantL (getDconLoc hloc) (last_shortcut_size) (last_shortcut)
                                                                             let fieldLocVarsAfter = P.map (\(Just idx) -> let fldloc = lookup (k, idx) (getFieldLocs hloc)
                                                                                                                         in case fldloc of 
                                                                                                                             Just location -> Just location
@@ -1378,6 +1384,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                       case arg of
                                                                                           (VarE v) -> case lookupVEnv v env of
                                                                                                           CursorTy -> return $ ArgFixed 8
+                                                                                                          CursorArrayTy sz -> return $ ArgFixed (8 * sz)
                                                                                                           IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
                                                                                                           FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                                                                                                           SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
@@ -1897,11 +1904,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.AddFixed cur i)) bod', ty', cs')
 
         Ext (L1.StartOfPkdCursor cur) -> do
-          (bod',ty',cs') <- inferExp ddefs (extendVEnv vr CursorTy env) bod dest
           let bty' = case bty of 
                       CursorTy -> L2.CursorTy
                       CursorArrayTy sz -> L2.CursorArrayTy sz
                       _ -> error "InferExp: Did not expect any other type!"
+          (bod',ty',cs') <- inferExp ddefs (extendVEnv vr bty' env) bod dest
           return (L2.LetE (vr,[],bty',L2.Ext (L2.StartOfPkdCursor cur)) bod', ty', cs')
 
         Ext(BenchE{}) -> error "inferExp: BenchE not handled."
