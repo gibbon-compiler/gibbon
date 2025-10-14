@@ -17,7 +17,7 @@ add1 lst = case lst of
 		Nil -> Nil 
 		Cons i rst -> let 
 				i1 = i + 1
-                               in Cons i1 (add1 rst)
+							in Cons i1 (add1 rst)
 
 
 --fieldDep :: List -> (Int, List) 

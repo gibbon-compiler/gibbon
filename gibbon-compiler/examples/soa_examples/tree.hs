@@ -3,7 +3,7 @@ module Tree where
 data Tree = Leaf Int Float
           | Node Int Int Int Float Tree Tree Tree Tree
   deriving Show
-{-# ANN type Tree "Factored" #-}
+{-# ANN type Tree "Linear" #-}
 
 mkTree :: Int -> Tree
 mkTree d =
@@ -34,7 +34,7 @@ id tree = tree
 gibbon_main = 
    let tree = id (mkTree 10)
        tree' = (add1Tree tree)
-       tree'' = id (add1Tree tree')
+       tree'' = iterate (id (add1Tree tree'))
        val = iterate (sumTree tree'')
        _ = printsym (quote "(sum: ")
        _ = printint val 
