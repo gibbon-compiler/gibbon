@@ -1,7 +1,7 @@
 data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
 data Tree = Node Int Float FloatList List Tree Tree Tree | Leaf
-
+{-# ANN type Tree "Factored" #-}
 
 mkList :: Int -> List 
 mkList len = if len <= 0 

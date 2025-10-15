@@ -27,6 +27,7 @@ import qualified Gibbon.L3.Syntax as L3
 import Gibbon.NewL2.Syntax
 import Gibbon.Passes.AddRAN (numRANsDataCon)
 import Text.PrettyPrint.GenericPretty
+import Safe (fromJustDef)
 
 {-
 
@@ -1769,14 +1770,14 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
           (additional_bnds', freeVarToVarEnv'', _) <-
             foldlM
               ( \(b, env, idx') ((_, _), loc) -> do
-                  (var_for_loc, present', env') <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of
-                    Just v -> return $ (v, True, env)
+                  (var_for_loc, present', env', bnds) <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of
+                    Just v -> return $ (v, True, env, [])
                     Nothing -> case loc of
-                      Single l -> return $ (l, False, env)
+                      Single l -> return $ (l, False, env, [])
                       SoA {} -> do
                         new_name <- gensym "field_cursor"
                         let env'' = M.insert (fromLocVarToFreeVarsTy loc) new_name env
-                        return $ (new_name, False, env'')
+                        return $ (new_name, False, env'', [])
                   let b' =
                         if present'
                           then b
@@ -2381,7 +2382,7 @@ cursorizeLocExp freeVarToVarEnv denv tenv senv lvar locExp =
             then pure $ Right (rhs, [], tenv, senv)
             -- CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg))
             else pure $ Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_logarg) [(lvar_name, [], CursorTy, rhs)] denv
-    GetFieldLocSoA i loc ->
+    GetFieldLocSoA i loc -> do
       {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
       let loc_from_locarg = toLocVar loc
           field_locs = getAllFieldLocsSoA loc_from_locarg
@@ -2398,10 +2399,22 @@ cursorizeLocExp freeVarToVarEnv denv tenv senv lvar locExp =
           lvar_name = case (M.lookup (fromLocVarToFreeVarsTy lvar) freeVarToVarEnv) of
             Just v -> v
             Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
-          rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -})
-       in if isBound loc_var tenv
-            then pure $ Right (rhs, [], tenv, senv)
-            else pure $ Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) [(lvar_name, [], CursorTy, rhs)] denv
+      (rhs, additional_lets) <- case field_loc of 
+                                            Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
+                                            SoA _ fregs -> do
+                                                           let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
+                                                           let start = L.elemIndex (i, field_loc) field_locs
+                                                           let start_val = fromJustDef (-1) start
+                                                           res <- foldlM (\bnds i -> do 
+                                                                                           new_var <- gensym "unpack_loc"
+                                                                                           return $ bnds ++ [ (new_var, (new_var, [], CursorTy, Ext $ IndexCursorArray loc_var i)) ]
+                                                                              ) [] [(start_val + 1)..(start_val + sz)]
+                                                           let vars = map fst res
+                                                           let bnds = map snd res
+                                                           return $ (Ext $ MakeCursorArray (length vars) vars, bnds)
+      if isBound loc_var tenv
+            then pure $ Right (rhs, additional_lets, tenv, senv)
+            else pure $ Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) (additional_lets ++ [(lvar_name, [], CursorTy, rhs)]) denv
     GenSoALoc dloc flocs -> do
       {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
       let dcloc_var = case (M.lookup (fromLocVarToFreeVarsTy (toLocVar dloc)) freeVarToVarEnv) of
@@ -2454,7 +2467,7 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
             -- CursorArrayTy (1 + length (getAllFieldLocsSoA loc_from_logarg))
             -- VS: Hack: We always want to get a reference to the region.
             else pure $ Left $ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name, [], CursorTy, rhs)] denv
-    GetFieldRegSoA i loc ->
+    GetFieldRegSoA i loc -> do
       {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
       let loc_from_locarg = toLocVar loc
           field_locs = getAllFieldLocsSoA loc_from_locarg
@@ -2472,10 +2485,23 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
           lvar_name = case (M.lookup (fromRegVarToFreeVarsTy lvar) freeVarToVarEnv) of
             Just v -> v
             Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show regExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
-          rhs = Ext $ IndexCursorArray loc_var (1 + elem_idx {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -})
-       in if isBound loc_var tenv
-            then pure $ Right (rhs, [], tenv, senv)
-            else pure $ Left $ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) [(lvar_name, [], CursorTy, rhs)] denv
+          -- {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
+      (rhs, additional_lets) <- case field_loc of 
+                                            Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
+                                            SoA _ fregs -> do
+                                                           let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
+                                                           let start = L.elemIndex (i, field_loc) field_locs
+                                                           let start_val = fromJustDef (-1) start
+                                                           res <- foldlM (\bnds i -> do 
+                                                                                           new_var <- gensym "unpack_loc"
+                                                                                           return $ bnds ++ [ (new_var, (new_var, [], CursorTy, Ext $ IndexCursorArray loc_var i)) ]
+                                                                              ) [] [(start_val + 1)..(start_val + sz)]
+                                                           let vars = map fst res
+                                                           let bnds = map snd res
+                                                           return $ (Ext $ MakeCursorArray (length vars) vars, bnds)
+      if isBound loc_var tenv
+            then pure $ Right (rhs, additional_lets, tenv, senv)
+            else pure $ Left $ M.insertWith (++) (fromRegVarToFreeVarsTy reg_from_loc) (additional_lets ++ [(lvar_name, [], CursorTy, rhs)]) denv
     GenSoAReg dloc flocs -> do
       {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
       let dcloc_var = case (M.lookup (fromRegVarToFreeVarsTy (fromLocVarToRegVar $ toLocVar dloc)) freeVarToVarEnv) of
