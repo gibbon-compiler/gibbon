@@ -500,9 +500,7 @@ cursorizeFunDef useSoA ddefs fundefs FunDef {funName, funTy, funArgs, funBody, f
           -- Packed types in the output then become end-cursors for those same destinations.
           newOut =
             mapPacked
-              ( \var loc -> case loc of
-                  Single _ -> ProdTy [CursorTy, CursorTy]
-                  SoA _ fields -> ProdTy [CursorArrayTy (1 + length fields), CursorArrayTy (1 + length fields)]
+              ( \var loc -> ProdTy [getCursorizeTyFromLocVar'' loc, getCursorizeTyFromLocVar'' loc]
               )
               out_ty
 
