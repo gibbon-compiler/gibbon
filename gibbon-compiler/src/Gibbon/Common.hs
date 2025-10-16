@@ -33,7 +33,8 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA, varsInLocVar, varsInRegVar
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
+       , varsInLocVar, varsInRegVar, getAllFieldRegsSoA
        , appendNameToLocVar 
 
          -- * Establish conventions for the output of #lang gibbon:
@@ -579,6 +580,12 @@ getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), LocVar)]
 getAllFieldLocsSoA loc = case loc of 
                     SoA _dcon fieldLocs -> fieldLocs
                     Single _lc -> error "getFieldLocs : Did not expect a non SoA location!"
+
+
+getAllFieldRegsSoA :: RegVar -> [((DataCon, Int), RegVar)]
+getAllFieldRegsSoA loc = case loc of 
+                    SoARv _dcon fieldLocs -> fieldLocs
+                    SingleR _lc -> error "getFieldLocs : Did not expect a non SoA location!"
 
 freshSingleLocVar :: String -> PassM LocVar
 freshSingleLocVar m = do v <- gensym (toVar m)

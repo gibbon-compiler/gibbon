@@ -23,7 +23,9 @@ module Gibbon.L3.Syntax
   , getCursorizeTyFromRegVar''
   , getCursorizeTyFromRegVar'''
   , getIndexPositionOfSoALocVar
+  , getIndexPositionOfSoARegVar
   , linearizeLocVar
+  , linearizeRegVar
   , module Gibbon.Language
   )
 where
@@ -319,11 +321,30 @@ getIndexPositionOfSoALocVar flds loc = foldl (\(s, e, b) (_, fl) -> if b
                                                                                     in (e, e + sz, seen)
                                              ) (1, 1, False) flds 
 
+getIndexPositionOfSoARegVar :: [((DataCon, Int), RegVar)] -> RegVar -> (Int, Int, Bool)
+getIndexPositionOfSoARegVar flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+                                                                    then
+                                                                      (s, e, True)
+                                                                    else
+                                                                      let seen = if fl == loc then True else False
+                                                                       in case fl of 
+                                                                          SingleR{} -> (e, e + 1, seen) 
+                                                                          SoARv{} -> let (CursorArrayTy sz) = getCursorizeTyFromRegVar fl 
+                                                                                    in (e, e + sz, seen)
+                                             ) (1, 1, False) flds 
+
 linearizeLocVar :: LocVar -> [LocVar]
 linearizeLocVar loc = case loc of 
                             Single{} -> [loc]
                             SoA dcloc flocs -> let flinear = concatMap (\(_, fl) -> linearizeLocVar fl) flocs
                                                  in [singleLocVar dcloc] ++ flinear
+
+
+linearizeRegVar :: RegVar -> [RegVar]
+linearizeRegVar loc = case loc of 
+                            SingleR{} -> [loc]
+                            SoARv dcloc flocs -> let flinear = concatMap (\(_, fl) -> linearizeRegVar fl) flocs
+                                                 in [dcloc] ++ flinear
 
 getCursorizeTyFromLocVar :: LocVar -> Ty3
 getCursorizeTyFromLocVar lc = case lc of 
