@@ -23,6 +23,7 @@ module Gibbon.L3.Syntax
   , getCursorizeTyFromRegVar''
   , getCursorizeTyFromRegVar'''
   , getIndexPositionOfSoALocVar
+  , linearizeLocVar
   , module Gibbon.Language
   )
 where
@@ -318,6 +319,11 @@ getIndexPositionOfSoALocVar flds loc = foldl (\(s, e, b) (_, fl) -> if b
                                                                                     in (e, e + sz, seen)
                                              ) (1, 1, False) flds 
 
+linearizeLocVar :: LocVar -> [LocVar]
+linearizeLocVar loc = case loc of 
+                            Single{} -> [loc]
+                            SoA dcloc flocs -> let flinear = concatMap (\(_, fl) -> linearizeLocVar fl) flocs
+                                                 in [singleLocVar dcloc] ++ flinear
 
 getCursorizeTyFromLocVar :: LocVar -> Ty3
 getCursorizeTyFromLocVar lc = case lc of 
