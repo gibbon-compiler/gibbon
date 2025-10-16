@@ -150,6 +150,33 @@ mangle :: [Var] -> Var
 mangle vars = toVar $ "mangle" ++ (L.foldr (\v acc -> acc ++ "_" ++ (fromVar v)) "" vars)
 
 
+-- The LocVar here is the field location, which we need to generate code for.
+-- (Int, Int) is the start and end locations of that field.
+handleIndexingSoACursors :: (Int, Int) -> LocVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var, [(Var, [()], Ty3, Exp3)])
+handleIndexingSoACursors (start, end) locvar var_env = do
+                                           let par_var = case (M.lookup (fromLocVarToFreeVarsTy locvar) var_env) of 
+                                                                          Just v -> v 
+                                                                          Nothing -> case locvar of 
+                                                                                          Single l -> l 
+                                                                                          SoA{} -> error "Expected variable name for parent array!"
+                                           case locvar of 
+                                                Single{} -> do 
+                                                            return (var_env, [(par_var, [], CursorTy, Ext $ IndexCursorArray par_var start)])
+                                                SoA{} -> do
+                                                         (bnds, var_env') <- foldlM (\(b, env) (i, l) -> do
+                                                                                      (lvar, fenv') <- case (M.lookup (fromLocVarToFreeVarsTy l) var_env) of
+                                                                                                                         Just v -> return (v, env)
+                                                                                                                         Nothing -> do
+                                                                                                                                    new_var <- gensym "unpack"
+                                                                                                                                    let env' = M.insert (fromLocVarToFreeVarsTy l) new_var env
+                                                                                                                                    return (new_var, env')
+                                                                                      pure $ (b ++ [(lvar, [], CursorTy, Ext $ IndexCursorArray par_var i)], fenv')
+
+                                                           
+                                                                                    ) ([], var_env) (zip [start..end] (linearizeLocVar locvar))
+                                                         return (var_env, bnds)
+
+
 cursorizeFunDef :: Bool -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
 cursorizeFunDef useSoA ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta} = do
   let inLocs = inLocVars funTy
