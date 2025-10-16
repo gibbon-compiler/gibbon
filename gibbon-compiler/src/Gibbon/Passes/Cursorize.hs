@@ -152,29 +152,57 @@ mangle vars = toVar $ "mangle" ++ (L.foldr (\v acc -> acc ++ "_" ++ (fromVar v))
 
 -- The LocVar here is the field location, which we need to generate code for.
 -- (Int, Int) is the start and end locations of that field.
-handleIndexingSoACursors :: (Int, Int) -> LocVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var, [(Var, [()], Ty3, Exp3)])
-handleIndexingSoACursors (start, end) locvar var_env = do
+handleIndexingSoACursors :: (LocVar, Var) -> (Int, Int) -> LocVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var, [(Var, [()], Ty3, Exp3)])
+handleIndexingSoACursors (arrLoc, arrName) (start, end) locvar var_env = do
                                            let par_var = case (M.lookup (fromLocVarToFreeVarsTy locvar) var_env) of 
                                                                           Just v -> v 
                                                                           Nothing -> case locvar of 
                                                                                           Single l -> l 
                                                                                           SoA{} -> error "Expected variable name for parent array!"
-                                           case locvar of 
+                                           case arrLoc of 
                                                 Single{} -> do 
-                                                            return (var_env, [(par_var, [], CursorTy, Ext $ IndexCursorArray par_var start)])
+                                                            return (var_env, [(arrName, [], CursorTy, Ext $ IndexCursorArray par_var start)])
                                                 SoA{} -> do
-                                                         (bnds, var_env') <- foldlM (\(b, env) (i, l) -> do
+                                                         let linearized_locs = (linearizeLocVar locvar)
+                                                         (vars, bnds, var_env') <- foldlM (\(v, b, env) (i, l) -> do
                                                                                       (lvar, fenv') <- case (M.lookup (fromLocVarToFreeVarsTy l) var_env) of
                                                                                                                          Just v -> return (v, env)
                                                                                                                          Nothing -> do
                                                                                                                                     new_var <- gensym "unpack"
                                                                                                                                     let env' = M.insert (fromLocVarToFreeVarsTy l) new_var env
                                                                                                                                     return (new_var, env')
-                                                                                      pure $ (b ++ [(lvar, [], CursorTy, Ext $ IndexCursorArray par_var i)], fenv')
+                                                                                      pure $ (v ++ [lvar], b ++ [(lvar, [], CursorTy, Ext $ IndexCursorArray par_var i)], fenv')
 
                                                            
-                                                                                    ) ([], var_env) (zip [start..end] (linearizeLocVar locvar))
-                                                         return (var_env, bnds)
+                                                                                    ) ([], [], var_env) (zip [start..end] (take (end - start) (drop start linearized_locs)) )
+                                                         let make_cur_arr_let = [(arrName, [], getCursorizeTyFromLocVar arrLoc, Ext $ MakeCursorArray (length vars) vars)]
+                                                         return (var_env, bnds ++ make_cur_arr_let)
+
+handleIndexingSoARegCursors :: (RegVar, Var) -> (Int, Int) -> RegVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var, [(Var, [()], UrTy (), (PreExp E3Ext () (UrTy ())))])
+handleIndexingSoARegCursors (arrLoc, arrName) (start, end) locvar var_env = do
+                                           let par_var = case (M.lookup (fromRegVarToFreeVarsTy locvar) var_env) of 
+                                                                          Just v -> v 
+                                                                          Nothing -> case locvar of 
+                                                                                          SingleR l -> l 
+                                                                                          SoARv{} -> error "Expected variable name for parent array!"
+                                           case arrLoc of 
+                                                SingleR{} -> do 
+                                                            return (var_env, [(arrName, [], CursorTy, Ext $ IndexCursorArray par_var start)])
+                                                SoARv{} -> do
+                                                         let linearized_locs = (linearizeRegVar locvar)
+                                                         (vars, bnds, var_env') <- foldlM (\(v, b, env) (i, l) -> do
+                                                                                      (lvar, fenv') <- case (M.lookup (fromRegVarToFreeVarsTy l) var_env) of
+                                                                                                                         Just v -> return (v, env)
+                                                                                                                         Nothing -> do
+                                                                                                                                    new_var <- gensym "unpack"
+                                                                                                                                    let env' = M.insert (fromRegVarToFreeVarsTy l) new_var env
+                                                                                                                                    return (new_var, env')
+                                                                                      pure $ (v ++ [lvar], b ++ [(lvar, [], CursorTy, Ext $ IndexCursorArray par_var i)], fenv')
+
+                                                           
+                                                                                    ) ([], [], var_env) (zip [start..end] (take (end - start) (drop start linearized_locs)) )
+                                                         let make_cur_arr_let = [(arrName, [], getCursorizeTyFromRegVar''' arrLoc, Ext $ MakeCursorArray (length vars) vars)]
+                                                         return (var_env, bnds ++ make_cur_arr_let)
 
 
 cursorizeFunDef :: Bool -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
@@ -2562,8 +2590,13 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                 Just v -> v
                                 Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding parent region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc
                           name <- gensym "cursor_reg_ptr"
-                          let instrs = [LetE (name, [], getCursorizeTyFromRegVar r, Ext $ IndexCursorArray (name_par_reg) 1)]
-                          return $ (M.insert loc_var name acc, acc' ++ instrs)
+                          let (R par_reg_inner) = par_reg
+                          -- Vidush: TODO, is this right?
+                          let (start, end, _) = getIndexPositionOfSoARegVar (getAllFieldRegsSoA par_reg_inner) r
+                          (_acc, instrs) <- handleIndexingSoARegCursors (r, name) (start, end) par_reg_inner acc
+                          --let instrs = [LetE (name, [], getCursorizeTyFromRegVar r, Ext $ IndexCursorArray (name_par_reg) 1)]
+                          let instrs' = map (\i -> LetE i) instrs
+                          return $ (M.insert loc_var name _acc, acc' ++ instrs')
                         Nothing -> do
                           (dconReg_var, dcon_insts) <- case (M.lookup (fromRegVarToFreeVarsTy dconReg) acc) of
                             Just v -> return (v, [])
@@ -2583,15 +2616,29 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                   return (name_dcon, instrs)
 
                           -- Nothing -> error $ "cursorizeAppE: Did not find an end of region variable for the corresponding datacon region.\n\n" ++ show f ++ "\n\n " ++ show r ++ "\n\n " ++ show acc
-                          let fieldReg_vars =
-                                map
-                                  ( \(key, field_reg) -> case (M.lookup (fromRegVarToFreeVarsTy field_reg) acc) of
-                                      Just v -> v
-                                      Nothing -> error "cursorizeAppE: Did not find an end of region variable for the corresponding  field region.\n"
+                          (fieldReg_vars, bnds) <-
+                                foldlM
+                                  (\(vs, bds) (key, field_reg) -> do 
+                                                                    v <- case (M.lookup (fromRegVarToFreeVarsTy field_reg) acc) of
+                                                                                        Just vv -> return vv
+                                                                                        Nothing -> error "cursorizeAppE: Did not find an end of region variable for the corresponding  field region.\n"
+                                                                    case field_reg of 
+                                                                          SingleR{} -> do 
+                                                                                       let (idx, _, _) = getIndexPositionOfSoARegVar fieldRegions field_reg
+                                                                                       pure (vs ++ [v], bds ++ [(v, [], CursorTy, Ext $ IndexCursorArray v idx)])
+                                                                          SoARv{} -> do
+                                                                                     let (start, end, _) = getIndexPositionOfSoARegVar fieldRegions field_reg
+                                                                                     (nvars, bnds) <- foldlM (\(nv, bnd) i -> do 
+                                                                                                                var_n <- gensym "unpack"
+                                                                                                                return (nv ++ [var_n], bnd ++ [(var_n, [], CursorTy, Ext $ IndexCursorArray v i)])  
+                                                                                      
+                                                                                                    ) ([], []) [start ..(end - 1)]
+                                                                                     pure (vs ++ nvars, bds ++ bnds)
                                   )
+                                  ([], [])
                                   fieldRegions
                           name <- gensym "cursor_reg_ptr"
-                          let instrs = dcon_insts ++ [LetE (name, [], getCursorizeTyFromRegVar r, Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
+                          let instrs = dcon_insts ++ (map (\i -> LetE i) bnds) ++ [LetE (name, [], getCursorizeTyFromRegVar r, Ext $ MakeCursorArray (1 + length fieldReg_vars) ([dconReg_var] ++ fieldReg_vars))]
                           dbgTrace (minChatLvl) "Print Reg: " dbgTrace (minChatLvl) (sdoc (f, dconReg, fieldRegions)) dbgTrace (minChatLvl) "End soa Reg\n" return $ (M.insert loc_var name acc, acc' ++ instrs)
                       pure ret
 
@@ -3275,9 +3322,11 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
               field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
               let acc3' = dbgTrace (minChatLvl) "print loc: " dbgTrace (minChatLvl) (sdoc (loc, scrut_loc)) dbgTrace (minChatLvl) "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
               let field_cursor_ty = getCursorizeTyFromLocVar loc
-              let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1 + idx_elem))]
+              let (start, end, _) = getIndexPositionOfSoALocVar (getAllFieldLocsSoA scrut_loc) loc
+              (acc3'', field_let) <- handleIndexingSoACursors (loc, field_var) (start, end) scrut_loc acc3'
+              --let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1 + idx_elem))]
               let curr_window = [((dcon', idx), field_var)]
-              return (acc1 ++ field_let, acc2 ++ curr_window, acc3')
+              return (acc1 ++ field_let, acc2 ++ curr_window, acc3'')
           )
           ([], [], freeVarToVarEnv)
           (getAllFieldLocsSoA scrut_loc)
