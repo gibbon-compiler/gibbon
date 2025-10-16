@@ -14,7 +14,15 @@ module Gibbon.L3.Syntax
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars
-
+  , getCursorizeTyFromLocVar
+  , getCursorizeTyFromLocVar'
+  , getCursorizeTyFromLocVar''
+  , getCursorizeTyFromLocVar'''
+  , getCursorizeTyFromRegVar
+  , getCursorizeTyFromRegVar'
+  , getCursorizeTyFromRegVar''
+  , getCursorizeTyFromRegVar'''
+  , getIndexPositionOfSoALocVar
   , module Gibbon.Language
   )
 where
@@ -298,6 +306,119 @@ scalarToTy SymS  = SymTy
 scalarToTy BoolS = BoolTy
 
 
+getIndexPositionOfSoALocVar :: [((DataCon, Int), LocVar)] -> LocVar -> (Int, Int, Bool)
+getIndexPositionOfSoALocVar flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+                                                                    then
+                                                                      (s, e, True)
+                                                                    else
+                                                                      let seen = if fl == loc then True else False
+                                                                       in case fl of 
+                                                                          Single{} -> (e, e + 1, seen) 
+                                                                          SoA{} -> let (CursorArrayTy sz) = getCursorizeTyFromLocVar fl 
+                                                                                    in (e, e + sz, seen)
+                                             ) (1, 1, False) flds 
+
+
+getCursorizeTyFromLocVar :: LocVar -> Ty3
+getCursorizeTyFromLocVar lc = case lc of 
+                                  Single{} -> CursorTy 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                                                                                    Single{} -> len + 1
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar flc 
+                                                                                                              in case ty3 of 
+                                                                                                                       CursorArrayTy sz -> len + sz
+                                                                                                                       _ -> error "Did not expect type!"
+                                                                                 ) 0 flds
+                                                  in CursorArrayTy (1 + size_flds)
+
+getCursorizeTyFromRegVar :: RegVar -> Ty3
+getCursorizeTyFromRegVar rv = case rv of 
+                                  SingleR{} -> CursorTy
+                                  SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
+                                                                                                SingleR{} -> len + 1
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar flr
+                                                                                                           in case ty3 of 
+                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                                  _ -> error "Did not expect type!"
+                                                                        ) 0 flds
+                                                   in CursorArrayTy (1 + size_flds)
+
+
+getCursorizeTyFromLocVar' :: LocVar -> L2.Ty2
+getCursorizeTyFromLocVar' lc = case lc of 
+                                  Single{} -> L2.MkTy2 CursorTy 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                                                                                    Single{} -> len + 1
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar flc 
+                                                                                                              in case ty3 of 
+                                                                                                                       CursorArrayTy sz -> len + sz
+                                                                                                                       _ -> error "Did not expect type!"
+                                                                                 ) 0 flds
+                                                  in L2.MkTy2 $ CursorArrayTy (1 + size_flds)
+
+getCursorizeTyFromRegVar' :: RegVar -> L2.Ty2
+getCursorizeTyFromRegVar' rv = case rv of 
+                                  SingleR{} -> L2.MkTy2 CursorTy
+                                  SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
+                                                                                                SingleR{} -> len + 1
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar flr
+                                                                                                           in case ty3 of 
+                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                                  _ -> error "Did not expect type!"
+                                                                        ) 0 flds
+                                                   in L2.MkTy2 $ CursorArrayTy (1 + size_flds)
+
+
+getCursorizeTyFromLocVar'' :: LocVar -> UrTy loc
+getCursorizeTyFromLocVar'' lc = case lc of 
+                                  Single{} -> CursorTy 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                                                                                    Single{} -> len + 1
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar flc 
+                                                                                                              in case ty3 of 
+                                                                                                                       CursorArrayTy sz -> len + sz
+                                                                                                                       _ -> error "Did not expect type!"
+                                                                                 ) 0 flds
+                                                  in CursorArrayTy (1 + size_flds)
+
+getCursorizeTyFromRegVar'' :: RegVar -> UrTy loc
+getCursorizeTyFromRegVar'' rv = case rv of 
+                                  SingleR{} -> CursorTy
+                                  SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
+                                                                                                SingleR{} -> len + 1
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar flr
+                                                                                                           in case ty3 of 
+                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                                  _ -> error "Did not expect type!"
+                                                                        ) 0 flds
+                                                   in CursorArrayTy (1 + size_flds)
+
+
+getCursorizeTyFromLocVar''' :: LocVar -> UrTy ()
+getCursorizeTyFromLocVar''' lc = case lc of 
+                                  Single{} -> CursorTy 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                                                                                    Single{} -> len + 1
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar flc 
+                                                                                                              in case ty3 of 
+                                                                                                                       CursorArrayTy sz -> len + sz
+                                                                                                                       _ -> error "Did not expect type!"
+                                                                                 ) 0 flds
+                                                  in CursorArrayTy (1 + size_flds)
+
+getCursorizeTyFromRegVar''' :: RegVar -> UrTy ()
+getCursorizeTyFromRegVar''' rv = case rv of 
+                                  SingleR{} -> CursorTy
+                                  SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
+                                                                                                SingleR{} -> len + 1
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar flr
+                                                                                                           in case ty3 of 
+                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                                  _ -> error "Did not expect type!"
+                                                                        ) 0 flds
+                                                   in CursorArrayTy (1 + size_flds)
+
+
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
@@ -322,9 +443,7 @@ cursorizeTy ty =
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
     SymDictTy v _ -> SymDictTy v CursorTy
     PDictTy k v   -> PDictTy (cursorizeTy k) (cursorizeTy v)
-    PackedTy _ l    -> case l of 
-                           Single _ -> ProdTy [CursorTy, CursorTy]
-                           SoA _ flds -> ProdTy [CursorArrayTy (1 + length flds), CursorArrayTy (1 + length flds)]
+    PackedTy _ l    -> ProdTy [getCursorizeTyFromLocVar'' l, getCursorizeTyFromLocVar'' l]
     VectorTy el_ty' -> VectorTy $ cursorizeTy el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy
