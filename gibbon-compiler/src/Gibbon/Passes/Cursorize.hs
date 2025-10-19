@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unused-local-binds  #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# LANGUAGE BlockArguments #-}
 module Gibbon.Passes.Cursorize
   (cursorize) where
 
@@ -3628,7 +3629,32 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                               var_dcon_next <- gensym "dcon_next"
                               vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
                               redirection_var_dcon <- gensym "dcon_redir"
-                              redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
+                              res <- mapM (\((dcon, idx), _loc) -> do
+                                                                               let locTy = (lookupDataCon ddfs dcon) !! idx
+                                                                               case locTy of 
+                                                                                                MkTy2 (PackedTy _ loc) -> do
+                                                                                                                          let lty = getCursorizeTyFromLocVar loc
+                                                                                                                          case lty of 
+                                                                                                                               CursorTy -> do
+                                                                                                                                            new_var <- gensym "fld_redir"
+                                                                                                                                            return $ ((dcon, idx), _loc, [new_var])
+                                                                                                                               CursorArrayTy _sz -> do  
+                                                                                                                                                    num_vars <- mapM (\i -> do 
+                                                                                                                                                          var <- gensym "new"
+                                                                                                                                                          return var
+                                                                                                                                                          ) [1.._sz] 
+                                                                                                                                                    return $ ((dcon, idx), _loc, num_vars) 
+                                                                                                MkTy2 (CursorArrayTy _sz) -> do
+                                                                                                                             num_vars <- mapM (\i -> do 
+                                                                                                                                                     var <- gensym "new"
+                                                                                                                                                     return var
+                                                                                                                                              ) [1.._sz] 
+                                                                                                                             return $ ((dcon, idx), _loc, num_vars)
+                                                                                                _ -> do 
+                                                                                                     new_var <- gensym "fld_redir"
+                                                                                                     return $ ((dcon, idx), _loc, [new_var])
+                                                                ) _field_cur
+                              let redirection_var_flds = concatMap thd3 res
                               -- let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                               -- let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                               let tenv' =
@@ -3662,7 +3688,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                   -- generate binds for all fields.
                                   binds_flields =
                                     L.foldl
-                                      ( \(index, res) ((dcon', idx), var) ->
+                                      ( \(index, res) ((dcon', idx), var, redir_vars) ->
                                           let read_cursor_f =
                                                 if isIndirectionTag dcon || isRedirectionTag dcon
                                                   then Ext (ReadTaggedCursor (vars_next_fields !! index))
@@ -3671,25 +3697,31 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                               ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                            in case ty_of_field of
                                                 (MkTy2 PackedTy {}) ->
-                                                  let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
-                                                   in (index + 1, res ++ new_binds)
+                                                  let new_binds = case redir_vars of 
+                                                                          [v] -> [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                          rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
+                                                                   in (index + 1, res ++ new_binds)
                                                 (MkTy2 CursorArrayTy {}) ->
-                                                  let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                  let new_binds = case redir_vars of 
+                                                                            [v] -> [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                            rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                    in (index + 1, res ++ new_binds)
                                                 _ ->
-                                                  let new_binds =
-                                                        [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                          (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
-                                                          -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                          ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                          (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                          (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
-                                                          (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                        ]
+                                                  let new_binds = case redir_vars of 
+                                                                        [v] ->
+                                                                              [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                              ]
+                                                                        rst -> error $ "Did not expect multiple variables for type " ++ show ty_of_field
                                                    in (index + 1, res ++ new_binds)
                                       )
                                       (0, [])
-                                      _field_cur
+                                      res
                                   -- Vidush : TODO this needs to change since type changed
                                   soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                   tenv'' =
@@ -3757,7 +3789,32 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                     var_dcon_next <- gensym "dcon_next"
                                     vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
                                     redirection_var_dcon <- gensym "dcon_redir"
-                                    redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
+                                    res <- mapM (\((dcon, idx), _loc) -> do
+                                                                               let locTy = (lookupDataCon ddfs dcon) !! idx
+                                                                               case locTy of 
+                                                                                                MkTy2 (PackedTy _ loc) -> do
+                                                                                                                          let lty = getCursorizeTyFromLocVar loc
+                                                                                                                          case lty of 
+                                                                                                                               CursorTy -> do
+                                                                                                                                            new_var <- gensym "fld_redir"
+                                                                                                                                            return $ ((dcon, idx), _loc, [new_var])
+                                                                                                                               CursorArrayTy _sz -> do  
+                                                                                                                                                    num_vars <- mapM (\i -> do 
+                                                                                                                                                          var <- gensym "new"
+                                                                                                                                                          return var
+                                                                                                                                                          ) [1.._sz] 
+                                                                                                                                                    return $ ((dcon, idx), _loc, num_vars) 
+                                                                                                MkTy2 (CursorArrayTy _sz) -> do
+                                                                                                                             num_vars <- mapM (\i -> do 
+                                                                                                                                                     var <- gensym "new"
+                                                                                                                                                     return var
+                                                                                                                                              ) [1.._sz] 
+                                                                                                                             return $ ((dcon, idx), _loc, num_vars)
+                                                                                                _ -> do 
+                                                                                                     new_var <- gensym "fld_redir"
+                                                                                                     return $ ((dcon, idx), _loc, [new_var])
+                                                                ) _field_cur
+                                    let redirection_var_flds = concatMap thd3 res
                                     -- let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                                     -- let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                                     let tenv' = M.union
@@ -3787,7 +3844,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                         -- generate binds for all fields.
                                         binds_flields =
                                           L.foldl
-                                            ( \(index, res) ((dcon', idx), var) ->
+                                            ( \(index, res) ((dcon', idx), var, redir_vars) ->
                                               let read_cursor_f =
                                                       if isIndirectionTag dcon || isRedirectionTag dcon
                                                       then Ext (ReadTaggedCursor (vars_next_fields !! index))
@@ -3796,23 +3853,29 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                   ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                                in case ty_of_field of
                                                     (MkTy2 PackedTy {}) ->
-                                                        let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                        let new_binds = case redir_vars of 
+                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + 1, res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
-                                                        let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                        let new_binds = case redir_vars of 
+                                                                                 [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                 rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + 1, res ++ new_binds)
                                                     _ ->
-                                                        let new_binds =
-                                                              [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
-                                                                -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
-                                                                (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                              ]
+                                                        let new_binds = case redir_vars of 
+                                                              [v] ->
+                                                                    [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                      (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                      -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                      ((v), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                      (toEndV (v), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                      (toTagV (v), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                      (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
+                                                                    ]
+                                                              _ -> error "Did not expect multiple variables!"
                                                          in (index + 1, res ++ new_binds)
-                                            ) (0, []) _field_cur
+                                            ) (0, []) res
                                         soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                         tenv'' = M.union
                                                 ( M.fromList
@@ -3834,7 +3897,32 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                               var_dcon_next <- gensym "dcon_next"
                               vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
                               redirection_var_dcon <- gensym "dcon_redir"
-                              redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
+                              res <- mapM (\((dcon, idx), _loc) -> do
+                                                                               let locTy = (lookupDataCon ddfs dcon) !! idx
+                                                                               case locTy of 
+                                                                                                MkTy2 (PackedTy _ loc) -> do
+                                                                                                                          let lty = getCursorizeTyFromLocVar loc
+                                                                                                                          case lty of 
+                                                                                                                               CursorTy -> do
+                                                                                                                                            new_var <- gensym "fld_redir"
+                                                                                                                                            return $ ((dcon, idx), _loc, [new_var])
+                                                                                                                               CursorArrayTy _sz -> do  
+                                                                                                                                                    num_vars <- mapM (\i -> do 
+                                                                                                                                                          var <- gensym "new"
+                                                                                                                                                          return var
+                                                                                                                                                          ) [1.._sz] 
+                                                                                                                                                    return $ ((dcon, idx), _loc, num_vars) 
+                                                                                                MkTy2 (CursorArrayTy _sz) -> do
+                                                                                                                             num_vars <- mapM (\i -> do 
+                                                                                                                                                     var <- gensym "new"
+                                                                                                                                                     return var
+                                                                                                                                              ) [1.._sz] 
+                                                                                                                             return $ ((dcon, idx), _loc, num_vars)
+                                                                                                _ -> do 
+                                                                                                     new_var <- gensym "fld_redir"
+                                                                                                     return $ ((dcon, idx), _loc, [new_var])
+                                                                ) _field_cur
+                              let redirection_var_flds = concatMap thd3 res
                               -- let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                               -- let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                               let tenv' =
@@ -3868,7 +3956,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                   -- generate binds for all fields.
                                   binds_flields =
                                     L.foldl
-                                      ( \(index, res) ((dcon', idx), var) ->
+                                      ( \(index, res) ((dcon', idx), var, redir_vars) ->
                                           let read_cursor_f =
                                                 if isIndirectionTag dcon || isRedirectionTag dcon
                                                   then Ext (ReadTaggedCursor (vars_next_fields !! index))
@@ -3877,25 +3965,31 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                               ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                            in case ty_of_field of
                                                 (MkTy2 PackedTy {}) ->
-                                                  let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                  let new_binds = case redir_vars of 
+                                                                        [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                        rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                    in (index + 1, res ++ new_binds)
                                                 (MkTy2 CursorArrayTy {}) ->
-                                                  let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                  let new_binds = case redir_vars of 
+                                                                        [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                        rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                    in (index + 1, res ++ new_binds)
                                                 _ ->
-                                                  let new_binds =
-                                                        [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                          (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
-                                                          -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                          ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                          (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                          (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
-                                                          (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                        ]
+                                                  let new_binds = case redir_vars of 
+                                                                        [v] -> 
+                                                                                [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                  (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                  -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                  ((v), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                  (toEndV (v), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                  (toTagV (v), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                  (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
+                                                                                ]
+                                                                        _ -> error $ "Did not expect multiple variables for type" ++ show ty_of_field
                                                    in (index + 1, res ++ new_binds)
                                       )
                                       (0, [])
-                                      _field_cur
+                                      res
                                   soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                   tenv'' =
                                     M.union
@@ -3960,7 +4054,32 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                     var_dcon_next <- gensym "dcon_next"
                                     vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
                                     redirection_var_dcon <- gensym "dcon_redir"
-                                    redirection_var_flds <- mapM (\((dcon, idx), _) -> gensym "fld_redir") _field_cur
+                                    res <- mapM (\((dcon, idx), _loc) -> do
+                                                                               let locTy = (lookupDataCon ddfs dcon) !! idx
+                                                                               case locTy of 
+                                                                                                MkTy2 (PackedTy _ loc) -> do
+                                                                                                                          let lty = getCursorizeTyFromLocVar loc
+                                                                                                                          case lty of 
+                                                                                                                               CursorTy -> do
+                                                                                                                                            new_var <- gensym "fld_redir"
+                                                                                                                                            return $ ((dcon, idx), _loc, [new_var])
+                                                                                                                               CursorArrayTy _sz -> do  
+                                                                                                                                                    num_vars <- mapM (\i -> do 
+                                                                                                                                                          var <- gensym "new"
+                                                                                                                                                          return var
+                                                                                                                                                          ) [1.._sz] 
+                                                                                                                                                    return $ ((dcon, idx), _loc, num_vars) 
+                                                                                                MkTy2 (CursorArrayTy _sz) -> do
+                                                                                                                             num_vars <- mapM (\i -> do 
+                                                                                                                                                     var <- gensym "new"
+                                                                                                                                                     return var
+                                                                                                                                              ) [1.._sz] 
+                                                                                                                             return $ ((dcon, idx), _loc, num_vars)
+                                                                                                _ -> do 
+                                                                                                     new_var <- gensym "fld_redir"
+                                                                                                     return $ ((dcon, idx), _loc, [new_var])
+                                                                ) _field_cur
+                                    let redirection_var_flds = concatMap thd3 res
                                     -- let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                                     -- let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                                     let tenv' = M.union
@@ -3990,7 +4109,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                         -- generate binds for all fields.
                                         binds_flields =
                                           L.foldl
-                                            ( \(index, res) ((dcon', idx), var) ->
+                                            ( \(index, res) ((dcon', idx), var, redir_vars) ->
                                               let read_cursor_f =
                                                       if isIndirectionTag dcon || isRedirectionTag dcon
                                                       then Ext (ReadTaggedCursor (vars_next_fields !! index))
@@ -3999,23 +4118,29 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                   ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                                in case ty_of_field of
                                                     (MkTy2 PackedTy {}) ->
-                                                        let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                        let new_binds = case redir_vars of 
+                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + 1, res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
-                                                        let new_binds = [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                        let new_binds = case redir_vars of 
+                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + 1, res ++ new_binds)
                                                     _ ->
-                                                        let new_binds =
-                                                              [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
-                                                                -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
-                                                                (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                              ]
+                                                        let new_binds = case redir_vars of 
+                                                                                [v] ->
+                                                                                      [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                                      ]
+                                                                                _ -> error $ "Did not expect multiple variables for ty: " ++ show ty_of_field
                                                          in (index + 1, res ++ new_binds)
-                                            ) (0, []) _field_cur
+                                            ) (0, []) res
                                         soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                         tenv'' = M.union
                                                 ( M.fromList
@@ -4986,7 +5111,41 @@ regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
     -- TODO: SoA Region
     SoAR dcreg fieldRegs -> do
       (dcreg_binds, _freeVarToVarEnv) <- regionToBinds freeVarToVarEnv for_parallel_allocs dcreg sz
-      field_binds_pairs <- mapM (\(key, field_reg) -> regionToBinds _freeVarToVarEnv for_parallel_allocs field_reg sz) fieldRegs
+      field_binds_pairs <- mapM (\(key, field_reg) -> case regionToVar field_reg of 
+                                                             SingleR{} -> regionToBinds _freeVarToVarEnv for_parallel_allocs field_reg sz
+                                                             -- We linearize these regions.
+                                                             SoARv dc_reg fregs -> do 
+                                                                                   case field_reg of
+                                                                                          SoAR dcr frs -> do
+                                                                                              let dc_bnds = case dcr of 
+                                                                                                               GlobR v mul  -> let mul' = go mul
+                                                                                                                                   endv = toEndV v
+                                                                                                                                   bnds = [ (v, [], CursorTy, Ext (NewBuffer mul')),
+                                                                                                                                            (endv, [], CursorTy, Ext (EndOfBuffer mul'))
+                                                                                                                                          ]
+                                                                                                                                 in bnds
+                                                                                                               _ -> error "not implemented"
+                                                                                              fld_bnds <- concat <$> mapM (\((dcon, idx), fr) -> do 
+                                                                                                                                      case fr of
+                                                                                                                                         GlobR v mul  -> do 
+                                                                                                                                                         let mul' = go mul
+                                                                                                                                                         let endv = toEndV v
+                                                                                                                                                         let ty :: Ty3 = CursorTy
+                                                                                                                                                         let exp1 :: Exp3 = Ext (NewBuffer mul')
+                                                                                                                                                         let exp2 :: Exp3 = Ext (EndOfBuffer mul')
+                                                                                                                                                         let bnds = [ (v, [], ty, exp1),
+                                                                                                                                                                      (endv, [], ty, exp2)
+                                                                                                                                                                    ]
+                                                                                                                                                         pure bnds
+                                                                                                                                         _ -> error "Not implemented!"
+                                                                                                                           
+                                                                                                                 ) frs
+
+                                                                                              pure (dc_bnds ++ fld_bnds, _freeVarToVarEnv)
+                                                                                                                                
+                                                                                       
+                                                             
+                                ) fieldRegs
       let field_binds = concatMap fst field_binds_pairs
       let field_new_maps = map snd field_binds_pairs
       let _freeVarToVarEnv' = foldr (\m acc -> M.union m acc) freeVarToVarEnv field_new_maps
@@ -4998,18 +5157,23 @@ regionToBinds freeVarToVarEnv for_parallel_allocs r sz = do
         Nothing -> gensym "reg_ptr"
       let freeVarToVarEnv'' = M.insert (fromRegVarToFreeVarsTy reg_to_reg_var) regions_var freeVarToVarEnv'
       field_reg_keys_vars <-
-        mapM
+        concat <$> mapM
           ( \(key, field_reg) -> do
               case M.lookup (fromRegVarToFreeVarsTy (regionToVar field_reg)) freeVarToVarEnv'' of
-                Just v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
+                Just v -> return [(fromRegVarToFreeVarsTy (regionToVar field_reg), v)]
                 Nothing -> case field_reg of
-                  VarR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
-                  GlobR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
-                  DynR v _ -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
-                  MMapR v -> return (fromRegVarToFreeVarsTy (regionToVar field_reg), v)
-                  SoAR _ _ -> do
-                    new_name <- gensym "reg_ptr"
-                    return (fromRegVarToFreeVarsTy (regionToVar field_reg), new_name)
+                  VarR v -> return [(fromRegVarToFreeVarsTy (regionToVar field_reg), v)]
+                  GlobR v _ -> return [(fromRegVarToFreeVarsTy (regionToVar field_reg), v)]
+                  DynR v _ -> return [(fromRegVarToFreeVarsTy (regionToVar field_reg), v)]
+                  MMapR v -> return [(fromRegVarToFreeVarsTy (regionToVar field_reg), v)]
+                  SoAR dc fvar -> do
+                                  let dcv = case dc of 
+                                                  GlobR v _ -> (fromRegVarToFreeVarsTy (regionToVar dc), v) 
+                                  let fvs = map (\(_, f) -> case f of 
+                                                               GlobR v _ -> (fromRegVarToFreeVarsTy (regionToVar f), v)
+                                                ) fvar
+                                  return $ [dcv] ++ fvs
+                                  
           )
           fieldRegs
       let field_reg_keys = map fst field_reg_keys_vars
