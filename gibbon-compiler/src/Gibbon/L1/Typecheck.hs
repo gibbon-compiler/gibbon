@@ -27,12 +27,14 @@ import Gibbon.Common
 import Gibbon.L1.Syntax as L1
 import Gibbon.DynFlags
 import Prelude hiding (exp)
+import Data.Vector.Internal.Check (HasCallStack)
+import GHC.Stack (callStack, prettyCallStack)
 
 --------------------------------------------------------------------------------
 
 -- | Typecheck a L1 expression
 --
-tcExp :: DDefs1 -> Env2 Var Ty1 -> Exp1 -> TcM Ty1 Exp1
+tcExp :: HasCallStack => DDefs1 -> Env2 Var Ty1 -> Exp1 -> TcM Ty1 Exp1
 tcExp ddfs env exp =
   case exp of
     VarE v    -> lookupVar env v exp
@@ -648,7 +650,7 @@ tcExp ddfs env exp =
       then throwError $ GenericTC ("Invalid argument length: " ++ sdoc es) exp
       else do
         -- Check if arguments match with expected datacon types
-        sequence_ [ ensureEqualTy e ty1 ty2
+        sequence_ [  ensureEqualTy e ty1 ty2
                   | (ty1,ty2,e) <- zip3 args tys es]
         return $ PackedTy dcTy loc
 
@@ -688,7 +690,7 @@ tcExp ddfs env exp =
       case ty of 
         PackedTy tycon _ -> let dd = lookupDDef ddfs tycon
                                 ranTy = getCursorTypeForDataCon ddfs dd
-                              in pure ranTy
+                              in dbgTrace (minChatLvl) "Print ty" dbgTrace (minChatLvl) (sdoc (ty, dd, ranTy)) dbgTrace (minChatLvl) "End printing ty" pure ranTy
         _ -> throwError $ GenericTC "Expected a packed argument" exp
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
@@ -704,7 +706,7 @@ tcExp ddfs env exp =
 
 -- | Typecheck a L1 program
 --
-tcProg :: Prog1 -> PassM Prog1
+tcProg :: HasCallStack => Prog1 -> PassM Prog1
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Get flags to check if we're in packed mode
   flags <- getDynFlags
@@ -768,11 +770,11 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
       let (argTys,retty) = funTy
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
-          res  = runExcept $ tcExp ddefs env' funBody
+          res = runExcept $ tcExp ddefs env' funBody
       dynflags <- getDynFlags
       let isPacked = gopt Opt_Packed dynflags
       case res of
-        Left err -> error $ sdoc err
+        Left err -> error $ sdoc err ++ "\n" ++ prettyCallStack callStack
         Right ty -> if isPacked && (length $ getPackedTys retty) > 1
                     then error ("Gibbon-TODO: Functions cannot return multiple packed values; "
                                 ++ "check " ++ sdoc funName)

@@ -258,8 +258,14 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
                                      if not (getTyOfDataCon ddfs dcon `S.member` needRANsTyCons)
                                      then acc
                                      else
-                                       let ranTy = getCursorTypeForDataCon ddfs dd
-                                           tys'   = [(False,ranTy) | _ <- [1..n]] ++ tys
+                                       let fields = lookupDataCon ddfs dcon
+                                           needsRanFields = L.drop (length fields - n) fields
+                                           ranTyFields = map (\ty -> case ty of
+                                                                        PackedTy tycon _ -> let dd = lookupDDef ddfs tycon
+                                                                                              in getCursorTypeForDataCon ddfs dd 
+                                                                        _ -> CursorTy
+                                              ) needsRanFields
+                                           tys'   = [(False, r) | r <- ranTyFields] ++ tys
                                            dcon'  = toAbsRANDataCon dcon
 
                                            _tys''  = (False,IntTy) : [(False,IntTy) | _ <- [1..n]] ++ tys
