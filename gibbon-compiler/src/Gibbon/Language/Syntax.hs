@@ -182,7 +182,13 @@ getCursorTypeForDataCon _ddefs DDef{tyName, dataCons, memLayout} =
                                                                               PackedTy tycon _ ->
                                                                                  if (toVar tycon) == tyName 
                                                                                  then c'' 
-                                                                                 else c'' + 1
+                                                                                 else 
+                                                                                   let ddef_for_tycon = lookupDDef _ddefs tycon
+                                                                                       ty_of_packed_field = getCursorTypeForDataCon _ddefs ddef_for_tycon
+                                                                                     in case ty_of_packed_field of 
+                                                                                                CursorTy -> c'' + 1
+                                                                                                CursorArrayTy sz -> c'' + sz 
+                                                                                                _ -> error "Did not expect type"
                                                                               CursorTy -> c''
                                                                               CursorArrayTy _ -> c''
                                                                               _ -> c'' + 1 

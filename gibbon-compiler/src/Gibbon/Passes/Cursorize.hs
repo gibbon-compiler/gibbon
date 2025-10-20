@@ -28,7 +28,6 @@ import qualified Gibbon.L3.Syntax as L3
 import Gibbon.NewL2.Syntax
 import Gibbon.Passes.AddRAN (numRANsDataCon)
 import Text.PrettyPrint.GenericPretty
-import Safe (fromJustDef)
 
 {-
 
@@ -1527,13 +1526,13 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                -- Vidush: This indexing is actually wrong. 
                                                                -- I should make a function that given a position of a loc
                                                                -- get the exact index.
-                                                               let (start, end, _) = getIndexPositionOfSoALocVar aft_flocs floc
+                                                               -- let (start, end, _) = getIndexPositionOfSoALocVar aft_flocs floc
                                                                (vars, bnds) <- foldlM (\(v, b) i -> do 
                                                                                         new_var <- gensym "unpack_var"
                                                                                         let bnds = [(new_var, [], CursorTy, Ext $ IndexCursorArray var_name i)]
                                                                                         return $ (v ++ [new_var], b ++ bnds)
                                                                                       
-                                                                                 ) ([], []) [start..(end - 1)]
+                                                                                 ) ([], []) [0..(sz - 1)]
                                                                return $ res ++ [(vars, bnds)]
                             ) [] aft_flocs
                     let after_flocs_to_vars = concatMap fst res
@@ -2375,12 +2374,13 @@ cursorizeLocExp freeVarToVarEnv denv tenv senv lvar locExp =
                                             Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
                                             SoA _ fregs -> do
                                                            let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
-                                                           let start = L.elemIndex (i, field_loc) field_locs
-                                                           let start_val = fromJustDef (-1) start
+                                                           let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc
+                                                           --let start = L.elemIndex (i, field_loc) field_locs
+                                                           --let start_val = fromJustDef (-1) start
                                                            res <- foldlM (\bnds i -> do 
                                                                                            new_var <- gensym "unpack_loc"
                                                                                            return $ bnds ++ [ (new_var, (new_var, [], CursorTy, Ext $ IndexCursorArray loc_var i)) ]
-                                                                              ) [] [(start_val + 1)..(start_val + sz)]
+                                                                              ) [] [(start)..(end - 1)]
                                                            let vars = map fst res
                                                            let bnds = map snd res
                                                            return $ (Ext $ MakeCursorArray (length vars) vars, bnds)
@@ -2462,12 +2462,13 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
                                             Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
                                             SoA _ fregs -> do
                                                            let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
-                                                           let start = L.elemIndex (i, field_loc) field_locs
-                                                           let start_val = fromJustDef (-1) start
+                                                           let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc  
+                                                           --let start = L.elemIndex (i, field_loc) field_locs
+                                                           --let start_val = fromJustDef (-1) start
                                                            res <- foldlM (\bnds i -> do 
                                                                                            new_var <- gensym "unpack_loc"
                                                                                            return $ bnds ++ [ (new_var, (new_var, [], CursorTy, Ext $ IndexCursorArray loc_var i)) ]
-                                                                              ) [] [(start_val + 1)..(start_val + sz)]
+                                                                              ) [] [(start)..(end-1)]
                                                            let vars = map fst res
                                                            let bnds = map snd res
                                                            return $ (Ext $ MakeCursorArray (length vars) vars, bnds)
@@ -2628,12 +2629,13 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                        let (idx, _, _) = getIndexPositionOfSoARegVar fieldRegions field_reg
                                                                                        pure (vs ++ [v], bds ++ [(v, [], CursorTy, Ext $ IndexCursorArray v idx)])
                                                                           SoARv{} -> do
-                                                                                     let (start, end, _) = getIndexPositionOfSoARegVar fieldRegions field_reg
+                                                                                     --let (start, end, _) = getIndexPositionOfSoARegVar fieldRegions field_reg
+                                                                                     let CursorArrayTy _sz = getCursorizeTyFromRegVar field_reg
                                                                                      (nvars, bnds) <- foldlM (\(nv, bnd) i -> do 
                                                                                                                 var_n <- gensym "unpack"
                                                                                                                 return (nv ++ [var_n], bnd ++ [(var_n, [], CursorTy, Ext $ IndexCursorArray v i)])  
                                                                                       
-                                                                                                    ) ([], []) [start ..(end - 1)]
+                                                                                                    ) ([], []) [0 ..(_sz - 1)]
                                                                                      pure (vs ++ nvars, bds ++ bnds)
                                   )
                                   ([], [])
