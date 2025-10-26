@@ -48,6 +48,11 @@ id lst = lst
 
 gibbon_main = let 
                 pi = mkPackedInt 10
-                lst = mkList 1000000
-                lst' = iterate (add1 lst)
-               in (sumList lst') 
+                lst = mkList 100000
+                lst' = id (add1 lst)
+               in (sumList lst')
+
+
+
+
+ 
