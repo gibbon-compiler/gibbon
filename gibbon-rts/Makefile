@@ -150,7 +150,7 @@ $(C_RTS_DIR)/$(NAME).o: FORCE
 
 $(BUILD_DIR)/%.h: $(C_RTS_DIR)/%.h
 	mkdir -p $(BUILD_DIR) && \
-	ln -s $^ $@
+	ln -sf $^ $@
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
