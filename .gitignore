@@ -46,3 +46,4 @@ cabal.project.local~
 .ghc.environment.*
 stack*.yaml.lock
 .vscode/*
+racket-*
