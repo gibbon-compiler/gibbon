@@ -11,6 +11,7 @@ import           Data.Foldable ( foldrM )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.List as L
 import qualified Safe as Sf
 
 import           Data.IORef
@@ -1408,7 +1409,7 @@ desugarLinearExts (Prog ddefs fundefs main) = do
                   case fn' of
                     Ext (LambdaE [(v,ProdTy tys)] bod) -> do
                       let ty = Sf.headErr tys
-                          bod'' = foldl' (\acc i -> gSubstE (ProjE i (VarE v)) (VarE v) acc) bod [0..(length tys)]
+                          bod'' = L.foldl' (\acc i -> gSubstE (ProjE i (VarE v)) (VarE v) acc) bod [0..(length tys)]
                       pure (LetE (v,[],ty,e) bod'')
                     _ -> error $ "desugarLinearExts: couldn't desugar " ++ sdoc ex
                 ReverseAppE fn arg -> do
