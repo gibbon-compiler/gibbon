@@ -35,11 +35,12 @@ import           System.Environment
 import           System.Exit
 import           System.FilePath
 import           System.IO
-import           System.IO.Error (isDoesNotExistError)
+import           System.IO.Error (isDoesNotExistError, catchIOError)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
-import           Data.List (isInfixOf)
+import           Data.List (isInfixOf, stripPrefix)
+import           Data.Char (isDigit, isSpace)
 import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Language
@@ -377,6 +378,21 @@ compileRTS Config{verbosity,optc,dynflags,cc=ccCmd} = do
   when (isClangCompiler ccCmd && not ("llvm-ar" `isInfixOf` takeFileName archiver)) $
     putStrLn $
       "[compiler] clang detected but llvm-ar not found; using '" ++ archiver ++ "' instead."
+  when (isClangCompiler ccCmd && "llvm-ar" `isInfixOf` takeFileName archiver) $ do
+    clangVer <- toolVersionMajor ccCmd
+    arVer    <- toolVersionMajor archiver
+    case (clangVer, arVer) of
+      (Just clangMajor, Just arMajor)
+        | clangMajor /= arMajor ->
+            die $ unlines
+              [ "[compiler] clang/llvm-ar version mismatch detected."
+              , "  requested compiler : " ++ ccCmd
+              , "  selected archiver  : " ++ archiver
+              , "  clang major version: " ++ show clangMajor
+              , "  archiver major ver : " ++ show arMajor
+              , "Please adjust PATH so clang and llvm-ar versions align."
+              ]
+      _ -> pure ()
   let rtsmk = gibbon_dir </> "gibbon-rts/Makefile"
       userCFlags = optc
       rtsmkcmd = "make -f " ++ rtsmk ++ " "
@@ -497,6 +513,36 @@ chooseArchiver ccCmd = pick candidates
 isClangCompiler :: String -> Bool
 isClangCompiler = ("clang" `isInfixOf`) . takeFileName
 
+toolVersionMajor :: String -> IO (Maybe Int)
+toolVersionMajor toolString = do
+  let exe = takeWhile (not . isSpace) (dropWhile isSpace toolString)
+      base = takeFileName exe
+      marker
+        | "llvm-ar" `isInfixOf` base = Just "LLVM version "
+        | "clang"   `isInfixOf` base = Just "clang version "
+        | otherwise                  = Nothing
+  case marker of
+    Nothing -> pure Nothing
+    Just mk -> do
+      outcome <- catchIOError (Just <$> readProcessWithExitCode exe ["--version"] "") (const (pure Nothing))
+      case outcome of
+        Just (ExitSuccess, stdoutText, _) -> pure (parseMajorAfter mk stdoutText)
+        _ -> pure Nothing
+
+parseMajorAfter :: String -> String -> Maybe Int
+parseMajorAfter marker txt = do
+  rest <- findMarker marker txt
+  let digits = takeWhile isDigit rest
+  if null digits
+     then Nothing
+     else Just (read digits)
+
+findMarker :: String -> String -> Maybe String
+findMarker _ [] = Nothing
+findMarker marker str =
+  case stripPrefix marker str of
+    Just rest -> Just rest
+    Nothing   -> findMarker marker (tail str)
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
 execCmd dir cmd msg errmsg = do
