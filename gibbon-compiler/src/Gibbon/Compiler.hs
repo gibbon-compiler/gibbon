@@ -39,6 +39,7 @@ import           System.IO.Error (isDoesNotExistError)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
+import           Data.List (isInfixOf)
 import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Language
@@ -370,10 +371,15 @@ withPrintInterpProg l0 =
     return Nothing
 
 compileRTS :: Config -> IO ()
-compileRTS Config{verbosity,optc,dynflags} = do
+compileRTS Config{verbosity,optc,dynflags,cc=ccCmd} = do
   gibbon_dir <- getGibbonDir
+  archiver <- chooseArchiver ccCmd
+  when (isClangCompiler ccCmd && not ("llvm-ar" `isInfixOf` takeFileName archiver)) $
+    putStrLn $
+      "[compiler] clang detected but llvm-ar not found; using '" ++ archiver ++ "' instead."
   let rtsmk = gibbon_dir </> "gibbon-rts/Makefile"
-  let rtsmkcmd = "make -f " ++ rtsmk ++ " "
+      userCFlags = optc
+      rtsmkcmd = "make -f " ++ rtsmk ++ " "
                  ++ (if rts_debug then " MODE=debug " else " MODE=release ")
                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                  ++ (if not genGC then " GC=nongen " else " GC=gen ")
@@ -382,8 +388,10 @@ compileRTS Config{verbosity,optc,dynflags} = do
                  ++ (if parallel then " PARALLEL=1 " else "")
                  ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
                  ++ (if papi || papi_native then " PAPI=1 " else "")
-                 ++ (" USER_CFLAGS=\"" ++ optc ++ "\"")
+                 ++ (" USER_CFLAGS=\"" ++ userCFlags ++ "\"")
                  ++ (" VERBOSITY=" ++ show verbosity)
+                 ++ (" CC=\"" ++ ccCmd ++ "\"")
+                 ++ (" AR=\"" ++ archiver ++ "\"")
   execCmd
     Nothing
     rtsmkcmd
@@ -442,7 +450,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             compileRTS cfg
             lib_dir <- getRTSBuildDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
-            let compile_prog_cmd = compilationCmd backend cfg
+                compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
                                    ++" -L" ++ lib_dir
@@ -472,6 +480,22 @@ getRTSBuildDir =
      exists <- doesDirectoryExist build_dir
      unless exists (error "RTS build not found.")
      pure build_dir
+
+chooseArchiver :: String -> IO String
+chooseArchiver ccCmd = pick candidates
+  where
+    candidates
+      | isClangCompiler ccCmd = ["llvm-ar", "ar"]
+      | otherwise             = ["gcc-ar", "ar"]
+    pick [] = pure "ar"
+    pick (tool:rest) = do
+      found <- findExecutable tool
+      case found of
+        Just path -> pure path
+        Nothing   -> pick rest
+
+isClangCompiler :: String -> Bool
+isClangCompiler = ("clang" `isInfixOf`) . takeFileName
 
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
