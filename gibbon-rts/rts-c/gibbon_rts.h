@@ -16,6 +16,25 @@
 #include <cilk/cilk_api.h>
 #endif
 
+#define GIB_PRAGMA(x) _Pragma(#x)
+
+#if defined(__clang__)
+#define GIB_PRAGMA_MESSAGE(msg)        \
+    GIB_PRAGMA(clang diagnostic push)  \
+    GIB_PRAGMA(clang diagnostic ignored "-W#pragma-messages") \
+    GIB_PRAGMA(message msg)            \
+    GIB_PRAGMA(clang diagnostic pop)
+#else
+#define GIB_PRAGMA_MESSAGE(msg) GIB_PRAGMA(message msg)
+#endif
+
+#if defined(__clang__)
+#define GIB_PRAGMA_UNROLL(n) GIB_PRAGMA(unroll n)
+#elif defined(__GNUC__) && (__GNUC__ >= 8)
+#define GIB_PRAGMA_UNROLL(n) GIB_PRAGMA(GCC unroll n)
+#else
+#define GIB_PRAGMA_UNROLL(n)
+#endif
 /*
  * CPP macros used in the RTS:
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -389,7 +408,7 @@ extern bool gib_global_thread_requested_gc;
 
 extern uint64_t gib_global_num_threads;
 
-INLINE_HEADER GibThreadId gib_get_thread_id()
+INLINE_HEADER GibThreadId gib_get_thread_id(void)
 {
 #ifdef _GIBBON_PARALLEL
     return __cilkrts_get_worker_number();
@@ -1120,9 +1139,9 @@ INLINE_HEADER void gib_indirection_barrier(
 {
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
-    #pragma message "Simple write barrier is enabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is enabled.")
 #else
-    #pragma message "Simple write barrier is disabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is disabled.")
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
@@ -1258,12 +1277,12 @@ INLINE_HEADER uint8_t gib_log2(size_t x)
 
 // From Chandler Carruth's CppCon 2015 talk.
 INLINE_HEADER void escape(void *p) {
-    asm volatile("" : : "g"(p) : "memory");
+    __asm__ __volatile__("" : : "g"(p) : "memory");
 }
 
 // From Chandler Carruth's CppCon 2015 talk.
-INLINE_HEADER void clobber() {
-    asm volatile("" : : : "memory");
+INLINE_HEADER void clobber(void) {
+    __asm__ __volatile__("" : : : "memory");
 }
 
 

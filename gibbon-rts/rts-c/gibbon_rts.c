@@ -170,7 +170,7 @@ void increment_papi_region_id(void)
 #ifdef _GIBBON_POINTER
 
 #ifdef _GIBBON_BUMPALLOC_HEAP
-#pragma message "Using bump allocator."
+GIB_PRAGMA_MESSAGE("Using bump allocator.")
 
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -537,7 +537,7 @@ GibCursor *gib_array_alloc(GibCursor *arr, size_t size)
         exit(1);
     }
 
-    #pragma GCC unroll 2
+    GIB_PRAGMA_UNROLL(2)
     for (size_t i = 0; i < size; i++){
         arr_on_heap[i] = arr[i];
     }
@@ -749,7 +749,7 @@ double gib_sum_timing_array(GibVector *times)
 
 #ifdef _GIBBON_BUMPALLOC_LISTS
 // #define _GIBBON_DEBUG
-#pragma message "Using bump allocator."
+GIB_PRAGMA_MESSAGE("Using bump allocator.")
 
 static __thread char *gib_global_list_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_list_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -1079,26 +1079,26 @@ void gib_print_gc_config(void) {
     printf("C config\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
 #if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
-    #pragma message "Generational GC is disabled."
+    GIB_PRAGMA_MESSAGE("Generational GC is disabled.")
     printf("Generational GC is disabled.\n");
 #else
-    #pragma message "Generational GC is enabled."
+    GIB_PRAGMA_MESSAGE("Generational GC is enabled.")
     printf("Generational GC is enabled.\n");
 #endif
 
 #if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
-    #pragma message "Eager promotion is disabled."
+    GIB_PRAGMA_MESSAGE("Eager promotion is disabled.")
     printf("Eager promotion is disabled.\n");
 #else
-    #pragma message "Eager promotion is enabled."
+    GIB_PRAGMA_MESSAGE("Eager promotion is enabled.")
     printf("Eager promotion is enabled.\n");
 #endif
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 0
-    #pragma message "Simple write barrier is disabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is disabled.")
     printf("Simple write barrier is disabled.\n");
 #else
-    #pragma message "Simple write barrier is enabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is enabled.")
     printf("Simple write barrier is enabled.\n");
 #endif
 
