@@ -17,7 +17,7 @@ module Gibbon.Language.Syntax
     DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef, 
-  getCursorTypeForDataCon
+  getCursorTypeForDataCon, getCursorTypeFromTy
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..)
@@ -185,6 +185,41 @@ getCursorTypeForDataCon _ddefs DDef{tyName, dataCons, memLayout} =
                                                                                  else 
                                                                                    let ddef_for_tycon = lookupDDef _ddefs tycon
                                                                                        ty_of_packed_field = getCursorTypeForDataCon _ddefs ddef_for_tycon
+                                                                                     in case ty_of_packed_field of 
+                                                                                                CursorTy -> c'' + 1
+                                                                                                CursorArrayTy sz -> c'' + sz 
+                                                                                                _ -> error "Did not expect type"
+                                                                              CursorTy -> c''
+                                                                              CursorArrayTy _ -> c''
+                                                                              _ -> c'' + 1 
+                                                                       ) c fields
+                                                           in c'
+                                ) 0 _dataCons'
+             in CursorArrayTy (numFieldBuffers + 1)
+         _ -> error "Memory Layout is not implemented!"
+
+getCursorTypeFromTy :: Out a => TyCon -> DDefs (UrTy a) -> UrTy a
+getCursorTypeFromTy tycon ddefs =
+  let _ddef@DDef{tyName, dataCons, memLayout} = lookupDDef ddefs tycon
+  -- remove data constructors introduced by RAN
+      _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
+                                       then []
+                                       else [e]
+                      ) dataCons
+   in case memLayout of
+       -- VS: For now, in the design we just always ensure 
+       -- that a random access node is a CursorTy. 
+        --_ -> CursorTy
+         Linear -> CursorTy 
+         FullyFactored -> 
+           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
+                                                            c' = foldr (\ty c'' -> case ty of 
+                                                                              PackedTy tycon' _ ->
+                                                                                 if (toVar tycon') == tyName 
+                                                                                 then c'' 
+                                                                                 else 
+                                                                                   let ddef_for_tycon = lookupDDef ddefs tycon'
+                                                                                       ty_of_packed_field = getCursorTypeForDataCon ddefs ddef_for_tycon
                                                                                      in case ty_of_packed_field of 
                                                                                                 CursorTy -> c'' + 1
                                                                                                 CursorArrayTy sz -> c'' + sz 

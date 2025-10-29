@@ -1028,7 +1028,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                           region_locs1
                           (zip locs [0 .. length (locs)])
                    in acc'
-          num_cursor_tys = dbgTrace (minChatLvl) "print in doCase (renv0): " dbgTrace (minChatLvl) (sdoc (renv1'', renv0, region_locs1')) dbgTrace (minChatLvl) "End doCase (renv0).\n" length $ filter ((== CursorTy) . unTy2) dcon_tys
+          num_cursor_tys = dbgTrace (minChatLvl) "print in doCase (renv0): " dbgTrace (minChatLvl) (sdoc (renv1'', renv0, region_locs1')) dbgTrace (minChatLvl) "End doCase (renv0).\n" length $ filter (\t -> case (unTy2 t) of --          (== CursorTy) . unTy2
+                                                                                                                                                                                                                      CursorTy ->  True
+                                                                                                                                                                                                                      CursorArrayTy{} -> True
+                                                                                                                                                                                                                      _ -> False
+                                                                                                                                                                                                        ) dcon_tys
           ran_env1' =
             ran_env1
               `M.union` ( if isIndirectionTag dcon || isRedirectionTag dcon

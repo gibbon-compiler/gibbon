@@ -123,8 +123,7 @@ data WindowIntoCursor = AoSWin Var | SoAWin Var [((DataCon, Int), Var)]
 cursorize :: Prog2 -> PassM Prog3
 cursorize Prog {ddefs, fundefs, mainExp} = do
   dflags <- getDynFlags
-  let useSoA = gopt Opt_Packed_SoA dflags
-  fns' <- mapM (cursorizeFunDef useSoA ddefs fundefs . snd) (M.toList fundefs)
+  fns' <- mapM (cursorizeFunDef ddefs fundefs . snd) (M.toList fundefs)
   let fundefs' = M.fromList $ L.map (\f -> (funName f, f)) fns'
       ddefs' = M.map eraseLocMarkers ddefs
 
@@ -205,15 +204,15 @@ handleIndexingSoARegCursors (arrLoc, arrName) (start, end) locvar var_env = do
                                                          return (var_env, bnds ++ make_cur_arr_let)
 
 
-cursorizeFunDef :: Bool -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
-cursorizeFunDef useSoA ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta} = do
+cursorizeFunDef :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
+cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta} = do
   let inLocs = inLocVars funTy
       outLocs = outLocVars funTy
       outRegs = outRegVars funTy
       inRegs = inRegVars funTy
       in_tys = arrIns funTy
       out_ty = arrOut funTy
-      funTy' = cursorizeArrowTy useSoA funTy
+      funTy' = cursorizeArrowTy funTy
 
       -- [2019.03.04] CSK: the order of these new cursor/region arguments isn't
       -- intuitive and can be improved.
@@ -423,8 +422,8 @@ cursorizeFunDef useSoA ddefs fundefs FunDef {funName, funTy, funArgs, funBody, f
                 (zip (map MkTy2 tys) [0 ..])
             _ -> acc
 
-    cursorizeArrowTy :: Bool -> ArrowTy2 Ty2 -> ([Ty3], Ty3)
-    cursorizeArrowTy useSoA ty@ArrowTy2 {arrIns, arrOut, locVars, locRets} =
+    cursorizeArrowTy :: ArrowTy2 Ty2 -> ([Ty3], Ty3)
+    cursorizeArrowTy ty@ArrowTy2 {arrIns, arrOut, locVars, locRets} =
       let -- Regions corresponding to ouput cursors. (See [Threading regions])
           numOutRegs = length (outRegVars ty)
           -- outRegs = L.map (\_ -> CursorTy) [1..numOutRegs]
@@ -479,10 +478,10 @@ cursorizeFunDef useSoA ddefs fundefs FunDef {funName, funTy, funArgs, funBody, f
 
           -- Packed types in the input now become (read-only) cursors.
 
-          newIns =
-            if useSoA
-              then map (cursorizeInTy) in_tys
-              else map (constPacked CursorTy) in_tys
+          newIns = map (cursorizeInTy) in_tys
+            --if useSoA
+              --then map (cursorizeInTy) in_tys
+              --else map (constPacked CursorTy) in_tys
        in dbgTrace (minChatLvl) "Print in_tys" dbgTrace (minChatLvl) (sdoc (out_ty, in_tys)) dbgTrace (minChatLvl) "End in_tys\n" (map stripTyLocs newIns, stripTyLocs newOut')
 
 -- | Cursorize expressions NOT producing `Packed` values
