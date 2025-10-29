@@ -11,7 +11,8 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, copyOutOfOrderPacked, fixRANs, removeAliasesForCopyCalls
+     , filterRanDatacons)
     where
 
 {-
@@ -105,7 +106,6 @@ import qualified Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
 import Gibbon.Passes.Flatten (flattenL1)
-import Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
 -- Environments
@@ -141,12 +141,11 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 convertFunTy :: DDefs1 -> ([Ty1],Ty1,Bool) -> PassM (ArrowTy2 Ty2)
 convertFunTy ddefs (from,to,isPar) = do
     dflags <- getDynFlags
-    let useSoA = gopt Opt_Packed_SoA dflags
-    from' <- mapM (convertTy ddefs useSoA) from
-    to'   <- convertTy ddefs useSoA to
+    from' <- mapM (convertTy ddefs) from
+    to'   <- convertTy ddefs to
     -- For this simple version, we assume every location is in a separate region:
-    lrm1 <- concat <$> mapM (toLRM useSoA Input) from'
-    lrm2 <- toLRM useSoA Output to'
+    lrm1 <- concat <$> mapM (toLRM Input) from'
+    lrm2 <- toLRM Output to'
     -- dbgTrace minChatLvl "convertFunTy: " dbgTrace minChatLvl (sdoc (from', to', lrm1, lrm2, useSoA)) dbgTrace minChatLvl "\n"
     dbgTrace minChatLvl  "Print The data type definitions: " dbgTrace minChatLvl (sdoc (from', to')) dbgTrace minChatLvl "End print data type definitions.\n" return $ ArrowTy2 { locVars = lrm1 ++ lrm2
                      , arrIns  = from'
@@ -155,21 +154,18 @@ convertFunTy ddefs (from,to,isPar) = do
                      , locRets = []
                      , hasParallelism = isPar }
  where
-   toLRM soa md ls  = do
-                      case soa of 
-                          True -> mapM (\v -> do
-                                              dataBufRegion <- freshLocVar "r"
-                                              case v of 
-                                                Single _ -> do 
-                                                            regionForLoc <- freshRegVar
-                                                            return $ LRM v regionForLoc md
-                                                SoA _ fieldLocs -> do
-                                                                   fieldRegions <- getSoARegionsFromLocs fieldLocs 
-                                                                   let region = SoAR (VarR (unwrapLocVar dataBufRegion)) fieldRegions
-                                                                   return $ LRM v region md
+   toLRM md ls  = do 
+                    mapM (\v -> do
+                                 dataBufRegion <- freshLocVar "r"
+                                 case v of 
+                                      Single _ -> do 
+                                                    regionForLoc <- freshRegVar
+                                                    return $ LRM v regionForLoc md
+                                      SoA _ fieldLocs -> do
+                                                    fieldRegions <- getSoARegionsFromLocs fieldLocs 
+                                                    let region = SoAR (VarR (unwrapLocVar dataBufRegion)) fieldRegions
+                                                    return $ LRM v region md
                                        ) (F.toList ls)
-                          False -> mapM (\v -> do r <- freshLocVar "r"
-                                                  return $ LRM v (VarR (unwrapLocVar r)) md) (F.toList ls)
 
 getSoARegionsFromLocs :: [((DataCon, Int), LocVar)] -> PassM [((DataCon, Int), Region)]
 getSoARegionsFromLocs locs = case locs of 
@@ -214,18 +210,19 @@ filterRanDatacons dcons = let to_ignore = map (\(dcon, ty) -> if L.isSuffixOf "^
                            in catMaybes buffered_dcon
 
 
-convertTy :: DDefs1 -> Bool -> Ty1 -> PassM Ty2
-convertTy ddefs useSoA ty = case useSoA of 
-                            False -> traverse (const (freshLocVar "loc")) ty 
-                            True ->  case ty of 
-                                        PackedTy tycon _ -> do 
-                                                             dconBuff <- freshLocVar "loc"
-                                                             let dcons = getConOrdering ddefs tycon
-                                                             let dcons' = filterRanDcons dcons
-                                                             locsForFields <- convertTyHelperSoAParent tycon ddefs dcons'
-                                                             let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
-                                                             dbgTrace minChatLvl "Print ty: " dbgTrace minChatLvl (sdoc (PackedTy tycon soaLocation)) dbgTrace minChatLvl "End ty.\n" return $ PackedTy tycon soaLocation
-                                        _ -> traverse (const (freshLocVar "loc")) ty
+convertTy :: DDefs1 -> Ty1 -> PassM Ty2
+convertTy ddefs ty = case ty of 
+                        PackedTy tycon _ -> do
+                                            case (getCursorTypeFromTy tycon ddefs) of
+                                                   CursorArrayTy{} -> do 
+                                                                      dconBuff <- freshLocVar "loc"
+                                                                      let dcons = getConOrdering ddefs tycon
+                                                                      let dcons' = filterRanDcons dcons
+                                                                      locsForFields <- convertTyHelperSoAParent tycon ddefs dcons'
+                                                                      let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
+                                                                      dbgTrace minChatLvl "Print ty: " dbgTrace minChatLvl (sdoc (PackedTy tycon soaLocation)) dbgTrace minChatLvl "End ty.\n" return $ PackedTy tycon soaLocation
+                                                   _ -> traverse (const (freshLocVar "loc")) ty
+                        _ -> traverse (const (freshLocVar "loc")) ty
 
 convertTyHelperSoAParent :: TyCon -> DDefs1 -> [DataCon] -> PassM [((DataCon, Int), LocVar)]
 convertTyHelperSoAParent tycon ddefs dcons = do 
@@ -263,11 +260,21 @@ convertTyHelperSoAChild tycon ddefs dcon = do
                                                                                              if tycon == tycon'
                                                                                              then return (flds, idx + 1)
                                                                                              else do 
-                                                                                              dconBuff <- freshLocVar "loc"
-                                                                                              let dcons = filterRanDcons $ getConOrdering ddefs tycon'
-                                                                                              locsForFields <- convertTyHelperSoAParent tycon' ddefs dcons
-                                                                                              let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
-                                                                                              return (flds ++ [((dcon, idx), soaLocation)], idx + 1)  
+                                                                                              -- we need to check the annotation attached with 
+                                                                                              -- the data type here and change the memory 
+                                                                                              -- representation accordingly.
+                                                                                              let curTy = getCursorTypeFromTy tycon' ddefs
+                                                                                              case curTy of 
+                                                                                                  CursorArrayTy{} -> do 
+                                                                                                                     dconBuff <- freshLocVar "loc"
+                                                                                                                     let dcons = filterRanDcons $ getConOrdering ddefs tycon'
+                                                                                                                     locsForFields <- convertTyHelperSoAParent tycon' ddefs dcons
+                                                                                                                     let soaLocation = SoA (unwrapLocVar dconBuff) locsForFields
+                                                                                                                     return (flds ++ [((dcon, idx), soaLocation)], idx + 1)
+                                                                                                  _ -> do 
+                                                                                                              fldLoc <- freshLocVar "fldloc"
+                                                                                                              return (flds ++ [((dcon, idx), fldLoc)], idx + 1)
+
                                                                         -- For ran pointers, we are skipping making buffers for them.
                                                                         CursorTy -> return (flds, idx + 1)
                                                                         CursorArrayTy _ -> return (flds, idx + 1)
@@ -304,10 +311,9 @@ convertDDefs ddefs = traverse f ddefs
     -- in order to check the layout
     where f (DDef tyargs n dcs layout) = do
             dflags <- getDynFlags
-            let useSoA = gopt Opt_Packed_SoA dflags
             dcs' <- forM dcs $ \(dc,bnds) -> do
                              bnds' <- forM bnds $ \(isb,ty) -> do
-                                               ty' <- convertTy ddefs useSoA ty
+                                               ty' <- convertTy ddefs ty
                                                return (isb, ty')
                              return (dc,bnds')
             return $ DDef tyargs n dcs' layout
@@ -439,11 +445,10 @@ destFromType' frt =
 
 freshTyLocs :: Ty2 -> DDefs1 -> TiM Ty2
 freshTyLocs ty ddefs = do 
-    dflags <- getDynFlags
-    let useSoA = gopt Opt_Packed_SoA dflags 
+    dflags <- getDynFlags 
     case ty of
-      PackedTy tc lv -> if useSoA 
-                        then do 
+      PackedTy tc lv -> case (getCursorTypeFromTy tc ddefs) of 
+                        CursorArrayTy{} ->  
                           case lv of 
                             SoA dbuf rst -> do 
                                             --dbuf' <- fresh
@@ -458,7 +463,7 @@ freshTyLocs ty ddefs = do
                             Single _ -> do
                                          freshLoc <- fresh
                                          return $ PackedTy tc freshLoc
-                        else do fresh >>= return . PackedTy tc
+                        _ -> fresh >>= return . PackedTy tc
       ProdTy tys -> mapM (\ty -> freshTyLocs ty ddefs) tys >>= return . ProdTy
       _ -> return ty 
 
@@ -862,14 +867,13 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       doCase ddfs env src dst (con,vars,rhs) = do
         let (_tyc, (_don, flds)) = lkp ddfs con
         dflags <- getDynFlags
-        let useSoA = gopt Opt_Packed_SoA dflags
         let zippedVars = zip vars flds
         vars' <- forM zippedVars $ \((v,_), (_, t)) -> do 
                                        case t of 
                                           PackedTy ty _ -> do 
-                                                lv <- if useSoA
-                                                      then freshSoALoc2 ddfs ty
-                                                      else lift $ lift $ freshLocVar "case"
+                                                lv <- case (getCursorTypeFromTy ty ddfs) of 
+                                                       CursorArrayTy{} -> freshSoALoc2 ddfs ty
+                                                       _ -> lift $ lift $ freshLocVar "case"
                                                 _ <- fixLoc lv
                                                 return (v,lv)
 
@@ -1214,7 +1218,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           {- TODO: should we just using assign loc instead of afterconstant? -}
                           {- Con: it might be tougher to typecheck constraints -}
                           afterVar ((ArgFixed 0), (Just loc1), (Just loc2)) = case loc1 of 
-                                                                                      (Single _) -> Just $ AfterConstantL loc1 0 loc2
+                                                                                      --(Single _) -> Just $ AfterConstantL loc1 0 loc2
                                                                                       _ -> Just $ AssignL loc1 loc2
                           afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
                             Just $ AfterConstantL loc1 s loc2
@@ -1337,7 +1341,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                            else [] 
                                                                                                ) fields_hloc
                                                                         let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> case loc_new of 
-                                                                                                                                     Single _ ->  AfterConstantL loc_new 0 loc_old
+                                                                                                                                     --Single _ ->  AfterConstantL loc_new 0 loc_old
                                                                                                                                      _ -> AssignL loc_new loc_old
                                                                                                          ) pair_new_old
 
@@ -1423,7 +1427,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                              else [] 
                                                                                                          ) fields_hloc
                                                                             let fieldConstraints_unsed = map (\(k, loc_new, loc_old) -> case loc_new of 
-                                                                                                                                          Single _ ->  AfterConstantL loc_new 0 loc_old
+                                                                                                                                          --Single _ ->  AfterConstantL loc_new 0 loc_old
                                                                                                                                           _ -> AssignL loc_new loc_old
                                                                                                              ) pair_new_old
                                                                             let afvarc = (mapMaybe afterVar $ zip3 
@@ -1517,7 +1521,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         TupleDest _ -> err "Cannot unify DictInsert with destination"
         NoDest -> do (d',SymDictTy ar dty',_dcs) <- inferExp ddefs env d NoDest
                      (k',_,_kcs) <- inferExp ddefs env k NoDest
-                     dty'' <- lift $ lift $ convertTy ddefs False dty
+                     dty'' <- lift $ lift $ convertTy ddefs dty
                      r <- lift $ lift $ freshRegVar
                      loc <- lift $ lift $ freshLocVar "ins"
                      -- _ <- fixLoc loc
@@ -1530,7 +1534,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       case dest of
         SingleDest loc -> do (d',SymDictTy _ _dty,_dcs) <- inferExp ddefs env d NoDest
                              (k',_,_kcs) <- inferExp ddefs env k NoDest
-                             dty' <- lift $ lift $ convertTy ddefs False dty
+                             dty' <- lift $ lift $ convertTy ddefs dty
                              let loc' = locOfTy dty'
                              _ <- fixLoc loc'
                              let e' = PrimAppE (DictLookupP dty') [d',k']
@@ -1545,7 +1549,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       case dest of
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
-        NoDest -> do dty' <- lift $ lift $ convertTy ddefs False dty
+        NoDest -> do dty' <- lift $ lift $ convertTy ddefs dty
                      return (PrimAppE (DictEmptyP dty') [(VarE var)], SymDictTy (Just var) $ stripTyLocs dty', [])
 
     PrimAppE (DictHasKeyP dty) [d,k] ->
@@ -1566,7 +1570,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         NoDest -> do results <- mapM (\e -> inferExp ddefs env e NoDest) [VarE ls]
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
-                     ty <- lift $ lift $ convertTy ddefs False $ primRetTy pr
+                     ty <- lift $ lift $ convertTy ddefs $ primRetTy pr
                      pr' <- lift $ lift $ prim ddefs pr
                      let args = [a | (a,_,_) <- results] ++ [VarE fp]
                      return (PrimAppE pr' args, ty, [])
@@ -1585,7 +1589,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         NoDest -> do results <- mapM (\e -> inferExp ddefs env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
-                     ty <- lift $ lift $ convertTy ddefs False $ primRetTy pr
+                     ty <- lift $ lift $ convertTy ddefs $ primRetTy pr
                      pr' <- lift $ lift $ prim ddefs pr
                      return (PrimAppE pr' [a | (a,_,_) <- results], ty, [])
 
@@ -1698,7 +1702,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
 
         PrimAppE (WritePackedFile fp _ty0) [VarE packd] -> do
-          bty' <- lift $ lift $ convertTy ddefs False bty
+          bty' <- lift $ lift $ convertTy ddefs bty
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr bty' env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
@@ -1712,8 +1716,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
 
         PrimAppE (ReadArrayFile fp ty0) [] -> do
-          ty <- lift $ lift $ convertTy ddefs False bty
-          ty0' <- lift $ lift $ convertTy ddefs False ty0
+          ty <- lift $ lift $ convertTy ddefs bty
+          ty0' <- lift $ lift $ convertTy ddefs ty0
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr ty env) bod dest
           (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs'''
@@ -1757,7 +1761,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
         -- the type environment.
         PrimAppE p@(VSortP ty) [VarE ls, VarE fp] -> do
           lsrec <- mapM (\e -> inferExp ddefs env e NoDest) [VarE ls]
-          ty <- lift $ lift $ convertTy ddefs False bty
+          ty <- lift $ lift $ convertTy ddefs bty
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr ty env) bod dest
           let ls' = [a | (a,_,_) <- lsrec] ++ [VarE fp]
               cs'' = concat $ [c | (_,_,c) <- lsrec]
@@ -1768,7 +1772,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp ddefs env e NoDest) ls
-          ty <- lift $ lift $ convertTy ddefs False bty
+          ty <- lift $ lift $ convertTy ddefs bty
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr ty env) bod dest
           let ls' = [a | (a,_,_) <- lsrec]
               cs'' = concat $ [c | (_,_,c) <- lsrec]
@@ -1779,16 +1783,15 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
         DataConE _loc k ls  -> do
           dflags <- getDynFlags
-          let useSoA = gopt Opt_Packed_SoA dflags
           (_, locTy) <- case bty of 
-                    PackedTy tcon _ -> if useSoA 
-                                       then do
-                                            lc1 <- freshSoALoc3 "datacon" (Just k) ddefs tcon
-                                            lc2 <- freshSoALoc3 "datacon" Nothing ddefs tcon
-                                            return (lc1, lc2)
-                                       else do
-                                            lcd <- lift $ lift $ freshLocVar "datacon"
-                                            return $ (lcd, lcd)
+                    PackedTy tcon _ -> case (getCursorTypeFromTy tcon ddefs) of
+                                            CursorArrayTy{} -> do
+                                              lc1 <- freshSoALoc3 "datacon" (Just k) ddefs tcon
+                                              lc2 <- freshSoALoc3 "datacon" Nothing ddefs tcon
+                                              return (lc1, lc2)
+                                            _ -> do
+                                              lcd <- lift $ lift $ freshLocVar "datacon"
+                                              return $ (lcd, lcd)
                     _ -> do 
                          lcd <- lift $ lift $ freshLocVar "datacon"
                          return (lcd, lcd)
@@ -1822,15 +1825,15 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
         CaseE ex ls    -> do
           dflags <- getDynFlags
-          let useSoA = gopt Opt_Packed_SoA dflags
           loc <- case bty of 
-                    PackedTy tcon _ -> if useSoA 
-                                       then freshSoALoc3 "datacon" Nothing ddefs tcon
-                                       else lift $ lift $ freshLocVar "datacon"
+                    PackedTy tcon _ -> case (getCursorTypeFromTy tcon ddefs) of 
+                                         CursorArrayTy{} ->  freshSoALoc3 "datacon" Nothing ddefs tcon
+                                         CursorTy -> lift $ lift $ freshLocVar "datacon"
+                                         _ -> error "did not expect cursor type for packed expression!"
                     _ -> lift $ lift $ freshLocVar "datacon"
           (ex',ty2,cs) <- inferExp ddefs env ex (SingleDest loc)
           let src = locOfTy ty2
-          rhsTy <- lift $ lift $ convertTy ddefs False bty
+          rhsTy <- lift $ lift $ convertTy ddefs bty
           caseDest <- destFromType' rhsTy
           pairs <- mapM (doCase dataDefs env src caseDest) ls
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr rhsTy env) bod dest
@@ -1849,7 +1852,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           -- variable reference (because of ANF), and the AppE/DataConE cases
           -- above will do the right thing.
           lsrec <- mapM (\e -> inferExp ddefs env e NoDest) ls
-          ty@(ProdTy tys) <- lift $ lift $ convertTy ddefs False bty
+          ty@(ProdTy tys) <- lift $ lift $ convertTy ddefs bty
           let env' = extendVEnv vr ty env
           (bod',ty',cs') <- inferExp ddefs env' bod dest
           let als = [a | (a,_,_) <- lsrec]
@@ -2155,6 +2158,7 @@ cleanExp e =
                                                     AfterConstantLE _i lv   -> [lv]
                                                     AfterVariableLE _v lv _ -> [lv]
                                                     GetFieldLocSoA _ lv -> [lv]
+                                                    AssignLE lv -> [lv]
                                                     oth -> []
                                          in (Ext (LetLocE loc lex e'), S.delete loc (S.union s' $ S.fromList ls))
                                     else (e',s')
@@ -2492,10 +2496,18 @@ freshSoALocHelper ddefs tyvar lst = do
                                                                                                 if tyvar == tyc 
                                                                                                 then return []
                                                                                                 else do 
-                                                                                                  {- TODO: we should return an SoA loc here instead -}
-                                                                                                  newLoc <- freshSoALoc2 ddefs tyc
-                                                                                                  let Just idx = L.elemIndex e flds
-                                                                                                  return $ [((a, idx), newLoc)]
+                                                                                                  -- determine the type of the location 
+                                                                                                  -- from the meta-data 
+                                                                                                  let cursorTy = getCursorTypeFromTy tyc ddefs
+                                                                                                  case cursorTy of 
+                                                                                                      CursorArrayTy{} -> do 
+                                                                                                                          newLoc <- freshSoALoc2 ddefs tyc
+                                                                                                                          let Just idx = L.elemIndex e flds
+                                                                                                                          return $ [((a, idx), newLoc)]
+                                                                                                      _ -> do 
+                                                                                                                  newLoc <- fresh
+                                                                                                                  let Just idx = L.elemIndex e flds
+                                                                                                                  return $ [((a, idx), newLoc)]
                                                                                 -- no new buffers for shortcut pointers
                                                                                 CursorTy -> return []
                                                                                 CursorArrayTy{} -> return []
@@ -2698,40 +2710,40 @@ prim ddefs p = case p of
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
            RequestSizeOf -> return RequestSizeOf
-           ErrorP sty ty -> convertTy ddefs False ty >>= \ty -> return (ErrorP sty ty)
-           DictEmptyP dty  -> convertTy ddefs False dty >>= return . DictEmptyP
-           DictInsertP dty -> convertTy ddefs False dty >>= return . DictInsertP
-           DictLookupP dty -> convertTy ddefs False dty >>= return . DictLookupP
-           DictHasKeyP dty -> convertTy ddefs False dty >>= return . DictHasKeyP
-           VAllocP elty    -> convertTy ddefs False elty >>= return . VAllocP
-           VFreeP elty     -> convertTy ddefs False elty >>= return . VFreeP
-           VFree2P elty    -> convertTy ddefs False elty >>= return . VFree2P
-           VLengthP elty   -> convertTy ddefs False elty >>= return . VLengthP
-           VNthP elty      -> convertTy ddefs False elty >>= return . VNthP
-           VSliceP elty    -> convertTy ddefs False elty >>= return . VSliceP
-           InplaceVUpdateP elty -> convertTy ddefs False elty >>= return . InplaceVUpdateP
-           VConcatP elty   -> convertTy ddefs False elty >>= return . VConcatP
-           VSortP elty     -> convertTy ddefs False elty >>= return . VSortP
-           VMergeP elty    -> convertTy ddefs False elty >>= return . VMergeP
-           PDictAllocP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictAllocP k' v')
-           PDictInsertP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictInsertP k' v')
-           PDictLookupP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictLookupP k' v')
-           PDictHasKeyP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictHasKeyP k' v')
-           PDictForkP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictForkP k' v')
-           PDictJoinP k v -> convertTy ddefs False k >>= (\k' -> convertTy ddefs False v >>= \v' -> return $ PDictJoinP k' v')
-           LLAllocP elty   -> convertTy ddefs False elty >>= return . LLAllocP
-           LLIsEmptyP elty   -> convertTy ddefs False elty >>= return . LLIsEmptyP
-           LLConsP elty   -> convertTy ddefs False elty >>= return . LLConsP
-           LLHeadP elty   -> convertTy ddefs False elty >>= return . LLHeadP
-           LLTailP elty   -> convertTy ddefs False elty >>= return . LLTailP
-           LLFreeP elty   -> convertTy ddefs False elty >>= return . LLFreeP
-           LLFree2P elty   -> convertTy ddefs False elty >>= return . LLFree2P
-           LLCopyP elty   -> convertTy ddefs False elty >>= return . LLCopyP
-           InplaceVSortP elty -> convertTy ddefs False elty >>= return . InplaceVSortP
+           ErrorP sty ty -> convertTy ddefs ty >>= \ty -> return (ErrorP sty ty)
+           DictEmptyP dty  -> convertTy ddefs dty >>= return . DictEmptyP
+           DictInsertP dty -> convertTy ddefs dty >>= return . DictInsertP
+           DictLookupP dty -> convertTy ddefs dty >>= return . DictLookupP
+           DictHasKeyP dty -> convertTy ddefs dty >>= return . DictHasKeyP
+           VAllocP elty    -> convertTy ddefs elty >>= return . VAllocP
+           VFreeP elty     -> convertTy ddefs elty >>= return . VFreeP
+           VFree2P elty    -> convertTy ddefs elty >>= return . VFree2P
+           VLengthP elty   -> convertTy ddefs elty >>= return . VLengthP
+           VNthP elty      -> convertTy ddefs elty >>= return . VNthP
+           VSliceP elty    -> convertTy ddefs elty >>= return . VSliceP
+           InplaceVUpdateP elty -> convertTy ddefs elty >>= return . InplaceVUpdateP
+           VConcatP elty   -> convertTy ddefs elty >>= return . VConcatP
+           VSortP elty     -> convertTy ddefs elty >>= return . VSortP
+           VMergeP elty    -> convertTy ddefs elty >>= return . VMergeP
+           PDictAllocP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs v >>= \v' -> return $ PDictAllocP k' v')
+           PDictInsertP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs v >>= \v' -> return $ PDictInsertP k' v')
+           PDictLookupP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs v >>= \v' -> return $ PDictLookupP k' v')
+           PDictHasKeyP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs v >>= \v' -> return $ PDictHasKeyP k' v')
+           PDictForkP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs v >>= \v' -> return $ PDictForkP k' v')
+           PDictJoinP k v -> convertTy ddefs k >>= (\k' -> convertTy ddefs  v >>= \v' -> return $ PDictJoinP k' v')
+           LLAllocP elty   -> convertTy ddefs elty >>= return . LLAllocP
+           LLIsEmptyP elty   -> convertTy ddefs elty >>= return . LLIsEmptyP
+           LLConsP elty   -> convertTy ddefs elty >>= return . LLConsP
+           LLHeadP elty   -> convertTy ddefs elty >>= return . LLHeadP
+           LLTailP elty   -> convertTy ddefs elty >>= return . LLTailP
+           LLFreeP elty   -> convertTy ddefs elty >>= return . LLFreeP
+           LLFree2P elty   -> convertTy ddefs elty >>= return . LLFree2P
+           LLCopyP elty   -> convertTy ddefs elty >>= return . LLCopyP
+           InplaceVSortP elty -> convertTy ddefs elty >>= return . InplaceVSortP
            GetNumProcessors -> pure GetNumProcessors
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
-           WritePackedFile fp ty -> convertTy ddefs False ty >>= return . (WritePackedFile fp)
+           WritePackedFile fp ty -> convertTy ddefs ty >>= return . (WritePackedFile fp)
            SymSetEmpty{} -> return SymSetEmpty
            SymSetInsert{} -> return SymSetInsert
            SymSetContains{} -> return SymSetContains

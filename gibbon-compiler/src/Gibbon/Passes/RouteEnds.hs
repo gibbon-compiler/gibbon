@@ -44,6 +44,7 @@ import Gibbon.L2.Syntax as L2
 import Gibbon.L1.Syntax as L1
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
+import Gibbon.Passes.InferLocations (filterRanDatacons)
 
 
 -- | Data structure that accumulates what we know about the relationship
@@ -312,7 +313,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                _ -> lenv
 
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 let (e2', inst_waiting_on_loc', rel) = wrapBody f e2 newls inst_waiting_on_loc 
+                 let (e2', inst_waiting_on_loc', rel) = wrapBody ddefs f e2 newls inst_waiting_on_loc 
 
                  e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
                  let expr = dbgTrace (minChatLvl) "Print insts_waiting_on_loc: " dbgTrace (minChatLvl) (sdoc (newls, (v,_ls,ty,(AppE f lsin e1)), inst_waiting_on_loc', rel)) dbgTrace (minChatLvl) "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f lsin e1) e2''
@@ -327,7 +328,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                PackedTy _n l -> M.insert (fromVarToFreeVarsTy v) l lenv
                                _ -> lenv
                  (outlocs,newls,eor') <- doBoundApp f lsin
-                 let (e2', inst_waiting_on_loc', rel) = wrapBody f e2 newls inst_waiting_on_loc
+                 let (e2', inst_waiting_on_loc', rel) = wrapBody ddefs f e2 newls inst_waiting_on_loc
                  e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
                  return $ LetE (v,outlocs,ty, SpawnE f lsin e1) e2''
                                
@@ -754,13 +755,13 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
                -- We may need to emit some additional let bindings if we've reached
                -- an end witness that is equivalent to the after location of something.
-               wrapBody f e ((l1,l2):ls) inst_waiting_on_loc =
+               wrapBody ddefs f e ((l1,l2):ls) inst_waiting_on_loc =
                  case M.lookup (fromLocVarToFreeVarsTy l1) afterenv of
                    Nothing -> let let_to_release = case (M.lookup l1 inst_waiting_on_loc) of
                                                                 Just lets -> lets
                                                                 Nothing -> [] 
                                   inst_waiting_on_loc' = M.delete l1 inst_waiting_on_loc
-                                  (e'', inst_waiting_on_loc'', let_to_release') = wrapBody f e ls inst_waiting_on_loc' 
+                                  (e'', inst_waiting_on_loc'', let_to_release') = wrapBody ddefs f e ls inst_waiting_on_loc' 
                                 in (e'', inst_waiting_on_loc'', let_to_release ++ let_to_release') 
                    Just la ->
                      let go loc acc =
@@ -802,9 +803,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                                                                                             Nothing -> []
                                                                                                                                                         in (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, let_to_release)
                                                                                                                                                      else
-                                                                                                                                                       let same_ty_loc = findSubSetLoc la l2
+                                                                                                                                                       let same_ty_loc = findSubSetLoc ddefs tycon tycon' la l2
                                                                                                                                                          in case same_ty_loc of 
-                                                                                                                                                                Nothing -> error $ "RouteEnds: could not find same loc for: " ++ show (l2, la)
+                                                                                                                                                                Nothing -> error $ "RouteEnds: could not find same loc for: " ++ show (l1, l2, la)
                                                                                                                                                                 Just l2loc -> let  
                                                                                                                                                                     alias_same = [LetLocE l2loc (FromEndLE l2)]
                                                                                                                                                                     gen_soa = GenSoALoc (getDconLoc la) flocs 
@@ -831,13 +832,13 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                                   Nothing -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
                                                                                 _ -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
                                                                   Nothing -> (Ext (LetLocE la (FromEndLE l2) bod'), inst_waiting_on_loc, [])
-                              (bod''', inst_waiting_on_loc'', rel) = wrapBody f bod'' ls inst_waiting_on_loc'       
+                              (bod''', inst_waiting_on_loc'', rel) = wrapBody ddefs f bod'' ls inst_waiting_on_loc'       
                             in (bod''', M.unionWith (++) inst_waiting_on_loc' inst_waiting_on_loc'', rels ++ rel)
                          else
                           let bod'' = Ext (LetLocE la (FromEndLE l2) bod')
-                              (bod''', inst_waiting_on_loc', rel) = wrapBody f bod'' ls inst_waiting_on_loc 
+                              (bod''', inst_waiting_on_loc', rel) = wrapBody ddefs f bod'' ls inst_waiting_on_loc 
                             in (bod''', M.unionWith (++) inst_waiting_on_loc' inst_waiting_on_loc, rel)
-               wrapBody f e [] inst_waiting_on_loc = (e, inst_waiting_on_loc, [])
+               wrapBody ddefs f e [] inst_waiting_on_loc = (e, inst_waiting_on_loc, [])
 
                -- Process a let bound fn app.
                doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, LocVar)], EndOfRel)
@@ -868,13 +869,30 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 isSubset :: String -> String -> Bool
 isSubset subset str = all (`elem` str) (L.nub subset)
 
-findSubSetLoc :: LocVar -> LocVar -> Maybe LocVar
-findSubSetLoc l1@(SoA dloc1 flocs1) l2@(SoA dloc2 flocs2) = if l1 == l2 then Just l1
-                                                            else checkIfFieldLocInLoc flocs1 l2
-findSubSetLoc l1@(SoA dloc1 flocs1) l2@(Single dloc2) = Nothing
-findSubSetLoc l1@(Single _) l2@(SoA _ _) = Nothing
-findSubSetLoc l1@(Single dloc1) l2@(Single dloc2) = if l1 == l2 then Just l1
-                                                      else Nothing
+findSubSetLoc :: DDefs2 -> TyCon -> TyCon -> LocVar -> LocVar -> Maybe LocVar
+findSubSetLoc ddefs ptycon tycon l1@(SoA dloc1 flocs1) l2@(SoA dloc2 flocs2) = if l1 == l2 
+                                                                               then Just l1
+                                                                               else checkIfFieldLocInLoc flocs1 l2
+findSubSetLoc ddefs ptycon tycon l1@(SoA dloc1 flocs1) l2@(Single dloc2) = let ddef_par@DDef{dataCons} = lookupDDef ddefs ptycon
+                                                                               dataCons' = filterRanDatacons dataCons   
+                                                                               res = L.foldr (\(d, flds) acc -> let res = L.foldr (\s@(_, ty) acc -> case ty of 
+                                                                                                                                             PackedTy t _ -> if t == tycon
+                                                                                                                                                             then Just (d, fromJust $ L.elemIndex s flds)
+                                                                                                                                                             else acc
+                                                                                                                                             _ -> acc               
+                                                                                                                                  ) Nothing flds
+                                                                                                                   in case res of 
+                                                                                                                        Nothing -> acc
+                                                                                                                        Just s -> Just s
+                                                                                           ) Nothing dataCons' 
+                                                                              in case res of 
+                                                                                     Nothing -> error "Could not find location for end!"
+                                                                                     Just x -> let l = dbgTrace (minChatLvl) "Tried looking: " dbgTrace (minChatLvl) (sdoc (x)) dbgTrace (minChatLvl) "End Tried looking!\n"  L.lookup x flocs1
+                                                                                                in l
+findSubSetLoc ddefs ptycon tycon l1@(Single _) l2@(SoA _ _) = Nothing
+findSubSetLoc ddefs ptycon tycon l1@(Single dloc1) l2@(Single dloc2) = if l1 == l2 
+                                                                       then Just l1
+                                                                       else Nothing
 
 
 
