@@ -95,11 +95,17 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                  (ewitnesses', locenv'') =
                         foldr
                           (\(witloc, tloc) (wits, env) ->
-                             let (New.Loc lrem) = (env # (tloc))
-                                 wit' = New.EndWitness lrem witloc
-                                 env' = M.insert witloc wit' env
-                             in (wit' : wits, env'))
+                            let val = (env # (tloc))
+                              lrem = case val of
+                                        New.Loc l -> l
+                                        _         -> error $ "Expected New.Loc, got: " ++ show val
+                              wit' = New.EndWitness lrem witloc
+                              env' = M.insert witloc wit' env
+                            in (wit' : wits, env'))
                           ([], locenv')
+
+
+
                           (zip ewitnesses traversed_locs)
              rhs' <- go locenv env2 rhs
              bod' <- go locenv'' (extendVEnv v ty env2) bod

@@ -265,48 +265,61 @@ tcExp ddfs env exp =
 
         DictEmptyP ty -> do
           len1
-          let [a] = tys
-          _ <- ensureEqualTy exp ArenaTy a
-          case (es !! 0) of
-            (VarE var) -> do ensureArenaScope exp env $ Just var
-                             return $ SymDictTy (Just var) ty
-            _ -> throwError $ GenericTC "Expected arena variable argument" exp
+          case tys of
+            [a] -> do
+              _ <- ensureEqualTy exp ArenaTy a
+              case (es !! 0) of
+                (VarE var) -> do
+                  ensureArenaScope exp env $ Just var
+                  return $ SymDictTy (Just var) ty
+                _ -> throwError $ GenericTC "Expected arena variable argument" exp
+            _ -> throwError $ GenericTC "DictEmptyP expects exactly 1 type argument" exp
 
         DictInsertP ty -> do
           len4
-          let [a,d,k,v] = tys
-          _ <- ensureEqualTy exp ArenaTy a
-          case d of
-            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
-                                   _ <- ensureEqualTy exp ty v
-                                   _ <- ensureEqualTy exp ty dty
-                                   ensureArenaScope exp env ar
-                                   case es !!! 0 of
-                                     (VarE var) -> do ensureArenaScope exp env $ Just var
-                                                      return $ SymDictTy (Just var) ty
-                                     _ -> throwError $ GenericTC "Expected arena variable argument" exp
-            _ -> throwError $ GenericTC "Expected SymDictTy" exp
+          case tys of
+            [a,d,k,v] -> do
+              _ <- ensureEqualTy exp ArenaTy a
+              case d of
+                SymDictTy ar dty -> do
+                  _ <- ensureEqualTy exp SymTy k
+                  _ <- ensureEqualTy exp ty v
+                  _ <- ensureEqualTy exp ty dty
+                  ensureArenaScope exp env ar
+                  case es !!! 0 of
+                    (VarE var) -> do
+                      ensureArenaScope exp env $ Just var
+                      return $ SymDictTy (Just var) ty
+                    _ -> throwError $ GenericTC "Expected arena variable argument" exp
+                _ -> throwError $ GenericTC "Expected SymDictTy" exp
+            _ -> throwError $ GenericTC "DictInsertP expects exactly 4 type arguments" exp
 
         DictLookupP ty -> do
           len2
-          let [d,k] = tys
-          case d of
-            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
-                                   _ <- ensureEqualTy exp ty dty
-                                   -- dbgTrace 3 (show $ vEnv env) $ return ()
-                                   ensureArenaScope exp env ar
-                                   return ty
-            _ -> throwError $ GenericTC "Expected SymDictTy" exp
+          case tys of
+            [d,k] -> do
+              case d of
+                SymDictTy ar dty -> do
+                  _ <- ensureEqualTy exp SymTy k
+                  _ <- ensureEqualTy exp ty dty
+                  -- dbgTrace 3 (show $ vEnv env) $ return ()
+                  ensureArenaScope exp env ar
+                  return ty
+                _ -> throwError $ GenericTC "Expected SymDictTy" exp
+            _ -> throwError $ GenericTC "DictLookupP expects exactly 2 type arguments" exp
 
         DictHasKeyP ty -> do
           len2
-          let [d,k] = tys
-          case d of
-            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
-                                   _ <- ensureEqualTy exp ty dty
-                                   ensureArenaScope exp env ar
-                                   return BoolTy
-            _ -> throwError $ GenericTC "Expected SymDictTy" exp
+          case tys of
+            [d,k] -> do
+              case d of
+                SymDictTy ar dty -> do
+                  _ <- ensureEqualTy exp SymTy k
+                  _ <- ensureEqualTy exp ty dty
+                  ensureArenaScope exp env ar
+                  return BoolTy
+                _ -> throwError $ GenericTC "Expected SymDictTy" exp
+            _ -> throwError $ GenericTC "DictHasKeyP expects exactly 2 type arguments" exp
 
         ErrorP _str ty -> do
           len0
@@ -318,11 +331,13 @@ tcExp ddfs env exp =
 
         IsBig -> do
           len2
-          let [ity,ety] = tys
-          _ <- ensureEqualTy exp ity IntTy
-          if isPackedTy ety
-          then pure BoolTy
-          else error $ "L1.Typecheck: IsBig expects a Packed value. Got: " ++ sdoc ety
+          case tys of
+            [ity,ety] -> do
+              _ <- ensureEqualTy exp ity IntTy
+              if isPackedTy ety
+              then pure BoolTy
+              else error $ "L1.Typecheck: IsBig expects a Packed value. Got: " ++ sdoc ety
+            _ -> throwError $ GenericTC ("IsBig expects exactly 2 type arguments, got " ++ show tys) exp
 
         ReadPackedFile _fp _tycon _reg ty -> do
           len0
@@ -331,9 +346,11 @@ tcExp ddfs env exp =
         WritePackedFile _ ty
            | PackedTy{} <- ty  -> do
              len1
-             let [packed_ty] = tys
-             _ <- ensureEqualTy exp packed_ty ty
-             pure (ProdTy [])
+             case tys of
+              [packed_ty] -> do
+                _ <- ensureEqualTy exp packed_ty ty
+                pure (ProdTy [])
+              _ -> throwError $ GenericTC ("WritePackedFile expects exactly 1 type argument, got " ++ show tys) exp
            | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
 
         ReadArrayFile _ ty -> do
@@ -356,63 +373,79 @@ tcExp ddfs env exp =
         VAllocP elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) IntTy i
-          pure (VectorTy elty)
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) IntTy i
+              pure (VectorTy elty)
+            _ -> throwError $ GenericTC ("VAllocP expects exactly 1 type argument, got " ++ show tys) exp
 
         VFreeP elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
-          pure (ProdTy [])
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+              pure (ProdTy [])
+            _ -> throwError $ GenericTC ("VFreeP expects exactly 1 type argument, got " ++ show tys) exp
 
         VFree2P elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
-          pure (ProdTy [])
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+              pure (ProdTy [])
+            _ -> throwError $ GenericTC ("VFree2P expects exactly 1 type argument, got " ++ show tys) exp
 
         VLengthP elty -> do
           len1
           checkListElemTy elty
-          let [ls] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
-          pure IntTy
+          case tys of
+            [ls] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+              pure IntTy
+            _ -> throwError $ GenericTC ("VLengthP expects exactly 1 type argument, got " ++ show tys) exp
 
         VNthP elty -> do
           len2
           checkListElemTy elty
-          let [ls, i] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
-          _ <- ensureEqualTy (es !! 1) IntTy i
-          pure elty
+          case tys of
+            [ls, i] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+              _ <- ensureEqualTy (es !! 1) IntTy i
+              pure elty
+            _ -> throwError $ GenericTC ("VNthP expects exactly 2 type arguments, got " ++ show tys) exp
 
         VSliceP elty -> do
           len3
           checkListElemTy elty
-          let [from,to,ls] = tys
-          _ <- ensureEqualTy (es !! 0) IntTy from
-          _ <- ensureEqualTy (es !! 1) IntTy to
-          _ <- ensureEqualTy (es !! 2) (VectorTy elty) ls
-          pure (VectorTy elty)
+          case tys of
+            [from,to,ls] -> do
+              _ <- ensureEqualTy (es !! 0) IntTy from
+              _ <- ensureEqualTy (es !! 1) IntTy to
+              _ <- ensureEqualTy (es !! 2) (VectorTy elty) ls
+              pure (VectorTy elty)
+            _ -> throwError $ GenericTC ("VSliceP expects exactly 3 type arguments, got " ++ show tys) exp
 
         InplaceVUpdateP elty -> do
           len3
           checkListElemTy elty
-          let [ls,i,x] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
-          _ <- ensureEqualTy (es !! 1) IntTy i
-          _ <- ensureEqualTy (es !! 2) elty x
-          pure (VectorTy elty)
+          case tys of
+            [ls,i,x] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+              _ <- ensureEqualTy (es !! 1) IntTy i
+              _ <- ensureEqualTy (es !! 2) elty x
+              pure (VectorTy elty)
+            _ -> throwError $ GenericTC ("VInplaceVUpdateP expects exactly 3 type arguments, got " ++ show tys) exp
 
         VConcatP elty -> do
           len1
           checkListElemTy elty
-          let [ls] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
-          pure (VectorTy elty)
+          case tys of
+            [ls] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
+              pure (VectorTy elty)
+            _ -> throwError $ GenericTC ("VConcatP expects exactly 1 type argument, got " ++ show tys) exp
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -421,18 +454,20 @@ tcExp ddfs env exp =
           case (es !! 1) of
             VarE f -> do
               len2
-              let [ls] = tys
-                  fn_ty@(in_tys, ret_ty) = lookupFEnv f env
-                  err x = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
-              case in_tys of
-                [a,b] -> do
-                   -- [2021.05.08]: looks suspicious
-                   _ <- ensureEqualTy (es !! 1) a elty
-                   _ <- ensureEqualTy (es !! 1) b elty
-                   _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                   pure (VectorTy elty)
-                _ -> err fn_ty
+              case tys of
+                [ls] -> do
+                  let fn_ty@(in_tys, ret_ty) = lookupFEnv f env
+                      err x = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+                  _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+                  case in_tys of
+                    [a,b] -> do
+                      -- [2021.05.08]: looks suspicious
+                      _ <- ensureEqualTy (es !! 1) a elty
+                      _ <- ensureEqualTy (es !! 1) b elty
+                      _ <- ensureEqualTy (es !! 1) ret_ty IntTy
+                      pure (VectorTy elty)
+                    _ -> err fn_ty
+                _ -> throwError $ GenericTC ("VSortPP expects exactly 1 type argument, got " ++ show tys) exp
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         InplaceVSortP elty -> go (PrimAppE (VSortP elty) es)
@@ -440,30 +475,36 @@ tcExp ddfs env exp =
         VMergeP elty -> do
           len2
           checkListElemTy elty
-          let [ls1,ls2] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
-          _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
-          pure (VectorTy elty)
+          case tys of
+            [ls1,ls2] -> do
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
+              _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
+              pure (VectorTy elty)
+            _ -> throwError $ GenericTC ("VMergeP expects exactly 2 type arguments, got " ++ show tys) exp
 
 
         PDictInsertP kty vty -> do
           len3
           checkListElemTy kty
           checkListElemTy vty
-          let [key, val, dict] = tys
-          _ <- ensureEqualTy (es !! 0) key kty
-          _ <- ensureEqualTy (es !! 1) val vty
-          _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
-          pure (PDictTy kty vty)
+          case tys of
+            [key, val, dict] -> do
+              _ <- ensureEqualTy (es !! 0) key kty
+              _ <- ensureEqualTy (es !! 1) val vty
+              _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
+              pure (PDictTy kty vty)
+            _ -> throwError $ GenericTC ("PDictInsertP expects exactly 3 type arguments, got " ++ show tys) exp
 
         PDictLookupP kty vty -> do
           len2
           checkListElemTy kty
           checkListElemTy vty
-          let [key, dict] = tys
-          _ <- ensureEqualTy (es !! 0) key kty
-          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
-          pure (vty)
+          case tys of
+            [key, dict] -> do
+              _ <- ensureEqualTy (es !! 0) key kty
+              _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+              pure (vty)
+            _ -> throwError $ GenericTC ("PDictLookupP expects exactly 2 type arguments, got " ++ show tys) exp
 
         PDictAllocP kty vty -> do
           len0
@@ -475,27 +516,33 @@ tcExp ddfs env exp =
           len2
           checkListElemTy kty
           checkListElemTy vty
-          let [key, dict] = tys
-          _ <- ensureEqualTy (es !! 0) key kty
-          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
-          pure (BoolTy)
+          case tys of
+            [key, dict] -> do
+              _ <- ensureEqualTy (es !! 0) key kty
+              _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+              pure (BoolTy)
+            _ -> throwError $ GenericTC ("PDictHasKeyP expects exactly 2 type arguments, got " ++ show tys) exp
 
         PDictForkP kty vty -> do
           len1
           checkListElemTy kty
           checkListElemTy vty
-          let [dict] = tys
-          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
-          pure (ProdTy [PDictTy kty vty, PDictTy kty vty])
+          case tys of
+            [dict] -> do
+              _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+              pure (ProdTy [PDictTy kty vty, PDictTy kty vty])
+            _ -> throwError $ GenericTC ("PDictForkP expects exactly 1 type argument, given " ++ show tys) exp
 
         PDictJoinP kty vty -> do
           len2
           checkListElemTy kty
           checkListElemTy vty
-          let [dict1, dict2] = tys
-          _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
-          _ <- ensureEqualTy (es !! 0) dict2 (PDictTy kty vty)
-          pure (PDictTy kty vty)
+          case tys of
+            [dict1, dict2] -> do
+              _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
+              _ <- ensureEqualTy (es !! 0) dict2 (PDictTy kty vty)
+              pure (PDictTy kty vty)
+            _ -> throwError $ GenericTC ("PDictJoinP expects exactly 2 type arguments, given " ++ show tys) exp
 
         LLAllocP elty -> do
           len0
@@ -505,52 +552,66 @@ tcExp ddfs env exp =
         LLIsEmptyP elty -> do
           len1
           checkListElemTy elty
-          let [ll] = tys
-          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-          pure (BoolTy)
+          case tys of
+            [ll] -> do
+              _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+              pure (BoolTy)
+            _ -> throwError $ GenericTC ("LLIsEmptyP expects exactly 1 type argument, given " ++ show tys) exp
 
         LLConsP elty -> do
           len2
           checkListElemTy elty
-          let [elt, ll] = tys
-          _ <- ensureEqualTy (es !! 0) elt elty
-          _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
-          pure (ListTy elty)
+          case tys of
+            [elt, ll] -> do
+              _ <- ensureEqualTy (es !! 0) elt elty
+              _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
+              pure (ListTy elty)
+            _ -> throwError $ GenericTC ("LLIsConsP expects exactly 2 type arguments, given " ++ show tys) exp
 
         LLHeadP elty -> do
           len1
           checkListElemTy elty
-          let [ll] = tys
-          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-          pure (elty)
+          case tys of
+            [ll] -> do
+              _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+              pure (elty)
+            _ -> throwError $ GenericTC ("LLHeapP expects exactly 1 type argument, given " ++ show tys) exp
 
         LLTailP elty -> do
           len1
           checkListElemTy elty
-          let [ll] = tys
-          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-          pure (ListTy elty)
+          case tys of
+            [ll] -> do
+              _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+              pure (ListTy elty)
+            _ -> throwError $ GenericTC ("LLTailP expects exactly 1 type argument, given " ++ show tys) exp
 
         LLFreeP elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-          pure (ProdTy [])
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+              pure (ProdTy [])
+            _ -> throwError $ GenericTC ("LLFreeP expects exactly 1 type argument, given " ++ show tys) exp
 
         LLFree2P elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-          pure (ProdTy [])
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+              pure (ProdTy [])
+            _ -> throwError $ GenericTC ("LLFree2P expects exactly 1 type argument, given " ++ show tys) exp
 
         LLCopyP elty -> do
           len1
           checkListElemTy elty
-          let [i] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-          pure (ListTy elty)
+          case tys of
+            [i] -> do
+              _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+              pure (ListTy elty)
+            _ -> throwError $ GenericTC ("LLCopyP expects exactly 1 type argument, given " ++ show tys) exp
 
         GetNumProcessors -> do
           len0
@@ -632,11 +693,13 @@ tcExp ddfs env exp =
       case L.nub tycons of
         [one] -> do
           -- _ <- ensureEqualTy exp (PackedTy one ()) tye
-          let (PackedTy t _l) = tye
-          if one == t
-          then return ()
-          else error$ "Expected these to be the same: " ++ one ++ " & " ++ sdoc t
-          tcCases ddfs env cs
+          case tye of
+            (PackedTy t _l) -> do
+              if one == t
+              then return ()
+              else error$ "Expected these to be the same: " ++ one ++ " & " ++ sdoc t
+              tcCases ddfs env cs
+            ty -> throwError $ GenericTC ("Expected packed type, got " ++ show ty) exp
         oth   -> throwError $ GenericTC ("Case branches have mismatched types: " ++ sdoc oth
                                          ++" , in " ++ sdoc exp) exp
 

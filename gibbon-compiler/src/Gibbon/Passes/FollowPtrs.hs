@@ -32,24 +32,28 @@ followPtrs (Prog ddefs fundefs mainExp) = do
     go env out_ty funName funArgs funTy e =
       case e of
           CaseE scrt brs -> do
-            let VarE scrtv = scrt
-                PackedTy tycon scrt_loc = env # scrtv
-                DDef{dataCons} = lookupDDef ddefs tycon
-            flags <- getDynFlags
-            let no_copies = gopt Opt_No_RemoveCopies flags
-            if no_copies
-            then do
-              indir_ptrv <- gensym "indr"
-              _indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
-              callv <- gensym "call"
-              wc <- gensym "wildcard"
-              indir_ptrloc <- freshCommonLoc "case" scrt_loc
+            case env # scrtv of
+              PackedTy tycon scrt_loc -> do
+                let DDef{dataCons} = lookupDDef ddefs tycon
+                flags <- getDynFlags
+                let no_copies = gopt Opt_No_RemoveCopies flags
+                if no_copies
+                then do
+                  indir_ptrv <- gensym "indr"
+                  _indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
+                  callv <- gensym "call"
+                  wc <- gensym "wildcard"
+                  indir_ptrloc <- freshCommonLoc "case" scrt_loc
 
-              endofs <- mapM (\lr -> case lr of
-                                            EndOf lrm -> do 
-                                                         let loc = lrmLoc lrm 
-                                                         freshCommonLoc "endof" loc
-                              ) (locRets funTy)
+                  endofs <- mapM (\lr -> case lr of
+                                                EndOf lrm -> do 
+                                                            let loc = lrmLoc lrm 
+                                                            freshCommonLoc "endof" loc
+                                                _ -> error $ "FollowPtrs.go: unexpected " ++ show lr
+                                  ) (locRets funTy)
+              otherTy ->
+                error $ "FollowPtrs.go: expected PackedTy in env for " ++ show scrtv
+                    ++ ", but got " ++ show otherTy
 
               --endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
               --let endofs' = map Single endofs

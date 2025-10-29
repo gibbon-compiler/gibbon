@@ -425,10 +425,12 @@ tcExp isSoA isPacked ddfs env exp = do
 
         IsBig -> do
           len2
-          let [ity, ety] = tys
-          ensureEqualTy exp ity IntTy
-          ensureEqualTy exp ety CursorTy
-          pure BoolTy
+          case tys of
+            [ity, ety] -> do
+              ensureEqualTy exp ity IntTy
+              ensureEqualTy exp ety CursorTy
+              pure BoolTy
+            _ -> error $ "Expected exactly two type arguments in IsBig, got: " ++ show tys
 
         PrintInt -> do
           len1

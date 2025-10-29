@@ -193,495 +193,552 @@ tcExp ddfs env funs constrs regs tstatein exp =
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
-               -- Special case because we can't lookup the type of the function pointer
-               let es' = case pr of
-                           VSortP{} -> init es
-                           InplaceVSortP{} -> init es
-                           _        -> es
-               (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es'
+              -- Special case because we can't lookup the type of the function pointer
+              let es' = case pr of
+                          VSortP{} -> init es
+                          InplaceVSortP{} -> init es
+                          _        -> es
+              (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es'
 
-               -- Pattern matches would be one way to check length safely, but then the
-               -- error would not go through our monad:
-               let len2 = checkLen exp pr 2 es
-                   len1 = checkLen exp pr 1 es
-                   len0 = checkLen exp pr 0 es
-                   len3 = checkLen exp pr 3 es
-                   len4 = checkLen exp pr 4 es
+              -- Pattern matches would be one way to check length safely, but then the
+              -- error would not go through our monad:
+              let len2 = checkLen exp pr 2 es
+                  len1 = checkLen exp pr 1 es
+                  len0 = checkLen exp pr 0 es
+                  len3 = checkLen exp pr 3 es
+                  len4 = checkLen exp pr 4 es
 
-                   mk_bools = do
-                     len0
-                     pure (BoolTy, tstate)
+                  mk_bools = do
+                    len0
+                    pure (BoolTy, tstate)
 
-                   bool_ops = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
-                     pure (BoolTy, tstate)
+                  bool_ops = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
+                    pure (BoolTy, tstate)
 
-                   int_ops = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
-                     pure (IntTy, tstate)
+                  int_ops = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+                    pure (IntTy, tstate)
 
-                   float_ops = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
-                     pure (FloatTy, tstate)
+                  float_ops = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
+                    pure (FloatTy, tstate)
 
-                   int_cmps = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
-                     pure (BoolTy, tstate)
+                  int_cmps = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+                    pure (BoolTy, tstate)
 
-                   float_cmps = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
-                     pure (BoolTy, tstate)
+                  float_cmps = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
+                    pure (BoolTy, tstate)
 
-                   char_cmps = do
-                     len2
-                     _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
-                     _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
-                     pure (BoolTy, tstate)
+                  char_cmps = do
+                    len2
+                    _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
+                    _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
+                    pure (BoolTy, tstate)
 
-               case pr of
-                 MkTrue  -> mk_bools
-                 MkFalse -> mk_bools
-                 AddP    -> int_ops
-                 SubP    -> int_ops
-                 MulP    -> int_ops
-                 DivP    -> int_ops
-                 ModP    -> int_ops
-                 ExpP    -> int_ops
-                 FAddP   -> float_ops
-                 FSubP   -> float_ops
-                 FMulP   -> float_ops
-                 FDivP   -> float_ops
-                 FExpP   -> float_ops
-                 EqIntP  -> int_cmps
-                 LtP     -> int_cmps
-                 GtP     -> int_cmps
-                 LtEqP   -> int_cmps
-                 GtEqP   -> int_cmps
-                 EqFloatP -> float_cmps
-                 EqCharP  -> char_cmps
-                 FLtP     -> float_cmps
-                 FGtP     -> float_cmps
-                 FLtEqP   -> float_cmps
-                 FGtEqP   -> float_cmps
-                 OrP     -> bool_ops
-                 AndP    -> bool_ops
+              case pr of
+                MkTrue  -> mk_bools
+                MkFalse -> mk_bools
+                AddP    -> int_ops
+                SubP    -> int_ops
+                MulP    -> int_ops
+                DivP    -> int_ops
+                ModP    -> int_ops
+                ExpP    -> int_ops
+                FAddP   -> float_ops
+                FSubP   -> float_ops
+                FMulP   -> float_ops
+                FDivP   -> float_ops
+                FExpP   -> float_ops
+                EqIntP  -> int_cmps
+                LtP     -> int_cmps
+                GtP     -> int_cmps
+                LtEqP   -> int_cmps
+                GtEqP   -> int_cmps
+                EqFloatP -> float_cmps
+                EqCharP  -> char_cmps
+                FLtP     -> float_cmps
+                FGtP     -> float_cmps
+                FLtEqP   -> float_cmps
+                FGtEqP   -> float_cmps
+                OrP     -> bool_ops
+                AndP    -> bool_ops
 
-                 RandP -> return (IntTy, tstate)
-                 FRandP -> return (FloatTy, tstate)
+                RandP -> return (IntTy, tstate)
+                FRandP -> return (FloatTy, tstate)
 
-                 FloatToIntP -> do
-                   len1
-                   ensureEqualTy exp FloatTy (tys !! 0)
-                   return (IntTy, tstate)
+                FloatToIntP -> do
+                  len1
+                  ensureEqualTy exp FloatTy (tys !! 0)
+                  return (IntTy, tstate)
 
-                 IntToFloatP -> do
-                   len1
-                   ensureEqualTy exp IntTy (tys !! 0)
-                   return (FloatTy, tstate)
+                IntToFloatP -> do
+                  len1
+                  ensureEqualTy exp IntTy (tys !! 0)
+                  return (FloatTy, tstate)
 
-                 FSqrtP -> do
-                   len1
-                   ensureEqualTy exp FloatTy (tys !! 0)
-                   return (FloatTy, tstate)
+                FSqrtP -> do
+                  len1
+                  ensureEqualTy exp FloatTy (tys !! 0)
+                  return (FloatTy, tstate)
 
-                 FTanP -> do
-                   len1
-                   ensureEqualTy exp FloatTy (tys !! 0)
-                   return (FloatTy, tstate)
+                FTanP -> do
+                  len1
+                  ensureEqualTy exp FloatTy (tys !! 0)
+                  return (FloatTy, tstate)
 
-                 Gensym -> len0 >>= \_ -> pure (SymTy, tstate)
+                Gensym -> len0 >>= \_ -> pure (SymTy, tstate)
 
-                 EqSymP -> do
-                   len2
-                   ensureEqualTy exp SymTy (tys !! 0)
-                   ensureEqualTy exp SymTy (tys !! 1)
-                   return (BoolTy,tstate)
+                EqSymP -> do
+                  len2
+                  ensureEqualTy exp SymTy (tys !! 0)
+                  ensureEqualTy exp SymTy (tys !! 1)
+                  return (BoolTy,tstate)
 
-                 EqBenchProgP _ -> do
-                   len0
-                   return (BoolTy,tstate)
+                EqBenchProgP _ -> do
+                  len0
+                  return (BoolTy,tstate)
 
-                 DictEmptyP ty -> do
-                   len1
-                   let [a] = tys
-                   _ <- ensureEqualTy exp ArenaTy a
-                   case es !! 0 of
-                     (VarE var) ->
-                         do ensureArenaScope exp env (Just var)
+                DictEmptyP ty -> do
+                  len1
+                  case tys of
+                    [a] -> do
+                      _ <- ensureEqualTy exp ArenaTy a
+                      case es !! 0 of
+                        (VarE var) -> do
+                            ensureArenaScope exp env (Just var)
                             return (SymDictTy (Just var) (stripTyLocs ty), tstate)
-                     _ -> throwError $ GenericTC "Expected arena variable argument" exp
+                        _ -> throwError $ GenericTC "Expected arena variable argument" exp
+                    _ -> throwError $ GenericTC "Expected exactly one type argument" exp
 
-                 DictInsertP ty -> do
-                   len4
-                   let [a,d,k,v]  = tys
-                   _ <- ensureEqualTy exp ArenaTy a
-                   _ <- ensureEqualTy exp SymTy k
-                   _ <- ensureEqualTyNoLoc exp ty v
-                   case d of
-                     SymDictTy ar _ty ->
-                         case es !! 0 of
-                           (VarE var) ->
-                               do ensureArenaScope exp env ar
-                                  ensureArenaScope exp env (Just var)
-                                  return (SymDictTy (Just var) (stripTyLocs ty), tstate)
-                           _ -> throwError $ GenericTC "Expected arena variable argument" exp
-                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                DictInsertP ty -> do
+                  len4
+                  case tys of
+                    [a,d,k,v] -> do
+                      _ <- ensureEqualTy exp ArenaTy a
+                      _ <- ensureEqualTy exp SymTy k
+                      _ <- ensureEqualTyNoLoc exp ty v
+                      case d of
+                        SymDictTy ar _ty ->
+                            case es !! 0 of
+                              (VarE var) ->
+                                  do ensureArenaScope exp env ar
+                                     ensureArenaScope exp env (Just var)
+                                     return (SymDictTy (Just var) (stripTyLocs ty), tstate)
+                              _ -> throwError $ GenericTC "Expected arena variable argument" exp
+                        _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                    _ -> throwError $ GenericTC "Expected exactly 4 types in DictInsertP" exp
 
-                 DictLookupP ty -> do
-                   len2
-                   let [d,k]  = tys
-                   case d of
-                     SymDictTy ar _ty ->
-                         do _ <- ensureEqualTy exp SymTy k
-                            ensureArenaScope exp env ar
-                            return (ty, tstate)
-                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                DictLookupP ty -> do
+                  len2
+                  case tys of
+                    [d,k] -> do
+                      case d of
+                        SymDictTy ar _ty ->
+                            do _ <- ensureEqualTy exp SymTy k
+                               ensureArenaScope exp env ar
+                               return (ty, tstate)
+                        _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                    _ -> throwError $ GenericTC "Expected exactly 2 types in DictLookupP" exp
 
-                 DictHasKeyP _ty -> do
-                   len2
-                   let [d,k]  = tys
-                   case d of
-                     SymDictTy ar _ty -> do _ <- ensureEqualTy exp SymTy k
-                                            ensureArenaScope exp env ar
-                                            return (BoolTy, tstate)
-                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                DictHasKeyP _ty -> do
+                  len2
+                  case tys of
+                    [d,k] -> do
+                      case d of
+                        SymDictTy ar _ty -> do
+                          _ <- ensureEqualTy exp SymTy k
+                          ensureArenaScope exp env ar
+                          return (BoolTy, tstate)
+                        _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                    _ -> throwError $ GenericTC "Expected exactly 2 types in DictHasKeyP" exp
 
-                 SizeParam -> do
-                   len0
-                   return (IntTy, tstate)
+                SizeParam -> do
+                  len0
+                  return (IntTy, tstate)
 
-                 IsBig -> do
-                   len2
-                   let [ity, ety] = tys
-                   ensureEqualTy exp ity IntTy
-                   if isPackedTy ety
-                   then pure (BoolTy, tstate)
-                   else error "L1.Typecheck: IsBig expects a Packed value."
+                IsBig -> do
+                  len2
+                  case tys of
+                    [ity, ety] -> do
+                      ensureEqualTy exp ity IntTy
+                      if isPackedTy ety
+                      then pure (BoolTy, tstate)
+                      else error "L1.Typecheck: IsBig expects a Packed value."
+                    _ -> error "Expected exactly 2 types in IsBig"
 
-                 ErrorP _str ty -> do
-                   len0
-                   return (ty, tstate)
+                ErrorP _str ty -> do
+                  len0
+                  return (ty, tstate)
 
-                 ReadPackedFile _fp _tycon _reg ty -> do
-                   len0
-                   return (ty, tstate)
+                ReadPackedFile _fp _tycon _reg ty -> do
+                  len0
+                  return (ty, tstate)
 
-                 WritePackedFile _ ty
-                   | PackedTy{} <- ty  -> do
-                     len1
-                     let [packed_ty] = tys
-                     _ <- ensureEqualTy exp packed_ty ty
-                     pure (ProdTy [], tstate)
-                   | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
+                WritePackedFile _ ty
+                  | PackedTy{} <- ty  -> do
+                    len1
+                    case tys of
+                      [packed_ty] -> do
+                        _ <- ensureEqualTy exp packed_ty ty
+                        pure (ProdTy [], tstate)
+                      _ -> error $ "writePackedFile expects exactly 1 type argument. Given: " ++ show tys
+                  | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
 
-                 ReadArrayFile _ ty -> do
-                   len0
-                   if isValidListElemTy ty
-                   then return (VectorTy ty, tstate)
-                   else throwError $ GenericTC "Not a valid list type" exp
+                ReadArrayFile _ ty -> do
+                  len0
+                  if isValidListElemTy ty
+                  then return (VectorTy ty, tstate)
+                  else throwError $ GenericTC "Not a valid list type" exp
 
-                 RequestSizeOf -> do
-                   len1
-                   case (es !! 0) of
-                     VarE{} -> if isPackedTy (tys !! 0)
-                               then return (IntTy, tstate)
-                               else case (tys !! 0) of
-                                      SymTy -> return (IntTy, tstate)
-                                      IntTy -> return (IntTy, tstate)
-                                      _ -> throwError $ GenericTC "Expected PackedTy" exp
-                     _ -> throwError $ GenericTC "Expected a variable argument" exp
+                RequestSizeOf -> do
+                  len1
+                  case (es !! 0) of
+                    VarE{} -> if isPackedTy (tys !! 0)
+                              then return (IntTy, tstate)
+                              else case (tys !! 0) of
+                                     SymTy -> return (IntTy, tstate)
+                                     IntTy -> return (IntTy, tstate)
+                                     _ -> throwError $ GenericTC "Expected PackedTy" exp
+                    _ -> throwError $ GenericTC "Expected a variable argument" exp
 
-                 VAllocP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) IntTy i
-                   pure (VectorTy elty, tstate)
+                VAllocP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) IntTy i
+                      pure (VectorTy elty, tstate)
+                    _ -> error $ "VAllocP expects exactly 1 type argument. Given: " ++ show tys
 
-                 VFreeP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
-                   pure (ProdTy [], tstate)
+                VFreeP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+                      pure (ProdTy [], tstate)
+                    _ -> error $ "VFreeP expects exactly 1 type argument. Given: " ++ show tys
 
-                 VFree2P elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
-                   pure (ProdTy [], tstate)
+                VFree2P elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+                      pure (ProdTy [], tstate)
+                    _ -> error $ "VFreeP2 expects exactly 1 type argument. Given: " ++ show tys
 
-                 VLengthP elty -> do
-                   let [ls] = tys
-                   _ <- ensureEqualTy exp (VectorTy elty) ls
-                   pure (IntTy, tstate)
+                VLengthP elty -> do
+                  case tys of
+                    [ls] -> do
+                      _ <- ensureEqualTy exp (VectorTy elty) ls
+                      pure (IntTy, tstate)
+                    _ -> error $ "VLengthP expects exactly 1 type argument. Given: " ++ show tys
 
-                 VNthP elty -> do
-                   let [ls, i] = tys
-                   _ <- ensureEqualTy exp (VectorTy elty) ls
-                   _ <- ensureEqualTy exp IntTy i
-                   pure (elty, tstate)
+                VNthP elty -> do
+                  case tys of
+                    [ls, i] -> do
+                      _ <- ensureEqualTy exp (VectorTy elty) ls
+                      _ <- ensureEqualTy exp IntTy i
+                      pure (elty, tstate)
+                    _ -> error $ "VFreeP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 VSliceP elty   -> do
-                   let [from,to,ls] = tys
-                   _ <- ensureEqualTy exp IntTy from
-                   _ <- ensureEqualTy exp IntTy to
-                   _ <- ensureEqualTy exp (VectorTy elty) ls
-                   pure (VectorTy elty, tstate)
+                VSliceP elty   -> do
+                  case tys of
+                    [from,to,ls] -> do
+                      _ <- ensureEqualTy exp IntTy from
+                      _ <- ensureEqualTy exp IntTy to
+                      _ <- ensureEqualTy exp (VectorTy elty) ls
+                      pure (VectorTy elty, tstate)
+                    _ -> error $ "VSliceP expects exactly 3 type argument. Given: " ++ show tys
 
-                 InplaceVUpdateP elty -> do
-                   let [ls,i,val] = tys
-                   _ <- ensureEqualTy exp (VectorTy elty) ls
-                   _ <- ensureEqualTy exp IntTy i
-                   _ <- ensureEqualTy exp elty val
-                   pure (VectorTy elty, tstate)
+                InplaceVUpdateP elty -> do
+                  case tys of
+                    [ls,i,val] -> do
+                      _ <- ensureEqualTy exp (VectorTy elty) ls
+                      _ <- ensureEqualTy exp IntTy i
+                      _ <- ensureEqualTy exp elty val
+                      pure (VectorTy elty, tstate)
+                    _ -> error $ "InplaceVUpdateP expects exactly 3 type arguments. Given: " ++ show tys
 
-                 VConcatP elty -> do
-                   len1
-                   let [ls] = tys
-                   _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
-                   pure (VectorTy elty, tstate)
+                VConcatP elty -> do
+                  len1
+                  case tys of
+                    [ls] -> do
+                      _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
+                      pure (VectorTy elty, tstate)
+                    _ -> error $ "VConcatP expects exactly 2 type arguments. Given: " ++ show tys
 
 
-                 -- Given that the first argument is a list of type (VectorTy t),
-                 -- ensure that the 2nd argument is function reference of type:
-                 -- ty -> ty -> Bool
-                 VSortP elty ->
-                   case (es !! 1) of
-                     VarE f -> do
-                       len2
-                       let [ls]   = tys
-                           fn_ty  = lookupFEnvLocVar (fromVarToFreeVarsTy f) env
-                           in_tys = inTys fn_ty
-                           ret_ty = outTy fn_ty
-                           err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-                       _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
-                       case in_tys of
-                         [a,b] -> do
-                            _ <- ensureEqualTy (es !! 1) a elty
-                            _ <- ensureEqualTy (es !! 1) b elty
-                            _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                            pure (VectorTy elty, tstate)
-                         _ -> err fn_ty
-                     oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
+                -- Given that the first argument is a list of type (VectorTy t),
+                -- ensure that the 2nd argument is function reference of type:
+                -- ty -> ty -> Bool
+                VSortP elty ->
+                  case (es !! 1) of
+                    VarE f -> do
+                      len2
+                      case tys of
+                        [ls] -> do
+                          let fn_ty  = lookupFEnvLocVar (fromVarToFreeVarsTy f) env
+                              in_tys = inTys fn_ty
+                              ret_ty = outTy fn_ty
+                              err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+                          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+                          case in_tys of
+                            [a,b] -> do
+                              _ <- ensureEqualTy (es !! 1) a elty
+                              _ <- ensureEqualTy (es !! 1) b elty
+                              _ <- ensureEqualTy (es !! 1) ret_ty IntTy
+                              pure (VectorTy elty, tstate)
+                            _ -> err fn_ty
+                        _ -> error $ "VSortP expects exactly 1 type argument. Given: " ++ show tys
+                    oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-                 InplaceVSortP elty -> recur tstatein (PrimAppE (VSortP elty) es)
+                InplaceVSortP elty -> recur tstatein (PrimAppE (VSortP elty) es)
 
-                 VMergeP elty -> do
-                   len2
-                   checkListElemTy elty
-                   let [ls1,ls2] = tys
-                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
-                   _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
-                   pure (VectorTy elty, tstate)
+                VMergeP elty -> do
+                  len2
+                  checkListElemTy elty
+                  case tys of
+                    [ls1,ls2] -> do
+                      _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
+                      _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
+                      pure (VectorTy elty, tstate)
+                    _ -> error $ "VMergeP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 PDictInsertP kty vty -> do
-                   len3
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   let [key, val, dict] = tys
-                   _ <- ensureEqualTy (es !! 0) key kty
-                   _ <- ensureEqualTy (es !! 1) val vty
-                   _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
-                   pure (PDictTy kty vty, tstate)
+                PDictInsertP kty vty -> do
+                  len3
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  case tys of
+                    [key, val, dict] -> do
+                      _ <- ensureEqualTy (es !! 0) key kty
+                      _ <- ensureEqualTy (es !! 1) val vty
+                      _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
+                      pure (PDictTy kty vty, tstate)
+                    _ -> error $ "PDictInsertP expects exactly 3 type arguments. Given: " ++ show tys
 
-                 PDictLookupP kty vty -> do
-                   len2
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   let [key, dict] = tys
-                   _ <- ensureEqualTy (es !! 0) key kty
-                   _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
-                   pure (vty, tstate)
+                PDictLookupP kty vty -> do
+                  len2
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  case tys of
+                    [key, dict] -> do
+                      _ <- ensureEqualTy (es !! 0) key kty
+                      _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
+                      pure (vty, tstate)
+                    _ -> error $ "PDictLookupP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 PDictAllocP kty vty -> do
-                   len0
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   pure (PDictTy kty vty, tstate)
+                PDictAllocP kty vty -> do
+                  len0
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  pure (PDictTy kty vty, tstate)
 
-                 PDictHasKeyP kty vty -> do
-                   len2
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   let [key, dict] = tys
-                   _ <- ensureEqualTy (es !! 0) key kty
-                   _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
-                   pure (BoolTy, tstate)
+                PDictHasKeyP kty vty -> do
+                  len2
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  case tys of
+                    [key, dict] -> do
+                      _ <- ensureEqualTy (es !! 0) key kty
+                      _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
+                      pure (BoolTy, tstate)
+                    _ -> error $ "PDictHasKeyP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 PDictForkP kty vty -> do
-                   len1
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   let [dict] = tys
-                   _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
-                   pure (ProdTy [PDictTy kty vty, PDictTy kty vty], tstate)
+                PDictForkP kty vty -> do
+                  len1
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  case tys of
+                    [dict] -> do
+                      _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+                      pure (ProdTy [PDictTy kty vty, PDictTy kty vty], tstate)
+                    _ -> error $ "PDictForkP expects exactly 1 type argument. Given: " ++ show tys
 
-                 PDictJoinP kty vty -> do
-                   len2
-                   checkListElemTy kty
-                   checkListElemTy vty
-                   let [dict1, dict2] = tys
-                   _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
-                   _ <- ensureEqualTy (es !! 1) dict2 (PDictTy kty vty)
-                   pure (PDictTy kty vty, tstate)
+                PDictJoinP kty vty -> do
+                  len2
+                  checkListElemTy kty
+                  checkListElemTy vty
+                  case tys of
+                    [dict1, dict2] -> do
+                      _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
+                      _ <- ensureEqualTy (es !! 1) dict2 (PDictTy kty vty)
+                      pure (PDictTy kty vty, tstate)
+                    _ -> error $ "PDictJoinP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 LLAllocP elty -> do
-                   len0
-                   checkListElemTy elty
-                   pure (ListTy elty, tstate)
+                LLAllocP elty -> do
+                  len0
+                  checkListElemTy elty
+                  pure (ListTy elty, tstate)
 
-                 LLIsEmptyP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [ll] = tys
-                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-                   pure (BoolTy, tstate)
+                LLIsEmptyP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [ll] -> do
+                      _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                      pure (BoolTy, tstate)
+                    _ -> error $ "LLIsEmptyP expects exactly 1 type argument. Given: " ++ show tys
 
-                 LLConsP elty -> do
-                   len2
-                   checkListElemTy elty
-                   let [elt, ll] = tys
-                   _ <- ensureEqualTy (es !! 0) elt elty
-                   _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
-                   pure (ListTy elty, tstate)
+                LLConsP elty -> do
+                  len2
+                  checkListElemTy elty
+                  case tys of
+                    [elt, ll] -> do
+                      _ <- ensureEqualTy (es !! 0) elt elty
+                      _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
+                      pure (ListTy elty, tstate)
+                    _ -> error $ "LLConsP expects exactly 2 type arguments. Given: " ++ show tys
 
-                 LLHeadP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [ll] = tys
-                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-                   pure (elty, tstate)
+                LLHeadP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [ll] -> do
+                      _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                      pure (elty, tstate)
+                    _ -> error $ "LLHeadP expects exactly 1 type argument. Given: " ++ show tys
 
-                 LLTailP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [ll] = tys
-                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
-                   pure (ListTy elty, tstate)
+                LLTailP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [ll] -> do
+                      _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                      pure (ListTy elty, tstate)
+                    _ -> error $ "LLTailP expects exactly 1 type argument. Given: " ++ show tys
 
-                 LLFreeP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-                   pure (ProdTy [], tstate)
+                LLFreeP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                      pure (ProdTy [], tstate)
+                    _ -> error $ "LLFreeP expects exactly 1 type argument. Given: " ++ show tys
 
-                 LLFree2P elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-                   pure (ProdTy [], tstate)
+                LLFree2P elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                      pure (ProdTy [], tstate)
+                    _ -> error $ "LLFree2P expects exactly 1 type argument. Given: " ++ show tys
 
-                 LLCopyP elty -> do
-                   len1
-                   checkListElemTy elty
-                   let [i] = tys
-                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
-                   pure (ListTy elty, tstate)
+                LLCopyP elty -> do
+                  len1
+                  checkListElemTy elty
+                  case tys of
+                    [i] -> do
+                      _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                      pure (ListTy elty, tstate)
+                    _ -> error $ "LLCopyP expects exactly 1 type argument. Given: " ++ show tys
 
-                 GetNumProcessors -> do
-                   len0
-                   pure (IntTy, tstate)
+                GetNumProcessors -> do
+                  len0
+                  pure (IntTy, tstate)
 
-                 PrintInt -> do
-                   len1
-                   _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
-                   pure (ProdTy [], tstate)
+                PrintInt -> do
+                  len1
+                  _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
+                  pure (ProdTy [], tstate)
 
-                 PrintChar -> do
-                   len1
-                   _ <- ensureEqualTy (es !!! 0) CharTy (tys !!! 0)
-                   pure (ProdTy [], tstate)
+                PrintChar -> do
+                  len1
+                  _ <- ensureEqualTy (es !!! 0) CharTy (tys !!! 0)
+                  pure (ProdTy [], tstate)
 
-                 PrintFloat -> do
-                   len1
-                   _ <- ensureEqualTy (es !!! 0) FloatTy (tys !!! 0)
-                   pure (ProdTy [], tstate)
+                PrintFloat -> do
+                  len1
+                  _ <- ensureEqualTy (es !!! 0) FloatTy (tys !!! 0)
+                  pure (ProdTy [], tstate)
 
-                 PrintBool -> do
-                   len1
-                   _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
-                   pure (ProdTy [], tstate)
+                PrintBool -> do
+                  len1
+                  _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
+                  pure (ProdTy [], tstate)
 
-                 PrintSym -> do
-                   len1
-                   _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-                   pure (ProdTy [], tstate)
+                PrintSym -> do
+                  len1
+                  _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
+                  pure (ProdTy [], tstate)
 
-                 ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
+                ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
 
-                 SymSetEmpty -> do
-                   len0
-                   pure (SymSetTy, tstate)
+                SymSetEmpty -> do
+                  len0
+                  pure (SymSetTy, tstate)
 
-                 SymSetInsert -> do
-                   len2
-                   _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (SymSetTy, tstate)
+                SymSetInsert -> do
+                  len2
+                  _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  pure (SymSetTy, tstate)
 
-                 SymSetContains -> do
-                   len2
-                   _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (BoolTy, tstate)
+                SymSetContains -> do
+                  len2
+                  _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  pure (BoolTy, tstate)
 
-                 SymHashEmpty -> do
-                   len0
-                   pure (SymHashTy, tstate)
+                SymHashEmpty -> do
+                  len0
+                  pure (SymHashTy, tstate)
 
-                 SymHashInsert -> do
-                   len3
-                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   _ <- ensureEqualTy (es !!! 2) SymTy (tys !!! 2)
-                   pure (SymHashTy, tstate)
+                SymHashInsert -> do
+                  len3
+                  _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  _ <- ensureEqualTy (es !!! 2) SymTy (tys !!! 2)
+                  pure (SymHashTy, tstate)
 
-                 SymHashLookup -> do
-                   len2
-                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (SymTy, tstate)
+                SymHashLookup -> do
+                  len2
+                  _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  pure (SymTy, tstate)
 
-                 SymHashContains -> do
-                   len2
-                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (BoolTy, tstate)
+                SymHashContains -> do
+                  len2
+                  _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  pure (BoolTy, tstate)
 
-                 IntHashEmpty -> do
-                   len0
-                   pure (IntHashTy, tstate)
+                IntHashEmpty -> do
+                  len0
+                  pure (IntHashTy, tstate)
 
-                 IntHashInsert -> do
-                   len3
-                   _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   _ <- ensureEqualTy (es !!! 2) IntTy (tys !!! 2)
-                   pure (IntHashTy, tstate)
+                IntHashInsert -> do
+                  len3
+                  _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  _ <- ensureEqualTy (es !!! 2) IntTy (tys !!! 2)
+                  pure (IntHashTy, tstate)
 
-                 IntHashLookup -> do
-                   len2
-                   _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
-                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (IntTy, tstate)
+                IntHashLookup -> do
+                  len2
+                  _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+                  _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                  pure (IntTy, tstate)
 
-                 Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
+                Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
 
-                 RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
+                RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
 
       LetE (v, _ls, ty, e1@(AppE _f _ls1 _)) e2 -> do
         (ty1,tstate1) <- recur tstatein e1
@@ -887,9 +944,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                               -- get the region of the SoA loc. 
                                               r <- getRegion exp constrs soa_loc
                                               -- get the region of the field location 
-                                              let Just r' = case r of 
-                                                             SoAR _dreg fieldRegions -> lookup key fieldRegions
-                                                             _ -> error $ "L2.Typecheck.tcExp: GetFieldLocSoA: Expected SoAR region, got " ++ show r
+                                              r' <- case r of 
+                                                SoAR _dreg fieldRegions -> case lookup key fieldRegions of
+                                                  Just region -> return region
+                                                  Nothing -> error $ "L2.Typecheck.tcExp: Key not found in fieldRegions: " ++ show key
+                                                _ -> error $ "L2.Typecheck.tcExp: GetFieldLocSoA: Expected SoAR region, got " ++ show r
                                               let tstate1 = extendTS loc (Output, True) $ tstatein 
                                               let constrs1 = extendConstrs (InRegionC loc r') $ constrs
                                               (ty, tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e

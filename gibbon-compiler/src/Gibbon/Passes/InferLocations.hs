@@ -2819,16 +2819,17 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
                                                Nothing -> acc3
                                                Just ls ->
                                                  let binds = map (\(old,new) ->
-                                                                    let PackedTy tycon _ = L1.lookupVEnv old env2'
-                                                                        f = mkCopyFunName tycon
-                                                                    in (new,[],PackedTy tycon (),AppE f [] [VarE old]))
+                                                                    case L1.lookupVEnv old env2' of
+                                                                      PackedTy tycon _ ->
+                                                                        let f = mkCopyFunName tycon
+                                                                        in (new,[],PackedTy tycon (),AppE f [] [VarE old])
+                                                                      otherTy -> error $ "copyOutOfOrderPacked.go: expected PackedTy for " ++ show old ++ ", but got " ++ show otherTy)
                                                              ls
                                                  in mkLets binds rhs1)
                                  rhs1 vars
                 pure (acc1' `M.union` cpy_env1, (dcon,vs,rhs2) : acc2)
           (cpy_env2, ls1) <- F.foldrM doPat (cpy_env1, []) ls
           pure $ (cpy_env2, CaseE scrt1 ls1)
-
 
         ----------------------------------------
 

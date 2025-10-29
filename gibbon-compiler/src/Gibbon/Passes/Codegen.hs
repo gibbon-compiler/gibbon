@@ -1568,12 +1568,14 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  --        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
 
                  CastPtr -> do
-                    let [(outV, outT)] = bnds
-                        [ptr] = rnds
-                        ptr' = codegenTriv venv ptr
-                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ] 
-
-
+                  case (bnds, rnds) of
+                    ([(outV, outT)], [ptr]) -> do
+                      let ptr' = codegenTriv venv ptr
+                      return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:(codegenTy outT)) $exp:ptr'; |] ]
+                    _ ->
+                      error $ "CastPtr: expected one binding and one operand, got "
+                          ++ show (length bnds) ++ " bindings and "
+                          ++ show (length rnds) ++ " operands."
 
        return $ pre ++ bod'
 

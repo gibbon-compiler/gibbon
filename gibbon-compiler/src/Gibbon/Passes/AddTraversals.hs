@@ -62,11 +62,13 @@ addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Var Ty2 -> RegEnv -> String ->
 addTraversalsExp ddefs fundefs env2 renv context ex =
   case ex of
     CaseE scrt@(VarE sv) brs -> do
-        let PackedTy _tycon tyloc = lookupVEnv sv env2
-            reg = renv # tyloc
-        CaseE scrt <$> mapM (docase reg) brs
-
+      case lookupVEnv sv env2 of
+        PackedTy _tycon tyloc -> do
+          let reg = renv # tyloc
+          CaseE scrt <$> mapM (docase reg) brs
+        otherTyp -> error $ "addTraversalsExp: expected PackedTy for variable " ++ show sv ++ ", but got: " ++ show otherTy
     CaseE scrt _ -> error $ "addTraversalsExp: Scrutinee is not flat " ++ sdoc scrt
+    _ -> error "addTraversalsExp: expected CaseE expression"
 
     -- standard recursion here
     VarE{}    -> return ex

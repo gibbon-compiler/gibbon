@@ -506,8 +506,9 @@ recoverType ddfs env2 ex =
     CharE _      -> CharTy
     FloatE{}     -> FloatTy
     LitSymE _    -> IntTy
-    AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
-                       in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+    AppE v tyapps _ ->  case fEnv env2 # v of
+                          (ForAll tyvars (ArrowTy _ retty)) -> substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+                          ty -> error $ "Function applied  with type arguments has an unexpected type. Got " ++ sdoc ty ++ " in function " ++ sdoc v
     -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     PrimAppE p _ -> primRetTy1 p
@@ -525,8 +526,9 @@ recoverType ddfs env2 ex =
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
-                         in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+    SpawnE v tyapps _ ->  case fEnv env2 # v of
+                            (ForAll tyvars (ArrowTy _ retty)) -> substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+                            ty -> error $ "Spawned function has an unexpected type. Got " ++ sdoc ty ++ " in function " ++ sdoc v
     SyncE -> voidTy0
     CaseE _ mp ->
       let (c,args,e) = Sf.headErr mp
