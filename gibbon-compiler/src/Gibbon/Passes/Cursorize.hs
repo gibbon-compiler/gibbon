@@ -1737,6 +1737,9 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                 if present
                   then []
                   else [(sloc_dcon, [], CursorTy, Ext $ IndexCursorArray sloc 0)]
+          
+          -- Vidush 
+          -- Check the index logic might not be robust here.
           (additional_bnds', freeVarToVarEnv'', _) <-
             foldlM
               ( \(b, env, idx') ((_, _), loc) -> do
@@ -2370,7 +2373,9 @@ cursorizeLocExp freeVarToVarEnv denv tenv senv lvar locExp =
             Just v -> v
             Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
       (rhs, additional_lets) <- case field_loc of 
-                                            Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
+                                            Single{} -> do
+                                                        let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc 
+                                                        return $ (Ext $ IndexCursorArray loc_var start, [])
                                             SoA _ fregs -> do
                                                            let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
                                                            let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc
@@ -2458,7 +2463,9 @@ cursorizeRegExp freeVarToVarEnv denv tenv senv lvar regExp =
             Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show regExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
           -- {- VS : We add one since the data constructor is reserved as the first element in the cursor Array -}
       (rhs, additional_lets) <- case field_loc of 
-                                            Single{} -> return $ (Ext $ IndexCursorArray loc_var (1 + elem_idx), [])
+                                            Single{} -> do
+                                                        let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc   
+                                                        return $ (Ext $ IndexCursorArray loc_var start, [])
                                             SoA _ fregs -> do
                                                            let CursorArrayTy sz = getCursorizeTyFromLocVar field_loc
                                                            let (start, end, _) = getIndexPositionOfSoALocVar field_locs field_loc  
@@ -3701,12 +3708,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                   let new_binds = case redir_vars of 
                                                                           [v] -> [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                           rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                                   in (index + 1, res ++ new_binds)
+                                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                                 (MkTy2 CursorArrayTy {}) ->
                                                   let new_binds = case redir_vars of 
                                                                             [v] -> [(redirection_var_flds !! index, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                             rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                   in (index + 1, res ++ new_binds)
+                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                                 _ ->
                                                   let new_binds = case redir_vars of 
                                                                         [v] ->
@@ -3719,7 +3726,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                                 (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                               ]
                                                                         rst -> error $ "Did not expect multiple variables for type " ++ show ty_of_field
-                                                   in (index + 1, res ++ new_binds)
+                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                       )
                                       (0, [])
                                       res
@@ -3857,12 +3864,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                         let new_binds = case redir_vars of 
                                                                                 [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                 rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
                                                         let new_binds = case redir_vars of 
                                                                                  [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                  rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                                     _ ->
                                                         let new_binds = case redir_vars of 
                                                               [v] ->
@@ -3875,7 +3882,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                       (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
                                                                     ]
                                                               _ -> error "Did not expect multiple variables!"
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                             ) (0, []) res
                                         soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                         tenv'' = M.union
@@ -3969,12 +3976,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                   let new_binds = case redir_vars of 
                                                                         [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                         rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                   in (index + 1, res ++ new_binds)
+                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                                 (MkTy2 CursorArrayTy {}) ->
                                                   let new_binds = case redir_vars of 
                                                                         [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                         rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                   in (index + 1, res ++ new_binds)
+                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                                 _ ->
                                                   let new_binds = case redir_vars of 
                                                                         [v] -> 
@@ -3987,7 +3994,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                                   (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
                                                                                 ]
                                                                         _ -> error $ "Did not expect multiple variables for type" ++ show ty_of_field
-                                                   in (index + 1, res ++ new_binds)
+                                                   in (index + L.length (redir_vars), res ++ new_binds)
                                       )
                                       (0, [])
                                       res
@@ -4122,12 +4129,12 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                         let new_binds = case redir_vars of 
                                                                                 [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                 rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
                                                         let new_binds = case redir_vars of 
                                                                                 [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                 rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                                     _ ->
                                                         let new_binds = case redir_vars of 
                                                                                 [v] ->
@@ -4140,7 +4147,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                                       ]
                                                                                 _ -> error $ "Did not expect multiple variables for ty: " ++ show ty_of_field
-                                                         in (index + 1, res ++ new_binds)
+                                                         in (index + L.length (redir_vars), res ++ new_binds)
                                             ) (0, []) res
                                         soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
                                         tenv'' = M.union
