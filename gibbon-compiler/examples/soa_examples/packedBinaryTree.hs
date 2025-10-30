@@ -1,6 +1,9 @@
 data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
 data Tree = Node Int FloatList List Tree Tree | Leaf
+{-# ANN type Tree "Linear" #-}
+{-# ANN type List "Linear" #-}
+{-# ANN type FloatList "Linear" #-}
 
 
 mkList :: Int -> List 
@@ -16,7 +19,7 @@ mkFloatList len = if len <= 0
 mkTree :: Int -> Tree
 mkTree d = if (d <= 0)
 	   then Leaf
-           else Node d (mkFloatList d) (mkList d) (mkTree (d - 1)) (mkTree (d - 1)) 
+           else Node d (mkFloatList 50000) (mkList 50000) (mkTree (d - 1)) (mkTree (d - 1))
 
 add1List :: List -> List
 add1List lst = case lst of 
@@ -70,7 +73,7 @@ sumFloatList :: FloatList -> Int
 sumFloatList lst = 10
 
 gibbon_main = 
-      let tree = mkTree 12
-          tree' = add1Tree tree
-       in sumTree tree'
+      let tree = mkTree 8
+          tree' = iterate (add1Tree tree)
+      in iterate (sumTree tree')
 
