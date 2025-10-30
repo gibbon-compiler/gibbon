@@ -32,79 +32,84 @@ followPtrs (Prog ddefs fundefs mainExp) = do
     go env out_ty funName funArgs funTy e =
       case e of
           CaseE scrt brs -> do
-            case env # scrtv of
-              PackedTy tycon scrt_loc -> do
-                let DDef{dataCons} = lookupDDef ddefs tycon
-                flags <- getDynFlags
-                let no_copies = gopt Opt_No_RemoveCopies flags
-                if no_copies
-                then do
-                  indir_ptrv <- gensym "indr"
-                  _indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
-                  callv <- gensym "call"
-                  wc <- gensym "wildcard"
-                  indir_ptrloc <- freshCommonLoc "case" scrt_loc
+            case scrt of
+              VarE scrtv -> do
+                case env # scrtv of
+                  PackedTy tycon scrt_loc -> do
+                    let DDef{dataCons} = lookupDDef ddefs tycon
+                    flags <- getDynFlags
+                    let no_copies = gopt Opt_No_RemoveCopies flags
+                    if no_copies
+                    then do
+                      indir_ptrv <- gensym "indr"
+                      _indir_ptrv_loc <- freshCommonLoc "indr" scrt_loc
+                      callv <- gensym "call"
+                      wc <- gensym "wildcard"
+                      indir_ptrloc <- freshCommonLoc "case" scrt_loc
 
-                  endofs <- mapM (\lr -> case lr of
+                      endofs <- mapM (\lr -> case lr of
                                                 EndOf lrm -> do 
                                                             let loc = lrmLoc lrm 
                                                             freshCommonLoc "endof" loc
-                                                _ -> error $ "FollowPtrs.go: unexpected " ++ show lr
-                                  ) (locRets funTy)
-              otherTy ->
-                error $ "FollowPtrs.go: expected PackedTy in env for " ++ show scrtv
-                    ++ ", but got " ++ show otherTy
+                                      ) (locRets funTy)
 
-              --endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
-              --let endofs' = map Single endofs
-              let args = foldr (\v acc -> if v == scrtv
-                                          then ((VarE indir_ptrv) : acc)
-                                          else (VarE v : acc))
-                              [] funArgs
-              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((indir_ptrloc) : acc) else (loc : acc)) [] (inLocVars funTy)
-              let out_locs = outLocVars funTy
-              let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
-              let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                              LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
-                              Ext (RetE endofs callv)
-              let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod)
-              ----------------------------------------
-              (pure (CaseE scrt (brs ++ [redir_br])))
-            else do
-              indir_ptrv <- gensym "indr"
-              indir_ptrloc <- gensym "case"
-              jump <- gensym "jump"
-              callv <- gensym "call"
-              let _effs = arrEffs funTy
-              endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
-              let endofs' = map Single endofs
-              let ret_endofs = foldr (\(end, (EndOf (LRM loc _ _))) acc ->
-                                        if loc == scrt_loc
-                                        then (Single jump) : acc
-                                        else end : acc)
-                              []
-                               (zip endofs' (locRets funTy))
-              let args = foldr (\v acc -> if v == scrtv
-                                          then ((VarE indir_ptrv) : acc)
-                                          else (VarE v : acc))
-                              [] funArgs
-              let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((Single indir_ptrv) : acc) else (loc : acc)) [] (inLocVars funTy)
-              let out_locs = outLocVars funTy
-              wc <- gensym "wildcard"
-              let indir_bod = Ext $ LetLocE (Single jump) (AfterConstantLE 8 (Single indir_ptrloc)) $
-                              (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
-                              LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
-                              Ext (RetE ret_endofs callv)
-              let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
-              let indir_br = (indir_dcon,[(indir_ptrv,(Single indir_ptrloc))],indir_bod)
-              ----------------------------------------
-              let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
-              let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                             LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
-                             Ext (RetE endofs' callv)
-              let redir_br = (redir_dcon,[(indir_ptrv,(Single indir_ptrloc))],redir_bod)
-              ----------------------------------------
-              (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
+                      --endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
+                      --let endofs' = map Single endofs
+                      let args = foldr (\v acc -> if v == scrtv
+                                                  then ((VarE indir_ptrv) : acc)
+                                                  else (VarE v : acc))
+                                      [] funArgs
+                      let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((indir_ptrloc) : acc) else (loc : acc)) [] (inLocVars funTy)
+                      let out_locs = outLocVars funTy
+                      let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
+                      let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
+                                      LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                                      Ext (RetE endofs callv)
+                      let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod)
+                      ----------------------------------------
+                      (pure (CaseE scrt (brs ++ [redir_br])))
+                    else do
+                      indir_ptrv <- gensym "indr"
+                      indir_ptrloc <- gensym "case"
+                      jump <- gensym "jump"
+                      callv <- gensym "call"
+                      let _effs = arrEffs funTy
+                      endofs <- mapM (\_ -> gensym "endof") (locRets funTy)
+                      let endofs' = map Single endofs
+                      let ret_endofs = foldr (\(end, (EndOf (LRM loc _ _))) acc ->
+                                                if loc == scrt_loc
+                                                then (Single jump) : acc
+                                                else end : acc)
+                                      []
+                                      (zip endofs' (locRets funTy))
+                      let args = foldr (\v acc -> if v == scrtv
+                                                  then ((VarE indir_ptrv) : acc)
+                                                  else (VarE v : acc))
+                                      [] funArgs
+                      let in_locs = foldr (\loc acc -> if loc ==  scrt_loc then ((Single indir_ptrv) : acc) else (loc : acc)) [] (inLocVars funTy)
+                      let out_locs = outLocVars funTy
+                      wc <- gensym "wildcard"
+                      let indir_bod = Ext $ LetLocE (Single jump) (AfterConstantLE 8 (Single indir_ptrloc)) $
+                                      (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
+                                      LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
+                                      Ext (RetE ret_endofs callv)
+                      let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
+                      let indir_br = (indir_dcon,[(indir_ptrv,(Single indir_ptrloc))],indir_bod)
+                      ----------------------------------------
+                      let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
+                      let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
+                                    LetE (callv,endofs',out_ty,AppE funName (in_locs ++ out_locs) args) $
+                                    Ext (RetE endofs' callv)
+                      let redir_br = (redir_dcon,[(indir_ptrv,(Single indir_ptrloc))],redir_bod)
+                      ----------------------------------------
+                      (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
+                  other ->
+                    error $ "followPtrs: expected packed type for " ++ show scrtv
+                      ++ ", but got " ++ show other
+              other ->
+                error $ "followPtrs: expected variable expression for " ++ show scrt
+                  ++ ", but got " ++ show other
+
           IfE a b c -> do
             a' <- go env  out_ty funName funArgs funTy a
             b' <- go env  out_ty funName funArgs funTy b

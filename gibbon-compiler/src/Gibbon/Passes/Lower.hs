@@ -252,13 +252,12 @@ printTy pkd ty trvs =
                                     T.VarTriv v -> do
                                       let unpkd = varAppend "unpkd_" v
                                           ignre = varAppend "ignre_" v
-                                      in
-                                        if pkd
-                                        then (\tl -> T.LetCallT False [(unpkd, T.PtrTy), (ignre, T.CursorTy)]
-                                                    (mkUnpackerName constr) trvs $
-                                                    T.LetCallT False [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
-                                        else T.LetCallT False [] (mkPrinterName constr) trvs
-                                  _ -> error $ "Expected VarTriv, got: " ++ show one
+                                      if pkd
+                                      then (\tl -> T.LetCallT False [(unpkd, T.PtrTy), (ignre, T.CursorTy)]
+                                                  (mkUnpackerName constr) trvs $
+                                                  T.LetCallT False [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
+                                      else T.LetCallT False [] (mkPrinterName constr) trvs
+                                    _ -> error $ "Expected VarTriv, got: " ++ show one
     (VectorTy{}, [_one]) -> T.LetPrimCallT [] (T.PrintString "<vector>") []
     (ListTy{}, [_one]) -> T.LetPrimCallT [] (T.PrintString "<list>") []
 
