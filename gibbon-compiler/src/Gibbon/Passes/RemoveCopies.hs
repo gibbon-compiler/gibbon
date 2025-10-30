@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 -- | Replace calls to copy functions with tagged indirection nodes
 module Gibbon.Passes.RemoveCopies where
