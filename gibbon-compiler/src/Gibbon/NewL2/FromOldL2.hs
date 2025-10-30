@@ -96,11 +96,11 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                         foldr
                           (\(witloc, tloc) (wits, env) ->
                             let val = (env # (tloc))
-                              lrem = case val of
-                                        New.Loc l -> l
-                                        _         -> error $ "Expected New.Loc, got: " ++ show val
-                              wit' = New.EndWitness lrem witloc
-                              env' = M.insert witloc wit' env
+                                lrem = case val of
+                                          New.Loc l -> l
+                                          _         -> error $ "Expected New.Loc, got: " ++ show val
+                                wit' = New.EndWitness lrem witloc
+                                env' = M.insert witloc wit' env
                             in (wit' : wits, env'))
                           ([], locenv')
 
@@ -128,39 +128,50 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
     CaseE scrt brs
       | VarE v <- scrt ->
-          do let (PackedTy _ scrt_loc) = lookupVEnv v env2
-                 (New.Loc lrem) = locenv # scrt_loc
 
-                 docase (dcon, vlocs, rhs) = do
 
-                   let mkLocArg loc (Just idx) = let lrem_reg = New.lremReg lrem
-                                                     lrem_end_reg = New.lremEndReg lrem
-                                                     New.Loc lrem' = case lrem_reg of 
-                                                                  SingleR _ -> New.Loc $ lrem { New.lremLoc = loc }
-                                                                  SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
-                                                                                            Just fr -> New.Loc $ lrem { New.lremLoc = loc, New.lremReg = fr }
-                                                                                            Nothing -> New.Loc $ lrem { New.lremLoc = loc }
-                                                     New.Loc lrem'' = case lrem_end_reg of 
-                                                                      SingleR _ -> New.Loc lrem' 
-                                                                      SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
-                                                                                                Just fr -> New.Loc $ lrem' { New.lremEndReg = fr} 
-                                                                                                Nothing -> New.Loc lrem'
-                                                    in New.Loc lrem''   
-
-                       mkLocArg loc Nothing = New.Loc $ lrem { New.lremLoc = loc }
-                   let (vars,locs) = unzip vlocs
-                       locargs = map (\(loc, idx) -> mkLocArg loc (Just idx)) $ zip locs [0..length(locs)]
-                       vlocs' = zip vars locargs
-                       locenv' = foldr
-                                   (\(New.Loc lrem') acc -> M.insert (New.lremLoc lrem') (New.Loc lrem') acc)
-                                   locenv locargs
-                       env2' = extendPatternMatchEnv dcon ddefs vars locs env2
-                       locenv'' = if isRedirectionTag dcon || isIndirectionTag dcon
-                                  then let ptr = Single $ Sf.headErr vars
-                                       in M.insert ptr (mkLocArg ptr Nothing) locenv'
-                                  else locenv'
-                   rhs' <- go locenv'' env2' rhs
-                   dbgTrace minChatLvl "Print LREM Case: " dbgTrace minChatLvl (sdoc (lrem, locargs, locenv'')) dbgTrace minChatLvl "End LREM Case.\n" pure $ (dcon, vlocs', rhs')
+          do let  scrt_loc =
+                    case lookupVEnv v env2 of
+                      PackedTy _ l -> l
+                      other        -> error $ "Expected PackedTy, got: " ++ show other
+                  lrem =
+                    case locenv # scrt_loc of
+                      New.Loc l -> l
+                      other     -> error $ "Expected New.Loc, got: " ++ show other
+                  docase (dcon, vlocs, rhs) = do
+                    let mkLocArg loc (Just idx) = let lrem_reg = New.lremReg lrem
+                                                      lrem_end_reg = New.lremEndReg lrem
+                                                      lrem' = 
+                                                        case lrem_reg of 
+                                                          SingleR _ -> lrem { New.lremLoc = loc }
+                                                          SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
+                                                                                    Just fr -> lrem { New.lremLoc = loc, New.lremReg = fr }
+                                                                                    Nothing -> lrem { New.lremLoc = loc }
+                                                      lrem'' =
+                                                        case lrem_end_reg of 
+                                                          SingleR _ -> lrem' 
+                                                          SoARv _dcreg fregs -> case L.lookup (dcon, idx) fregs of
+                                                                                    Just fr -> lrem' { New.lremEndReg = fr} 
+                                                                                    Nothing -> lrem'
+                                                  in New.Loc lrem''   
+ 
+                        mkLocArg loc Nothing = New.Loc $ lrem { New.lremLoc = loc }
+                    let (vars,locs) = unzip vlocs
+                        locargs = map (\(loc, idx) -> mkLocArg loc (Just idx)) $ zip locs [0..length(locs)]
+                        vlocs' = zip vars locargs
+                        locenv' = foldr
+                                    (\locv acc ->
+                                      case locv of
+                                        New.Loc lrem' -> M.insert (New.lremLoc lrem') (New.Loc lrem') acc
+                                        other -> error $ "Expected New.Loc in fromOldL2Exp, got: " ++ show other)
+                                      locenv locargs
+                        env2' = extendPatternMatchEnv dcon ddefs vars locs env2
+                        locenv'' = if isRedirectionTag dcon || isIndirectionTag dcon
+                                   then let ptr = Single $ Sf.headErr vars
+                                        in M.insert ptr (mkLocArg ptr Nothing) locenv'
+                                   else locenv'
+                    rhs' <- go locenv'' env2' rhs
+                    dbgTrace minChatLvl "Print LREM Case: " dbgTrace minChatLvl (sdoc (lrem, locargs, locenv'')) dbgTrace minChatLvl "End LREM Case.\n" pure $ (dcon, vlocs', rhs')
 
              (CaseE (VarE v)) <$> mapM docase brs
 
@@ -261,11 +272,13 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
     case locexp of
       StartOfRegionLE reg -> New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       AfterConstantLE _ loc2 ->
-        let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+        case locenv0 # loc2 of
+          (New.Loc lrem) -> New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+          other -> error $ "Expected New.Loc in AfterConstantLE, got " ++ show other
       AfterVariableLE _ loc2 _ ->
-        let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+        case locenv0 # loc2 of
+          (New.Loc lrem) -> New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+          other -> error $ "Expected New.Loc in AfterVariableLE, got " ++ show other
       InRegionLE reg ->
         New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       FreeLE ->
@@ -275,40 +288,48 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           New.Loc lrem -> New.Loc (lrem { New.lremLoc = loc })
           New.EndWitness lrem _ -> New.Loc ( lrem { New.lremLoc = loc } )
           oth -> error $ "toLocArg: got" ++ sdoc oth
-      GetDataConLocSoA loc2 -> 
-        let (New.Loc lrem) = locenv0 # loc2
-            regVar = New.lremReg lrem
-            endRegVar = New.lremEndReg lrem 
-            modality = New.lremMode lrem
-            dcRegVar = getDataConRegFromRegVar regVar
-            dcEndRegVar = getDataConRegFromRegVar endRegVar
-          in New.Loc (New.LREM loc dcRegVar dcEndRegVar modality)
+      GetDataConLocSoA loc2 ->
+        case locenv0 # loc2 of
+          (New.Loc lrem) ->
+            let regVar = New.lremReg lrem
+                endRegVar = New.lremEndReg lrem 
+                modality = New.lremMode lrem
+                dcRegVar = getDataConRegFromRegVar regVar
+                dcEndRegVar = getDataConRegFromRegVar endRegVar
+            in New.Loc (New.LREM loc dcRegVar dcEndRegVar modality)
+          other -> error $ "Expected New.Loc in GetDataConLocSoA, got " ++ show other
       GetFieldLocSoA (dcon, idx) loc2 ->
-        let (New.Loc lrem) = locenv0 # loc2
-            regVar = New.lremReg lrem
-            endRegVar = New.lremEndReg lrem 
-            modality = New.lremMode lrem
-            fieldRegVar = getFieldRegFromRegVar (dcon, idx) regVar
-            fieldEndRegVar = getFieldRegFromRegVar (dcon, idx) endRegVar
-        in New.Loc (New.LREM loc fieldRegVar fieldEndRegVar modality)
+        case locenv0 # loc2 of
+          (New.Loc lrem) ->
+            let regVar = New.lremReg lrem
+                endRegVar = New.lremEndReg lrem 
+                modality = New.lremMode lrem
+                fieldRegVar = getFieldRegFromRegVar (dcon, idx) regVar
+                fieldEndRegVar = getFieldRegFromRegVar (dcon, idx) endRegVar
+            in New.Loc (New.LREM loc fieldRegVar fieldEndRegVar modality)
+          other -> error $ "Expected New.Loc in GetFieldLocSoA, got " ++ show other
       GenSoALoc dloc fieldsLocs ->
         -- Get the single locs and build this part
         let _soa_loc = SoA (unwrapLocVar dloc) (map (\(d, flc) -> (d, flc)) fieldsLocs)
-            (New.Loc dlrem) = locenv0 # dloc
-            dloc_reg = New.lremReg dlrem 
-            dloc_end_reg = New.lremEndReg dlrem
-            field_regs = map (\(k, flc) -> let (New.Loc flrem) = locenv0 # flc
-                                              in (k, New.lremReg flrem)
-                             ) fieldsLocs
-            field_end_regs = map (\(k, flc) -> let (New.Loc flrem) = locenv0 # flc
-                                                  in (k, New.lremEndReg flrem)
-                             ) fieldsLocs
-            soa_reg = SoARv dloc_reg field_regs
-            soa_end_reg = SoARv dloc_end_reg field_end_regs
-            -- modality of all regions should be same
-            modality = New.lremMode dlrem
-            lrem = New.LREM loc soa_reg soa_end_reg modality
-         in New.Loc lrem
+            lrem =  case locenv0 # dloc of
+                      New.Loc dlrem -> 
+                        let dloc_reg = New.lremReg dlrem 
+                            dloc_end_reg = New.lremEndReg dlrem
+                            field_regs = map (\(k, flc) ->  case locenv0 # flc of
+                                                              New.Loc flrem -> (k, New.lremReg flrem)
+                                                              other -> error $ "Expected New.Loc for field, got " ++ show other
+                                            ) fieldsLocs
+                            field_end_regs = map (\(k, flc) ->  case locenv0 # flc of
+                                                                  New.Loc flrem -> (k, New.lremEndReg flrem)
+                                                                  other -> error $ "Expected New.Loc for field end, got " ++ show other
+                                            ) fieldsLocs
+                            soa_reg = SoARv dloc_reg field_regs
+                            soa_end_reg = SoARv dloc_end_reg field_end_regs
+                            -- modality of all regions should be same
+                            modality = New.lremMode dlrem
+                        in New.LREM loc soa_reg soa_end_reg modality
+                      other -> error $ "Expected New.Loc for SoA loc, got " ++ show other
+        in New.Loc lrem
       AssignLE {} -> error "toLocArg: AssignLE not handled"
 
 

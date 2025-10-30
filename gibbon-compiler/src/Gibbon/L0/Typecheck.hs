@@ -73,14 +73,15 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM FunDef0
 tcFun ddefs fenv fn@FunDef{funArgs,funTy,funBody, funName} = do
   res <- runTcM $ do
-    let (ForAll tyvars (ArrowTy gvn_arg_tys gvn_retty)) = funTy
-        init_venv = M.fromList $ zip funArgs $ map (ForAll []) gvn_arg_tys
-        init_s = emptySubst
-    (s1, drvd_funBody_ty, funBody_tc) <-
-      tcExp ddefs init_s init_venv fenv tyvars False funBody
-    s2 <- unify funBody drvd_funBody_ty gvn_retty
-    pure $ fn { funTy   = zonkTyScheme (s1 <> s2) funTy
-              , funBody = zonkExp (s1 <> s2) funBody_tc }
+    case funTy of
+      (ForAll tyvars (ArrowTy gvn_arg_tys gvn_retty)) -> do
+        let init_venv = M.fromList $ zip funArgs $ map (ForAll []) gvn_arg_tys
+            init_s = emptySubst
+        (s1, drvd_funBody_ty, funBody_tc) <- tcExp ddefs init_s init_venv fenv tyvars False funBody
+        s2 <- unify funBody drvd_funBody_ty gvn_retty
+        pure $ fn { funTy   = zonkTyScheme (s1 <> s2) funTy
+                  , funBody = zonkExp (s1 <> s2) funBody_tc }
+      _ -> error $ "Expected a function type of form (ForAll ... (ArrowTy ...)), but got " ++ sdoc funTy
   case res of
     Left er   -> error $ render er ++ " in " ++ show funName
     Right fn1 -> pure fn1
@@ -327,46 +328,55 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         DictEmptyP ty -> do
           len1
-          let [a] = arg_tys'
-          s2 <- unify (args !! 0) ArenaTy a
-          case args !! 0 of
-            (VarE var) ->
-                pure (s1 <> s2, SymDictTy (Just var) ty,
-                         PrimAppE pr args_tc)
-            Ext (L0.L _ (VarE var)) ->
-                pure (s1 <> s2, SymDictTy (Just var) ty,
-                         PrimAppE pr args_tc)
-            _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
+          case arg_tys' of
+            [a] -> do
+              s2 <- unify (args !! 0) ArenaTy a
+              case args !! 0 of
+                (VarE var) ->
+                    pure (s1 <> s2, SymDictTy (Just var) ty,
+                            PrimAppE pr args_tc)
+                Ext (L0.L _ (VarE var)) ->
+                    pure (s1 <> s2, SymDictTy (Just var) ty,
+                            PrimAppE pr args_tc)
+                _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
+            _ -> error $ "Expected exactly one argument type in DictEmptyP, got: " ++ show arg_tys'
+            
 
         DictInsertP ty -> do
           len4
-          let [a,d,k,v] = arg_tys'
-          s2 <- unify (args !! 1) (SymDictTy Nothing ty) d
-          s3 <- unify (args !! 2) SymTy0 k
-          s4 <- unify (args !! 3) ty v
-          s5 <- unify (args !! 0) ArenaTy a
-          case args !! 0 of
-            (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
-                                       SymDictTy (Just var) ty,
-                                       PrimAppE pr args_tc)
-            Ext (L0.L _ (VarE var)) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
-                                       SymDictTy (Just var) ty,
-                                       PrimAppE pr args_tc)
-            _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
+          case arg_tys' of
+            [a,d,k,v] -> do
+              s2 <- unify (args !! 1) (SymDictTy Nothing ty) d
+              s3 <- unify (args !! 2) SymTy0 k
+              s4 <- unify (args !! 3) ty v
+              s5 <- unify (args !! 0) ArenaTy a
+              case args !! 0 of
+                (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+                                          SymDictTy (Just var) ty,
+                                          PrimAppE pr args_tc)
+                Ext (L0.L _ (VarE var)) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+                                          SymDictTy (Just var) ty,
+                                          PrimAppE pr args_tc)
+                _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
+            _ -> error $ "Expected exactly four argument types in DictInsertP, got: " ++ show arg_tys'
 
         DictLookupP ty -> do
           len2
-          let [d,k] = arg_tys'
-          s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
-          s3 <- unify (args !! 1) SymTy0 k
-          pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [d,k] -> do
+              s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
+              s3 <- unify (args !! 1) SymTy0 k
+              pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in DictLookupP, got: " ++ show arg_tys'
 
         DictHasKeyP ty -> do
           len2
-          let [d,k] = arg_tys'
-          s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
-          s3 <- unify (args !! 1) SymTy0 k
-          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+          case arg_tys' of
+            [d,k] -> do
+              s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
+              s3 <- unify (args !! 1) SymTy0 k
+              pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in DictHasKeyP, got: " ++ show arg_tys'
 
         IntHashEmpty -> do
           len0
@@ -387,56 +397,72 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         VAllocP elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) IntTy i
-          pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) IntTy i
+              pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in VAllocP, got: " ++ show arg_tys'
 
         VFreeP elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) i
-          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) i
+              pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in VFreeP, got: " ++ show arg_tys'
 
         VFree2P elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) i
-          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) i
+              pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in VFree2P, got: " ++ show arg_tys'
 
         VLengthP elty -> do
           len1
-          let [ls] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) ls
-          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) ls
+              pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in VLengthP, got: " ++ show arg_tys'
 
         VNthP elty -> do
           len2
-          let [ls,i] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) ls
-          s3 <- unify (args !! 1) IntTy i
-          pure (s1 <> s2 <> s3, elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls,i] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) ls
+              s3 <- unify (args !! 1) IntTy i
+              pure (s1 <> s2 <> s3, elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in VNthP, got: " ++ show arg_tys'
 
         VSliceP elty -> do
           len3
-          let [from,to,ls] = arg_tys'
-          s2 <- unify (args !! 0) IntTy from
-          s3 <- unify (args !! 1) IntTy to
-          s4 <- unify (args !! 2) (VectorTy elty) ls
-          pure (s1 <> s2 <> s3 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [from,to,ls] -> do
+              s2 <- unify (args !! 0) IntTy from
+              s3 <- unify (args !! 1) IntTy to
+              s4 <- unify (args !! 2) (VectorTy elty) ls
+              pure (s1 <> s2 <> s3 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly three argument types in VSliceP, got: " ++ show arg_tys'
 
         InplaceVUpdateP elty -> do
           len3
-          let [ls,i,val] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) ls
-          s3 <- unify (args !! 1) IntTy i
-          s4 <- unify (args !! 2) elty val
-          pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls,i,val] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) ls
+              s3 <- unify (args !! 1) IntTy i
+              s4 <- unify (args !! 2) elty val
+              pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly three argument types in InplaceVUpdateP, got: " ++ show arg_tys'
 
         VConcatP elty -> do
           len1
-          let [ls] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy (VectorTy elty)) ls
-          pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls] -> do
+              s2 <- unify (args !! 0) (VectorTy (VectorTy elty)) ls
+              pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in VConcatP, got: " ++ show arg_tys'
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -445,10 +471,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         -- TODO: cannot unify if the 2nd argument is a lambda.
         VSortP elty -> do
           len2
-          let [ls,fp] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) ls
-          s3 <- unify (args !! 1) (ArrowTy [elty, elty] IntTy) fp
-          pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls,fp] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) ls
+              s3 <- unify (args !! 1) (ArrowTy [elty, elty] IntTy) fp
+              pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in VSortP, got: " ++ show arg_tys'
 
         InplaceVSortP elty -> do
           (s2, t, e) <- go (PrimAppE (VSortP elty) args)
@@ -459,25 +487,31 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         VMergeP elty -> do
           len2
-          let [ls1,ls2] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy elty) ls1
-          s3 <- unify (args !! 1) (VectorTy elty) ls2
-          pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ls1,ls2] -> do
+              s2 <- unify (args !! 0) (VectorTy elty) ls1
+              s3 <- unify (args !! 1) (VectorTy elty) ls2
+              pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in VMergeP, got: " ++ show arg_tys'
 
         PDictInsertP kty vty -> do
           len3
-          let [key, val, dict] = arg_tys'
-          s2 <- unify (args !! 0) key kty
-          s3 <- unify (args !! 1) val vty
-          s4 <- unify (args !! 2) dict (PDictTy kty vty)
-          pure (s1 <> s2 <> s3 <> s4, PDictTy kty vty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [key, val, dict] -> do
+              s2 <- unify (args !! 0) key kty
+              s3 <- unify (args !! 1) val vty
+              s4 <- unify (args !! 2) dict (PDictTy kty vty)
+              pure (s1 <> s2 <> s3 <> s4, PDictTy kty vty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly three argument types in PDictInsertP, got: " ++ show arg_tys'
 
         PDictLookupP kty vty -> do
           len2
-          let [key, dict] = arg_tys'
-          s2 <- unify (args !! 0) key kty
-          s3 <- unify (args !! 1) dict (PDictTy kty vty)
-          pure (s1 <> s2 <> s3, vty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [key, dict] -> do
+              s2 <- unify (args !! 0) key kty
+              s3 <- unify (args !! 1) dict (PDictTy kty vty)
+              pure (s1 <> s2 <> s3, vty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in PDictLookupP, got: " ++ show arg_tys'
 
         PDictAllocP kty vty -> do
           len0
@@ -485,23 +519,29 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         PDictHasKeyP kty vty -> do
           len2
-          let [key, dict] = arg_tys'
-          s2 <- unify (args !! 0) key kty
-          s3 <- unify (args !! 1) dict (PDictTy kty vty)
-          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+          case arg_tys' of
+            [key, dict] -> do
+              s2 <- unify (args !! 0) key kty
+              s3 <- unify (args !! 1) dict (PDictTy kty vty)
+              pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in PDictHasKeyP, got: " ++ show arg_tys'
 
         PDictForkP kty vty -> do
           len1
-          let [dict] = arg_tys'
-          s2 <- unify (args !! 0) dict (PDictTy kty vty)
-          pure (s1 <> s2, ProdTy [PDictTy kty vty, PDictTy kty vty], PrimAppE pr args_tc)
+          case arg_tys' of
+            [dict] -> do
+              s2 <- unify (args !! 0) dict (PDictTy kty vty)
+              pure (s1 <> s2, ProdTy [PDictTy kty vty, PDictTy kty vty], PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in PDictForkP, got: " ++ show arg_tys'
 
         PDictJoinP kty vty -> do
           len2
-          let [dict1, dict2] = arg_tys'
-          s2 <- unify (args !! 0) dict1 (PDictTy kty vty)
-          s3 <- unify (args !! 1) dict2 (PDictTy kty vty)
-          pure (s1 <> s2 <> s3, PDictTy kty vty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [dict1, dict2] -> do
+              s2 <- unify (args !! 0) dict1 (PDictTy kty vty)
+              s3 <- unify (args !! 1) dict2 (PDictTy kty vty)
+              pure (s1 <> s2 <> s3, PDictTy kty vty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in PDictJoinP, got: " ++ show arg_tys'
 
         LLAllocP elty -> do
           len0
@@ -509,46 +549,60 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         LLIsEmptyP elty -> do
           len1
-          let [ll] = arg_tys
-          s2 <- unify (args !! 0) ll (ListTy elty)
-          pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+          case arg_tys of
+            [ll] -> do
+              s2 <- unify (args !! 0) ll (ListTy elty)
+              pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLIsEmptyP, got: " ++ show arg_tys
 
         LLConsP elty -> do
           len2
-          let [elt, ll] = arg_tys
-          s2 <- unify (args !! 0) elt elty
-          s3 <- unify (args !! 1) ll (ListTy elty)
-          pure (s1 <> s2 <> s3, ListTy elty, PrimAppE pr args_tc)
+          case arg_tys of
+            [elt, ll] -> do
+              s2 <- unify (args !! 0) elt elty
+              s3 <- unify (args !! 1) ll (ListTy elty)
+              pure (s1 <> s2 <> s3, ListTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in LLConsP, got: " ++ show arg_tys
 
         LLHeadP elty -> do
           len1
-          let [ll] = arg_tys
-          s2 <- unify (args !! 0) ll (ListTy elty)
-          pure (s1 <> s2, elty, PrimAppE pr args_tc)
+          case arg_tys of
+            [ll] -> do
+              s2 <- unify (args !! 0) ll (ListTy elty)
+              pure (s1 <> s2, elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLHeadP, got: " ++ show arg_tys
 
         LLTailP elty -> do
           len1
-          let [ll] = arg_tys
-          s2 <- unify (args !! 0) ll (ListTy elty)
-          pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
+          case arg_tys of
+            [ll] -> do
+              s2 <- unify (args !! 0) ll (ListTy elty)
+              pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLTailP, got: " ++ show arg_tys
 
         LLFreeP elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy elty) i
-          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) (ListTy elty) i
+              pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLFreeP, got: " ++ show arg_tys'
 
         LLFree2P elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy elty) i
-          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) (ListTy elty) i
+              pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLFree2P, got: " ++ show arg_tys'
 
         LLCopyP elty -> do
           len1
-          let [i] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy elty) i
-          pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
+          case arg_tys' of
+            [i] -> do
+              s2 <- unify (args !! 0) (ListTy elty) i
+              pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly one argument type in LLCopyP, got: " ++ show arg_tys'
 
         GetNumProcessors -> do
           len0
@@ -564,10 +618,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         IsBig -> do
           len2
-          let [ity, _ety] = arg_tys'
-          -- s1 <- unify (args !! 0) (PackedTy)
-          s2 <- unify (args !! 0) IntTy ity
-          pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+          case arg_tys' of
+            [ity, _ety] -> do
+              -- s1 <- unify (args !! 0) (PackedTy)
+              s2 <- unify (args !! 0) IntTy ity
+              pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+            _ -> error $ "Expected exactly two argument types in IsBig, got: " ++ show arg_tys'
 
         ReadPackedFile _fp _tycon _reg ty -> do
           len0
@@ -578,10 +634,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           pure (s1, VectorTy ty, PrimAppE pr args_tc)
 
         WritePackedFile fp ty -> do
-             len1
-             let [packed_ty] = arg_tys'
-             s2 <- unify (args !! 0) ty packed_ty
-             pure (s1 <> s2, ProdTy [], PrimAppE (WritePackedFile fp (zonkTy s2 ty)) args_tc)
+            len1
+            case arg_tys' of
+              [packed_ty] -> do
+                s2 <- unify (args !! 0) ty packed_ty
+                pure (s1 <> s2, ProdTy [], PrimAppE (WritePackedFile fp (zonkTy s2 ty)) args_tc)
+              _ -> error $ "Expected exactly one argument type in WritePackedFile, got: " ++ show arg_tys'
 
         Write3dPpmFile{} -> err $ text "Write3dPpmFile"
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc

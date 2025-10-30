@@ -446,8 +446,10 @@ revertExp ex =
     AppE v _ args   -> AppE v [] (L.map revertExp args)
     PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
     LetE (v,_, ty, (Ext (Old.IndirectionE _ _ _ _ arg))) bod ->
-      let PackedTy tycon _ =  unTy2 ty in
+      case unTy2 ty of
+        PackedTy tycon _ ->
           LetE (v,[],(stripTyLocs (unTy2 ty)), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
+        otherTy -> error $ "Expected PackedTy in revertExp, got " ++ show otherTy
     LetE (v,_,ty,rhs) bod ->
       LetE (v,[], stripTyLocs (unTy2 ty), revertExp rhs) (revertExp bod)
     IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
