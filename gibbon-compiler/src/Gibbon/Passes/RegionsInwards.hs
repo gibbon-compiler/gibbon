@@ -36,7 +36,7 @@ regionsInwards Prog {ddefs, fundefs, mainExp} = do
       let env = M.empty
       mn' <- removeAliasedLocations M.empty S.empty mn -- Use M.empty for creating the empty env
       mn'' <- placeRegionInwards env scopeSetMain mn' -- Delay Regions for the main function
-      pure $ Just (mn', ty) -- (mn'', ty)
+      pure $ Just (mn'', ty) -- (mn'', ty)
   return $ Prog ddefs fundefs' mainExp'
 
 placeRegionsInwardsFunBody :: S.Set FreeVarsTy -> FunDef2 -> PassM FunDef2
