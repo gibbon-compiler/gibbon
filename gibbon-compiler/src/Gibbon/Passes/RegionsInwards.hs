@@ -36,7 +36,7 @@ regionsInwards Prog {ddefs, fundefs, mainExp} = do
       let env = M.empty
       mn' <- removeAliasedLocations M.empty S.empty mn -- Use M.empty for creating the empty env
       mn'' <- placeRegionInwards env scopeSetMain mn' -- Delay Regions for the main function
-      pure $ Just (mn'', ty) -- (mn'', ty)
+      pure $ Just (mn', ty) -- (mn'', ty)
   return $ Prog ddefs fundefs' mainExp'
 
 placeRegionsInwardsFunBody :: S.Set FreeVarsTy -> FunDef2 -> PassM FunDef2
@@ -668,9 +668,8 @@ removeAliasedLocations env definedLocs ex =
             AssignLE loc' -> do
               -- rhs' <- removeAliasedLocations env definedLocs' rhs
               let env' = makeAlias env loc' loc
-              removeAliasedLocations env' definedLocs rhs
+              removeAliasedLocations env' definedLocs' rhs
             GenSoALoc dconl fieldLocs -> do
-              rhs' <- removeAliasedLocations env definedLocs' rhs
               let nloc = case loc of
                     Single _ -> getAliasLoc env loc
                     SoA dcl fieldLocs' ->
@@ -679,9 +678,13 @@ removeAliasedLocations env definedLocs ex =
                        in SoA (unwrapLocVar dcl') fieldLocs''
                   ndconl = getAliasLoc env dconl
                   nfieldLocs = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs
+                  oldSoALoc = SoA (unwrapLocVar dconl) fieldLocs
+                  newSoALoc = SoA (unwrapLocVar ndconl) nfieldLocs
+                  env' = makeAlias env newSoALoc oldSoALoc
+              rhs' <- removeAliasedLocations env' definedLocs' rhs
               case existsLetForLoc of
                 True -> return rhs'
-                False -> return $ Ext $ LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'
+                False -> dbgTrace (minChatLvl) "New GenSoA: " dbgTrace (minChatLvl) (sdoc (GenSoALoc ndconl nfieldLocs)) dbgTrace (minChatLvl) "End GenSoA!\n" return $ Ext $ LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'
         LetParRegionE r sz ty rhs -> do
           rhs' <- go rhs
           return $ Ext $ LetParRegionE r sz ty rhs'
