@@ -87,7 +87,7 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = 
-      let tree = mkTree 8
+      let tree = mkTree 2
           tree' = iterate (add1Tree tree)
           val = iterate (sumTree tree)
           r = iterate (rightMostTree tree')
