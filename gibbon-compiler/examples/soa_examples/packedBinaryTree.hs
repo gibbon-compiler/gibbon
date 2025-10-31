@@ -1,7 +1,7 @@
 data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
 data Tree = Node Int FloatList List Tree Tree | Leaf
-{-# ANN type Tree "Linear" #-}
+{-# ANN type Tree "Factored" #-}
 {-# ANN type List "Linear" #-}
 {-# ANN type FloatList "Linear" #-}
 
@@ -73,7 +73,7 @@ sumFloatList :: FloatList -> Int
 sumFloatList lst = 10
 
 gibbon_main = 
-      let tree = mkTree 8
+      let tree = mkTree 3
           tree' = iterate (add1Tree tree)
       in iterate (sumTree tree')
 
