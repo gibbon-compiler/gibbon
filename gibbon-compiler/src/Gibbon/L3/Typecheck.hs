@@ -1013,42 +1013,44 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ " <> " ++ (sdoc b)) a b
 
 
+-- ensureEqualTyModCursor :: DDefs3 -> Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
+-- ensureEqualTyModCursor ddefs exp ty1 ty2 = case ty2 of 
+--                                         PackedTy tycon _ -> 
+--                                            let cursorTy = getCursorTypeFromTy tycon ddefs 
+--                                             in case cursorTy of 
+--                                                     CursorTy -> case ty1 of 
+--                                                                     CursorTy -> return CursorTy 
+--                                                                     _ -> ensureEqualTy exp ty1 ty2
+--                                                     CursorArrayTy{} -> case ty1 of 
+--                                                                            CursorArrayTy{} -> return ty1
+--                                                                            _ -> ensureEqualTy exp ty1 ty2
+--                                                     _ -> ensureEqualTy exp ty1 ty2
+--                                         CursorTy -> case ty1 of 
+--                                                          PackedTy{} -> return CursorTy
+--                                                          IntTy -> return CursorTy
+--                                                          _ -> ensureEqualTy exp ty1 ty2
+--                                         CursorArrayTy sz -> case ty1 of 
+--                                                                 PackedTy{} -> return (CursorArrayTy sz)
+--                                                                 IntTy -> return (CursorArrayTy sz)
+--                                                                 _ -> ensureEqualTy exp ty1 ty2
+--                                         IntTy -> case ty1 of 
+--                                                     CursorTy -> return CursorTy
+--                                                     CursorArrayTy sz -> return $ CursorArrayTy sz
+--                                                     _ -> ensureEqualTy exp ty1 ty2
+--                                         (ProdTy ls1) -> case ty1 of 
+--                                                             (ProdTy ls2) -> sequence_ [ ensureEqualTyModCursor ddefs exp ty1' ty2' | (ty1',ty2') <- zip ls1 ls2] >>= \_ -> return (packedToCursor ddefs (ProdTy ls1))
+--                                                             _ -> ensureEqualTy exp ty1 ty2
+--                                         _ -> ensureEqualTy exp ty1 ty2
+
 ensureEqualTyModCursor :: DDefs3 -> Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
-ensureEqualTyModCursor ddefs exp ty1 ty2 = case ty2 of 
-                                        PackedTy tycon _ -> 
-                                           let cursorTy = getCursorTypeFromTy tycon ddefs 
-                                            in case cursorTy of 
-                                                    CursorTy -> case ty1 of 
-                                                                    CursorTy -> return CursorTy 
-                                                                    _ -> ensureEqualTy exp ty1 ty2
-                                                    CursorArrayTy{} -> case ty1 of 
-                                                                           CursorArrayTy{} -> return ty1
-                                                                           _ -> ensureEqualTy exp ty1 ty2
-                                                    _ -> ensureEqualTy exp ty1 ty2
-                                        CursorTy -> case ty1 of 
-                                                         PackedTy{} -> return CursorTy
-                                                         IntTy -> return CursorTy
-                                                         _ -> ensureEqualTy exp ty1 ty2
-                                        CursorArrayTy sz -> case ty1 of 
-                                                                PackedTy{} -> return (CursorArrayTy sz)
-                                                                IntTy -> return (CursorArrayTy sz)
-                                                                _ -> ensureEqualTy exp ty1 ty2
-                                        IntTy -> case ty1 of 
-                                                    CursorTy -> return CursorTy
-                                                    CursorArrayTy sz -> return $ CursorArrayTy sz
-                                                    _ -> ensureEqualTy exp ty1 ty2
-                                        (ProdTy ls1) -> case ty1 of 
-                                                            (ProdTy ls2) -> sequence_ [ ensureEqualTyModCursor ddefs exp ty1' ty2' | (ty1',ty2') <- zip ls1 ls2] >>= \_ -> return (packedToCursor ddefs (ProdTy ls1))
-                                                            _ -> ensureEqualTy exp ty1 ty2
-                                        _ -> ensureEqualTy exp ty1 ty2
+ensureEqualTyModCursor _ddefs _exp CursorTy (PackedTy _ _) = return CursorTy
+ensureEqualTyModCursor _ddefs _exp (PackedTy _ _) CursorTy = return CursorTy
+ensureEqualTyModCursor _ddefs _exp IntTy CursorTy = return CursorTy
+ensureEqualTyModCursor _ddefs _exp CursorTy IntTy = return CursorTy
 
--- ensureEqualTyModCursor False _exp CursorTy (PackedTy _ _) = return CursorTy
--- ensureEqualTyModCursor False _exp (PackedTy _ _) CursorTy = return CursorTy
--- ensureEqualTyModCursor False _exp IntTy CursorTy = return CursorTy
--- ensureEqualTyModCursor False _exp CursorTy IntTy = return CursorTy
-
--- ensureEqualTyModCursor False exp (ProdTy ls1) (ProdTy ls2) =
---   sequence_ [ ensureEqualTyModCursor False exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor False (ProdTy ls1))
+ensureEqualTyModCursor ddefs exp (ProdTy ls1) (ProdTy ls2) =
+  sequence_ [ ensureEqualTyModCursor ddefs exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor ddefs (ProdTy ls1))
+ensureEqualTyModCursor _ddefs exp a b = ensureEqualTy exp a b
 
 -- ensureEqualTyModCursor True _exp (CursorArrayTy sz) (PackedTy _ _) = return (CursorArrayTy sz)
 -- ensureEqualTyModCursor True _exp (PackedTy _ _) (CursorArrayTy sz) = return (CursorArrayTy sz)
@@ -1060,12 +1062,12 @@ ensureEqualTyModCursor ddefs exp ty1 ty2 = case ty2 of
 -- ensureEqualTyModCursor _s exp a b = ensureEqualTy exp a b
 
 packedToCursor :: DDefs3 -> Ty3 -> Ty3
-packedToCursor ddefs (PackedTy tycon _) = let 
+packedToCursor ddefs t@(PackedTy tycon _) = let 
                                             cursorTy = getCursorTypeFromTy tycon ddefs 
                                            in case cursorTy of 
                                                     CursorTy -> CursorTy
                                                     CursorArrayTy sz -> CursorArrayTy sz
-                                                    _ -> CursorTy
+                                                    _ -> t 
 packedToCursor _dd (ProdTy tys) = ProdTy $ map (\ty -> packedToCursor _dd ty) tys
 packedToCursor _dd ty = ty
 

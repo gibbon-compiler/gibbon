@@ -2035,17 +2035,17 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let from_loc_var = case M.lookup (fromLocArgToFreeVarsTy from) freeVarToVarEnv of 
                                           Nothing -> error "Did not find variable for location!"
                                           Just var -> var
-                  let from_locs = [Single dcloc] ++ map (\(_, floc) -> floc) flds
+                  let from_locs = linearizeLocVar (SoA dcloc flds) --[Single dcloc] ++ map (\(_, floc) -> floc) flds
                   let to_locs = case (toLocVar to) of
                                     Single{} -> error "Expected a SoA location!\n"
-                                    SoA dc_loc flocs -> [Single dc_loc] ++ map (\(_, floc) -> floc) flocs
+                                    SoA dc_loc flocs -> linearizeLocVar (SoA dc_loc flocs) --[Single dc_loc] ++ map (\(_, floc) -> floc) flocs
                   let to_loc_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of
                         Nothing -> error "Did not find variable for location!"
                         Just var -> var
                   let reg_from_reg = fromLocVarToRegVar (toLocVar from_reg)
                   let from_reg_vars = case reg_from_reg of 
                                               SingleR{} -> error "expected an SoA region!\n"
-                                              SoARv dc_reg fieldRegs -> [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
+                                              SoARv dc_reg fieldRegs -> linearizeRegVar (SoARv dc_reg fieldRegs) --[dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
 
                   let from_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_from_reg) freeVarToVarEnv of 
                                                       Nothing -> error "Did not find region!"
@@ -2054,7 +2054,7 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                   let reg_to_reg = fromLocVarToRegVar (toLocVar to_reg)
                   let to_reg_vars = case reg_to_reg of 
                                               SingleR{} -> error "expected an SoA region!\n"
-                                              SoARv dc_reg fieldRegs -> [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
+                                              SoARv dc_reg fieldRegs ->  linearizeRegVar (SoARv dc_reg fieldRegs) -- [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
                   
                   let to_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_to_reg) freeVarToVarEnv of 
                                                       Nothing -> error "Did not find region!"
@@ -2105,59 +2105,14 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
                                                                                                   return (ls ++ [(new_deref, [], CursorTy, Ext $ DerefMutCursor v)], nvs ++ [new_deref]) 
                                                                                     _ -> return (ls, nvs ++ [v])
                                                                                ) ([], []) [from_var, to_var, from_reg_var, to_reg_var]
-
+                                              -- We need to make sure to get the right tycon for the the nested SoA field 
+                                              -- This may be important for the GC to work properly.
+                                              -- Vidush: TODO
                                               let new_let = [ ("_", [], ProdTy [], Ext (IndirectionBarrier tycon ((new_vars !! 0), (new_vars !! 2), (new_vars !! 1), (new_vars !! 3)))),
                                                               (start, [], CursorTy, VarE (from_var)),
                                                               (end, [], CursorTy, Ext $ AddCursor (from_var) (L3.LitE 9))
                                                             ]
                                               return (lets ++ fvl ++ tvl ++ frl ++ trl ++ need_deref ++ new_let, range ++ [(start, end)], p, b_args)
-                                            SoA dcloc' flds' -> do 
-                                                (fl_var, fvl) <- do case (M.lookup (fromLocVarToFreeVarsTy fl)) freeVarToVarEnv of 
-                                                                              Nothing -> case to_loc of 
-                                                                                          Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray flp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoA{} -> do 
-                                                                                                  field_name <- gensym "field_cursor"
-                                                                                                  return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray flp (fromJust (L.elemIndex r b_args)))])
-                                                                              Just var -> return $ (var, [])
-                                                let from_locs' = [Single dcloc'] ++ map (\(_, floc) -> floc) flds'
-                                                let to_locs' = case to_loc of
-                                                                    Single{} -> error "Expected a SoA location!\n"
-                                                                    SoA dc_loc flocs -> [Single dc_loc] ++ map (\(_, floc) -> floc) flocs
-                                                (to_loc_var', tvl) <- case M.lookup (fromLocVarToFreeVarsTy to_loc) freeVarToVarEnv of
-                                                                          Nothing -> case to_loc of 
-                                                                                          Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray tp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoA{} -> do 
-                                                                                                  field_name <- gensym "field_cursor"
-                                                                                                  return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray tp (fromJust (L.elemIndex r b_args)))])
-                                                                          Just var -> return $ (var, [])
-                                                let from_reg_vars' = case from_reg of 
-                                                                    SingleR{} -> error "expected an SoA region!\n"
-                                                                    SoARv dc_reg fieldRegs -> [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
-
-                                                (from_reg_var', frl) <- case (M.lookup (fromRegVarToFreeVarsTy from_reg)) freeVarToVarEnv of 
-                                                                              Nothing -> case to_loc of 
-                                                                                          Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray rp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoA{} -> do 
-                                                                                                  field_name <- gensym "field_cursor"
-                                                                                                  return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray rp (fromJust (L.elemIndex r b_args)))])
-                                                                              Just var -> return $ (var, [])
-
-                                                let to_reg_vars' = case to_reg of 
-                                                                    SingleR{} -> error "expected an SoA region!\n"
-                                                                    SoARv dc_reg fieldRegs -> [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
-                                                
-                                                (to_reg_var', trl) <- case (M.lookup (fromRegVarToFreeVarsTy to_reg)) freeVarToVarEnv of 
-                                                                              Nothing -> case to_loc of 
-                                                                                          Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray trp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoA{} -> do 
-                                                                                                  field_name <- gensym "field_cursor"
-                                                                                                  return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray trp (fromJust (L.elemIndex r b_args)))])
-                                                                              Just var -> return $ (var, [])
-                                                                              
-                                                let barrier_args' = L.zip4 from_locs' to_locs' from_reg_vars' to_reg_vars'
-                                                (let_exprs', range_s', parents, _) <- foldlM handle_indrs_rec ([], [], (fl_var, to_loc_var', from_reg_var', to_reg_var'), barrier_args') barrier_args'
-                                                _ <- error "SoA: Packed indirections with GC does not work! Please turn off GC for now!"
-                                                return (fvl ++ tvl ++ frl ++ trl ++ let_exprs', range_s', parents, barrier_args)
                                         )
 
                   (let_exprs, range_s, _, _) <- foldlM handle_indrs_rec ([], [], (from_loc_var, to_loc_var, from_reg_var, to_reg_var), barrier_args) barrier_args
@@ -3790,6 +3745,8 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                           ]
                                     bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
                                     return $ mkLets binds bod
+                                    -- TODO:
+                                    -- Vidush: The GC case for indirection will require us to take the indirection for nested SoA locations too!
                                    else do 
                                     tmp <- dbgTrace (minChatLvl) "Print field_cur: " dbgTrace (minChatLvl) (sdoc (dcur, _field_cur)) dbgTrace (minChatLvl) "End FieldCur\n" gensym "readcursor_indir"
                                     tmp_flds <- mapM (\((dcon, idx), _) -> gensym "readcursor_indir_flds") _field_cur
@@ -3860,14 +3817,28 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                   tmpf = tmp_flds !! index
                                                   ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                                in case ty_of_field of
-                                                    (MkTy2 PackedTy {}) ->
+                                                    (MkTy2 PackedTy {}) -> --[(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                         let new_binds = case redir_vars of 
-                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                         (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                         ((v), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                         (toEndV (v), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                         (toTagV (v), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                         (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
+                                                                                       ]
                                                                                 rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
                                                         let new_binds = case redir_vars of 
-                                                                                 [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                 [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                         (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                         ((v), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                         (toEndV (v), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                         (toTagV (v), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                         (toEndFromTaggedV (v), [], CursorTy, Ext $ AddCursor (v) (VarE (toTagV (v))))
+                                                                                       ]
                                                                                  rst ->  map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     _ ->
@@ -4055,12 +4026,14 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                           ]
                                     bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
                                     return $ mkLets binds bod
-                                   else do 
+                                   else do
+                                    let linearizedLocs = case loc of 
+                                                              FL l -> linearizeLocVar l
                                     tmp <- dbgTrace (minChatLvl) "Print field_cur: " dbgTrace (minChatLvl) (sdoc (dcur, _field_cur)) dbgTrace (minChatLvl) "End FieldCur\n" gensym "readcursor_indir"
-                                    tmp_flds <- mapM (\((dcon, idx), _) -> gensym "readcursor_indir_flds") _field_cur
+                                    tmp_flds <- mapM (\_ -> gensym "readcursor_indir_flds") linearizedLocs
                                     loc_var <- lookupVariable loc fenv
                                     var_dcon_next <- gensym "dcon_next"
-                                    vars_next_fields <- mapM (\((dcon, idx), _) -> gensym "field_nxt") _field_cur
+                                    vars_next_fields <- mapM (\_ -> gensym "field_nxt") linearizedLocs
                                     redirection_var_dcon <- gensym "dcon_redir"
                                     res <- mapM (\((dcon, idx), _loc) -> do
                                                                                let locTy = (lookupDataCon ddfs dcon) !! idx
@@ -4127,12 +4100,26 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                in case ty_of_field of
                                                     (MkTy2 PackedTy {}) ->
                                                         let new_binds = case redir_vars of 
-                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                                      ]
                                                                                 rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
                                                         let new_binds = case redir_vars of 
-                                                                                [v] -> [(v, [], CursorTy, Ext (AddCursor var (LitE 0)))]
+                                                                                [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                                      ]
                                                                                 rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     _ ->
