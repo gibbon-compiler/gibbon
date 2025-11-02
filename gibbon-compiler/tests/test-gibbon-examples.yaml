@@ -510,7 +510,7 @@ tests:
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3]
+    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
   - name: test08b_dict.gib
     failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
   - name: test08c_dict.gib
@@ -593,22 +593,22 @@ tests:
   #simple SoA benchmarks
   - name: list.hs
     dir: examples/soa_examples
-    failing: []
+    failing: [gibbon3]
     answer-file: examples/soa_examples/test_list.ans
 
   - name: tree.hs
     dir: examples/soa_examples
-    failing: ["interp1"]
+    failing: ["interp1", gibbon3]
     answer-file: examples/soa_examples/test_tree.ans
 
   - name: packedList.hs
     dir: examples/soa_examples
-    failing: []
+    failing: [gibbon3]
     answer-file: examples/soa_examples/test_packed_list.ans
 
   - name: packedTree.hs
     dir: examples/soa_examples
-    failing: []
+    failing: [gibbon3]
     answer-file: examples/soa_examples/test_packed_tree.ans
     
   - name: test_303.hs

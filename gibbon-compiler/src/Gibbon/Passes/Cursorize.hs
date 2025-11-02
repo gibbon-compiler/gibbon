@@ -4031,6 +4031,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                                               FL l -> linearizeLocVar l
                                     tmp <- dbgTrace (minChatLvl) "Print field_cur: " dbgTrace (minChatLvl) (sdoc (dcur, _field_cur)) dbgTrace (minChatLvl) "End FieldCur\n" gensym "readcursor_indir"
                                     tmp_flds <- mapM (\_ -> gensym "readcursor_indir_flds") linearizedLocs
+                                    tmp_unpack <- mapM (\_ -> gensym "tmp_unpack") linearizedLocs
                                     loc_var <- lookupVariable loc fenv
                                     var_dcon_next <- gensym "dcon_next"
                                     vars_next_fields <- mapM (\_ -> gensym "field_nxt") linearizedLocs
@@ -4091,46 +4092,67 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                         binds_flields =
                                           L.foldl
                                             ( \(index, res) ((dcon', idx), var, redir_vars) ->
-                                              let read_cursor_f =
+                                              let read_cursor_f idx =
                                                       if isIndirectionTag dcon || isRedirectionTag dcon
-                                                      then Ext (ReadTaggedCursor (vars_next_fields !! index))
+                                                      then Ext (ReadTaggedCursor (vars_next_fields !! idx))
                                                       else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                                  tmpf = tmp_flds !! index
+                                                  tmpf idtmpf = tmp_flds !! idtmpf
                                                   ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                                in case ty_of_field of
                                                     (MkTy2 PackedTy {}) ->
                                                         let new_binds = case redir_vars of 
                                                                                 [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                                       ]
-                                                                                rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
+                                                                                rst -> snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
+                                                                                                    (vars_next_fields !! i, [], CursorTy, Ext (AddCursor (tmp_unpack !! i) (LitE 1))), 
+                                                                                                    (tmpf i, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f i),
+                                                                                                    -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                                    ((redirection_var_flds !! i), [], CursorTy, ProjE 0 (VarE $ tmpf i)),
+                                                                                                    (toEndV (redirection_var_flds !! i), [], CursorTy, ProjE 1 (VarE $ tmpf i)),
+                                                                                                    (toTagV (redirection_var_flds !! i), [], IntTy, ProjE 2 (VarE $ tmpf i)),
+                                                                                                    (toEndFromTaggedV (redirection_var_flds !! i), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! i) (VarE (toTagV (redirection_var_flds !! i))))
+                                                                                                   ]
+                                                                                                   )
+                                                                                           ) (index, []) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     (MkTy2 CursorArrayTy {}) ->
                                                         let new_binds = case redir_vars of 
                                                                                 [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                                       ]
-                                                                                rst -> map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst
+                                                                                -- (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))
+                                                                                rst -> snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
+                                                                                                    (vars_next_fields !! i, [], CursorTy, Ext (AddCursor (tmp_unpack !! i) (LitE 1))),
+                                                                                                    (tmpf i, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f i),
+                                                                                                    -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                                    ((redirection_var_flds !! i), [], CursorTy, ProjE 0 (VarE $ tmpf i)),
+                                                                                                    (toEndV (redirection_var_flds !! i), [], CursorTy, ProjE 1 (VarE $ tmpf i)),
+                                                                                                    (toTagV (redirection_var_flds !! i), [], IntTy, ProjE 2 (VarE $ tmpf i)),
+                                                                                                    (toEndFromTaggedV (redirection_var_flds !! i), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! i) (VarE (toTagV (redirection_var_flds !! i))))
+                                                                                                   ]
+                                                                                                   )
+                                                                                           ) (index, []) rst
                                                          in (index + L.length (redir_vars), res ++ new_binds)
                                                     _ ->
                                                         let new_binds = case redir_vars of 
                                                                                 [v] ->
                                                                                       [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                                        (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
+                                                                                        (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE tmpf)),
-                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE tmpf)),
-                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE tmpf)),
+                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
+                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
+                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                                       ]
                                                                                 _ -> error $ "Did not expect multiple variables for ty: " ++ show ty_of_field
