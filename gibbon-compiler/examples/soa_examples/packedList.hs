@@ -1,6 +1,6 @@
 data PackedInt = PacI Int
 data List = Cons Int PackedInt List | Nil 
-{-# ANN type PackedInt "Linear" #-}
+{-# ANN type PackedInt "Factored" #-}
 {-# ANN type List "Factored" #-}
 
 addPackedInt' :: PackedInt -> Int -> PackedInt
@@ -48,7 +48,7 @@ id lst = lst
 
 gibbon_main = let 
                 pi = mkPackedInt 10
-                lst = mkList 100
+                lst = iterate (mkList 100000)
                 lst' = id (add1 lst)
                in (sumList lst')
 

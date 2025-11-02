@@ -5,7 +5,7 @@ module Gibbon.Passes.FollowPtrs
 import qualified Data.Map as M
 -- import qualified Data.Set as S
 import qualified Data.List as L
-import           Data.Foldable ( foldrM )
+import           Data.Foldable ( foldrM, foldlM )
 import           Data.Maybe ( fromJust )
 
 import           Gibbon.Common
@@ -106,6 +106,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               ----------------------------------------
               (pure (CaseE scrt (brs ++ [redir_br])))
             else do
+              let gc_off = gopt Opt_DisableGC flags
               indir_ptrv <- gensym "indr"
               indir_ptrloc <- freshCommonLoc "case" scrt_loc
               jump <- freshCommonLoc "jump" scrt_loc
@@ -144,17 +145,29 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               -- Field locs will all be the same
               indir_br <- case scrt_loc of 
                   SoA _d flocs -> do
-                    let arr_elems = 1 + length flocs 
+                    let arr_elems = 1 + length flocs
+                    let aft_dcon_indir_size = if gc_off then (1 + 8 * arr_elems) else 9
                     let data_con_let = LetLocE (getDconLoc scrt_loc) (GetDataConLocSoA scrt_loc)
                     -- assuming 8 byte pointer size
-                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE (1 + 8 * arr_elems) ((getDconLoc scrt_loc)))
+                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE aft_dcon_indir_size ((getDconLoc scrt_loc)))
                     let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) scrt_loc)]) [] (getAllFieldLocsSoA scrt_loc)
-
-                    let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA scrt_loc) ) $
+                    (indir_bod_additional_lets, field_vars) <- case gc_off of 
+                                                                     True -> return ([], getAllFieldLocsSoA scrt_loc)
+                                                                     False -> foldlM (\(lets, fvars_lst) ((dcon, idx), lc) -> case lc of
+                                                                                          Single{} -> do
+                                                                                                      new_var <- gensym "aft_indir_loc" 
+                                                                                                      return (lets ++ [LetLocE (singleLocVar new_var) (AfterConstantLE 9 (getFieldLoc (dcon, idx) scrt_loc))], fvars_lst ++ [((dcon, idx), singleLocVar new_var)])  
+                                                                                          -- There is a slight bug here 
+                                                                                          -- Vidush: Since we linearize the SoA location
+                                                                                          -- We do this in cursorize
+                                                                                          -- There we need to make sure we add 9 to the end location!            
+                                                                                          SoA{} -> return (lets, fvars_lst ++ [((dcon, idx), lc)])
+                                                                                     ) ([], []) (getAllFieldLocsSoA scrt_loc)
+                    let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) field_vars) $
                                  (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
                                  LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
                                  Ext (RetE ret_endofs callv)
-                    let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets)
+                    let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets ++ indir_bod_additional_lets)
                     let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
                     return $ (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod')
                   Single{} -> do

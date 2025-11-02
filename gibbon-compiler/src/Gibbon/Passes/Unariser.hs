@@ -175,8 +175,8 @@ unariserExp isTerminal ddfs stk env2 ex =
 
     TimeIt e ty b -> do
       tmp <- gensym $ toVar "timed"
-      e'  <- go isTerminal env2 e
-      return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
+      e'  <- go isTerminal env2 e 
+      dbgTrace (minChatLvl) "Print Ty unarizer: " dbgTrace (minChatLvl) (sdoc (ty, flattenTy ty)) dbgTrace (minChatLvl) "End Ty!\n" return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
 
     WithArenaE v e -> WithArenaE v <$> go isTerminal env2 e
 
