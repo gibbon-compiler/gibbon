@@ -1062,7 +1062,7 @@ INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
     while (run_ptr < end_ptr) {
         frame = (GibShadowstackFrame *) run_ptr;
         printf("ptr=%p, endptr=%p, datatype=%d\n",
-               frame->ptr, frame->endptr, frame->datatype);
+               (void *)frame->ptr, (void *)frame->endptr, frame->datatype);
         run_ptr += sizeof(GibShadowstackFrame);
     }
     return;
