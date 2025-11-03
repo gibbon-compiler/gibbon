@@ -154,8 +154,6 @@ executable gibbon
   main-is:             Frontend.hs
 
   build-depends:       base
-                     , haskell-src-exts
-                     , filepath
                      , gibbon
 
   default-language:    Haskell2010
@@ -195,12 +193,12 @@ test-suite test-gibbon
 executable test-gibbon-examples
   hs-source-dirs:      tests
   main-is:             BenchRunner.hs
-  build-depends:       gibbon,
-                       base, containers, mtl, transformers,
+  build-depends:       base, containers,
                        process, filepath, directory,
                        time, clock, text, bytestring,
                        yaml, optparse-applicative, scientific,
                        prettyprinter, prettyprinter-ansi-terminal
+  build-tool-depends: gibbon:gibbon
 
   default-language:    Haskell2010
   other-modules:       TestRunner
