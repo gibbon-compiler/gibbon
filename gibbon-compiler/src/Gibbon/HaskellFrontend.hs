@@ -8,7 +8,6 @@ module Gibbon.HaskellFrontend
 
 import           Control.Monad
 import           Data.Foldable ( foldrM )
-import           Data.List (foldl')
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
