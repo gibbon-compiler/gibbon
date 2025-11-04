@@ -15,7 +15,7 @@ jobs:
           sudo apt-get update
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt update
-          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11 clang racket
+          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11 clang llvm racket
           sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
       - name: ghc and cabal
         env:
