@@ -376,7 +376,7 @@ compileRTS Config{verbosity,optc,dynflags,cc=ccCmd} = do
   gibbon_dir <- getGibbonDir
   archiver <- chooseArchiver ccCmd
   when (isClangCompiler ccCmd && not ("llvm-ar" `isInfixOf` takeFileName archiver)) $
-    putStrLn $
+    hPutStrLn stderr $
       "[compiler] clang detected but llvm-ar not found; using '" ++ archiver ++ "' instead."
   when (isClangCompiler ccCmd && "llvm-ar" `isInfixOf` takeFileName archiver) $ do
     clangVer <- toolVersionMajor ccCmd
