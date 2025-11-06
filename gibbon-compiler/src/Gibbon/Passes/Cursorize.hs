@@ -10,6 +10,7 @@ import Control.Monad (forM)
 import Data.Foldable (foldlM, foldrM)
 import qualified Data.List as L
 import qualified Data.Map as M
+--import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Gibbon.Common
 import Gibbon.DynFlags
@@ -3378,7 +3379,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
           fromDi <$> pure rhs' 
         else do 
           (rhs', _) <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv env senv rhs
-          pure rhs'
+          pure rhs' 
 
     lookupVariable :: FreeVarsTy -> M.Map FreeVarsTy Var -> PassM Var
     lookupVariable loc fenv = case (M.lookup loc fenv) of
@@ -3561,9 +3562,20 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                         -- Int, Float, Sym, or Bool
                         _ | isScalarTy ty -> do
                           loc_var <- lookupVariable loc fenv
+                          -- This won't work 
+                          -- VS: We need to take union of all branches 
+                          -- Traverse variables used there 
+                          -- Except for indirection or redirectin pointers
+                          --let free_vars_rhs = allFreeVars rhs
+                          --let var_used = dbgTrace (minChatLvl) "Print free vars: " dbgTrace (minChatLvl) (sdoc (free_vars_rhs, rhs)) dbgTrace (minChatLvl) "End free vars.\n" S.member (V v) free_vars_rhs
+                          --(tenv', binds) <- if var_used 
+                          --                  then scalarBinds ty v loc_var tenv
+                          --                  else return (tenv, [])
                           (tenv', binds) <- scalarBinds ty v loc_var tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
-                          let field_cur' = map (\(k@(d, idx), var) -> if (d, idx) == (dcon, field_idx) then (k, (toEndV v)) else (k, var)) _field_cur
+                          let field_cur' = map (\(k@(d, idx), var) -> if ((d, idx) == (dcon, field_idx)) {-&& var_used-} 
+                                                                      then (k, (toEndV v))
+                                                                      else (k, var)) _field_cur
                           let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                           if canBind
                             then do
