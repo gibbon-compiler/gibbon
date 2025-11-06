@@ -504,7 +504,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                                                                                         let eorr' = mkEnd l1 jump_loc eorr
                                                                                                         let (Just jump) = L1.sizeOfTy ty
                                                                                                         let fieldCon = LetLocE (jump_loc) (AfterConstantLE jump l1)
-                                                                                                        return (eorr', [fieldCon] ++ ee, seen, bnds)                                            
+                                                                                                        return (eorr', ee ++ [fieldCon], seen, bnds)                                            
                                                                   ) (eor, [], seenSamePackedTy, []) cases
                                             let in_dcon_lete = LetLocE (singleLocVar in_dbuf_loc) (GetDataConLocSoA scrutloc)
                                             let end_con_lete = LetLocE (getDconLoc final_soa_loc) (AfterConstantLE 1 (singleLocVar in_dbuf_loc))

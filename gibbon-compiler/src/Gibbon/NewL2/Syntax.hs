@@ -595,7 +595,7 @@ allFreeVars ex =
       case ext of
         Old.LetRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
-        Old.LetLocE loc locexp bod -> S.difference ((S.singleton . fromLocVarToFreeVarsTy) loc) (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
+        Old.LetLocE loc locexp bod -> S.difference (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp)) ((S.singleton . fromLocVarToFreeVarsTy) loc)
         Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)
         Old.TagCursor a b-> S.fromList [((fromLocVarToFreeVarsTy . toLocVar)  a),((fromLocVarToFreeVarsTy . toLocVar) b)]
         Old.RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
