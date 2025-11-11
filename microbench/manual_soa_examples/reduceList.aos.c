@@ -1982,3 +1982,6 @@ int main(int argc, char **argv)
     
     return exit_144;
 }
+
+// gcc -std=gnu11  -O3  -flto  -D_GIBBON_GENGC=0  -D_GIBBON_SIMPLE_WRITE_BARRIER=0  -D_GIBBON_EAGER_PROMOTION=1  -o /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.aos.exe -I/home/vidushs/Applications/src/gibbon/gibbon-rts/build -L/home/vidushs/Applications/src/gibbon/gibbon-rts/build -Wl,-rpath=/home/vidushs/Applications/src/gibbon/gibbon-rts/build /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.aos.c /home/vidushs/Applications/src/gibbon/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
+
