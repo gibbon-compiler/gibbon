@@ -1380,7 +1380,7 @@ GibCursorPtr7GibCursorPtr7GibIntProd reduceB(GibCursor cursor_ptr_2775[7],
             //GibCursor pvrtmp_3908[7];
             
             //memcpy(pvrtmp_3908, tmp_struct_63.field1, sizeof(GibCursor [7]));
-            
+
             GibInt pvrtmp_3909 = tmp_struct_63.field2;
             GibInt tailprim_1882 = tmpval_3895 + pvrtmp_3909;
             GibCursorPtr7GibCursorPtr7GibIntProd return_64;
@@ -3329,3 +3329,7 @@ int main(int argc, char **argv)
     
     return exit_198;
 }
+
+
+// gcc -std=gnu11  -O3  -flto  -D_GIBBON_GENGC=0  -D_GIBBON_SIMPLE_WRITE_BARRIER=0  -D_GIBBON_EAGER_PROMOTION=1  -o /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.soa.returns.exe -I/home/vidushs/Applications/src/gibbon/gibbon-rts/build -L/home/vidushs/Applications/src/gibbon/gibbon-rts/build -Wl,-rpath=/home/vidushs/Applications/src/gibbon/gibbon-rts/build /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.soa.returns.c /home/vidushs/Applications/src/gibbon/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
+

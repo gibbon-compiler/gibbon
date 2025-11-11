@@ -1,5 +1,5 @@
 data List = Cons Int List | Nil 
-{-# ANN type List "Factored" #-}
+{-# ANN type List "Linear" #-}
 
 
 mkList :: Int -> List 
@@ -16,14 +16,7 @@ add1 lst = case lst of
 		Nil -> Nil 
 		Cons i rst -> let 
 				i1 = i + 1
-							in Cons i1 (add1 rst)
-
-
---fieldDep :: List -> (Int, List) 
---fieldDep lst = case lst of 
---		     Nil -> (0, Nil) 
---                     Cons i rst -> let (rv, rst') = fieldDep rst 
---				     in (rv + i, Cons (rv + i) rst')
+			       in Cons i1 (add1 rst)
                                           
 
 sumList :: List -> Int 
@@ -36,9 +29,10 @@ id :: List -> List
 id lst = lst
 
 gibbon_main = let 
-		lst = mkList 100
-                lst' = id (add1 lst)
-	       in sumList lst'
+		lst = mkList 10000000
+                lst' = iterate (add1 lst)
+	        sum = iterate (sumList lst')
+               in sum
 
 
 

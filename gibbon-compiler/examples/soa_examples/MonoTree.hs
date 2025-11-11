@@ -4,7 +4,7 @@ module MonoTree where
 data Tree = Leaf Int
           | Node Int Tree Tree
   deriving Show
-{-# ANN type Tree "Factored" #-}
+{-# ANN type Tree "Linear" #-}
 
 mkTree :: Int -> Int -> Tree
 mkTree d acc =
@@ -33,11 +33,10 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = let 
-                tree = id (mkTree 23 0) 
-                tree' = (add1Tree tree)
-                tree'' = (add1Tree tree')
-                val = iterate (rightMost tree'') 
-               in (sumTree tree'') + val
+                tree = (mkTree 23 0) 
+                tree' = iterate (add1Tree tree)
+                val = iterate (sumTree tree') 
+               in val
 
 main :: IO ()
 main = print gibbon_main
