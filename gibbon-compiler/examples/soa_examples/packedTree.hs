@@ -1,9 +1,18 @@
 data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
 data Tree = Node Int Float FloatList List Tree Tree Tree | Leaf
+data ListA = ConsA Int ListA | NilA
+{-# ANN type ListA "Linear" #-}
 {-# ANN type Tree "Factored" #-}
 {-# ANN type List "Linear" #-}
-{-# ANN type FloatList "Linear" #-}
+{-# ANN type FloatList "Factored" #-}
+
+
+mkListA :: Int -> ListA
+mkListA len = if len <= 0
+              then NilA 
+              else ConsA len (mkListA (len - 1))
+
 
 mkList :: Int -> List 
 mkList len = if len <= 0 
@@ -87,8 +96,10 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = 
-      let tree = id (mkTree 5)
-          tree' = (id (add1Tree tree))
-          val = (sumTree tree')
-       in val
+      let --tree = id (mkTree 5)
+          --tree' = (id (add1Tree tree))
+          --val = (sumTree tree')
+          lst = mkListA 100
+       --in val
+       in () 
 
