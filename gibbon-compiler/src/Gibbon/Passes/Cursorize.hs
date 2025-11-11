@@ -4270,14 +4270,41 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                   -- should be added to the dependency environment.
                                   dcon_next <- gensym $ toVar $ (fromVar dcur) ++ "_next"
                                   -- Vidush: TODO: things need to change here since the type in Cursorize Ty needs to change
-                                  let end_fields = map (\(key, varr) -> varr) _field_cur
-                                  let makeCurArr = Ext $ MakeCursorArray (1 + length (end_fields)) ([dcon_next] ++ end_fields)
-                                  let let_mk_cur_arr = (loc_var, [], CursorArrayTy (1 + length (end_fields)), makeCurArr)
-                                  let dcon_nxt = [(dcon_next, [], CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ [let_mk_cur_arr, (v, [], CursorArrayTy (1 + length (end_fields)), VarE (loc_var))]
+                                  end_fields <- mapM (\((dcon, idx), _loc) ->  do
+                                                                                let locTy = (lookupDataCon ddfs dcon) !! idx
+                                                                                case locTy of 
+                                                                                      MkTy2 (PackedTy _ loc) -> do
+                                                                                                                let lty = getCursorizeTyFromLocVar loc
+                                                                                                                case lty of 
+                                                                                                                   CursorTy -> do
+                                                                                                                                 return $ ((dcon, idx), _loc, ([], [_loc]))
+                                                                                                                   CursorArrayTy _sz -> do  
+                                                                                                                                        num_vars <- mapM (\i -> do 
+                                                                                                                                                           var <- gensym "new"
+                                                                                                                                                           return var
+                                                                                                                                                         ) [1.._sz] 
+                                                                                                                                        let bnds = map (\v -> (v, [], CursorTy, Ext (IndexCursorArray _loc (fromJust $ L.elemIndex v num_vars)))) num_vars
+                                                                                                                                        return $ ((dcon, idx), _loc, (bnds, num_vars)) 
+                                                                                      MkTy2 (CursorArrayTy _sz) -> do
+                                                                                                                   num_vars <- mapM (\i -> do 
+                                                                                                                                            var <- gensym "new"
+                                                                                                                                            return var
+                                                                                                                                    ) [1.._sz] 
+                                                                                                                   let bnds = map (\v -> (v, [], CursorTy, Ext (IndexCursorArray _loc (fromJust $ L.elemIndex v num_vars)))) num_vars
+                                                                                                                   return $ ((dcon, idx), _loc, (bnds, num_vars))
+                                                                                      _ -> do
+                                                                                            return $ ((dcon, idx), _loc, ([], [_loc]))
+                                                       ) _field_cur
+                                  let end_fields_tmp = map thd3 end_fields
+                                  let end_fields' = concatMap snd end_fields_tmp
+                                  let end_fields_bnds = concatMap fst end_fields_tmp
+                                  let makeCurArr = Ext $ MakeCursorArray (1 + length (end_fields')) ([dcon_next] ++ end_fields')
+                                  let let_mk_cur_arr = (loc_var, [], CursorArrayTy (1 + length (end_fields')), makeCurArr)
+                                  let dcon_nxt = [(dcon_next, [], CursorTy, Ext $ AddCursor dcur (LitE 1))] ++ end_fields_bnds ++ [let_mk_cur_arr, (v, [], CursorArrayTy (1 + length (end_fields')), VarE (loc_var))]
                                   -- make the new curw type
                                   -- this consists of incrementing the data constructor buffer by one and all the rest of the fields
                                   let curw' = SoAWin dcon_next _field_cur
-                                  bod <- go curw' fenv rst_vlocs rst_tys False denv tenv'' -- (toEndV v)
+                                  bod <- go curw' fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
                                   return $ mkLets dcon_nxt bod
                                 else do
                                   -- Cannot read this. Instead, we add it to DepEnv.
@@ -4296,7 +4323,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                   let tenv'' = M.insert (loc_var) ( ty3_of_field) tenv'
                                   -- Flip canBind to indicate that the subsequent fields
                                   -- should be added to the dependency environment.
-                                  bod <- go curw fenv rst_vlocs rst_tys False denv tenv'' -- (toEndV v)
+                                  bod <- go curw fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
                                   return $
                                     mkLets
                                       [ ((loc_var), [], ty3_of_field2, VarE cur),
@@ -4306,7 +4333,7 @@ unpackDataCon dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPack
                                 else do
                                   -- Cannot read this. Instead, we add it to DepEnv.
                                   let denv' = dbgTrace (minChatLvl) "Printing in packedTy unpack dcon: " dbgTrace (minChatLvl) (sdoc (loc)) dbgTrace (minChatLvl) "End in unpacking dcon.\n" M.insertWith (++) (loc) [((loc_var), [], ty3_of_field2, VarE cur), (v, [], ty3_of_field2, VarE (loc_var))] denv
-                                  bod <- go curw fenv rst_vlocs rst_tys False denv' tenv' -- (toEndV v)
+                                  bod <- go curw fenv rst_vlocs rst_tys canBind denv' tenv' -- (toEndV v)
                                   -- VS: [05.11.2025] This is a hack to ensure that the location variable is not undefined.
                                   -- If we have serialized packed types that are not self recursive, we still have to release
                                   -- The let binding and just adding it to the depenv is not enough.
