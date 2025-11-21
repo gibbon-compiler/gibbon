@@ -62,7 +62,7 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
         LetE (v,locs,ty,rhs) bod -> do
             let freeVarsRhs = case rhs of 
                                    TimeIt _ _ _ -> S.empty {-VS: For now leaving TimeIt as is. TODO: Implement. -}
-                                   AppE _ _ _ -> allFreeVars rhs
+                                   AppE _ _ _ _ -> allFreeVars rhs
                                    DataConE loc _ args -> 
                                        let extractVars argvar = case argvar of
                                                VarE v' -> [fromVarToFreeVarsTy v']
@@ -133,11 +133,11 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
         VarE _ -> pure (ex, delayedExprMap)
         LitSymE _ -> pure (ex, delayedExprMap)
 
-        AppE f lvs ls -> do 
+        AppE f cty lvs ls -> do 
                          results <- mapM (reorderLetExprsFunBody definedVars delayedExprMap) ls
                          let ls' = map fst results
                              delayedExprMap' = M.unions $ map snd results 
-                         pure $ (AppE f lvs ls', delayedExprMap') 
+                         pure $ (AppE f cty lvs ls', delayedExprMap') 
 
         PrimAppE p ls -> do
                          results <- mapM (reorderLetExprsFunBody definedVars delayedExprMap) ls
@@ -329,7 +329,7 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
         VarE v -> pure ex
         LitSymE _ -> pure ex
 
-        AppE f lvs ls -> AppE f lvs <$> mapM (releaseExprsFunBody definedVars delayedExprMap) ls
+        AppE f cty lvs ls -> AppE f cty lvs <$> mapM (releaseExprsFunBody definedVars delayedExprMap) ls
 
         PrimAppE p ls -> PrimAppE p <$> mapM (releaseExprsFunBody definedVars delayedExprMap) ls
 
@@ -499,7 +499,7 @@ ensureLocationsAreDefinedForWrite definedVars ex = do
         LitSymE _ -> pure ex
         VarE _ -> pure ex
         LitSymE _ -> pure ex
-        AppE f lvs ls -> AppE f lvs <$> mapM go ls
+        AppE f cty lvs ls -> AppE f cty lvs <$> mapM go ls
         PrimAppE p ls -> PrimAppE p <$> mapM go ls
         MkProdE ls -> MkProdE <$> mapM go ls 
         DataConE loc k ls -> do 
@@ -620,7 +620,7 @@ removeDuplicateLocations definedLocs ex = case ex of
         LitSymE _ -> pure ex
         VarE _ -> pure ex
         LitSymE _ -> pure ex
-        AppE f lvs ls -> AppE f lvs <$> mapM go ls
+        AppE f cty lvs ls -> AppE f cty lvs <$> mapM go ls
         PrimAppE p ls -> PrimAppE p <$> mapM go ls
         MkProdE ls -> MkProdE <$> mapM go ls 
         DataConE loc k ls -> DataConE loc k <$> mapM go ls

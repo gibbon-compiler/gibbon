@@ -47,7 +47,7 @@ inlineTrivExp = go
       FloatE{}  -> e0
       LitSymE{} -> e0
 
-      AppE v lvs es -> AppE v lvs $ map (go env) es
+      AppE v cty lvs es -> AppE v cty lvs $ map (go env) es
       PrimAppE p es -> PrimAppE p $ map (go env) es
 
       LetE (v,lvs,t,e') e ->

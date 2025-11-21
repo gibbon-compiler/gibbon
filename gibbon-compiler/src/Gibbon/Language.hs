@@ -84,7 +84,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
       LitSymE _ -> S.empty
       ProjE _ e -> gFreeVars e
       IfE a b c -> gFreeVars a `S.union` gFreeVars b `S.union` gFreeVars c
-      AppE v _ ls         -> S.unions $ (S.singleton v) : (L.map gFreeVars ls)
+      AppE v _ _ ls         -> S.unions $ (S.singleton v) : (L.map gFreeVars ls)
       PrimAppE _ ls        -> S.unions (L.map gFreeVars ls)
       LetE (v,_,_,rhs) bod -> gFreeVars rhs `S.union`
                               S.delete v (gFreeVars bod)
@@ -122,7 +122,7 @@ instance (Show (), Out (),
       CharE _      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
-      AppE v _ _   -> outTy $ fEnv env2 # v
+      AppE v _ _ _   -> outTy $ fEnv env2 # v
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
@@ -158,7 +158,7 @@ instance (Show (), Out (),
       CharE _      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
-      AppE v _ _   -> outTy $ fEnv env2 # (fromVarToFreeVarsTy v)
+      AppE v _ _ _   -> outTy $ fEnv env2 # (fromVarToFreeVarsTy v)
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
@@ -203,7 +203,7 @@ instance HasRenamable e l d => Renamable (PreExp e l d) where
       CharE{}   -> ex
       FloatE{}  -> ex
       LitSymE{} -> ex
-      AppE f locs args -> AppE (go f) (gol locs) (gol args)
+      AppE f cty locs args -> AppE (go f) cty (gol locs) (gol args)
       PrimAppE pr args -> PrimAppE pr (gol args)
       LetE (v,locs,ty,rhs) bod -> LetE (go v, gol locs, go ty, go rhs) (go bod)
       IfE a b c  -> IfE (go a) (go b) (go c)
@@ -290,7 +290,7 @@ subst old new ex =
     CharE{}            -> ex
     FloatE{}           -> ex
     LitSymE _          -> ex
-    AppE v loc ls      -> AppE v loc (map go ls)
+    AppE v cty loc ls      -> AppE v cty loc (map go ls)
     PrimAppE p ls      -> PrimAppE p $ L.map go ls
     LetE (v,loc,t,rhs) bod | v == old  -> LetE (v,loc,t,go rhs) bod
                            | otherwise -> LetE (v,loc,t,go rhs) (go bod)
@@ -335,7 +335,7 @@ substE old new ex =
     CharE _         -> ex
     FloatE{}        -> ex
     LitSymE _       -> ex
-    AppE v loc ls   -> AppE v loc (map go ls)
+    AppE v cty loc ls   -> AppE v cty loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls
     LetE (v,loc,t,rhs) bod | (VarE v) == old  -> LetE (v,loc,t,go rhs) bod
                            | otherwise -> LetE (v,loc,t,go rhs) (go bod)
@@ -372,7 +372,7 @@ hasTimeIt rhs =
       CharE _      -> False
       FloatE{}     -> False
       LitSymE _    -> False
-      AppE _ _ _   -> False
+      AppE _ _ _ _   -> False
       PrimAppE _ _ -> False
       ProjE _ e    -> hasTimeIt e
       MkProdE ls   -> any hasTimeIt ls

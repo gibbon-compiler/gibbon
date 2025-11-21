@@ -99,7 +99,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                                                      ) ([], [])  out_locs
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                              LetE (callv,endofs,out_ty,AppE funName (in_locs ++ new_out_locs) args) $
+                              LetE (callv,endofs,out_ty,AppE funName NotTailRec (in_locs ++ new_out_locs) args) $
                               Ext (RetE endofs callv)
               let redir_bod' = foldr (\bnd bod -> Ext $ bnd bod) redir_bod new_loc_bnds
               let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod')
@@ -165,7 +165,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                                                                                      ) ([], []) (getAllFieldLocsSoA scrt_loc)
                     let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) field_vars) $
                                  (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
-                                 LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                                 LetE (callv,endofs,out_ty,AppE funName UnknownTailType (in_locs ++ out_locs) args) $
                                  Ext (RetE ret_endofs callv)
                     let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets ++ indir_bod_additional_lets)
                     let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
@@ -173,7 +173,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                   Single{} -> do
                     let indir_bod = Ext $ LetLocE (jump) (AfterConstantLE 8 (indir_ptrloc)) $
                             (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
-                            LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                            LetE (callv,endofs,out_ty,AppE funName UnknownTailType (in_locs ++ out_locs) args) $
                             Ext (RetE ret_endofs callv)
                     let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
                     return $ (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod)
@@ -219,7 +219,7 @@ followPtrs (Prog ddefs fundefs mainExp) = do
                                                      ) ([], [])  out_locs
               let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
               let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
-                             LetE (callv,endofs,out_ty,AppE funName (in_locs ++ new_out_locs) args) $
+                             LetE (callv,endofs,out_ty,AppE funName UnknownTailType (in_locs ++ new_out_locs) args) $
                              Ext (RetE endofs callv)
               let redir_bod' = foldr (\bnd bod -> Ext $ bnd bod) redir_bod new_loc_bnds
               let redir_br = (redir_dcon,[(indir_ptrv,(indir_ptrloc))],redir_bod')

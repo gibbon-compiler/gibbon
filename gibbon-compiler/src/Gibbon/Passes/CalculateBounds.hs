@@ -103,7 +103,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
             SyncE{}             -> pass
             MapE{}              -> pass
             FoldE{}             -> pass
-            AppE _v _locs _args -> do
+            AppE _v _ _locs _args -> do
               -- TODO traversals
               return (ex, regSzEnv, regTyEnv)
             PrimAppE{}             -> return (ex, regSzEnv, regTyEnv)

@@ -113,7 +113,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
     FloatE{}  -> pure (sbst, FloatTy, ex)
     LitSymE{} -> pure (sbst, SymTy0, ex)
 
-    AppE f _tyapps args -> do
+    AppE f cty _tyapps args -> do
       (sigma, (metas, fn_ty_inst)) <-
         case (M.lookup f venv, M.lookup f fenv) of
           (Just lam_ty, _) -> (lam_ty,) <$> instantiate lam_ty
@@ -136,7 +136,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         --     id 10 ===> id [Int] 10
         let tyapps = map (zonkTy s3) metas
             s5 = s2 <> s3 <> s4
-        pure (s5, zonkTy s5 fresh, AppE f tyapps (map (zonkExp s5) args_tc))
+        pure (s5, zonkTy s5 fresh, AppE f cty tyapps (map (zonkExp s5) args_tc))
 
     PrimAppE pr args -> do
       (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
@@ -699,9 +699,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
     Ext (BenchE fn tyapps args b) ->
       if is_main
       then do
-        (s1, ty, e') <- go (AppE fn tyapps args)
+        (s1, ty, e') <- go (AppE fn NotTailRec tyapps args)
         case e' of
-          AppE fn' tyapps' args' ->
+          AppE fn' _ tyapps' args' ->
             pure (s1, zonkTy s1 ty, Ext (BenchE fn' tyapps' args' b))
           _ -> err $ text "BenchE"
       else err $ text "'bench' can only be used as a tail of the main expression." <+> exp_doc
@@ -741,9 +741,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       pure (s1, ty', WithArenaE v e1')
 
     SpawnE fn tyapps args -> do
-      (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (AppE fn tyapps args)
+      (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (AppE fn NotTailRec tyapps args)
       case e' of
-        AppE fn' tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
+        AppE fn' _ tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
         _ -> err $ text "SpawnE: not a saturated function"
 
     SyncE   -> pure (sbst, ProdTy [], SyncE)
@@ -932,8 +932,8 @@ zonkExp s ex =
     CharE{}   -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
-    AppE f tyapps args -> let tyapps1 = map (zonkTy s) tyapps
-                          in AppE f tyapps1 (map go args)
+    AppE f cty tyapps args -> let tyapps1 = map (zonkTy s) tyapps
+                          in AppE f cty tyapps1 (map go args)
     PrimAppE pr args  ->
       let pr' = case pr of
                   VAllocP  ty -> VAllocP  (zonkTy s ty)
@@ -1027,8 +1027,8 @@ substTyVarExp s ex =
     CharE{}   -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
-    AppE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
-                         in AppE f tyapps1 (map go arg)
+    AppE f cty tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
+                         in AppE f cty tyapps1 (map go arg)
     PrimAppE pr args  -> PrimAppE (substTyVarPrim s pr) (map go args)
     -- Let doesn't store any tyapps.
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTyVar s ty, go rhs) (go bod)

@@ -168,7 +168,7 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
     CharE{}   -> return ex
     FloatE{}  -> return ex
     LitSymE{} -> return ex
-    AppE f locs args -> AppE f locs <$> mapM go args
+    AppE f _cty locs args -> AppE f _cty locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args
     LetE (v,loc,ty,rhs) bod -> do
       LetE <$> (v,loc,ty,) <$> go rhs <*> go bod
@@ -199,7 +199,7 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
         CharE{}   -> ex1
         FloatE{}  -> ex1
         LitSymE{} -> ex1
-        AppE f locs args -> AppE f locs $ map changeSpawnToApp args
+        AppE f _cty locs args -> AppE f _cty locs $ map changeSpawnToApp args
         PrimAppE f args  -> PrimAppE f $ map changeSpawnToApp args
         LetE (_,_,_,SyncE) bod -> changeSpawnToApp bod
         LetE (v,loc,ty,rhs) bod -> do
@@ -212,7 +212,7 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
           CaseE (changeSpawnToApp scrt) $ map (\(a,b,c) -> (a,b, changeSpawnToApp c)) mp
         TimeIt e ty b  -> TimeIt (changeSpawnToApp e) ty b
         WithArenaE v e -> WithArenaE v (changeSpawnToApp e)
-        SpawnE f locs args -> AppE f locs $ map changeSpawnToApp args
+        SpawnE f locs args -> AppE f UnknownTailType locs $ map changeSpawnToApp args
         SyncE   -> SyncE
         Ext{}   -> ex1
         MapE{}  -> error "addRANExp: TODO MapE"
@@ -526,7 +526,7 @@ genRelOffsetsFunNameFn needRANsTyCons ddfs DDef{tyName, dataCons} = do
                 bod <- do
                        let bod0 acc = foldr (\(ty,x,y) acc ->
                                                if isPackedTy ty
-                                               then LetE (y, [], ty, AppE (mkRelOffsetsFunName (tyToDataCon ty)) [] [VarE x]) acc
+                                               then LetE (y, [], ty, AppE (mkRelOffsetsFunName (tyToDataCon ty)) UnknownTailType [] [VarE x]) acc
                                                else LetE (y, [], ty, VarE x) acc)
                                             acc
                                             (L.zip3 tys xs ys)

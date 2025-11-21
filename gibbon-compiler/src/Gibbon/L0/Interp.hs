@@ -25,7 +25,7 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) Var where
                 Nothing -> error $ "L0.Interp: Unbound function reference: " ++ sdoc f
                 Just fn -> pure $ VLam (funArgs fn) (funBody fn) M.empty
         BenchE fn locs args _b ->
-          gInterpExp rc valenv ddefs fundefs (AppE fn locs args)
+          gInterpExp rc valenv ddefs fundefs (AppE fn NotTailRec locs args)
         ParE0 ls -> gInterpExp rc valenv ddefs fundefs (MkProdE ls)
         PrintPacked _ty _arg -> pure $ VProd []
         CopyPacked _ty arg -> gInterpExp rc valenv ddefs fundefs arg

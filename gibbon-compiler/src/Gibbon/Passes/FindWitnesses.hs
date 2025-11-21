@@ -113,7 +113,7 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
         CharE c        -> handle' $ CharE c
         FloatE n       -> handle' $ FloatE n
         LitSymE v      -> handle' $ LitSymE v
-        AppE v locs ls -> handle' $ AppE v locs (map goClear ls)
+        AppE v cty locs ls -> handle' $ AppE v cty locs (map goClear ls)
 
         SpawnE v locs ls -> handle' $ SpawnE v locs (map goClear ls)
         SyncE            -> SyncE

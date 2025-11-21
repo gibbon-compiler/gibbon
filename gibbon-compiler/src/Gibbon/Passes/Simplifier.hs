@@ -44,7 +44,7 @@ inlineFuns (Prog ddefs fundefs main) = do
     go :: PreExpF E1Ext () (UrTy ()) Exp1 -> PassM Exp1
     go ex =
       case ex of
-        AppEF f [] args -> do
+        AppEF f cty [] args -> do
             let fn = fundefs M.! f
             if funInline (funMeta fn) == Inline && funRec (funMeta fn) == NotRec
               then do
@@ -54,7 +54,7 @@ inlineFuns (Prog ddefs fundefs main) = do
                 pure $ mkLets binds funBody
               else do
                 args' <- mapM (go . project) args
-                pure $ AppE f [] args'
+                pure $ AppE f cty [] args'
         _ -> pure $ embed ex
 
 deadFunElim :: Prog1 -> PassM Prog1
@@ -119,7 +119,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go :: M.Map LocVar (LocVar,Int) -> Exp2 -> Exp2
     go env ex =
       case ex of
-        AppE f locs args -> AppE f locs (map (go env) args)
+        AppE f cty locs args -> AppE f cty locs (map (go env) args)
         PrimAppE p args -> PrimAppE p (map (go env) args)
         LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go env rhs)) (go env bod)
         IfE a b c -> IfE (go env a) (go env b) (go env c)
@@ -152,7 +152,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go2 :: Exp2 -> Exp2
     go2 ex =
       case ex of
-        AppE f locs args -> AppE f locs (map go2 args)
+        AppE f cty locs args -> AppE f cty locs (map go2 args)
         PrimAppE p args -> PrimAppE p (map go2 args)
         LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go2 rhs)) (go2 bod)
         IfE a b c -> IfE (go2 a) (go2 b) (go2 c)
@@ -182,7 +182,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go0 :: M.Map LocExp LocVar -> M.Map LocVar LocVar -> Exp2 -> Exp2
     go0 env1 env2 ex =
       case ex of
-        AppE f locs args -> AppE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        AppE f cty locs args -> AppE f cty (map (substloc env2) locs) (map (go0 env1 env2) args)
         PrimAppE p args -> PrimAppE p (map (go0 env1 env2) args)
         LetE (v,locs,ty,rhs) bod -> LetE (v,locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
         IfE a b c -> IfE (go0 env1 env2 a) (go0 env1 env2 b) (go0 env1 env2 c)

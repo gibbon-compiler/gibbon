@@ -33,7 +33,7 @@ interpChatter = 7
 instance InterpExt () Exp1 (E1Ext () Ty1) Var where
   gInterpExt rc valenv ddefs fundefs ex =
       case ex of
-          BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn locs args)
+          BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn NotTailRec locs args)
           AddFixed{}   -> error "L1.Interp: AddFixed not handled."
           StartOfPkdCursor{} -> error "L1.Interp: StartOfPkdCursor not handled."
 
@@ -95,7 +95,7 @@ interp rc valenv ddefs fenv = go valenv
                               return $ ls !!! ix
 
           -- N.B. this AppE is shared by the interpreters for L0 and L1
-          AppE f _ ls -> do
+          AppE f _ _ ls -> do
             ls' <- mapM (go env) ls
             -- Look in the local environment first
             case M.lookup f env of
@@ -159,7 +159,7 @@ interp rc valenv ddefs fenv = go valenv
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! val
 
-          SpawnE f locs args -> go env (AppE f locs args)
+          SpawnE f locs args -> go env (AppE f NotTailRec locs args)
           SyncE -> pure $ VInt (-1)
 
           WithArenaE v e -> do

@@ -513,7 +513,7 @@ updateAvailVars froms tos ex =
     CharE _         -> ex
     FloatE{}        -> ex
     LitSymE _       -> ex
-    AppE v loc ls   -> AppE v loc (map go ls)
+    AppE v cty loc ls   -> AppE v cty loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls
     LetE (v,loc,t,rhs) bod -> LetE (v,loc,t,go rhs) (go bod)
     ProjE i e         -> ProjE i (go e)

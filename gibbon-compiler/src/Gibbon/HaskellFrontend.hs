@@ -548,7 +548,7 @@ desugarExp type_syns toplevel e =
                    pure $ VarE v
                  -- Otherwise, 'v' is a top-level value binding, which we
                  -- encode as a function which takes no arguments.
-                 _ -> pure $ AppE v [] []
+                 _ -> pure $ AppE v UnknownTailType [] []
              Nothing -> pure $ VarE v
     Lit _ lit  -> desugarLiteral lit
 
@@ -783,14 +783,14 @@ desugarExp type_syns toplevel e =
                     pure $ Ext (LinearExt (LseqE e2' undefined))
                   else if S.member f keywords
                   then error $ "desugarExp: Keyword not handled: " ++ sdoc f
-                  else AppE f [] <$> (: []) <$> desugarExp type_syns toplevel e2
+                  else AppE f UnknownTailType [] <$> (: []) <$> desugarExp type_syns toplevel e2
           (DataConE tyapp c as) -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp type_syns toplevel e2
           (Ext (ParE0 ls)) -> do
             e2' <- desugarExp type_syns toplevel e2
             pure $ Ext $ ParE0 (ls ++ [e2'])
-          (AppE f [] ls) -> do
+          (AppE f cty [] ls) -> do
             e2' <- desugarExp type_syns toplevel e2
-            pure $ AppE f [] (ls ++ [e2'])
+            pure $ AppE f cty [] (ls ++ [e2'])
 
           (Ext (BenchE fn [] ls b)) -> do
             e2' <- desugarExp type_syns toplevel e2
@@ -828,9 +828,9 @@ desugarExp type_syns toplevel e =
             e2' <- desugarExp type_syns toplevel e2
             pure (Ext (LinearExt (LseqE a e2')))
 
-          (Ext (LinearExt (ToLinearE (AppE f [] ls)))) -> do
+          (Ext (LinearExt (ToLinearE (AppE f cty [] ls)))) -> do
             e2' <- desugarExp type_syns toplevel e2
-            pure (Ext (LinearExt (ToLinearE (AppE f [] (ls ++ [e2'])))))
+            pure (Ext (LinearExt (ToLinearE (AppE f cty [] (ls ++ [e2'])))))
 
           (Ext (LinearExt (ToLinearE (DataConE tyapp dcon ls)))) -> do
             e2' <- desugarExp type_syns toplevel e2
@@ -842,7 +842,7 @@ desugarExp type_syns toplevel e =
 
           (Ext (LinearExt (ToLinearE (VarE fn)))) -> do
             e2' <- desugarExp type_syns toplevel e2
-            pure (Ext (LinearExt (ToLinearE (AppE fn [] [e2']))))
+            pure (Ext (LinearExt (ToLinearE (AppE fn UnknownTailType [] [e2']))))
 
           f -> error ("desugarExp: Couldn't parse function application: (" ++ show f ++ ")")
 
@@ -1244,7 +1244,7 @@ fixupSpawn ex =
     CharE{}    -> ex
     FloatE{}   -> ex
     LitSymE{}  -> ex
-    AppE fn tyapps args -> AppE fn tyapps (map go args)
+    AppE fn cty tyapps args -> AppE fn cty tyapps (map go args)
     PrimAppE pr args -> PrimAppE pr (map go args)
     DataConE dcon tyapps args -> DataConE dcon tyapps (map go args)
     ProjE i e  -> ProjE i $ go e
@@ -1257,7 +1257,7 @@ fixupSpawn ex =
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE _ _ args ->
       case args of
-          [(AppE fn tyapps ls)] -> SpawnE fn tyapps ls
+          [(AppE fn _cty tyapps ls)] -> SpawnE fn tyapps ls
           _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
     SyncE   -> SyncE
     MapE{}  -> error $ "fixupSpawn: TODO MapE"
@@ -1289,7 +1289,7 @@ verifyBenchEAssumptions bench_allowed ex =
     CharE{}    -> ex
     FloatE{}   -> ex
     LitSymE{}  -> ex
-    AppE fn tyapps args -> AppE fn tyapps (map not_allowed args)
+    AppE fn cty tyapps args -> AppE fn cty tyapps (map not_allowed args)
     PrimAppE pr args -> PrimAppE pr (map not_allowed args)
     DataConE dcon tyapps args -> DataConE dcon tyapps (map not_allowed args)
     ProjE i e  -> ProjE i $ not_allowed e
@@ -1347,8 +1347,8 @@ desugarLinearExts (Prog ddefs fundefs main) = do
         CharE{}   -> pure ex
         FloatE{}  -> pure ex
         LitSymE{} -> pure ex
-        AppE f tyapps args -> do args' <- mapM go args
-                                 pure (AppE f tyapps args')
+        AppE f cty tyapps args -> do args' <- mapM go args
+                                     pure (AppE f cty tyapps args')
         PrimAppE pr args   -> do args' <- mapM go args
                                  pure (PrimAppE pr args')
         LetE (v,locs,ty,rhs) bod -> do

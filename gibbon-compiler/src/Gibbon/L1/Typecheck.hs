@@ -43,7 +43,7 @@ tcExp ddfs env exp =
     FloatE{}  -> return FloatTy
     LitSymE _ -> return SymTy
 
-    AppE v locs ls -> do
+    AppE v _ locs ls -> do
       let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
@@ -661,7 +661,7 @@ tcExp ddfs env exp =
       return ty
 
     SpawnE v locs ls -> do
-      ty <- go (AppE v locs ls)
+      ty <- go (AppE v NotTailRec locs ls)
       if isScalarTy ty || isPackedTy ty
       then pure ty
       else case ty of
@@ -680,7 +680,7 @@ tcExp ddfs env exp =
       tcExp ddfs env' e
 
     Ext (BenchE fn tyapps args _b) -> do
-      go (AppE fn tyapps args)
+      go (AppE fn NotTailRec tyapps args)
 
     Ext (AddFixed{}) ->
       pure CursorTy

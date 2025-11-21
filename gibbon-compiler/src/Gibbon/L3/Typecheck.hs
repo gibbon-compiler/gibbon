@@ -284,7 +284,7 @@ tcExp isPacked ddfs env exp = do
     FloatE{}  -> return FloatTy
     LitSymE _ -> return SymTy
 
-    AppE v locs ls -> do
+    AppE v _ locs ls -> do
       let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
@@ -891,7 +891,7 @@ tcExp isPacked ddfs env exp = do
       ty <- go e
       return ty
 
-    SpawnE fn locs args -> go (AppE fn locs args)
+    SpawnE fn locs args -> go (AppE fn NotTailRec locs args)
     SyncE -> pure voidTy
 
     WithArenaE v e -> do

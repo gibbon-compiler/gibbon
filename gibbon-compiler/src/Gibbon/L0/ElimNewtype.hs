@@ -61,7 +61,7 @@ elimE cns tns dds e0 = case e0 of
   CharE _ -> e0
   FloatE _ -> e0
   LitSymE _ -> e0
-  AppE var ty es -> AppE var ty (f <$> es)
+  AppE var cty ty es -> AppE var cty ty (f <$> es)
   PrimAppE p es -> PrimAppE (elimPrim tns p) (f <$> es)
   LetE (var, u, t, e1) e2 -> LetE (var, g <$> u, g t, f e1) (f e2)
   IfE e1 e2 e3 -> IfE (f e1) (f e2) (f e3)

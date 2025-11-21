@@ -149,7 +149,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       LitSymE _v -> return (SymTy, tstatein)
 
-      AppE v ls args ->
+      AppE v _ ls args ->
           -- Checking function application involves a few steps:
           --  (1) We need to make sure the inputs/ouptuts line up with the expected
           --      types for the function.
@@ -684,7 +684,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
 
-      LetE (v, _ls, ty, e1@(AppE _f _ls1 _)) e2 -> do
+      LetE (v, _ls, ty, e1@(AppE _f _ _ls1 _)) e2 -> do
         (ty1,tstate1) <- recur tstatein e1
         ensureEqualTyNoLoc exp ty1 ty
         let zipped = zip _ls _ls1
@@ -773,7 +773,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                return (ty1,tstate1)
 
       SpawnE f locs args ->
-        tcExp ddfs env funs constrs regs tstatein (AppE f locs args)
+        tcExp ddfs env funs constrs regs tstatein (AppE f NotTailRec locs args)
 
       SyncE -> pure (ProdTy [], tstatein)
 
