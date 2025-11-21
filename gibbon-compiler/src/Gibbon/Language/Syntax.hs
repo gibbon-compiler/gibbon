@@ -682,7 +682,7 @@ data UrTy loc
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable, Out)
 
-
+  
 --------------------------------------------------------------------------------
 -- Generic Ops
 --------------------------------------------------------------------------------
