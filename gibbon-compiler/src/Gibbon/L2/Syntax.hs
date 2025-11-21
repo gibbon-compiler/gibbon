@@ -653,10 +653,10 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
       CharE{}      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
-      AppE v locs _ -> let fnty  = fEnv env2 # v
-                           outty = arrOut fnty
-                           mp = M.fromList $ zip (allLocVars fnty) locs
-                       in substLoc mp outty
+      AppE v _ locs _ -> let fnty  = fEnv env2 # v
+                             outty = arrOut fnty
+                             mp = M.fromList $ zip (allLocVars fnty) locs
+                            in substLoc mp outty
 
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
@@ -696,10 +696,10 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
       CharE{}      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
-      AppE v locs _ -> let fnty  = fEnv env2 # (fromVarToFreeVarsTy v)
-                           outty = arrOut fnty
-                           mp = M.fromList $ zip (allLocVars fnty) locs
-                       in substLoc mp outty
+      AppE v _ locs _ -> let fnty  = fEnv env2 # (fromVarToFreeVarsTy v)
+                             outty = arrOut fnty
+                             mp = M.fromList $ zip (allLocVars fnty) locs
+                          in substLoc mp outty
 
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
@@ -896,11 +896,11 @@ revertExp ex =
     CharE c   -> CharE c
     FloatE n  -> FloatE n
     LitSymE v -> LitSymE v
-    AppE v _ args   -> AppE v [] (L.map revertExp args)
+    AppE v cty _ args   -> AppE v cty [] (L.map revertExp args)
     PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
     LetE (v,_,ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
       let PackedTy tycon _ =  ty in
-          LetE (v,[],(stripTyLocs ty), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
+          LetE (v,[],(stripTyLocs ty), AppE (mkCopyFunName tycon) NotTailRec [] [revertExp arg]) (revertExp bod)
     LetE (v,_,ty,rhs) bod ->
       LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
     IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
@@ -961,7 +961,7 @@ occurs w ex =
     CharE{}   -> False
     FloatE{}  -> False
     LitSymE{} -> False
-    AppE _ _ ls   -> any go ls
+    AppE _ _ _ ls   -> any go ls
     PrimAppE _ ls -> any go ls
     LetE (_,_,_,rhs) bod -> go rhs || go bod
     IfE a b c   -> go a || go b || go c
@@ -1085,7 +1085,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           CharE{}   -> acc
           FloatE{}  -> acc
           LitSymE{} -> acc
-          AppE _ _ args   -> foldl go acc args
+          AppE _ _ _ args   -> foldl go acc args
           PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
             let acc_rhs = go acc rhs
@@ -1164,7 +1164,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
 allFreeVars :: Exp2 -> S.Set FreeVarsTy
 allFreeVars ex =
   case ex of
-    AppE _ locs args -> S.fromList (map fromLocVarToFreeVarsTy locs) `S.union` (S.unions (map allFreeVars args))
+    AppE _ _ locs args -> S.fromList (map fromLocVarToFreeVarsTy locs) `S.union` (S.unions (map allFreeVars args))
     PrimAppE _ args -> (S.unions (map allFreeVars args))
     LetE (v,locs,_,rhs) bod -> (S.fromList (map fromLocVarToFreeVarsTy locs) `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
                                `S.difference` S.singleton (V v)
@@ -1242,8 +1242,8 @@ changeAppToSpawn v args2 ex1 =
     CharE{}   -> ex1
     FloatE{}  -> ex1
     LitSymE{} -> ex1
-    AppE f locs args | v == f && args == args2 -> SpawnE f locs $ map go args
-    AppE f locs args -> AppE f locs $ map go args
+    AppE f _ locs args | v == f && args == args2 -> SpawnE f locs $ map go args
+    AppE f cty locs args -> AppE f cty locs $ map go args
     PrimAppE f args  -> PrimAppE f $ map go args
     LetE (v,loc,ty,rhs) bod -> LetE (v,loc,ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)

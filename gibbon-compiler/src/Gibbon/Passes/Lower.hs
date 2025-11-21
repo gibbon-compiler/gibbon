@@ -470,7 +470,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           CharE{}   -> syms
           FloatE{}  -> syms
           LitSymE v -> S.insert (fromVar v) syms
-          AppE _ _ args   -> gol args
+          AppE _ _ _ args   -> gol args
           PrimAppE _ args -> gol args
           LetE (_,_,_,rhs) bod -> go rhs <> go bod
           IfE a b c  -> go a <> go b <> go c
@@ -1000,27 +1000,27 @@ lower Prog{fundefs,ddefs,mainExp} = do
              (tail free_reg sym_tbl bod)
     --------------------------------End PrimApps----------------------------------
 
-    AppE v _ ls -> return $ T.TailCall v (map (triv sym_tbl "operand") ls)
+    AppE v _ _ ls -> return $ T.TailCall v (map (triv sym_tbl "operand") ls)
 
     SpawnE{} -> error "lower: Unbound SpanwnE"
     SyncE    -> error "lower: Unbound SpanwnE"
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
-    ProjE ix ( (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
+    ProjE ix ( (AppE f _cty _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
         let (inTs, _) = funTy (fundefs # f)
         tail free_reg sym_tbl $
           LetE ( tmp
                   , []
                   , fmap (const ()) (inTs !! ix)
-                  , ProjE ix (AppE f [] e))
+                  , ProjE ix (AppE f _cty [] e))
              (VarE tmp)
 
-    LetE (_,_,_, ( (L3.AppE f _ _))) _
+    LetE (_,_,_, ( (L3.AppE f _cty _ _))) _
         | M.notMember f fundefs -> error $ "Application of unbound function: "++show f
 
     -- Non-tail free_reg call:
-    LetE (vr, _,t, projOf -> (stk, ( (L3.AppE f _ ls)))) bod -> do
+    LetE (vr, _,t, projOf -> (stk, ( (L3.AppE f _cty _ ls)))) bod -> do
         let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
@@ -1042,7 +1042,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail free_reg sym_tbl bod')
 
     LetE (v, _,ty, L3.SpawnE fn locs args) bod -> do
-      T.LetCallT{..} <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
+      T.LetCallT{..} <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn UnknownTailType locs args) bod)
       pure $ T.LetCallT  { T.async = True, .. }
 
     LetE (_,_,_,  SyncE) bod -> do

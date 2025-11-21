@@ -14,7 +14,7 @@
 module Gibbon.Language.Syntax
   (
     -- * Datatype definitions
-    DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..)
+    DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..), TailRecType(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef, 
   getCursorTypeForDataCon, getCursorTypeFromTy
@@ -270,6 +270,7 @@ data FunInline = Inline | NoInline | Inlineable
 data TailRecType =   NotTailRec 
                    | TailCall 
                    | TailModuloCons
+                   | UnknownTailType
                    deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data FunMeta = FunMeta

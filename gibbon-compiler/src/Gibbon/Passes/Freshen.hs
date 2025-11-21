@@ -170,11 +170,11 @@ freshExp venv tvenv exp =
         Nothing -> return $ VarE (cleanFunName v)
         Just v' -> return $ VarE (cleanFunName v')
 
-    AppE v locs ls -> assert ([] == locs) $ do
+    AppE v cty locs ls -> assert ([] == locs) $ do
       ls' <- mapM go ls
       case M.lookup v venv of
-        Nothing -> return $ AppE (cleanFunName v) [] ls'
-        Just v' -> return $ AppE (cleanFunName v') [] ls'
+        Nothing -> return $ AppE (cleanFunName v) cty [] ls'
+        Just v' -> return $ AppE (cleanFunName v') cty [] ls'
 
     PrimAppE p es -> do
       es' <- mapM go es
@@ -333,11 +333,11 @@ freshExp1 vs exp =
         Nothing -> return $ VarE v
         Just v' -> return $ VarE v'
 
-    AppE v locs ls -> assert ([] == locs) $ do
+    AppE v cty locs ls -> assert ([] == locs) $ do
       ls' <- mapM (freshExp1 vs) ls
       case M.lookup v vs of
-        Nothing -> return $ AppE (cleanFunName v) [] ls'
-        Just v' -> return $ AppE (cleanFunName v') [] ls'
+        Nothing -> return $ AppE (cleanFunName v) cty [] ls'
+        Just v' -> return $ AppE (cleanFunName v') cty [] ls'
 
     PrimAppE p es -> do
       es' <- mapM (freshExp1 vs) es

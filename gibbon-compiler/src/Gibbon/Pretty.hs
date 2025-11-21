@@ -344,7 +344,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           CharE i -> quotes (char i)
           FloatE i  -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
-          AppE v locs ls -> parens $
+          AppE v _cty locs ls -> parens $
                              pprintWithStyle sty v <+>
                              (brackets $ hcat (punctuate "," (map pprint locs))) <+>
                              (pprintWithStyle sty ls)
@@ -694,7 +694,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
           CharE i -> char i
           FloatE i -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
-          AppE v _locs ls -> pprintWithStyle sty v <+>
+          AppE v _cty _locs ls -> pprintWithStyle sty v <+>
                             (hsep $ map (ppExp monadic env2) ls)
           PrimAppE pr es ->
               case pr of

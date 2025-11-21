@@ -2525,7 +2525,7 @@ findRegInRegion r1 r2 =
 cursorizeAppE :: M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var)
 cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
-    AppE f locs args -> do
+    AppE f _cty locs args -> do
       let fnTy = case M.lookup f fundefs of
             Just g -> funTy g
             Nothing -> error $ "Unknown function: " ++ sdoc f
@@ -2648,10 +2648,11 @@ cursorizeAppE freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
       --                          Just v -> v
       --                          Nothing -> error "cursorizeAppE: unexpected location variable"
       let bod = case locs of
-            [] -> AppE f [] starts
+            [] -> AppE f _cty [] starts
             _ ->
               AppE
                 f
+                _cty
                 []
                 ( map
                     ( \loc ->
@@ -2801,10 +2802,10 @@ cursorizeSpawn freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv 
     LetE (v, locs, MkTy2 ty, (SpawnE fn applocs args)) bod
       | isPackedTy ty -> do
           (rhs', freeVarToVarEnv') <- do 
-                  (expr, freeVarToVarEnv') <- cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
+                  (expr, freeVarToVarEnv') <- cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
                   return (fromDi expr, freeVarToVarEnv') 
           let rhs'' = case rhs' of
-                AppE fn' applocs' args' -> SpawnE fn' applocs' args'
+                AppE fn' _cty applocs' args' -> SpawnE fn' applocs' args'
                 _ -> error "cursorizeSpawn"
           fresh <- gensym "tup_packed"
           let ty' = case locs of
@@ -2846,10 +2847,10 @@ cursorizeSpawn freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv 
           return (mkLets bnds bod'', M.union freeVarToVarEnv' freeVarToVarEnv'')
       | hasPacked ty -> do
           (rhs', freeVarToVarEnv') <- do 
-                   (expr, freeVarToVarEnv') <- cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
+                   (expr, freeVarToVarEnv') <- cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn _cty applocs args)
                    return (fromDi expr, freeVarToVarEnv') 
           let rhs'' = case rhs' of
-                AppE fn' applocs' args' -> SpawnE fn' applocs' args'
+                AppE fn' _ applocs' args' -> SpawnE fn' applocs' args'
                 _ -> error $ "cursorizeSpawn: this should've been an AppE. Got" ++ sdoc rhs'
           fresh <- gensym "tup_haspacked"
           let ty' = case locs of
@@ -2873,7 +2874,7 @@ cursorizeSpawn freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv 
       | otherwise -> do
           (rhs', freeVarToVarEnv') <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
           let rhs'' = case rhs' of
-                AppE fn' applocs' args' -> SpawnE fn' applocs' args'
+                AppE fn' _ applocs' args' -> SpawnE fn' applocs' args'
                 _ -> error "cursorizeSpawn"
           case locs of
             [] -> do 

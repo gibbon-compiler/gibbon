@@ -139,7 +139,7 @@ exp ddfs env2 e0 =
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
-    AppE f lvs ls     -> gols (AppE f lvs)  ls "AppE"
+    AppE f cty lvs ls     -> gols (AppE f cty lvs)  ls "AppE"
     PrimAppE p ls     -> gols (PrimAppE p)  ls "Prm"
     MkProdE ls        -> gols  MkProdE      ls "Prd"
     DataConE loc k ls -> gols (DataConE loc k) ls "Pkd"
@@ -239,7 +239,7 @@ flattenExp0 ddfs env2 e0 =
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
-    AppE f lvs ls     -> gols (AppE f lvs)  ls "AppE"
+    AppE f cty lvs ls     -> gols (AppE f cty lvs)  ls "AppE"
     PrimAppE p ls     -> gols (PrimAppE p)  ls "Prm"
     MkProdE ls        -> gols  MkProdE      ls "Prd"
     DataConE loc k ls -> gols (DataConE loc k) ls "Pkd"

@@ -88,7 +88,7 @@ inferExp ddfs fenv env dps expr =
     FloatE{}  -> (S.empty, Nothing)
     LitSymE _ -> (S.empty, Nothing)
 
-    AppE v locs _e ->
+    AppE v _ locs _e ->
       -- Substitue locations used at this particular call-site in the function
       -- effects computed so far
       let orgLocs = allLocVars (fenv # v)

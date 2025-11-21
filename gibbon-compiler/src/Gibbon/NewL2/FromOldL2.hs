@@ -41,10 +41,10 @@ fromOldL2Fn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
 fromOldL2Exp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Var Ty2 -> Exp2 -> PassM New.Exp2
 fromOldL2Exp ddefs fundefs locenv env2 ex =
   case ex of
-    AppE f locs args -> do
+    AppE f cty locs args -> do
       args' <- mapM (go locenv env2) args
       let locargs = map (locenv # ) locs
-      pure $ AppE f locargs args'
+      pure $ AppE f cty locargs args'
 
     SpawnE f locs args -> do
       args' <- mapM (go locenv env2) args
@@ -60,12 +60,12 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
       | SpawnE f applocs args <- rhs
       , not (null ewitnesses) ->
-          do let e = LetE (v, ewitnesses, ty, AppE f applocs args) bod
-             (LetE (v', ewitnesses', ty', AppE f' applocs' args') bod') <-
+          do let e = LetE (v, ewitnesses, ty, AppE f NotTailRec applocs args) bod
+             (LetE (v', ewitnesses', ty', AppE f' NotTailRec applocs' args') bod') <-
                go locenv env2 e
              pure $ LetE (v', ewitnesses', ty', SpawnE f' applocs' args') bod'
 
-      | AppE f _applocs args <- rhs
+      | AppE f cty _applocs args <- rhs
       , not (null ewitnesses) ->
           do let fty = lookupFEnv f env2
                  effs = arrEffs fty
@@ -343,10 +343,10 @@ toOldL2Fn f@FunDef{funTy,funBody} = do
 toOldL2Exp :: New.Exp2 -> PassM Exp2
 toOldL2Exp ex =
   case ex of
-    AppE f locs args -> do
+    AppE f cty locs args -> do
       args' <- mapM go args
       let locargs = map New.toLocVar locs
-      pure $ AppE f locargs args'
+      pure $ AppE f cty locargs args'
 
     SpawnE f locs args -> do
       args' <- mapM go args

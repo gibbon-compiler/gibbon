@@ -48,7 +48,7 @@ shakeTreeExp = go
     (CharE i)           -> CharE i
     (FloatE i)         -> FloatE i
     (LitSymE v)        -> LitSymE v
-    (AppE f locs es)   -> AppE f locs $ map go es
+    (AppE f cty locs es)   -> AppE f cty locs $ map go es
     (PrimAppE pr es)   -> PrimAppE pr $ map go es
     (IfE e1 e2 e3)     -> IfE (go e1) (go e2) (go e3)
 
@@ -97,7 +97,7 @@ hasEffect rhs =
       -- These might have effects on output cursors, but the output cursors aren't used
       -- again!  We need to tie the knot in dataflow dependencies, making the start (value)
       -- depend on the end (final cursor).
-      AppE _ _ _ -> True  -- For now, don't drop.
+      AppE _ _ _ _ -> True  -- For now, don't drop.
 
       PrimAppE _ _ -> False -- No prims have effects.
 

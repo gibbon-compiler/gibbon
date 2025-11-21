@@ -55,7 +55,7 @@ removeReDefsExp env ex =
     CharE {} -> pure ex
     FloatE {} -> pure ex
     LitSymE {} -> pure ex
-    AppE f locs args -> AppE f locs <$> mapM go args
+    AppE f cty locs args -> AppE f cty locs <$> mapM go args
     PrimAppE pr args -> PrimAppE pr <$> mapM go args
     IfE a b c -> do
       a' <- go a

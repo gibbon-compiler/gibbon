@@ -141,7 +141,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                         reg_to = case (reg_env # to) of 
                                           SingleR v' -> v'
                                           SoARv _ _ -> error "parAlloc: did not expect an SoA region!"
-                        rhs = Ext $ IndirectionE tycon indr_dcon (from, singleLocVar reg_from) (to, singleLocVar reg_to) (AppE "nocopy" [] [])
+                        rhs = Ext $ IndirectionE tycon indr_dcon (from, singleLocVar reg_from) (to, singleLocVar reg_to) (AppE "nocopy" UnknownTailType [] [])
                     pure $ LetE (indr, [], PackedTy tycon from, rhs) acc)
                  bod1 (M.toList after_env)
       let bod3 = foldl
@@ -153,10 +153,10 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                      bod2 pending_binds
       pure $ LetE (v, endlocs, ty, SyncE) bod3
 
-    AppE f locs args -> do
+    AppE f cty locs args -> do
       let newlocs = map (\loc -> M.findWithDefault loc loc after_env) locs
       args' <- mapM go args
-      pure $ AppE f newlocs args'
+      pure $ AppE f cty newlocs args'
 
     DataConE loc dcon args  -> do
       pure $ DataConE (M.findWithDefault loc loc after_env) dcon args
@@ -331,7 +331,7 @@ substLocInExp mp ex1 =
     CharE{}   -> ex1
     FloatE{}  -> ex1
     LitSymE{} -> ex1
-    AppE f locs args -> AppE f (map (\l -> sub l) locs) $ map go args
+    AppE f cty locs args -> AppE f cty (map (\l -> sub l) locs) $ map go args
     PrimAppE f args  -> PrimAppE f $ map go args
     LetE (v,loc,ty,rhs) bod -> do
       LetE (v,loc,ty, go rhs) (go bod)

@@ -283,7 +283,7 @@ placeRegionInwards env scopeSet ex =
     CharE {} -> return ex
     FloatE {} -> return ex -- Just return Nothing special here
     LitSymE {} -> return ex -- Just return Nothing special here
-    AppE f locVars ls -> do
+    AppE f cty locVars ls -> do
       let allKeys = M.keys env -- List of all keys from env
           keyList = map (\variable -> F.find (S.member (fromLocVarToFreeVarsTy variable)) allKeys) locVars -- For each var in the input set find its corresponding key
           keyList' = S.catMaybes keyList -- Filter all the Nothing values from the list and let only Just values in the list
@@ -293,7 +293,7 @@ placeRegionInwards env scopeSet ex =
           newEnv' = M.fromList tupleList
        in do
             ls' <- mapM (placeRegionInwards newEnv' scopeSet) ls
-            let (_, ex') = dischargeBinds' env (S.fromList (map fromLocVarToFreeVarsTy locVars)) (AppE f locVars ls')
+            let (_, ex') = dischargeBinds' env (S.fromList (map fromLocVarToFreeVarsTy locVars)) (AppE f cty locVars ls')
              in return ex'
     PrimAppE {} -> return ex -- Just return, Nothing special here
     DataConE loc dataCons args -> do
@@ -712,9 +712,9 @@ removeAliasedLocations env definedLocs ex =
     CharE {} -> return ex
     FloatE {} -> return ex
     LitSymE {} -> return ex
-    AppE f locVars ls -> do
+    AppE f cty locVars ls -> do
       let nlocVars = map (getAliasLoc env) locVars
-      AppE f nlocVars <$> mapM go ls
+      AppE f cty nlocVars <$> mapM go ls
     PrimAppE {} -> return ex
     DataConE loc dataCons args -> do
       let nloc = getAliasLoc env loc

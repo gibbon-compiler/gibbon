@@ -45,7 +45,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         CharE c   -> CharE c
         FloatE n  -> FloatE n
         LitSymE v -> LitSymE v
-        AppE v locs ls   -> AppE v locs $ map (go env2) ls
+        AppE v cty locs ls   -> AppE v cty locs $ map (go env2) ls
         PrimAppE pr args -> PrimAppE pr $ L.map (go env2) args
         LetE (v,locs,ty,ProjE i arg) bod ->
             LetE (v, locs, goTy ty, ProjE i (go env2 arg)) $
@@ -68,7 +68,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         Ext (BenchE fn _locs args b) ->
           let fn_ty  = lookupFEnv fn env2
               ret_ty = snd fn_ty
-              ex'    = TimeIt (AppE fn [] args) ret_ty b
+              ex'    = TimeIt (AppE fn NotTailRec [] args) ret_ty b
           in go env2 ex'
         Ext (AddFixed{}) -> error "directL3: AddFixed not handled."
         Ext (StartOfPkdCursor{}) -> error "directL3: StartOfPkdCursor not handled."

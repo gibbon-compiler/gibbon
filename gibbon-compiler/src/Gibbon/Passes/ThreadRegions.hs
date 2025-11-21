@@ -208,7 +208,7 @@ threadRegionsExp :: DDefs NewL2.Ty2 -> NewL2.FunDefs2 -> [LREM] -> RegEnv -> Env
                  -> NewL2.Exp2 -> PassM NewL2.Exp2
 threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs ex =
   case ex of
-    AppE f applocs args -> do
+    AppE f cty applocs args -> do
       let ty = gRecoverTypeLoc ddefs env2 ex
           argtys = map (gRecoverTypeLoc ddefs env2) args
           argtylocs = concatMap NewL2.locsInTy argtys
@@ -237,13 +237,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         let out_tylocs = NewL2.locsInTy ty
         let out_regs = map (\l -> let r = (renv # l) in NewL2.EndOfReg r Output (toEndVRegVar r)) out_tylocs
         let newapplocs = in_regs ++ out_regs ++ applocs'
-        return $ AppE f newapplocs args
+        return $ AppE f cty newapplocs args
       -- Otherwise, only input regions.
       else do
         let newapplocs = in_regs ++ applocs
-        return $ AppE f newapplocs args
+        return $ AppE f cty newapplocs args
 
-    LetE (v,locs,ty, (AppE f applocs args)) bod -> do
+    LetE (v,locs,ty, (AppE f cty applocs args)) bod -> do
         let argtylocs = concatMap
                         (\arg ->
                              let argty = gRecoverTypeLoc ddefs env2 arg in
@@ -385,13 +385,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs' free_wlocs rlocs_env wlocs_env renv
         emit_ss <- emit_ss_instrs
         if emit_ss && funCanTriggerGC (funMeta (fundefs # f))
-          then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
+          then do let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f cty newapplocs args)] ++ wpop ++ rpop
                   (pure $ mkLets binds bod3)
-          else pure $ mkLets [(v, newretlocs, ty, AppE f newapplocs args)] bod3
+          else pure $ mkLets [(v, newretlocs, ty, AppE f cty newapplocs args)] bod3
 
 
     LetE (v,locs,ty, (SpawnE f applocs args)) bod -> do
-      let e' = LetE (v,locs,ty, (AppE f applocs args)) bod
+      let e' = LetE (v,locs,ty, (AppE f NotTailRec applocs args)) bod
       e'' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs e'
       pure $ changeAppToSpawn f args e''
 
@@ -754,7 +754,7 @@ findRetLocs e0 = go e0 []
         CharE{}   -> acc
         FloatE{}  -> acc
         LitSymE{} -> acc
-        AppE _ _ args   -> foldr go acc args
+        AppE _ _ _ args   -> foldr go acc args
         PrimAppE _ args -> foldr go acc args
         LetE (_,_,_,rhs) bod -> do
           foldr go acc [rhs,bod]
@@ -835,7 +835,7 @@ boundsCheck ddefs tycon =
 allFreeVars_sans_datacon_args :: NewL2.Exp2 -> S.Set FreeVarsTy
 allFreeVars_sans_datacon_args ex =
   case ex of
-    AppE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
+    AppE _ _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
     PrimAppE _ args -> (S.unions (map allFreeVars_sans_datacon_args args))
     LetE (v,locs,_,rhs) bod -> (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (allFreeVars_sans_datacon_args rhs) `S.union` (allFreeVars_sans_datacon_args bod))
                                `S.difference` S.singleton (fromVarToFreeVarsTy v)
@@ -876,7 +876,7 @@ allFreeVars_sans_datacon_args ex =
 substEndReg :: Either LocVar RegVar -> RegVar -> NewL2.Exp2 -> NewL2.Exp2
 substEndReg loc_or_reg end_reg ex =
   case ex of
-    AppE f locs args -> AppE f (map gosubst locs) (map go args)
+    AppE f cty locs args -> AppE f cty (map gosubst locs) (map go args)
     PrimAppE pr args -> PrimAppE pr (map go args)
     LetE (v,locs,ty,rhs) bod -> LetE (v,map gosubst locs,ty,go rhs) (go bod)
     IfE a b c                -> IfE (go a) (go b) (go c)

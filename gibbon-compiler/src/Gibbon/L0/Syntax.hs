@@ -329,16 +329,16 @@ isCallUnsaturated sigma args = length args < length (arrIns sigma)
 saturateCall :: MonadState Int m => TyScheme -> Exp0 -> m Exp0
 saturateCall sigma ex =
   case ex of
-    AppE f [] args -> do
+    AppE f cty [] args -> do
       -- # args needed to saturate this call-site.
       let args_wanted = length (arrIns sigma) - length args
       new_args <- mapM (\_ -> gensym "sat_arg_") [0..(args_wanted-1)]
       new_tys  <- mapM (\_ -> newMetaTy) new_args
       pure $
         Ext (LambdaE (zip new_args new_tys)
-               (AppE f [] (args ++ (map VarE new_args))))
+               (AppE f cty [] (args ++ (map VarE new_args))))
 
-    AppE _ tyapps _ ->
+    AppE _ cty tyapps _ ->
       error $ "saturateCall: Expected tyapps to be [], got: " ++ sdoc tyapps
     _ -> error $ "saturateCall: " ++ sdoc ex ++ " is not a call-site."
 
@@ -506,7 +506,7 @@ recoverType ddfs env2 ex =
     CharE _      -> CharTy
     FloatE{}     -> FloatTy
     LitSymE _    -> IntTy
-    AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
+    AppE v _ tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
                        in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty

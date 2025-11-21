@@ -45,12 +45,12 @@ fromLocArgToFreeVarsTy' arg =
 collectBoundsCheckExprs :: HoistAbleExprMap -> BoundEnv -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectBoundsCheckExprs env benv ex = do
   case ex of
-    AppE f applocs args -> do
+    AppE f cty applocs args -> do
       res <- mapM (collectBoundsCheckExprs env benv) args
       let args' = map fst res
       let envs = map snd res
       let env' = mergeHoistExprMaps envs
-      return (AppE f applocs args', env')
+      return (AppE f cty applocs args', env')
     LetE bnd@(v, locs, ty, rhs) bod -> do
       case rhs of
         Ext (BoundsCheck sz bound cur) -> do
@@ -163,12 +163,12 @@ storeHoistableExpr v1 v2 dependentVars hoistableExpr env
 collectVarsForBoundsCheck :: FreeVarsTy -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectVarsForBoundsCheck vars env ex = do
   case ex of
-    AppE f applocs args -> do
+    AppE f cty applocs args -> do
       res <- mapM (collectVarsForBoundsCheck vars env) args
       let args' = map fst res
       let envs = map snd res
       let env' = mergeHoistExprMaps envs
-      return (AppE f applocs args', env')
+      return (AppE f cty applocs args', env')
     LetE (v, locs, ty, rhs) bod -> do
       let (env', store) = storeHoistableExpr (fromVarToFreeVarsTy v) vars (allFreeVars rhs) (LetExpr (v, locs, ty, rhs)) env
       if store
