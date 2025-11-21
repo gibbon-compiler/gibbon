@@ -3333,3 +3333,10 @@ int main(int argc, char **argv)
 
 // gcc -std=gnu11  -O3  -flto  -D_GIBBON_GENGC=0  -D_GIBBON_SIMPLE_WRITE_BARRIER=0  -D_GIBBON_EAGER_PROMOTION=1  -o /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.soa.exe -I/home/vidushs/Applications/src/gibbon/gibbon-rts/build -L/home/vidushs/Applications/src/gibbon/gibbon-rts/build -Wl,-rpath=/home/vidushs/Applications/src/gibbon/gibbon-rts/build /home/vidushs/Applications/src/gibbon/microbench/manual_soa_examples/reduceList.soa.c /home/vidushs/Applications/src/gibbon/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
 
+
+
+//gcc -std=gnu11  -O3  -flto  -D_GIBBON_GENGC=0  -D_GIBBON_SIMPLE_WRITE_BARRIER=0  -D_GIBBON_EAGER_PROMOTION=1  -o /workdisk/git/gibbon/microbench/manual_soa_examples/reduceList.soa.exe -I/workdisk/git/gibbon/gibbon-rts/build -L/workdisk/git/gibbon/gibbon-rts/build -Wl,-rpath=/workdisk/git/gibbon/gibbon-rts/build /workdisk/git/gibbon/microbench/manual_soa_examples/reduceList.soa.c /workdisk/git/gibbon/gibbon-rts/build/gibbon_rts.o -lm  -lgibbon_rts_ng
+
+
+
+
