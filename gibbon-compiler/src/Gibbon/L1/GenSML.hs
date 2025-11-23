@@ -29,7 +29,7 @@ ppE e0 = case e0 of
   CharE c -> char c
   FloatE x -> double x
   LitSymE var -> doubleQuotes $ ppVar var
-  AppE var _ pes -> ppAp (ppVar var) pes
+  AppE var _cty _ pes -> ppAp (ppVar var) pes
   PrimAppE pr pes -> ppPrim pr pes
   LetE (v, _, _, e) pe' ->
     hsep
@@ -494,7 +494,7 @@ varsE :: Set.Set String -> Exp1 -> Set.Set String
 varsE vs pe0 = case pe0 of
   -- VarE var -> collect var
   VarE _ -> mempty
-  AppE var _ pes -> vpes pes <> collect var
+  AppE var _cty _ pes -> vpes pes <> collect var
   PrimAppE _ pes -> vpes pes
   LetE (_, _, _, pe') pe -> vpe pe <> vpe pe'
   IfE pe pe' pe3 -> vpes [pe, pe', pe3]

@@ -612,7 +612,7 @@ benchMainExp l1 = do
                                  (L1.ReadPackedFile benchInput tyc Nothing arg) [])
                         $ L1.LetE (toVar "benchres", [],
                                       ret,
-                                      L1.AppE fnname [] [L1.VarE (toVar tmp)])
+                                      L1.AppE fnname UnknownTailType [] [L1.VarE (toVar tmp)])
                         -- FIXME: should actually return the result,
                         -- as soon as we are able to print it.
                         (if gopt Opt_BenchPrint dynflags

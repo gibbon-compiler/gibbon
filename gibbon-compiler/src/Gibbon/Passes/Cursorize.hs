@@ -2872,7 +2872,7 @@ cursorizeSpawn freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv 
               (bod', freeVarToVarEnv'') <- go tenv' senv' bod
               return (mkLets bnds bod', M.union freeVarToVarEnv' freeVarToVarEnv'') 
       | otherwise -> do
-          (rhs', freeVarToVarEnv') <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn applocs args)
+          (rhs', freeVarToVarEnv') <- cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
           let rhs'' = case rhs' of
                 AppE fn' _ applocs' args' -> SpawnE fn' applocs' args'
                 _ -> error "cursorizeSpawn"

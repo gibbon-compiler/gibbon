@@ -65,7 +65,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                go locenv env2 e
              pure $ LetE (v', ewitnesses', ty', SpawnE f' applocs' args') bod'
 
-      | AppE f cty _applocs args <- rhs
+      | AppE f _cty _applocs args <- rhs
       , not (null ewitnesses) ->
           do let fty = lookupFEnv f env2
                  effs = arrEffs fty

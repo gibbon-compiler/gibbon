@@ -307,7 +307,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
           -- the end witnesses returned from the function.
-          LetE (v,_ls,ty,(AppE f lsin e1)) e2 -> do
+          LetE (v,_ls,ty,(AppE f cty lsin e1)) e2 -> do
                  let lenv' = case ty of
                                PackedTy _n l -> M.insert (fromVarToFreeVarsTy v) l lenv
                                _ -> lenv
@@ -316,7 +316,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let (e2', inst_waiting_on_loc', rel) = wrapBody ddefs f e2 newls inst_waiting_on_loc 
 
                  e2'' <- exp inst_waiting_on_loc' fns retlocs eor' lenv' afterenv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) e2'
-                 let expr = dbgTrace (minChatLvl) "Print insts_waiting_on_loc: " dbgTrace (minChatLvl) (sdoc (newls, (v,_ls,ty,(AppE f lsin e1)), inst_waiting_on_loc', rel)) dbgTrace (minChatLvl) "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f lsin e1) e2''
+                 let expr = dbgTrace (minChatLvl) "Print insts_waiting_on_loc: " dbgTrace (minChatLvl) (sdoc (newls, (v,_ls,ty,(AppE f cty lsin e1)), inst_waiting_on_loc', rel)) dbgTrace (minChatLvl) "End print insts waiting on loc.\n"  LetE (v,outlocs,ty, AppE f cty lsin e1) e2''
                  return $ L.foldr (\lete acc -> case lete of 
                                                   LetExpr (v,ls,ty,rhs) -> LetE (v,ls,ty,rhs) acc
                                                   LetLocExpr loc locexp -> Ext $ LetLocE loc locexp acc
@@ -600,10 +600,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
           -- by gensyming a new variable, sticking the AppE in a LetE, and recuring.
           -- Question: should this fail instead? I'm not sure.
-          AppE v args arg -> do
+          AppE v cty args arg -> do
                  v' <- gensym "tailapp"
                  let ty = gRecoverTypeLoc ddefs env2 e
-                     e' = LetE (v',[], ty, AppE v args arg) (VarE v')
+                     e' = LetE (v',[], ty, AppE v cty args arg) (VarE v')
                  go (e')
 
           PrimAppE (DictInsertP dty) [(VarE a),d,k,v] -> do

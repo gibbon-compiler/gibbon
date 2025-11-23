@@ -338,7 +338,7 @@ saturateCall sigma ex =
         Ext (LambdaE (zip new_args new_tys)
                (AppE f cty [] (args ++ (map VarE new_args))))
 
-    AppE _ cty tyapps _ ->
+    AppE _ _cty tyapps _ ->
       error $ "saturateCall: Expected tyapps to be [], got: " ++ sdoc tyapps
     _ -> error $ "saturateCall: " ++ sdoc ex ++ " is not a call-site."
 
