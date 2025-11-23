@@ -574,7 +574,7 @@ inferExp' ddefs env exp bound dest=
                                                                                                                                                       _ -> error "bindAllLocations: Not a packed type"
                                                                                                                                         a' = subst v1 (VarE v') a
                                                                                                                                         bod = Ext $ (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
-                                                                                                                                      in (acc, LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) bod)
+                                                                                                                                      in (acc, LetE (v',[],copyRetTy, AppE f UnknownTailType lvs [VarE v1]) bod)
                                                                                                                                 _ -> error $ "InferLocations : bindAllLocations : AfterSoALE: unexpected locatin constraint: " ++ show c 
                                                                                                                               ) ([], a) flst
                                                                                                          --new_field_locs = P.foldr (\c accum -> case c of 
@@ -624,7 +624,7 @@ inferExp' ddefs env exp bound dest=
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) arrty
                                           _ -> error "bindAllLocations: Not a packed type"
                             a' = subst v1 (VarE v') a
-                        in LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) $
+                        in LetE (v',[],copyRetTy, AppE f UnknownTailType lvs [VarE v1]) $
                            Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
 
   in do (eres, tyres, csres) <- inferExp ddefs env exp dest
@@ -813,7 +813,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                             copyRetTy = case arrOut arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
                                           _ -> error "bindAfterLoc: Not a packed type"
-                        let res'  = (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $ Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
+                        let res'  = (LetE (v',[],copyRetTy,AppE f UnknownTailType lvs [VarE v1]) $ Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
                         res'' <- bindAfterLoc v res'
                         return res''
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -953,9 +953,9 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
 
     SpawnE f _ args -> do
-      (ex0', ty, acs) <- inferExp ddefs env (AppE f [] args) dest
+      (ex0', ty, acs) <- inferExp ddefs env (AppE f UnknownTailType [] args) dest
       case ex0' of
-        AppE f' locs args' -> pure (SpawnE f' locs args', ty, acs)
+        AppE f' _ locs args' -> pure (SpawnE f' locs args', ty, acs)
         oth -> err $ "SpawnE: " ++ sdoc oth
 
     SyncE -> pure (SyncE, ProdTy [], [])
@@ -966,7 +966,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
 
     LitSymE s -> return (LitSymE s, SymTy, [])
 
-    AppE f _ args ->
+    AppE f cty _ args ->
         do let arrty = lookupFEnv f env
            valTy    <- freshTyLocs (arrOut arrty) ddefs
            -- /cc @vollmerm
@@ -979,19 +979,19 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                case locsInTy valTy of
                  -- dbgTrace minChatLvl "Print in AppE" dbgTrace minChatLvl (sdoc (valTy, d, outloc)) dbgTrace minChatLvl "End AppE inferExp unify.\n"
                  [outloc] -> unify d outloc
-                               (return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
+                               (return (L2.AppE f cty (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                (err$ "(AppE) Cannot unify" ++ sdoc d ++ " and " ++ sdoc outloc)
                  _ -> err$ "AppE expected a single output location in type: " ++ sdoc valTy
              TupleDest ds ->
                case valTy of
                  ProdTy tys -> unifyAll ds tys
-                                 (return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
+                                 (return (L2.AppE f cty (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                  (err$ "(AppE) Cannot unify" ++ sdoc ds ++ " and " ++ sdoc tys)
                  _ -> err$ "(AppE) Cannot unify" ++ sdoc dest ++ " and " ++ sdoc valTy
              NoDest ->
                -- dbgTrace minChatLvl "Print in AppE NoDest" dbgTrace minChatLvl (sdoc (valTy, NoDest)) dbgTrace minChatLvl "\n"
                case locsInTy valTy of
-                 [] -> return (L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
+                 [] -> return (L2.AppE f cty (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
                  _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy ++ ". This might be caused by a main expression having a packed type." ++ sdoc ex0
 
     TimeIt e t b ->
@@ -1077,7 +1077,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                           (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                           (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                          (AppE f lvs [(VarE v)]) -> do 
+                          (AppE f _cty lvs [(VarE v)]) -> do 
                                                   v' <- lift $ lift $ freshLocVar "cpy"
                                                   return $ ArgCopy v (unwrapLocVar v') f lvs
                           _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
@@ -1111,14 +1111,14 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                         -- dbgTrace minChatLvl "Print contrs'" dbgTrace minChatLvl (sdoc constrs') dbgTrace minChatLvl "\n"
                       ls'' <- forM (zip argLs ls') $ \(arg,(e,ty,cs)) -> do
                               case e of
-                                (AppE _ _ _) -> case arg of
+                                (AppE _ _ _ _) -> case arg of
                                                     ArgCopy _ v' _ _ -> return (VarE v',ty,cs)
                                                     _ -> undefined
                                 _ -> return (e,ty,cs)
                         -- bod <- return $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
                              then case last [e | (e,_,_) <- ls'] of
-                                  (AppE f lvs e) ->
+                                  (AppE f cty lvs e) ->
                                     let (ArgCopy _ v' _ copy_locs) = last argLs
                                         arrty = arrOut $ lookupFEnv f env
                                         -- Substitute the location occurring at the call site
@@ -1127,7 +1127,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                         copyRetTy = case arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc (last copy_locs)) arrty
                                           _ -> error "inferExp: Not a packed type"
-                                    in return $ LetE (v',[],copyRetTy, AppE f lvs e) $
+                                    in return $ LetE (v',[],copyRetTy, AppE f cty lvs e) $
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                   _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
@@ -1207,7 +1207,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           (LitSymE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy SymTy)
                           (PrimAppE MkTrue []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
                           (PrimAppE MkFalse []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
-                          (AppE f lvs [(VarE v)]) -> do 
+                          (AppE f _cty lvs [(VarE v)]) -> do 
                                                   v' <- lift $ lift $ freshLocVar "cpy"
                                                   return $ ArgCopy v (unwrapLocVar v') f lvs
                           _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
@@ -1320,7 +1320,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                       (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                                                                                       (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                                                                                       (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                      (AppE f lvs [(VarE v)]) -> do 
+                                                                                      (AppE f _cty lvs [(VarE v)]) -> do 
                                                                                                 v' <- lift $ lift $ freshLocVar "cpy"
                                                                                                 return $ ArgCopy v (unwrapLocVar v') f lvs
                                                                                       _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
@@ -1407,7 +1407,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                           (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                                                                                           (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                                                                                           (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                          (AppE f lvs [(VarE v)]) -> do 
+                                                                                          (AppE f _cty lvs [(VarE v)]) -> do 
                                                                                                     v' <- lift $ lift $ freshLocVar "cpy"
                                                                                                     return $ ArgCopy v (unwrapLocVar v') f lvs
                                                                                           _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
@@ -1473,14 +1473,14 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       -- dbgTrace minChatLvl "Print contrs'" dbgTrace minChatLvl (sdoc constrs') dbgTrace minChatLvl "\n"
                       ls'' <- forM (zip argLs ls') $ \(arg,(e,ty,cs)) -> do
                             case e of
-                              (AppE _ _ _) -> case arg of
+                              (AppE _ _ _ _) -> case arg of
                                                     ArgCopy _ v' _ _ -> return (VarE v',ty,cs)
                                                     _ -> undefined
                               _ -> return (e,ty,cs)
                       -- bod <- return $ DataConE d k [ e' | (e',_,_)  <- ls'']
                       bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
                              then case last [e | (e,_,_) <- ls'] of
-                                (AppE f lvs e) ->
+                                (AppE f cty lvs e) ->
                                     let (ArgCopy _ v' _ copy_locs) = last argLs
                                         arrty = arrOut $ lookupFEnv f env
                                         -- Substitute the location occurring at the call site
@@ -1489,7 +1489,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                         copyRetTy = case arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc (last copy_locs)) arrty
                                           _ -> error "inferExp: Not a packed type"
-                                    in return $ LetE (v',[],copyRetTy, AppE f lvs e) $
+                                    in return $ LetE (v',[],copyRetTy, AppE f cty lvs e) $
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
@@ -1610,7 +1610,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       case rhs of
         VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
 
-        AppE f [] args -> do
+        AppE f _cty [] args -> do
           let arrty = lookupFEnv f env
           valTy <- freshTyLocs (arrOut arrty) ddefs
           -- /cc @vollmerm
@@ -1630,7 +1630,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           -- fcs <- tryInRegion $ acs ++ cs''
           -- dbgTrace minChatLvl "inferExp: Let, AppE: " dbgTrace minChatLvl (sdoc (vcs, fcs, res, res', res'', valTy, bod'')) dbgTrace minChatLvl "print more: " dbgTrace minChatLvl (sdoc (cs'', argDests, argTys, ty'', args', atys, tupBod)) dbgTrace minChatLvl "End inferExp (Let, AppE)\n"
           -- dbgTrace minChatLvl "(vcs, fcs) " dbgTrace minChatLvl (sdoc (vcs, fcs)) dbgTrace minChatLvl "End (vcs, fcs).\n"
-          res' <- tryBindReg (L2.LetE (vr,[], valTy, L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
+          res' <- tryBindReg (L2.LetE (vr,[], valTy, L2.AppE f _cty (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           res'' <- bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
           return res''
 
@@ -1640,7 +1640,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           let _ret_ty = arrOut $ lookupFEnv f env
           -- if isScalarTy ret_ty || isPackedTy ret_ty
           -- then do
-          (ex0', ty, cs) <- inferExp ddefs env (LetE (vr,locs,bty,(AppE f [] args)) bod) dest
+          (ex0', ty, cs) <- inferExp ddefs env (LetE (vr,locs,bty,(AppE f UnknownTailType [] args)) bod) dest
           -- Assume that all args are VarE's
           let args2 = map (\e -> case e of
                                    (VarE v) -> VarE v
@@ -1924,7 +1924,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
       let fn_ty = lookupFEnv fn env
           retty :: Ty2
           retty = outTy fn_ty
-          e' = TimeIt (AppE fn locs args) (stripTyLocs retty) b
+          e' = TimeIt (AppE fn UnknownTailType locs args) (stripTyLocs retty) b
       in inferExp ddefs env e' dest
 
 
@@ -1941,10 +1941,10 @@ finishExp e =
       CharE i -> return $ CharE i
       FloatE i  -> return $ FloatE i
       LitSymE v -> return $ LitSymE v
-      AppE v ls es -> do
+      AppE v cty ls es -> do
              es' <- mapM finishExp es
              ls' <- mapM finalLocVar ls
-             return $ AppE v ls' es'
+             return $ AppE v cty ls' es'
       PrimAppE pr es -> do
              es' <- mapM finishExp es
              pr' <- finishPr pr
@@ -2084,8 +2084,8 @@ cleanExp e =
       CharE v -> (CharE v, S.empty)
       FloatE v -> (FloatE v, S.empty)
       LitSymE v -> (LitSymE v, S.empty)
-      AppE v ls e -> let (e',s') = unzip $ map cleanExp e
-                     in (AppE v ls e', (S.unions s') `S.union` (S.fromList ls)) -- (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --(S.fromList ls)
+      AppE v cty ls e -> let (e',s') = unzip $ map cleanExp e
+                     in (AppE v cty ls e', (S.unions s') `S.union` (S.fromList ls)) -- (P.foldr (\l a -> getAllLocations l a) S.empty ls )) --(S.fromList ls)
       PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (PrimAppE (DictInsertP ty) es',
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))
@@ -2228,8 +2228,8 @@ fixProj renam pvar proj e =
       CharE v -> CharE v
       FloatE v -> FloatE v
       LitSymE v -> LitSymE v
-      AppE v ls es -> let es' = map (fixProj renam pvar proj) es
-                      in AppE v ls es'
+      AppE v cty ls es -> let es' = map (fixProj renam pvar proj) es
+                      in AppE v cty ls es'
       PrimAppE pr es -> let es' = map (fixProj renam pvar proj) es
                         in PrimAppE pr es'
       LetE (v,ls,t,e1) e2 ->
@@ -2280,7 +2280,7 @@ moveProjsAfterSync sv ex = case sv of
         CharE{}    -> ex
         FloatE{}  -> ex
         LitSymE{} -> ex
-        AppE v locs ls   -> ex
+        AppE v _cty locs ls   -> ex
         PrimAppE pr args -> ex
         LetE (v,locs,ty,SyncE) bod ->
           let bod' = go [] S.empty bod
@@ -2412,14 +2412,14 @@ unifyAll [] [] successA _ = successA
 
 
 isCpyCallExpr1 :: Exp1 -> Bool 
-isCpyCallExpr1 (AppE f _ _ ) = isCpyVar f
+isCpyCallExpr1 (AppE f _cty _ _ ) = isCpyVar f
 isCpyCallExpr1 _ = False
 
 isCpyVar :: Var -> Bool
 isCpyVar v = L.isInfixOf ("copy") (fromVar v)
 
 isCpyCall :: Exp2 -> Bool
-isCpyCall (AppE f _ _) = True -- TODO: check if it's a real copy call, to be safe
+isCpyCall (AppE f _cty _ _) = True -- TODO: check if it's a real copy call, to be safe
 isCpyCall _ = False 
 
 freshLocVar :: String -> PassM LocVar
@@ -2624,7 +2624,7 @@ copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
-              eapp = AppE copyName [lv2,lv1] [e]
+              eapp = AppE copyName UnknownTailType [lv2,lv1] [e]
           return (eapp, PackedTy tc lv1, cs)
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
@@ -2859,7 +2859,7 @@ fixRANs prg@(Prog defs funs main) = do
         VarE{}    -> return ([],e0)
         LitSymE{} -> return ([],e0)
 
-        AppE f lvs ls     -> gols (AppE f lvs)  ls
+        AppE f _cty lvs ls     -> gols (AppE f _cty lvs)  ls
         PrimAppE p ls     -> gols (PrimAppE p)  ls
         MkProdE ls        -> gols  MkProdE      ls
 
@@ -2972,7 +2972,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
           case M.lookup v cpy_env2 of
             Just ls -> do let binds = map (\(old,new) -> let PackedTy tycon _ = L1.lookupVEnv old env2
                                                              f = mkCopyFunName tycon
-                                                         in (new,[],PackedTy tycon (),AppE f [] [VarE old]))
+                                                         in (new,[],PackedTy tycon (),AppE f UnknownTailType [] [VarE old]))
                                           ls
                               binds1 = (v,locs,ty,rhs1) : binds
                           pure $ (cpy_env2, mkLets binds1 bod1)
@@ -2992,7 +2992,7 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
                                                  let binds = map (\(old,new) ->
                                                                     let PackedTy tycon _ = L1.lookupVEnv old env2'
                                                                         f = mkCopyFunName tycon
-                                                                    in (new,[],PackedTy tycon (),AppE f [] [VarE old]))
+                                                                    in (new,[],PackedTy tycon (),AppE f UnknownTailType [] [VarE old]))
                                                              ls
                                                  in mkLets binds rhs1)
                                  rhs1 vars
@@ -3008,14 +3008,14 @@ copyOutOfOrderPacked prg@(Prog ddfs fndefs mnExp) = do
         CharE{}   -> pure (cpy_env, ex)
         FloatE{}  -> pure (cpy_env, ex)
         LitSymE{} -> pure (cpy_env, ex)
-        AppE v locs ls -> do
+        AppE v cty locs ls -> do
           (cpy_env1, ls1) <- F.foldrM
                                (\e (acc1,acc2) -> do
                                   (a,b) <- go env2 acc1 order e
                                   pure (a `M.union` acc1, b : acc2))
                                (cpy_env, [])
                                ls
-          pure $ (cpy_env1, AppE v locs ls1)
+          pure $ (cpy_env1, AppE v cty locs ls1)
         PrimAppE pr ls -> do
           (cpy_env1, ls1) <- F.foldrM
                                (\e (acc1,acc2) -> do
@@ -3143,9 +3143,9 @@ removeAliasesForCopyCalls prg@(Prog ddfs fndefs mnExp) = do
         CharE{} -> pure exp
         FloatE{} -> pure exp
         LitSymE{} -> pure exp
-        AppE f locs args -> do
+        AppE f cty locs args -> do
                             args' <- mapM (\expr -> removeAliases expr env) args
-                            pure $ AppE f locs args'
+                            pure $ AppE f cty locs args'
         PrimAppE f args -> do 
                            args' <- mapM (\expr -> removeAliases expr env) args
                            pure $ PrimAppE f args'
@@ -3349,7 +3349,7 @@ orderOfVarsOutputDataConE exp = case exp of
   LitSymE _ -> []
   ProjE _ e -> orderOfVarsOutputDataConE e
   IfE a b c -> (orderOfVarsOutputDataConE a) ++ (orderOfVarsOutputDataConE b) ++ (orderOfVarsOutputDataConE c)
-  AppE v _ ls         -> (L.concat $ (L.map orderOfVarsOutputDataConE ls))
+  AppE v _cty _ ls         -> (L.concat $ (L.map orderOfVarsOutputDataConE ls))
   PrimAppE _ ls        -> L.concat $ (L.map orderOfVarsOutputDataConE ls)
   LetE (v,_,_,rhs) bod -> (orderOfVarsOutputDataConE rhs) ++ (deleteOne v (orderOfVarsOutputDataConE bod))
   CaseE e ls -> (orderOfVarsOutputDataConE e) ++ (L.concat $

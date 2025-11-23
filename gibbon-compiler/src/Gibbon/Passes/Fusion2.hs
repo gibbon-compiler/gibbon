@@ -229,7 +229,7 @@ addOuterTailCall exp fName parName varType outerArgs =
       case ex of
           L1.LetE (v,ls,t, e1) e2 -> L1.LetE (v,ls,t, e1)  (go e2)
           x ->
-            let newCall = AppE fName [] ( (VarE parName) :outerArgs)
+            let newCall = AppE fName UnknownTailType [] ( (VarE parName) :outerArgs)
                 newLet = LetE (parName, [], varType, x) newCall
             in newLet
 {- This function≈ collect the following information for each defined variable:
@@ -412,6 +412,7 @@ inline2 inlined_fun outer_fun  =
         let rhs =
                 (AppE
                    (funName inlined_fun)
+                   UnknownTailType
                    []
                    (L.map VarE ( newTraversedTreeArg:tail (funArgs inlined_fun))))
             body = substE oldExp (VarE newVar) exp
@@ -494,6 +495,7 @@ inline inlined_fun outer_fun arg_pos = do
         let rhs =
                 (AppE
                    (funName inlined_fun)
+                   UnknownTailType
                    []
                    (L.map VarE (funArgs inlined_fun)))
             body = substE oldExp (VarE newVar) exp
@@ -658,8 +660,8 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
   let defTable = buildDefTable (body)
       go ex =
         case ex of
-          AppE fName _cty loc argList ->
-            let notFolded = AppE fName loc argList
+          AppE fName cty loc argList ->
+            let notFolded = AppE fName cty loc argList
              in if fName == outerName
                   then case (head argList) of
                          VarE (Var symInner) ->
@@ -668,7 +670,7 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
                                       outerArgs = argList
                                       newCallArgs =
                                         (innerArgs L.++ tail argList)
-                                   in AppE newName loc newCallArgs
+                                   in AppE newName cty loc newCallArgs
                              else notFolded
                          _ -> notFolded
                   else notFolded
@@ -732,7 +734,7 @@ foldTupledFunctions bodyM newFun oldCalls  outputPositions syncedArgs  =
                               getFirstArg ((AppE _ _cty _ (h:_)))= h --`debug` ("oldCalls" L.++ (show oldCalls) L.++
                                  --(render( pprint bodyM)))
 
-                        let rhs' =  AppE (funName newFun) [] args'
+                        let rhs' =  AppE (funName newFun) UnknownTailType [] args'
                             --   `debug` ("new call" L.++ (show (AppE (funName newFun) [] args')))
                         let bindType = outTy (funTy newFun)
                         let rhs'' =  case t of
@@ -767,10 +769,10 @@ foldTupledFunctions bodyM newFun oldCalls  outputPositions syncedArgs  =
                                   in  ProjE idx (VarE newVar) -- not complete buggy (i +eps)
                         return(LetE (Var y, loc, t, rhs') body')
 
-        AppE name _cty loc argList         ->
+        AppE name cty loc argList         ->
            do
              argList' <- Prelude.mapM  (\x -> go x newVar first) argList
-             return $  AppE name loc argList'
+             return $  AppE name cty loc argList'
         PrimAppE x ls            ->
             PrimAppE x <$> Prelude.mapM (\x -> go x newVar first) ls
 
@@ -843,8 +845,8 @@ removeUnusedDefsExp exp =
         CaseE e1 ls1             ->   CaseE e1 (L.map f ls1)
           where
             f (dataCon,x,exp) = (dataCon, x, go exp dTable)
-        AppE v _cty loc argList       ->
-          AppE v loc (L.map (`go` dTable) argList )
+        AppE v cty loc argList       ->
+          AppE v cty loc (L.map (`go` dTable) argList )
         TimeIt exp a b           ->   TimeIt (go exp dTable) a b
         _ ->  ex
 
@@ -994,8 +996,8 @@ renameFunction function newName =
      go ex =
       let oldName = funName function in
       case ex of
-          AppE name _cty loc argList          ->
-            AppE (if name==oldName then newName else name) _cty loc argList
+          AppE name cty loc argList          ->
+            AppE (if name==oldName then newName else name) cty loc argList
           PrimAppE x ls            ->   PrimAppE x (L.map f ls)
             where f item = go item
           LetE (v,loc,t,rhs) bod   ->   LetE (v,loc,t, go rhs) (go bod)
@@ -2071,7 +2073,7 @@ removeRedundantInputExp fdefs exp  mode =
       let (fdefs', body') = removeRedundantInputExp fdefs body mode
           boringCase =  (fdefs', (LetE rhs  body'))
       in (case bind of
-          x@( AppE fName _cty loc args) ->
+          x@( AppE fName cty loc args) ->
             if (L.isPrefixOf "_TUP"  (fromVar fName) ||
                 L.isPrefixOf "_FUS" (fromVar fName) )
                 then
@@ -2093,7 +2095,7 @@ removeRedundantInputExp fdefs exp  mode =
                       let (fNameNew, fdefsNew) =
                             eliminateInputArgs  fdefs' fName  redundantPositions
                           newCall =
-                            AppE fNameNew loc
+                            AppE fNameNew cty loc
                               (V.toList
                                 (V.ifilter
                                   (\idx _ -> M.notMember idx  redundantPositions )
@@ -2103,7 +2105,7 @@ removeRedundantInputExp fdefs exp  mode =
                   boringCase
           otherwise -> boringCase)
 
-    x@(AppE fName _cty loc args) ->
+    x@(AppE fName cty loc args) ->
             if (L.isPrefixOf "_TUP"  (fromVar fName) ||
                 L.isPrefixOf "_FUS" (fromVar fName) )
                 then
@@ -2123,7 +2125,7 @@ removeRedundantInputExp fdefs exp  mode =
                       let (fNameNew, fdefsNew) =
                             eliminateInputArgs  fdefs fName  redundantPositions
                           newCall =
-                            AppE fNameNew loc
+                            AppE fNameNew cty loc
                               (V.toList
                                 (V.ifilter
                                   (\idx _ -> M.notMember idx  redundantPositions )
