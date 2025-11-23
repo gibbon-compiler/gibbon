@@ -95,7 +95,7 @@ library
                        Gibbon.Passes.CalculateBounds
                        Gibbon.Passes.HoistBoundsCheck
                        Gibbon.Passes.ReorderLetExprs
-                       --Gibbon.Passes.AddCastInstructions
+                       Gibbon.Passes.InferCallType
                        Gibbon.Passes.OptimizeL3
 
   other-extensions:    DeriveDataTypeable CPP

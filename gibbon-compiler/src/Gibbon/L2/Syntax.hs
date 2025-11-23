@@ -597,12 +597,14 @@ instance NFData Region where
 
 -- | The modality of locations and cursors: input/output, for reading
 -- and writing, respectively.
-data Modality = Input | Output
+data Modality = Input | Output | InputMutable | OutputMutable
   deriving (Read,Show,Eq,Ord, Generic)
 instance Out Modality
 instance NFData Modality where
   rnf Input  = ()
   rnf Output = ()
+  rnf InputMutable = () 
+  rnf OutputMutable = ()
 
 -- | A location and region, together with modality.
 data LRM = LRM { lrmLoc :: LocVar
@@ -756,23 +758,23 @@ allLocVars ty = L.map (\(LRM l _ _) -> l) (locVars ty)
 
 inLocVars :: ArrowTy2 ty2 -> [LocVar]
 inLocVars ty = L.map (\(LRM l _ _) -> l) $
-               L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
+               L.filter (\(LRM _ _ m) -> m == Input || m == InputMutable) (locVars ty)
 
 outLocVars :: ArrowTy2 ty2 -> [LocVar]
 outLocVars ty = L.map (\(LRM l _ _) -> l) $
-                L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
+                L.filter (\(LRM _ _ m) -> m == Output || m == OutputMutable) (locVars ty)
 
 outRegVars :: ArrowTy2 ty2 -> [RegVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
                                           SoAR _rr _fieldRegions -> [regionToVar r]
                                           _ -> [regionToVar r] 
-                      ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
+                      ) $ L.filter (\(LRM _ _ m) -> m == Output || m == OutputMutable) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [RegVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 
                                                 SoAR _rr _fieldRegions -> [regionToVar r]
                                                 _ -> [regionToVar r]
-                      ) $ L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
+                      ) $ L.filter (\(LRM _ _ m) -> m == Input || m == InputMutable) (locVars ty)
 
 allRegVars :: ArrowTy2 ty2 -> [RegVar]
 allRegVars ty = L.nub $ L.concatMap (\ (LRM _ r _) -> [regionToVar r]
