@@ -267,10 +267,10 @@ data FunRec = Rec | NotRec | TailRec
 data FunInline = Inline | NoInline | Inlineable
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
-data TailRecType =   NotTailRec 
+data TailRecType =   UnknownTailType
+                   | NotTailRec 
                    | TailCall 
                    | TailModuloCons
-                   | UnknownTailType
                    deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data FunMeta = FunMeta

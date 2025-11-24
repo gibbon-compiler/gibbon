@@ -181,7 +181,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           let rhs' = fmap (locenv #) rhs
               locarg = toLocArg loc rhs locenv
           bod' <- go (M.insert loc locarg locenv) env2 bod
-          pure $ Ext $ LetLocE loc rhs' bod'
+          pure $ Ext $ LetLocE locarg rhs' bod'
 
         RetE locs v -> do
           let locargs = map (locenv #) locs
@@ -219,10 +219,12 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           pure $ Ext $ LetAvail avail rhs'
 
         AllocateTagHere loc tycon -> do
-          -- let locarg = locenv # loc
-          pure $ Ext $ AllocateTagHere loc tycon
+          let locarg = locenv # loc
+          pure $ Ext $ AllocateTagHere locarg tycon
 
-        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere loc
+        AllocateScalarsHere loc -> do
+          let locarg = locenv # loc          
+          pure $ Ext $ AllocateScalarsHere locarg
 
         SSPush mode loc end_loc tycon -> do
           pure $ Ext $ SSPush mode loc end_loc tycon
@@ -395,7 +397,7 @@ toOldL2Exp ex =
         LetLocE loc rhs bod -> do
           let rhs' = fmap New.toLocVar rhs
           bod' <- go bod
-          pure $ Ext $ LetLocE loc rhs' bod'
+          pure $ Ext $ LetLocE (New.toLocVar loc) rhs' bod'
 
         StartOfPkdCursor cur -> do
           pure $ Ext $ StartOfPkdCursor cur
@@ -431,9 +433,9 @@ toOldL2Exp ex =
           pure $ Ext $ LetAvail avail rhs'
 
         AllocateTagHere loc tycon -> do
-          pure $ Ext $ AllocateTagHere loc tycon
+          pure $ Ext $ AllocateTagHere (New.toLocVar loc) tycon
 
-        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere loc
+        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere (New.toLocVar loc)
 
         SSPush mode loc end_loc tycon -> do
           pure $ Ext $ SSPush mode loc end_loc tycon

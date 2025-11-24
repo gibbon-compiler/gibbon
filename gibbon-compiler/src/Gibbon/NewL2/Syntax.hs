@@ -541,7 +541,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.LetParRegionE r _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetLocE loc phs rhs  ->
-                go (M.insertWith (++) (fromLocVarToFreeVarsTy loc) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
+                go (M.insertWith (++) (fromLocVarToFreeVarsTy (toLocVar loc)) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
               Old.RetE{}         -> acc
               Old.FromEndE{}     -> acc
               Old.BoundsCheck{}  -> acc
@@ -595,7 +595,7 @@ allFreeVars ex =
       case ext of
         Old.LetRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
-        Old.LetLocE loc locexp bod -> S.difference (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp)) ((S.singleton . fromLocVarToFreeVarsTy) loc)
+        Old.LetLocE loc locexp bod -> S.difference (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp)) ((S.singleton . fromLocVarToFreeVarsTy) (toLocVar loc))
         Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)
         Old.TagCursor a b-> S.fromList [((fromLocVarToFreeVarsTy . toLocVar)  a),((fromLocVarToFreeVarsTy . toLocVar) b)]
         Old.RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
@@ -605,8 +605,8 @@ allFreeVars ex =
         Old.AddFixed v _    -> S.singleton (fromVarToFreeVarsTy v)
         Old.GetCilkWorkerNum-> S.empty
         Old.LetAvail vs bod -> S.fromList (L.map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
-        Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy loc
-        Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy loc
+        Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
+        Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
         Old.SSPush _ a b _ -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
         Old.SSPop _ a b -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
         Old.LetRegE {} -> error "allFreeVars: LetRegE not handled"

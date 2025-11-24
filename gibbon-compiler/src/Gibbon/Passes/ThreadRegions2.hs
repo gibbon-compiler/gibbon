@@ -212,6 +212,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     dcLoc = getDconLoc loc
                                     fieldLocs = getAllFieldLocsSoA loc
                                     fieldLocs' = map (\(k, floc) -> (k, floc)) fieldLocs
+                                    fieldLocArgs = map (\((_k, floc), freg) -> NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)) (zip fieldLocs fieldRegs')
                                     dcLocArg = NewL2.Loc (LREM dcLoc dcreg dcEndReg mode)
                                     dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
                                     {- VS: TODO: I need to get find the correct integer for bounds check-}
@@ -261,14 +262,14 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                         )
                                         fieldRegs
                                     -- Just in case the locations are not present, we release them here
-                                    locInst = [LetLocE dcLoc (GetDataConLocSoA (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                    locInst = [LetLocE dcLocArg (GetDataConLocSoA (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
                                     locInst' =
                                       concatMap
-                                        ( \(d, floc) -> case floc of
-                                            SoA _ _ -> [LetLocE (floc) (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
-                                            _ -> [LetLocE floc (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                        ( \((d, floc), flarg) -> case floc of
+                                            SoA _ _ -> [LetLocE flarg (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
+                                            _ -> [LetLocE flarg (GetFieldLocSoA d (NewL2.Loc (LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) mode)))]
                                         )
-                                        fieldLocs
+                                        (zip fieldLocs fieldLocArgs)
                                  in ((boundsCheckVector, new_reg_Inst), locInst ++ locInst' ++ regInst ++ regInst')
                               else
                                 let dcreg = regionToVar dcReg
@@ -765,8 +766,8 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         else pure $ mkLets [(v, newretlocs, ty, rhs')] bod1
     LetE (v, locs, ty, rhs@(Ext (AllocateTagHere x x_tycon))) bod -> do
       let -- x_tycon = (wlocs_env # x)
-          rlocs_env' = M.insert x x_tycon rlocs_env
-          wlocs_env' = M.delete x wlocs_env
+          rlocs_env' = M.insert (toLocVar x) x_tycon rlocs_env
+          wlocs_env' = M.delete (toLocVar x) wlocs_env
       (LetE (v, locs, ty, rhs))
         <$> threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2) lfenv rlocs_env' wlocs_env' pkd_env region_locs ran_env indirs redirs bod
     LetE (v, locs, ty, rhs) bod ->
@@ -784,7 +785,8 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             <$> LetLocE loc FreeLE
             <$> threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs bod
         -- Update renv with a binding for loc
-        LetLocE loc rhs bod -> do
+        LetLocE locarg rhs bod -> do
+          let loc = toLocVar locarg
           let reg = case rhs of
                 StartOfRegionLE r -> regionToVar r
                 InRegionLE r -> regionToVar r
@@ -828,7 +830,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                 _ -> region_locs
               wlocs_env' = dbgTrace (minChatLvl) "Print renv LetLocE: " dbgTrace (minChatLvl) (sdoc (loc, reg, renv, region_locs, region_locs1)) dbgTrace (minChatLvl) "End renv LetLocE.\n" M.insert loc hole_tycon wlocs_env
           Ext
-            <$> LetLocE loc rhs
+            <$> LetLocE locarg rhs
             <$> threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' pkd_env region_locs1 ran_env indirs redirs bod
         RetE locs v -> do
           let ty = lookupVEnvLocVar (fromVarToFreeVarsTy v) env2
@@ -1286,7 +1288,7 @@ allFreeVars_sans_datacon_args ex =
       case ext of
         LetRegionE r _sz _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetParRegionE r _sz _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
-        LetLocE loc locexp bod -> S.delete (fromLocVarToFreeVarsTy loc) (allFreeVars_sans_datacon_args bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
+        LetLocE loc locexp bod -> S.delete (fromLocVarToFreeVarsTy (toLocVar loc)) (allFreeVars_sans_datacon_args bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
         StartOfPkdCursor cur -> S.singleton (fromVarToFreeVarsTy cur)
         TagCursor a b -> S.fromList [(fromLocVarToFreeVarsTy . toLocVar) a, (fromLocVarToFreeVarsTy . toLocVar) b]
         RetE locs v -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
@@ -1296,8 +1298,8 @@ allFreeVars_sans_datacon_args ex =
         AddFixed v _ -> S.singleton (fromVarToFreeVarsTy v)
         GetCilkWorkerNum -> S.empty
         LetAvail vs bod -> S.fromList (map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
-        AllocateTagHere loc _ -> S.singleton (fromLocVarToFreeVarsTy loc)
-        AllocateScalarsHere loc -> S.singleton (fromLocVarToFreeVarsTy loc)
+        AllocateTagHere loc _ -> S.singleton (fromLocVarToFreeVarsTy (toLocVar loc))
+        AllocateScalarsHere loc -> S.singleton (fromLocVarToFreeVarsTy (toLocVar loc))
         SSPush _ a b _ -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
         SSPop _ a b -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
     _ -> S.map fromVarToFreeVarsTy $ gFreeVars ex
