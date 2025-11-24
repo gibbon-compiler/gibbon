@@ -81,7 +81,6 @@ library
                        Gibbon.Passes.RouteEnds
                        Gibbon.Passes.FollowPtrs
                        Gibbon.Passes.InferFunAllocs
-                       Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.ThreadRegions2
                        Gibbon.Passes.Cursorize
                        Gibbon.Passes.FindWitnesses

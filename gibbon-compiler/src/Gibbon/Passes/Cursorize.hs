@@ -874,7 +874,8 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
         -- See `cursorizeLocExp`
-        LetLocE loc rhs bod -> do
+        LetLocE locarg rhs bod -> do
+          let loc = (toLocVar locarg)
           let ty2_of_loc = getCursorizeTyFromLocVar'' loc
           let ty3_of_loc = getCursorizeTyFromLocVar loc
           freeVarToVarEnv' <- do
@@ -1048,12 +1049,14 @@ cursorizeExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         LetAvail vs bod -> do
                             (bod', env) <- go freeVarToVarEnv bod
                             return (Ext $ L3.LetAvail vs bod', env) 
-        AllocateTagHere v tycon -> do
+        AllocateTagHere varg tycon -> do
+          let v = toLocVar varg
           let variable_name = case (M.lookup (fromLocVarToFreeVarsTy v) freeVarToVarEnv) of
                 Just v -> v
                 Nothing -> error "cursorizeExp: AllocateTagHere: unexpected location variable"
           pure (Ext $ L3.AllocateTagHere (variable_name) tycon, freeVarToVarEnv)
-        AllocateScalarsHere v -> do
+        AllocateScalarsHere varg -> do
+          let v = toLocVar varg
           let variable_name = case (M.lookup (fromLocVarToFreeVarsTy v) freeVarToVarEnv) of
                 Just v -> v
                 Nothing -> error "cursorizeExp: AllocateTagHere: unexpected location variable"
@@ -1791,7 +1794,8 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
         -- See `cursorizeLocExp`
-        LetLocE loc rhs bod -> do
+        LetLocE locarg rhs bod -> do
+          let loc = toLocVar locarg
           freeVarToVarEnv' <- do
             case loc of
               Single l ->
@@ -2134,8 +2138,12 @@ cursorizePackedExp freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
         LetAvail vs bod -> do
           (bod', freeVarToVarEnv') <- go freeVarToVarEnv tenv senv bod
           return (onDi (Ext . L3.LetAvail vs) bod', freeVarToVarEnv') 
-        AllocateTagHere v tycon -> pure (dl <$> Ext $ L3.AllocateTagHere (unwrapLocVar v) tycon, freeVarToVarEnv)
-        AllocateScalarsHere v -> pure (dl <$> Ext $ L3.AllocateScalarsHere (unwrapLocVar v), freeVarToVarEnv)
+        AllocateTagHere varg tycon -> do 
+          let v = toLocVar varg
+          pure (dl <$> Ext $ L3.AllocateTagHere (unwrapLocVar v) tycon, freeVarToVarEnv)
+        AllocateScalarsHere varg -> do
+          let v = toLocVar varg
+          pure (dl <$> Ext $ L3.AllocateScalarsHere (unwrapLocVar v), freeVarToVarEnv)
         SSPush a b c d -> pure (dl <$> Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d, freeVarToVarEnv)
         SSPop a b c -> pure (dl <$> Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c), freeVarToVarEnv)
     MapE {} -> error $ "TODO: cursorizePackedExp MapE"

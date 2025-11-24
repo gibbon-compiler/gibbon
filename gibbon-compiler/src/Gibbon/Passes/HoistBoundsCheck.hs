@@ -17,7 +17,7 @@ type BoundEnv = S.Set FreeVarsTy
 data HoistableExpr
   = BoundsCheckExpr Int LocArg LocArg
   | BoundsCheckVectorExpr [(Int, LocArg, LocArg)]
-  | LetLocExpr LocVar (PreLocExp LocArg)
+  | LetLocExpr LocArg (PreLocExp LocArg)
   | LetRegExpr RegVar (PreRegExp LocArg)
   | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
   | LetRegionExpr Region RegionSize (Maybe RegionType)
@@ -186,7 +186,7 @@ collectVarsForBoundsCheck vars env ex = do
       case ext of
         AddFixed {} -> return (ex, env)
         LetLocE loc rhs bod -> do
-          let (env', store) = storeHoistableExpr (fromLocVarToFreeVarsTy loc) vars (freeVarsInLocExp rhs) (LetLocExpr loc rhs) env
+          let (env', store) = storeHoistableExpr (fromLocVarToFreeVarsTy (toLocVar loc)) vars (freeVarsInLocExp rhs) (LetLocExpr loc rhs) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do
