@@ -94,6 +94,7 @@ import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Passes.HoistBoundsCheck (hoistBoundsCheckProg)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
+import           Gibbon.Passes.InferCallType (inferCallType)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
 -- Configuring and launching the compiler.
@@ -835,6 +836,11 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- l2' <- go "threadRegions"    threadRegions l2'
               l2' <- go "threadRegions2" threadRegions2 l2'
               l2' <- go "hoistBoundsCheck" hoistBoundsCheckProg l2'
+
+
+              --Infer the type of AppE call
+              -- This can either be a tail call, a tail mod cons call or unknown
+              l2' <- go "inferCallType" inferCallType l2'
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)

@@ -1400,6 +1400,10 @@ switchOutLoc exp ts@(LocationTypeState ls) l =
       Nothing -> throwError $ GenericTC ("Unknown location " ++ (show l)) exp
       Just (Output,a) -> return $ LocationTypeState $ M.update (\_ -> Just (Input,a)) l ls
       Just (Input,_a) -> return ts
+      -- TODO these modalities might require some other logic
+      Just (OutputMutable,a) -> return $ LocationTypeState $ M.update (\_ -> Just (Input,a)) l ls
+      Just (InputMutable,_a) -> return ts
+
 
 _absentAfter :: Exp -> LocationTypeState -> LocVar -> TcM ()
 _absentAfter exp (LocationTypeState ls) l =

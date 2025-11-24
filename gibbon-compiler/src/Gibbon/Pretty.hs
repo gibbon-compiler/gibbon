@@ -344,8 +344,9 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           CharE i -> quotes (char i)
           FloatE i  -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
-          AppE v _cty locs ls -> parens $
+          AppE v cty locs ls -> parens $
                              pprintWithStyle sty v <+>
+                             pprintWithStyle sty cty <+>
                              (brackets $ hcat (punctuate "," (map pprint locs))) <+>
                              (pprintWithStyle sty ls)
           PrimAppE pr es ->
@@ -507,6 +508,8 @@ instance Pretty L2.LocVar where
 instance Pretty L2.RegVar where
   pprintWithStyle _ loc = parens $ text $ sdoc loc
 
+instance Pretty TailRecType where 
+ pprintWithStyle _ ty = parens $ text $ sdoc ty  
 
 instance Pretty L2.Region where
   pprintWithStyle _ reg = parens $ text $ sdoc reg
