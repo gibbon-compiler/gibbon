@@ -207,6 +207,8 @@ handleIndexingSoARegCursors (arrLoc, arrName) (start, end) locvar var_env = do
 
 cursorizeFunDef :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
 cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta} = do
+  dflags <- getDynFlags
+  let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
   let inLocs = inLocVars funTy
       outLocs = outLocVars funTy
       outRegs = outRegVars funTy

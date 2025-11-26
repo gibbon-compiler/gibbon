@@ -8,6 +8,7 @@ import Prelude as P
 import Gibbon.Common
 import Gibbon.L2.Syntax as Old
 import Gibbon.NewL2.Syntax as NewL2
+import Gibbon.DynFlags
 
 
 -- ^ A map that tracks location variables that need to be mutable.
@@ -40,6 +41,24 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                         Just TailModuloCons -> TailRec 
                         _ -> funRec
         funMeta' = meta{funRec=funRec'}
+    dflags <- getDynFlags
+    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
+    let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
+    let (funTy', needs_update) = case optimize_tail_calls of 
+                            True -> let (locVars', updateLocs) = P.foldr
+                                                         (\lrm@(LRM l r m) (lvs, lcs) -> case (l, m) of
+                                                                                            (Single{}, Input) -> (lvs ++ [LRM l r m], lcs)
+                                                                                            (Single{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            (SoA{}, Input) ->  (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            (SoA{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            _ -> (lvs ++ [lrm], lcs) 
+                                                         ) ([], []) locVars
+                                        fty' = (ArrowTy2 locVars' arrIns _arrEffs arrOut _locRets _isPar)
+                                      in (fty', updateLocs)
+                            False -> (funTy, [])
+        funBody'' = markMutableLocsAfterInitialPass needs_update funBody'
+
+
         -- If a function is identified to be tailRecursive
         -- Here is the blueprint of what we want to do 
         -- TODO: don't make tail recursion optimization automatic 
@@ -52,7 +71,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
         -- 1.) We make all inputs/outputs mutable and try to make the function 
         -- return void.
     --funBody''' <- copyOutputMutableBeforeCallsAndReplace funBody''
-    dbgTrace minChatLvl "Print tail call type!" dbgTrace minChatLvl (sdoc (funName, _tailTy)) dbgTrace minChatLvl "End tail call type!" return $ FunDef funName funArgs funTy funBody' funMeta'
+    dbgTrace minChatLvl "Print tail call type!" dbgTrace minChatLvl (sdoc (funName, _tailTy)) dbgTrace minChatLvl "End tail call type!" return $ FunDef funName funArgs funTy' funBody'' funMeta'
 
 --  if tailCallTy == TMC
 --  then
@@ -457,7 +476,139 @@ inferCallTypeFnBodyHelper depth exp2 = case exp2 of
         _ -> NotTailRec
     _ -> NotTailRec
 
-markMutableLocsAfterInitialPass :: TrackLocVariables -> NewL2.Exp2 -> NewL2.Exp2
+
+
+memberEnv :: LocArg -> [FreeVarsTy] -> Bool 
+memberEnv lcarg env = case lcarg of 
+                            NewL2.Loc (LREM l _r _e _m) -> P.elem (fromLocVarToFreeVarsTy l) env 
+                            NewL2.EndWitness (LREM l _r _e _m) _lvar -> P.elem (fromLocVarToFreeVarsTy l) env
+                            NewL2.Reg regvar _mod -> P.elem (fromRegVarToFreeVarsTy regvar) env
+                            NewL2.EndOfReg _r1 _mod r2 -> P.elem (fromRegVarToFreeVarsTy r2) env
+                            NewL2.EndOfReg_Tagged r1 -> P.elem (fromRegVarToFreeVarsTy r1) env
+
+updateEnv :: LocArg -> [FreeVarsTy] -> [FreeVarsTy]
+updateEnv lcarg env = case lcarg of 
+                            NewL2.Loc (LREM l r _e _m) -> let newElems = [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy r]
+                                                          in env ++ newElems
+                            NewL2.EndWitness (LREM l r _e _m) lvar -> let newElems = [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy r, fromLocVarToFreeVarsTy lvar]
+                                                                in env ++ newElems
+                            NewL2.Reg regvar _mod -> env ++ [fromRegVarToFreeVarsTy regvar]
+                            NewL2.EndOfReg r1 _mod r2 -> env ++ [fromRegVarToFreeVarsTy r1, fromRegVarToFreeVarsTy r2]
+                            NewL2.EndOfReg_Tagged r1 ->  env ++ [fromRegVarToFreeVarsTy r1]
+
+
+
+modalityNeedsUpdate :: LocVar -> Modality -> Bool
+modalityNeedsUpdate lc m = case (lc, m) of 
+                                    (Single{}, Input) -> False 
+                                    (Single{}, Output) -> True
+                                    (SoA{}, Input) -> True
+                                    (SoA{}, Output) -> True
+                                    _ -> False
+
+modalityNeedsUpdateReg :: RegVar -> Modality -> Bool
+modalityNeedsUpdateReg lc m = case (lc, m) of 
+                                    (SingleR{}, Input) -> False 
+                                    (SingleR{}, Output) -> True
+                                    (SoARv{}, Input) -> True
+                                    (SoARv{}, Output) -> True
+                                    _ -> False
+
+
+updateEnv' :: LocArg -> [FreeVarsTy] -> [FreeVarsTy]
+updateEnv' lcarg env = case lcarg of 
+                            NewL2.Loc (LREM l r _e m) -> if modalityNeedsUpdate l m 
+                                                         then env ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy r] 
+                                                         else env                                                              
+                            NewL2.EndWitness (LREM l r _e _m) _lvar -> if modalityNeedsUpdate l _m 
+                                                                      then env ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy r]
+                                                                      else env
+                            NewL2.Reg regvar _mod -> if modalityNeedsUpdateReg regvar _mod
+                                                     then env ++ [fromRegVarToFreeVarsTy regvar]
+                                                     else env
+                            NewL2.EndOfReg r1 _mod r2 -> if modalityNeedsUpdateReg r2 _mod
+                                                         then env ++ [fromRegVarToFreeVarsTy r1, fromRegVarToFreeVarsTy r2]
+                                                         else env
+                            NewL2.EndOfReg_Tagged r1 -> if modalityNeedsUpdateReg r1 _mod
+                                                        then env ++ [fromRegVarToFreeVarsTy r1]
+                                                        else env
+                             
+
+updateLocArg :: LocArg -> [FreeVarsTy] -> LocArg
+updateLocArg larg env = case larg of
+                             NewL2.Loc (LREM l r e m) -> if P.elem (fromLocVarToFreeVarsTy l) env
+                                                         then 
+                                                            let m' = case m of 
+                                                                        Input -> InputMutable
+                                                                        Output -> OutputMutable
+                                                                        _ -> m
+                                                              in NewL2.Loc (LREM l r e m')
+                                                         else NewL2.Loc (LREM l r e m)  
+                             NewL2.EndWitness (LREM l r e m) lvar -> if P.elem (fromLocVarToFreeVarsTy l) env
+                                                                     then 
+                                                                        let m' = case m of 
+                                                                                    Input -> InputMutable
+                                                                                    Output -> OutputMutable
+                                                                                    _ -> m
+                                                                          in NewL2.EndWitness (LREM l r e m') lvar 
+                                                                     else NewL2.EndWitness (LREM l r e m) lvar
+                             NewL2.Reg regvar mode -> if P.elem (fromRegVarToFreeVarsTy regvar) env
+                                                     then
+                                                        let m' = case mode of 
+                                                                    Input -> InputMutable
+                                                                    Output -> OutputMutable
+                                                                    _ -> mode
+                                                          in NewL2.Reg regvar m'
+                                                     else NewL2.Reg regvar mode
+                             NewL2.EndOfReg r1 mode r2 -> if P.elem (fromRegVarToFreeVarsTy r1) env || P.elem (fromRegVarToFreeVarsTy r2) env 
+                                                         then
+                                                            let m' = case mode of 
+                                                                    Input -> InputMutable
+                                                                    Output -> OutputMutable
+                                                                    _ -> mode
+                                                              in NewL2.EndOfReg r1 m' r2
+                                                         else NewL2.EndOfReg r1 mode r2
+                             NewL2.EndOfReg_Tagged _r1 -> larg
+
+
+updateLocArg' :: LocArg -> [FreeVarsTy] -> (LocArg, Bool)
+updateLocArg' larg env = case larg of
+                             NewL2.Loc (LREM l r e m) -> if P.elem (fromLocVarToFreeVarsTy l) env
+                                                         then 
+                                                            let m' = case m of 
+                                                                        Input -> InputMutable
+                                                                        Output -> OutputMutable
+                                                                        _ -> m
+                                                              in (NewL2.Loc (LREM l r e m'), True)
+                                                         else (NewL2.Loc (LREM l r e m), False)  
+                             NewL2.EndWitness (LREM l r e m) lvar -> if P.elem (fromLocVarToFreeVarsTy l) env
+                                                                     then 
+                                                                        let m' = case m of 
+                                                                                    Input -> InputMutable
+                                                                                    Output -> OutputMutable
+                                                                                    _ -> m
+                                                                          in (NewL2.EndWitness (LREM l r e m') lvar, True) 
+                                                                     else (NewL2.EndWitness (LREM l r e m) lvar, False)
+                             NewL2.Reg regvar mode -> if P.elem (fromRegVarToFreeVarsTy regvar) env
+                                                     then
+                                                        let m' = case mode of 
+                                                                    Input -> InputMutable
+                                                                    Output -> OutputMutable
+                                                                    _ -> mode
+                                                          in (NewL2.Reg regvar m', True)
+                                                     else (NewL2.Reg regvar mode, False)
+                             NewL2.EndOfReg r1 mode r2 -> if P.elem (fromRegVarToFreeVarsTy r1) env || P.elem (fromRegVarToFreeVarsTy r2) env 
+                                                         then
+                                                            let m' = case mode of 
+                                                                    Input -> InputMutable
+                                                                    Output -> OutputMutable
+                                                                    _ -> mode
+                                                              in (NewL2.EndOfReg r1 m' r2, True)
+                                                         else (NewL2.EndOfReg r1 mode r2, False)
+                             NewL2.EndOfReg_Tagged _r1 -> (larg, False)
+                              
+
+markMutableLocsAfterInitialPass :: [FreeVarsTy] -> NewL2.Exp2 -> NewL2.Exp2
 markMutableLocsAfterInitialPass env _exp =
     case _exp of
         VarE{} -> _exp
@@ -469,21 +620,39 @@ markMutableLocsAfterInitialPass env _exp =
             let args' = P.map (markMutableLocsAfterInitialPass env) args
                 locs' =
                     P.map
-                        ( \l -> case l of
-                            Loc (LREM l' r e _) -> case (backTrackLocs env l' False M.empty) of
-                                (False, _) -> l
-                                (True, _) -> Loc (LREM l' r e OutputMutable)
-                            _ -> l
-                        )
+                        ( \l -> updateLocArg l env)
                         locs
              in AppE v t locs' args'
         PrimAppE p args ->
             let args' = P.map (markMutableLocsAfterInitialPass env) args
              in PrimAppE p args'
-        LetE (v, loc, ty, rhs) bod ->
-            let rhs' = markMutableLocsAfterInitialPass env rhs
-                bod' = markMutableLocsAfterInitialPass env bod
-             in LetE (v, loc, ty, rhs') bod'
+        LetE (v, loc, ty, rhs) bod -> case rhs of 
+                                            -- TODO: This might be totally un-necessary
+                                            -- But this works for now.
+                                            AppE f t alocs args -> let 
+                                                                      (alocs', was_updated) = foldl (\(l, wu) al  ->
+                                                                                                            let (l', wu') = updateLocArg' al env
+                                                                                                             in (l ++ [l'], wu || wu')  
+                                                                                                    ) ([], False) alocs
+                                                                      args' = P.map (markMutableLocsAfterInitialPass env) args
+                                                                     in if was_updated 
+                                                                        then 
+                                                                            let env' = foldr (\l e -> updateEnv' l e) env loc
+                                                                                loc' = P.map (\l -> updateLocArg l env') loc
+                                                                                rhs' = AppE f t alocs' args'
+                                                                                bod' = markMutableLocsAfterInitialPass env' bod
+                                                                              in LetE (v, loc', ty, rhs') bod'
+                                                                        else
+                                                                            let env' = foldr (\l e -> updateEnv' l e) env loc
+                                                                                rhs' = AppE f t alocs' args'
+                                                                                bod' = markMutableLocsAfterInitialPass env' bod
+                                                                             in LetE (v, loc, ty, rhs') bod'
+                                            -- TODO: Update 
+                                            -- Should we just unconditionally update the locs in the LetE?
+                                            _ -> let rhs' = markMutableLocsAfterInitialPass env rhs
+                                                     bod' = markMutableLocsAfterInitialPass env bod
+                                                  in LetE (v, loc, ty, rhs') bod'
+                
         IfE a b c ->
             let a' = markMutableLocsAfterInitialPass env a
                 b' = markMutableLocsAfterInitialPass env b
@@ -506,18 +675,20 @@ markMutableLocsAfterInitialPass env _exp =
                         brs
              in CaseE scrt brs'
         -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
-        DataConE loc c args ->
-            let locInDataCon = toLocVar loc
-             in case (backTrackLocs env locInDataCon False M.empty) of
-                    (False, _) ->
-                        let args' = P.map (markMutableLocsAfterInitialPass env) args
-                         in DataConE loc c args'
-                    (True, _) ->
-                        let loc' = case loc of
-                                NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
-                                _ -> loc
-                            args' = P.map (markMutableLocsAfterInitialPass env) args
-                         in DataConE loc' c args'
+        DataConE loc c args -> let loc' = updateLocArg loc env
+                                   args' = P.map (markMutableLocsAfterInitialPass env) args
+                                 in DataConE loc' c args'
+            -- let locInDataCon = toLocVar loc
+            --  in case (backTrackLocs env locInDataCon False M.empty) of
+            --         (False, _) ->
+            --             let args' = P.map (markMutableLocsAfterInitialPass env) args
+            --              in DataConE loc c args'
+            --         (True, _) ->
+            --             let loc' = case loc of
+            --                     NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
+            --                     _ -> loc
+            --                 args' = P.map (markMutableLocsAfterInitialPass env) args
+            --              in DataConE loc' c args'
         TimeIt e d b ->
             let e' = markMutableLocsAfterInitialPass env e
              in TimeIt e' d b
@@ -543,43 +714,47 @@ markMutableLocsAfterInitialPass env _exp =
                 Old.LetParRegionE r a b bod ->
                     let bod' = markMutableLocsAfterInitialPass env bod
                      in Ext $ Old.LetParRegionE r a b bod'
-                Old.LetLocE loc locexp bod ->
-                    let locInExp = freeLoc locexp
-                        bod' = markMutableLocsAfterInitialPass env bod
-                        locexp' = case locInExp of
-                            Nothing -> locexp
-                            Just l -> case (backTrackLocs env l False M.empty) of
-                                (False, _) -> locexp
-                                (True, _) -> changeLocData locexp l
-                        loc' = case (backTrackLocs env (toLocVar loc) False M.empty) of
-                            (False, _) -> loc
-                            (True, _) -> case loc of
-                                --Loc lrem -> Loc lrem{lremMode = OutputMutable}
-                                _ -> loc
-                     in Ext $ Old.LetLocE loc' locexp' bod'
-                Old.BoundsCheck a reg cur ->
-                    let locInCur = toLocVar cur
-                     in case (backTrackLocs env locInCur False M.empty) of
-                            (False, _) -> Ext ext
-                            (True, _) ->
-                                let cur' = case cur of
-                                        NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
-                                        _ -> cur
-                                 in Ext $ Old.BoundsCheck a reg cur'
-                Old.AllocateTagHere loc tycon ->
-                    let loc' = case (backTrackLocs env (toLocVar loc) False M.empty) of
-                            (False, _) -> loc
-                            (True, _) -> case loc of
-                                Loc lrem -> Loc lrem{lremMode = OutputMutable}
-                                _ -> loc
-                     in Ext $ Old.AllocateTagHere loc' tycon
-                Old.AllocateScalarsHere loc ->
-                    let loc' = case (backTrackLocs env (toLocVar loc) False M.empty) of
-                            (False, _) -> loc
-                            (True, _) -> case loc of
-                                Loc lrem -> Loc lrem{lremMode = OutputMutable}
-                                _ -> loc
-                     in Ext $ Old.AllocateScalarsHere loc'
+                -- TODO: Handle all cases.
+                -- We need to add locations in locexp to the env. 
+                -- based on the locexp encountered. 
+                -- We need to pattern match on the locexp.     
+                Old.LetLocE loc locexp bod -> case locexp of
+                                                     StartOfRegionLE _reg -> let bod' = markMutableLocsAfterInitialPass env bod 
+                                                                              in Ext $ Old.LetLocE loc locexp bod'
+                                                     AfterConstantLE i lc -> let lc' = updateLocArg lc env
+                                                                                 env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                 loc' = updateLocArg loc env' 
+                                                                                 bod' = markMutableLocsAfterInitialPass env' bod
+                                                                              in Ext $ Old.LetLocE loc' (AfterConstantLE i lc') bod'
+                                                     AfterVariableLE v lc b -> let lc' = updateLocArg lc env
+                                                                                   env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                   loc' = updateLocArg loc env'
+                                                                                   bod' = markMutableLocsAfterInitialPass env' bod
+                                                                                 in Ext $ Old.LetLocE loc' (AfterVariableLE v lc' b) bod'
+                                                     InRegionLE _reg -> let bod' = markMutableLocsAfterInitialPass env bod 
+                                                                         in Ext $ Old.LetLocE loc locexp bod'
+                                                     FreeLE -> let bod' = markMutableLocsAfterInitialPass env bod
+                                                                in Ext $ Old.LetLocE loc locexp bod'
+                                                     FromEndLE lc -> let lc' = updateLocArg lc env 
+                                                                         env' = if memberEnv lc env then updateEnv loc env else env
+                                                                         loc' = updateLocArg loc env'
+                                                                         bod' = markMutableLocsAfterInitialPass env' bod 
+                                                                       in Ext $ Old.LetLocE loc' (FromEndLE lc') bod'
+                                                     _ -> error "Not implemented!"
+                                                    --  GenSoALoc lc flocs ->
+                                                    --  GetDataConLocSoA lc ->
+                                                    --  GetFieldLocSoA (dcon, fidx) lc ->
+                                                    --  AssignLE lc ->
+
+                Old.BoundsCheck a reg cur -> let cur' = updateLocArg cur env 
+                                                 reg' = updateLocArg reg env
+                                              in Ext $ Old.BoundsCheck a reg' cur'
+                Old.AllocateTagHere loc tycon -> let loc' = updateLocArg loc env 
+                                                  in Ext $ Old.AllocateTagHere loc' tycon
+                Old.AllocateScalarsHere loc -> let loc' = updateLocArg loc env 
+                                                 in Ext $ Old.AllocateScalarsHere loc'
+                Old.RetE locs v -> let locs' = map (\l -> updateLocArg l env) locs
+                                    in Ext $ Old.RetE locs' v
                 _ -> Ext ext
 
 -- Old.StartOfPkdCursor v -> [NoTail]
