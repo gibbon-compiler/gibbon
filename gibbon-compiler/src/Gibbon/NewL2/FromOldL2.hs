@@ -259,10 +259,14 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
       StartOfRegionLE reg -> New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       AfterConstantLE _ loc2 ->
         let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+            modal = case lrem of 
+                          New.LREM _ _ _ m -> m
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) modal)
       AfterVariableLE _ loc2 _ ->
         let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+            modal = case lrem of 
+                          New.LREM _ _ _ m -> m
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) modal)
       InRegionLE reg ->
         New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       FreeLE ->
