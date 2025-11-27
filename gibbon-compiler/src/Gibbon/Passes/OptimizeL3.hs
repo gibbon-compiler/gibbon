@@ -122,6 +122,9 @@ removeReDefsExp env ex =
     Ext (AddCursor v e) -> do
       e' <- go e
       pure (Ext $ AddCursor v e')
+    Ext (BumpCursorMutable v e) -> do
+      e' <- go e
+      pure (Ext $ BumpCursorMutable v e')
     Ext (DerefMutCursor v) -> do 
       pure (Ext $ DerefMutCursor v)
     Ext (SubPtr a b) -> do

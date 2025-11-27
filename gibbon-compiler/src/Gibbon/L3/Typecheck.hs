@@ -124,6 +124,13 @@ tcExp isPacked ddfs env exp = do
           ensureEqualTyModCursor ddfs exp vrhs IntTy
           return CursorTy
 
+        BumpCursorMutable v rhs -> do
+          vty <- lookupVar env v exp 
+          ensureEqualTyModCursor ddfs exp vty MutCursorTy
+          vrhs <- go rhs 
+          ensureEqualTyModCursor ddfs exp vrhs IntTy
+          return $ ProdTy []
+
         -- Subtract something from a cursor variable
         SubPtr v w -> do
           vty  <- lookupVar env v exp

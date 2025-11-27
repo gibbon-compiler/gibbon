@@ -487,6 +487,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
             case ext of
               WriteScalar _ _ ex -> go ex
               AddCursor _ ex   -> go ex
+              BumpCursorMutable _ ex -> go ex
               SubPtr{}         -> syms
               WriteCursor _ ex -> go ex
               TagCursor{}    -> syms
