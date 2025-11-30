@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
+    , toLocVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -48,6 +48,7 @@ import           Gibbon.L1.Syntax hiding (AddFixed, StartOfPkdCursor)
 import qualified Gibbon.L1.Syntax as L1
 
 import qualified Gibbon.L2.Syntax as Old
+import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
@@ -129,6 +130,14 @@ toLocVar arg =
     EndOfReg _ _ v -> Old.fromRegVarToLocVar v
     EndOfReg_Tagged v -> Old.fromRegVarToLocVar v
 
+getModality :: LocArg -> Maybe L2.Modality
+getModality lc =
+  case lc of
+    Loc lrm        -> Just $ lremMode lrm
+    EndWitness lrm _v -> Just $ lremMode lrm
+    Reg _v m        -> Just m
+    EndOfReg _ m _v -> Just m 
+    EndOfReg_Tagged _ -> Nothing
 
 fromLocArgToFreeVarsTy :: LocArg -> FreeVarsTy
 fromLocArgToFreeVarsTy arg =
