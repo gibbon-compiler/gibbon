@@ -1,6 +1,6 @@
 data PackedInt = PacI Int
 data List = Cons Int PackedInt List | Nil 
-{-# ANN type PackedInt "Factored" #-}
+{-# ANN type PackedInt "Linear" #-}
 {-# ANN type List "Factored" #-}
 
 addPackedInt' :: PackedInt -> Int -> PackedInt

@@ -157,7 +157,7 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                             TailCall -> env
                             TailModuloCons ->
                                 P.foldr
-                                    ( \innerloc e -> case M.lookup (toLocVar innerloc) e of
+                                    (\innerloc e -> case M.lookup (toLocVar innerloc) e of
                                         Nothing -> case innerloc of
                                             Loc (LREM _l' _r' _e' m') -> case m' of
                                                 Output -> M.insert (toLocVar innerloc) (S.empty, True) e
@@ -337,12 +337,12 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                         Nothing -> env
                         Just l -> M.insert l (S.singleton (toLocVar loc), False) env
                     (bod', env'', t) = inferCallTypeFnBody funName env' bod
-                    locexp' = case locInExp of
-                        Nothing -> locexp
-                        Just l -> case (backTrackLocs env'' l False M.empty) of
-                            (False, _) -> locexp
-                            (True, _) -> changeLocData locexp l
-                 in (Ext $ Old.LetLocE loc locexp' bod', env'', t)
+                    -- locexp' = case locInExp of
+                    --     Nothing -> locexp
+                    --     Just l -> case (backTrackLocs env'' l False M.empty) of
+                    --         (False, _) -> locexp
+                    --         (True, _) -> changeLocData locexp l
+                 in (Ext $ Old.LetLocE loc locexp bod', env'', t)
             Old.LetRegE reg regexp bod -> 
                 let (bod', env', t) = inferCallTypeFnBody funName env bod
                  in (Ext $ Old.LetRegE reg regexp bod', env', t)
@@ -722,12 +722,14 @@ markMutableLocsAfterInitialPass env _exp =
                                                      StartOfRegionLE _reg -> let bod' = markMutableLocsAfterInitialPass env bod 
                                                                               in Ext $ Old.LetLocE loc locexp bod'
                                                      AfterConstantLE i lc -> let lc' = updateLocArg lc env
-                                                                                 env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                 --env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                 env' = env
                                                                                  loc' = updateLocArg loc env' 
                                                                                  bod' = markMutableLocsAfterInitialPass env' bod
                                                                               in Ext $ Old.LetLocE loc' (AfterConstantLE i lc') bod'
                                                      AfterVariableLE v lc b -> let lc' = updateLocArg lc env
-                                                                                   env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                   --env' = if memberEnv lc env then updateEnv loc env else env
+                                                                                   env' = env
                                                                                    loc' = updateLocArg loc env'
                                                                                    bod' = markMutableLocsAfterInitialPass env' bod
                                                                                  in Ext $ Old.LetLocE loc' (AfterVariableLE v lc' b) bod'
@@ -736,7 +738,8 @@ markMutableLocsAfterInitialPass env _exp =
                                                      FreeLE -> let bod' = markMutableLocsAfterInitialPass env bod
                                                                 in Ext $ Old.LetLocE loc locexp bod'
                                                      FromEndLE lc -> let lc' = updateLocArg lc env 
-                                                                         env' = if memberEnv lc env then updateEnv loc env else env
+                                                                         -- env' = if memberEnv lc env then updateEnv loc env else env
+                                                                         env' = env
                                                                          loc' = updateLocArg loc env'
                                                                          bod' = markMutableLocsAfterInitialPass env' bod 
                                                                        in Ext $ Old.LetLocE loc' (FromEndLE lc') bod'

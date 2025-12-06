@@ -2,10 +2,10 @@ data List = Cons Int List | Nil
 data FloatList = FCons Float FloatList | FNil
 data Tree = Node Int Float FloatList List Tree Tree Tree | Leaf
 data ListA = ConsA Int ListA | NilA
-{-# ANN type ListA "Factored" #-}
+{-# ANN type ListA "Linear" #-}
 {-# ANN type Tree "Factored" #-}
 {-# ANN type List "Factored" #-}
-{-# ANN type FloatList "Linear" #-}
+{-# ANN type FloatList "Factored" #-}
 
 
 mkListA :: Int -> ListA
