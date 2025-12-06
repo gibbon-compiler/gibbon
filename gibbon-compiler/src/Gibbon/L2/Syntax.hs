@@ -48,7 +48,9 @@ module Gibbon.L2.Syntax
 -- * Operations on types
   , allLocVars
   , inLocVars
+  , inLocVarsMutable
   , outLocVars
+  , outLocVarsMutable
   , outRegVars
   , inRegVars
   , allRegVars
@@ -761,9 +763,18 @@ inLocVars :: ArrowTy2 ty2 -> [LocVar]
 inLocVars ty = L.map (\(LRM l _ _) -> l) $
                L.filter (\(LRM _ _ m) -> m == Input || m == InputMutable) (locVars ty)
 
+inLocVarsMutable :: ArrowTy2 ty2 -> [LocVar]
+inLocVarsMutable ty = L.map (\(LRM l _ _) -> l) $ 
+                      L.filter (\(LRM _ _ m) -> m == InputMutable) (locVars ty)
+
 outLocVars :: ArrowTy2 ty2 -> [LocVar]
 outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output || m == OutputMutable) (locVars ty)
+
+
+outLocVarsMutable :: ArrowTy2 ty2 -> [LocVar]
+outLocVarsMutable ty = L.map (\(LRM l _ _) -> l) $
+                       L.filter (\(LRM _ _ m) -> m == OutputMutable) (locVars ty)
 
 outRegVars :: ArrowTy2 ty2 -> [RegVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of

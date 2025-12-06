@@ -26,6 +26,15 @@ module Gibbon.L3.Syntax
   , getIndexPositionOfSoARegVar
   , linearizeLocVar
   , linearizeRegVar
+  , getVarNameFromFreeVar
+  , isMutModality
+  , checkIfLocIsPointedToByOutputMutLoc
+  , fst4
+  , snd4
+  , thd4
+  , fth4
+  , MutableLocPtsToEnv
+  , MutableLocOldValueEnv
   , module Gibbon.Language
   )
 where
@@ -40,6 +49,7 @@ import           Gibbon.Common
 -- import qualified Gibbon.L2.Syntax               as L2
 import           Gibbon.Language                hiding (mapMExprs)
 import qualified Gibbon.NewL2.Syntax as L2
+import Data.Vector.Internal.Check (HasCallStack)
 
 -------------------------------------------------------------------------------- 
 
@@ -58,6 +68,13 @@ type FunDef3 = FunDef Var Exp3
 type Exp3 = PreExp E3Ext () Ty3
 
 type Ty3 = UrTy ()
+
+-- Take the current snapshot of a Mutable location
+-- For a Mutable Location, we store its current value in the env. (variable name, location value name)
+type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar)
+
+-- Store the old value of the mutable location.
+type MutableLocOldValueEnv = M.Map LocVar (Var, Maybe LocVar)
 
 --------------------------------------------------------------------------------
 
@@ -120,6 +137,31 @@ data E3Ext loc dec =
   | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
     -- ^ Analogous to L2's extensions.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+
+getVarNameFromFreeVar :: HasCallStack => M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
+getVarNameFromFreeVar env fvar = case M.lookup fvar env of 
+                                        Nothing -> error "Did not find variable name!\n"
+                                        Just v -> v
+
+isMutModality :: L2.Modality -> Bool 
+isMutModality modal = case modal of 
+                          L2.InputMutable -> True
+                          L2.OutputMutable -> True 
+                          _ -> False
+
+fst4 :: (a, b, c, d) -> a
+fst4 (a, _, _, _) = a
+
+snd4 :: (a, b, c, d) -> b
+snd4 (_, b, _, _) = b
+
+thd4 :: (a, b, c, d) -> c
+thd4 (_, _, c, _) = c
+
+fth4 :: (a, b, c, d) -> d
+fth4 (_, _, _, d) = d
+
 
 instance FreeVars (E3Ext l d) where
   gFreeVars  e =
@@ -310,12 +352,22 @@ scalarToTy FloatS= FloatTy
 scalarToTy SymS  = SymTy
 scalarToTy BoolS = BoolTy
 
+
+-- Takes in a Loc and checks if a mutable locations points to that loc
+checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv)) mbl -> case mlv of 
+                                                                                    Nothing -> mbl
+                                                                                    Just lv -> if lv == loc
+                                                                                               then Just k
+                                                                                               else mbl
+                                                          ) Nothing (M.toList mlocenv)
+
 -- For a single location variable, its modality will determine which type of 
 -- Cursor will be assigned to it. 
 singleLocToCursorBasedOnModality :: LocVar -> Maybe L2.Modality -> Bool -> Ty3 
-singleLocToCursorBasedOnModality lc modality isTailAndOverrideModality = if isTailAndOverrideModality 
-                                                                         then MutCursorTy
-                                                                         else case modality of 
+singleLocToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False 
+                                                                          then MutCursorTy
+                                                                          else case modality of 
                                                                                   Nothing -> CursorTy 
                                                                                   Just m -> case (lc, m) of
                                                                                               (Single{}, L2.Input) -> CursorTy
@@ -327,11 +379,11 @@ singleLocToCursorBasedOnModality lc modality isTailAndOverrideModality = if isTa
 -- For a single location variable, its modality will determine which type of 
 -- Cursor will be assigned to it. Returns L2.Ty2
 singleLocToCursorBasedOnModalityL2 :: LocVar -> Maybe L2.Modality -> Bool -> L2.Ty2
-singleLocToCursorBasedOnModalityL2 lc modality isTailAndOverrideModality = if isTailAndOverrideModality
-                                                                           then L2.MkTy2 MutCursorTy
-                                                                           else case modality of 
-                                                                            Nothing -> L2.MkTy2 CursorTy
-                                                                            Just m -> case (lc, m) of
+singleLocToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if False
+                                                                            then L2.MkTy2 MutCursorTy
+                                                                            else case modality of 
+                                                                             Nothing -> L2.MkTy2 CursorTy
+                                                                             Just m -> case (lc, m) of
                                                                                            (Single{}, L2.Input) -> L2.MkTy2 CursorTy
                                                                                            (Single{}, L2.InputMutable) -> L2.MkTy2 MutCursorTy
                                                                                            (Single{}, L2.Output) -> L2.MkTy2 CursorTy
@@ -341,9 +393,9 @@ singleLocToCursorBasedOnModalityL2 lc modality isTailAndOverrideModality = if is
 -- For a single location variable, its modality will determine which type of 
 -- Cursor will be assigned to it. Returns UrTy loc
 singleLocToCursorBasedOnModalityUrTy :: LocVar -> Maybe L2.Modality -> Bool -> UrTy loc
-singleLocToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality = if isTailAndOverrideModality
-                                                                             then MutCursorTy 
-                                                                             else case modality of 
+singleLocToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if False
+                                                                              then MutCursorTy 
+                                                                              else case modality of 
                                                                                         Nothing -> CursorTy
                                                                                         Just m -> case (lc, m) of
                                                                                                        (Single{}, L2.Input) -> CursorTy
@@ -357,7 +409,7 @@ singleLocToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality = if 
 -- For a single region variable, its modality will determine which type of 
 -- Cursor will be assigned to it.
 singleRegToCursorBasedOnModality :: RegVar -> Maybe L2.Modality -> Bool -> Ty3 
-singleRegToCursorBasedOnModality lc modality isTailAndOverrideModality = if isTailAndOverrideModality
+singleRegToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False
                                                                                    then MutCursorTy
                                                                                    else case modality of 
                                                                                               Nothing -> CursorTy
@@ -371,10 +423,10 @@ singleRegToCursorBasedOnModality lc modality isTailAndOverrideModality = if isTa
 -- For a single region variable, its modality will determine which type of 
 -- Cursor will be assigned to it.
 singleRegToCursorBasedOnModalityL2 :: RegVar -> Maybe L2.Modality -> Bool -> L2.Ty2 
-singleRegToCursorBasedOnModalityL2 lc modality isTailAndOverrideModality = if isTailAndOverrideModality
-                                                                           then L2.MkTy2 MutCursorTy
-                                                                           else
-                                                                            case modality of 
+singleRegToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if False
+                                                                            then L2.MkTy2 MutCursorTy
+                                                                            else
+                                                                             case modality of 
                                                                               Nothing -> L2.MkTy2 CursorTy
                                                                               Just m -> case (lc, m) of
                                                                                                    (SingleR{}, L2.Input) -> L2.MkTy2 CursorTy
@@ -387,10 +439,10 @@ singleRegToCursorBasedOnModalityL2 lc modality isTailAndOverrideModality = if is
 -- For a single region variable, its modality will determine which type of 
 -- Cursor will be assigned to it.
 singleRegToCursorBasedOnModalityUrTy :: RegVar -> Maybe L2.Modality -> Bool-> UrTy loc 
-singleRegToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality = if isTailAndOverrideModality
-                                                                             then MutCursorTy 
-                                                                             else 
-                                                                              case modality of 
+singleRegToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if False
+                                                                              then MutCursorTy 
+                                                                              else 
+                                                                               case modality of 
                                                                                     Nothing -> CursorTy
                                                                                     Just m -> case (lc, m) of
                                                                                                    (SingleR{}, L2.Input) -> CursorTy
@@ -401,26 +453,26 @@ singleRegToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality = if 
 
 
 getIndexPositionOfSoALocVar :: Bool -> Maybe L2.Modality -> [((DataCon, Int), LocVar)] -> LocVar -> (Int, Int, Bool)
-getIndexPositionOfSoALocVar isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+getIndexPositionOfSoALocVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
                                                                     then
                                                                       (s, e, True)
                                                                     else
                                                                       let seen = if fl == loc then True else False
                                                                        in case fl of 
                                                                           Single{} -> (e, e + 1, seen) 
-                                                                          SoA{} -> let (CursorArrayTy sz) = getCursorizeTyFromLocVar modality isTailAndOverrideModality fl 
+                                                                          SoA{} -> let (CursorArrayTy sz) = getCursorizeTyFromLocVar modality False fl 
                                                                                     in (e, e + sz, seen)
                                              ) (1, 1, False) flds 
 
 getIndexPositionOfSoARegVar :: Bool -> Maybe L2.Modality -> [((DataCon, Int), RegVar)] -> RegVar -> (Int, Int, Bool)
-getIndexPositionOfSoARegVar isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+getIndexPositionOfSoARegVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
                                                                     then
                                                                       (s, e, True)
                                                                     else
                                                                       let seen = if fl == loc then True else False
                                                                        in case fl of 
                                                                           SingleR{} -> (e, e + 1, seen) 
-                                                                          SoARv{} -> let (CursorArrayTy sz) = getCursorizeTyFromRegVar modality isTailAndOverrideModality fl 
+                                                                          SoARv{} -> let (CursorArrayTy sz) = getCursorizeTyFromRegVar modality False fl 
                                                                                     in (e, e + sz, seen)
                                              ) (1, 1, False) flds 
 
@@ -438,14 +490,14 @@ linearizeRegVar loc = case loc of
                                                  in [dcloc] ++ flinear
 
 getCursorizeTyFromLocVar :: Maybe L2.Modality -> Bool -> LocVar -> Ty3
-getCursorizeTyFromLocVar modality isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModality lc modality isTailAndOverrideModality
+getCursorizeTyFromLocVar modality _isTailAndOverrideModality lc = case lc of 
+                                  Single{} -> singleLocToCursorBasedOnModality lc modality False
                                   SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
                                                                                                     Single{} -> len + 1
                                                                                                     -- For an SoA location 
                                                                                                     -- For now, outer modality also determines 
                                                                                                     -- the inner modality.
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality isTailAndOverrideModality flc 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
                                                                                                               in case ty3 of 
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
@@ -453,11 +505,11 @@ getCursorizeTyFromLocVar modality isTailAndOverrideModality lc = case lc of
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar :: Maybe L2.Modality -> Bool -> RegVar -> Ty3
-getCursorizeTyFromRegVar modality isTailAndOverrideModality rv = case rv of 
-                                  SingleR{} -> singleRegToCursorBasedOnModality rv modality isTailAndOverrideModality
+getCursorizeTyFromRegVar modality _isTailAndOverrideModality rv = case rv of 
+                                  SingleR{} -> singleRegToCursorBasedOnModality rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
-                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality isTailAndOverrideModality flr
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
                                                                                                            in case ty3 of 
                                                                                                                   CursorArrayTy sz -> len + sz 
                                                                                                                   _ -> error "Did not expect type!"
@@ -466,11 +518,11 @@ getCursorizeTyFromRegVar modality isTailAndOverrideModality rv = case rv of
 
 
 getCursorizeTyFromLocVar' :: Maybe L2.Modality -> Bool -> LocVar -> L2.Ty2
-getCursorizeTyFromLocVar' modality isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModalityL2 lc modality isTailAndOverrideModality 
+getCursorizeTyFromLocVar' modality _isTailAndOverrideModality lc = case lc of 
+                                  Single{} -> singleLocToCursorBasedOnModalityL2 lc modality False 
                                   SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality isTailAndOverrideModality flc 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
                                                                                                               in case ty3 of 
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
@@ -478,11 +530,11 @@ getCursorizeTyFromLocVar' modality isTailAndOverrideModality lc = case lc of
                                                   in L2.MkTy2 $ CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar' :: Maybe L2.Modality -> Bool -> RegVar -> L2.Ty2
-getCursorizeTyFromRegVar' modality isTailAndOverrideModality rv = case rv of 
-                                  SingleR{} -> singleRegToCursorBasedOnModalityL2 rv modality isTailAndOverrideModality
+getCursorizeTyFromRegVar' modality _isTailAndOverrideModality rv = case rv of 
+                                  SingleR{} -> singleRegToCursorBasedOnModalityL2 rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
-                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality isTailAndOverrideModality flr
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
                                                                                                            in case ty3 of 
                                                                                                                   CursorArrayTy sz -> len + sz 
                                                                                                                   _ -> error "Did not expect type!"
@@ -491,11 +543,11 @@ getCursorizeTyFromRegVar' modality isTailAndOverrideModality rv = case rv of
 
 
 getCursorizeTyFromLocVar'' :: Maybe L2.Modality -> Bool -> LocVar -> UrTy loc
-getCursorizeTyFromLocVar'' modality isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality 
+getCursorizeTyFromLocVar'' modality _isTailAndOverrideModality lc = case lc of 
+                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality False 
                                   SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality isTailAndOverrideModality flc 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
                                                                                                               in case ty3 of 
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
@@ -503,11 +555,11 @@ getCursorizeTyFromLocVar'' modality isTailAndOverrideModality lc = case lc of
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar'' :: Maybe L2.Modality -> Bool -> RegVar -> UrTy loc
-getCursorizeTyFromRegVar'' modality isTailAndOverrideModality rv = case rv of 
-                                  SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality isTailAndOverrideModality
+getCursorizeTyFromRegVar'' modality _isTailAndOverrideModality rv = case rv of 
+                                  SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
-                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality isTailAndOverrideModality flr
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
                                                                                                            in case ty3 of 
                                                                                                                   CursorArrayTy sz -> len + sz 
                                                                                                                   _ -> error "Did not expect type!"
@@ -516,11 +568,11 @@ getCursorizeTyFromRegVar'' modality isTailAndOverrideModality rv = case rv of
 
 
 getCursorizeTyFromLocVar''' :: Maybe L2.Modality -> Bool -> LocVar -> UrTy ()
-getCursorizeTyFromLocVar''' modality isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality isTailAndOverrideModality
+getCursorizeTyFromLocVar''' modality _isTailAndOverrideModality lc = case lc of 
+                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality False
                                   SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality isTailAndOverrideModality flc 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
                                                                                                               in case ty3 of 
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
@@ -528,13 +580,13 @@ getCursorizeTyFromLocVar''' modality isTailAndOverrideModality lc = case lc of
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar''' :: Maybe L2.Modality -> Bool -> RegVar -> UrTy ()
-getCursorizeTyFromRegVar''' modality isTailAndOverrideModality rv = case rv of 
-                                  SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality isTailAndOverrideModality
+getCursorizeTyFromRegVar''' modality _isTailAndOverrideModality rv = case rv of 
+                                  SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality False
                                   -- For SoA regions, arrays, are addresses so we don't need to change their type
                                   -- in case we want to mutate them in place.
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
-                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality isTailAndOverrideModality flr
+                                                                                                SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
                                                                                                            in case ty3 of 
                                                                                                                   CursorArrayTy sz -> len + sz 
                                                                                                                   _ -> error "Did not expect type!"
@@ -555,21 +607,31 @@ eraseLocMarkers (DDef tyargs tyname ls layout) = DDef tyargs tyname (L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs (L2.unTy2 ty))) ls')
 
-cursorizeTy :: Bool -> Maybe L2.Modality -> UrTy LocVar -> UrTy b
-cursorizeTy isTailAndOverrideModality modality ty =
+cursorizeTy :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Maybe L2.Modality -> UrTy LocVar -> UrTy b
+cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality ty =
   case ty of
     IntTy     -> IntTy
     CharTy    -> CharTy
     FloatTy   -> FloatTy
     SymTy     -> SymTy
     BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map (cursorizeTy isTailAndOverrideModality modality) ls
+    ProdTy ls -> ProdTy $ L.map (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality) ls
     SymDictTy v _ -> SymDictTy v CursorTy
-    PDictTy k v   -> PDictTy (cursorizeTy isTailAndOverrideModality modality k) (cursorizeTy isTailAndOverrideModality modality v)
-    -- TODO passing false for now, but need to think for tail call optimization
-    PackedTy _ l    -> ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
-    VectorTy el_ty' -> VectorTy $ cursorizeTy isTailAndOverrideModality modality el_ty'
-    ListTy el_ty'   -> ListTy $ cursorizeTy isTailAndOverrideModality modality el_ty'
+    PDictTy k v   -> PDictTy (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
+    -- Check if location in the packed type is a locations pointer to by 
+    -- any mutable location, (We should not return start and end locations for such types) 
+    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml) -> case ml of 
+                                                            Nothing -> []
+                                                            Just vl -> [vl]
+                                                  ) (M.elems mutLocsEnv)
+                                     )
+                       then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
+                       -- If the location in questionk itself is a mutable location.
+                       else if M.member l oldLocsToMutEnv
+                       then ProdTy []
+                       else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
+    VectorTy el_ty' -> VectorTy $ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
+    ListTy el_ty'   -> ListTy $ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     CursorArrayTy sz -> CursorArrayTy sz 
