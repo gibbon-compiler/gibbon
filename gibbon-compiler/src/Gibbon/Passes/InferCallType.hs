@@ -24,7 +24,9 @@ inferCallType Prog{ddefs, fundefs, mainExp} = do
 
 inferCallTypeFn :: NewL2.DDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
-    let (funBody', _env, _tailTy) = inferCallTypeFnBody funName M.empty funBody
+    dflags <- getDynFlags
+    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
+    let (funBody', _env, _tailTy) = inferCallTypeFnBody optimize_tail_calls funName M.empty funBody
         --(ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
         -- locVars' =
         --     P.map
@@ -41,8 +43,6 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                         Just TailModuloCons -> TailRec 
                         _ -> funRec
         funMeta' = meta{funRec=funRec'}
-    dflags <- getDynFlags
-    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
     let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
     let (funTy', needs_update) = case optimize_tail_calls of 
                             True -> let (locVars', updateLocs) = P.foldr
@@ -56,7 +56,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                         fty' = (ArrowTy2 locVars' arrIns _arrEffs arrOut _locRets _isPar)
                                       in (fty', updateLocs)
                             False -> (funTy, [])
-        funBody'' = markMutableLocsAfterInitialPass needs_update funBody'
+        funBody'' = if optimize_tail_calls then markMutableLocsAfterInitialPass needs_update funBody' else funBody'
 
 
         -- If a function is identified to be tailRecursive
@@ -111,15 +111,15 @@ backTrackLocs env v accum visited = case M.lookup v env of
             accum'' = accum' || mut
          in (accum'', visited'')
 
-inferCallTypeFnBody :: Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables, Maybe TailRecType)
-inferCallTypeFnBody funName env exp2 = case exp2 of
+inferCallTypeFnBody :: Bool -> Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables, Maybe TailRecType)
+inferCallTypeFnBody tailCallOptOn funName env exp2 = case exp2 of
     VarE v -> (VarE v, env, Nothing)
     LitE l -> (LitE l, env, Nothing)
     CharE c -> (CharE c, env, Nothing)
     FloatE f -> (FloatE f, env, Nothing)
     LitSymE v -> (LitSymE v, env, Nothing)
     AppE v t locs args ->
-        let results = P.map (inferCallTypeFnBody funName env) args
+        let results = P.map (inferCallTypeFnBody tailCallOptOn funName env) args
             args' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -133,7 +133,7 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                                  _ -> Just $ P.minimum lst'
          in (AppE v t locs args', env', tailTy)
     PrimAppE p args ->
-        let results = P.map (inferCallTypeFnBody funName env) args
+        let results = P.map (inferCallTypeFnBody tailCallOptOn funName env) args
             args' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -174,8 +174,8 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                     env
                                     locs'
                         rhs' = dbgTrace minChatLvl "Print tailCallType: " dbgTrace minChatLvl (sdoc tailCallType) dbgTrace minChatLvl "End tailCallType!\n" AppE v' tailCallType locs' args'
-                        (rhs'', env'', t1) = inferCallTypeFnBody funName env' rhs'
-                        (bod', env''', t2) = inferCallTypeFnBody funName env'' bod
+                        (rhs'', env'', t1) = inferCallTypeFnBody tailCallOptOn funName env' rhs'
+                        (bod', env''', t2) = inferCallTypeFnBody tailCallOptOn funName env'' bod
                         ret_lst = [Just tailCallType, t1, t2]
                         ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -186,8 +186,8 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                             rst -> Just $ P.minimum rst
                      in (LetE (v, loc, ty, rhs'') bod', env''', ret_lst'')
                 else
-                    let (rhs', env', t1) = inferCallTypeFnBody funName env rhs
-                        (bod', env'', t2) = inferCallTypeFnBody funName env' bod
+                    let (rhs', env', t1) = inferCallTypeFnBody tailCallOptOn funName env rhs
+                        (bod', env'', t2) = inferCallTypeFnBody tailCallOptOn funName env' bod
                         ret_lst = [t1, t2]
                         ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -198,8 +198,8 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                             rst -> Just $ P.minimum rst
                      in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
         _ ->
-            let (rhs', env', tailTy) = inferCallTypeFnBody funName env rhs
-                (bod', env'', tailTy') = inferCallTypeFnBody funName env' bod
+            let (rhs', env', tailTy) = inferCallTypeFnBody tailCallOptOn funName env rhs
+                (bod', env'', tailTy') = inferCallTypeFnBody tailCallOptOn funName env' bod
                 ret_lst = [tailTy, tailTy']
                 ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -210,9 +210,9 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                             rst -> Just $ P.minimum rst
              in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
     IfE a b c ->
-        let (a', e1, t) = inferCallTypeFnBody funName env a
-            (b', e2, t1) = inferCallTypeFnBody funName e1 b
-            (c', e3, t2) = inferCallTypeFnBody funName e2 c
+        let (a', e1, t) = inferCallTypeFnBody tailCallOptOn funName env a
+            (b', e2, t1) = inferCallTypeFnBody tailCallOptOn funName e1 b
+            (c', e3, t2) = inferCallTypeFnBody tailCallOptOn funName e2 c
             ret_lst = [t, t1, t2]
             ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -223,7 +223,7 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                             rst -> Just $ P.minimum rst
          in (IfE a' b' c', e3, ret_lst'')
     MkProdE ls ->
-        let results = P.map (inferCallTypeFnBody funName env) ls
+        let results = P.map (inferCallTypeFnBody tailCallOptOn funName env) ls
             ls' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -237,14 +237,14 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                                  _ -> Just $ P.minimum lst' 
          in (MkProdE ls', env', tailTy)
     ProjE i e ->
-        let (e', env', t) = inferCallTypeFnBody funName env e
+        let (e', env', t) = inferCallTypeFnBody tailCallOptOn funName env e
          in (ProjE i e', env', t)
     -- [(DataCon, [(Var,loc)], EXP)]
     CaseE scrt brs ->
         let results =
                 P.map
                     ( \(a, b, c) ->
-                        let (c', env', t) = inferCallTypeFnBody funName env c
+                        let (c', env', t) = inferCallTypeFnBody tailCallOptOn funName env c
                          in ((a, b, c'), env', t)
                     )
                     brs
@@ -263,9 +263,10 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     DataConE loc c args ->
         let locInDataCon = dbgTrace minChatLvl "In DataCon:" dbgTrace minChatLvl (sdoc (env, M.elems env)) dbgTrace minChatLvl ("End\n") toLocVar loc
-         in case (backTrackLocs env locInDataCon False M.empty) of
+            (val1, val2) = (backTrackLocs env locInDataCon False M.empty)
+         in case (val1 && tailCallOptOn, val2)  of
                 (False, _) ->
-                    let results = P.map (inferCallTypeFnBody funName env) args
+                    let results = P.map (inferCallTypeFnBody tailCallOptOn funName env) args
                         args' = P.map fst3 results
                         env' = M.unionsWith unionMapLambda $ P.map snd3 results
                         tailTy = case P.map thd3 results of 
@@ -282,7 +283,7 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                     let loc' = case loc of
                             NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
                             _ -> loc
-                        results = P.map (inferCallTypeFnBody funName env) args
+                        results = P.map (inferCallTypeFnBody tailCallOptOn funName env) args
                         args' = P.map fst3 results
                         env' = M.unionsWith unionMapLambda $ P.map snd3 results
                         tailTy = case P.map thd3 results of 
@@ -296,17 +297,17 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                                                  _ -> Just $ P.minimum lst'
                      in (DataConE loc' c args', env', tailTy)
     TimeIt e d b ->
-        let (e', env', t) = inferCallTypeFnBody funName env e
+        let (e', env', t) = inferCallTypeFnBody tailCallOptOn funName env e
          in (TimeIt e' d b, env', t)
     MapE d e ->
-        let (e', env', t) = inferCallTypeFnBody funName env e
+        let (e', env', t) = inferCallTypeFnBody tailCallOptOn funName env e
          in (MapE d e', env', t)
     FoldE i it e ->
-        let (e', env', t) = inferCallTypeFnBody funName env e
+        let (e', env', t) = inferCallTypeFnBody tailCallOptOn funName env e
          in (FoldE i it e', env', t)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     SpawnE v locs exps ->
-        let results = P.map (inferCallTypeFnBody funName env) exps
+        let results = P.map (inferCallTypeFnBody tailCallOptOn funName env) exps
             exps' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -321,22 +322,22 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
          in (SpawnE v locs exps', env', tailTy)
     SyncE -> (exp2, env, Nothing)
     WithArenaE _v e ->
-        let (e', env', t) = inferCallTypeFnBody funName env e
+        let (e', env', t) = inferCallTypeFnBody tailCallOptOn funName env e
          in (WithArenaE _v e', env', t)
     Ext ext ->
         case ext of
             Old.LetRegionE r a b bod ->
-                let (bod', env', t) = inferCallTypeFnBody funName env bod
+                let (bod', env', t) = inferCallTypeFnBody tailCallOptOn funName env bod
                  in (Ext $ Old.LetRegionE r a b bod', env', t)
             Old.LetParRegionE r a b bod ->
-                let (bod', env', t) = inferCallTypeFnBody funName env bod
+                let (bod', env', t) = inferCallTypeFnBody tailCallOptOn funName env bod
                  in (Ext $ Old.LetParRegionE r a b bod', env', t)
             Old.LetLocE loc locexp bod ->
                 let locInExp = freeLoc locexp
                     env' = case locInExp of
                         Nothing -> env
                         Just l -> M.insert l (S.singleton (toLocVar loc), False) env
-                    (bod', env'', t) = inferCallTypeFnBody funName env' bod
+                    (bod', env'', t) = inferCallTypeFnBody tailCallOptOn funName env' bod
                     -- locexp' = case locInExp of
                     --     Nothing -> locexp
                     --     Just l -> case (backTrackLocs env'' l False M.empty) of
@@ -344,7 +345,7 @@ inferCallTypeFnBody funName env exp2 = case exp2 of
                     --         (True, _) -> changeLocData locexp l
                  in (Ext $ Old.LetLocE loc locexp bod', env'', t)
             Old.LetRegE reg regexp bod -> 
-                let (bod', env', t) = inferCallTypeFnBody funName env bod
+                let (bod', env', t) = inferCallTypeFnBody tailCallOptOn funName env bod
                  in (Ext $ Old.LetRegE reg regexp bod', env', t)
             Old.BoundsCheckVector _bounds -> (exp2, env, Nothing)
             Old.RetE{} -> (exp2, env, Nothing)
