@@ -427,6 +427,8 @@ projNonFirst i e = ProjE i e
 -- | Smart constructor that immediately destroys products if it can:
 -- Does NOT avoid single-element tuples.
 mkProj :: HasCallStack => Int -> (PreExp e l d) -> (PreExp e l d)
+-- Vidush : TODO this needs to be removed
+mkProj _ix (MkProdE []) = MkProdE [] --error "Did not expect empty list!!"
 mkProj ix (MkProdE ls) = ls !! ix
 mkProj ix e = (ProjE ix e)
 
