@@ -52,6 +52,7 @@ module Gibbon.L2.Syntax
   , outLocVars
   , outLocVarsMutable
   , outRegVars
+  , outRegVarsMutable
   , inRegVars
   , allRegVars
   , substLoc
@@ -780,7 +781,13 @@ outRegVars :: ArrowTy2 ty2 -> [RegVar]
 outRegVars ty = L.concatMap (\(LRM _ r _) -> case r of
                                           SoAR _rr _fieldRegions -> [regionToVar r]
                                           _ -> [regionToVar r] 
-                      ) $ L.filter (\(LRM _ _ m) -> m == Output || m == OutputMutable) (locVars ty)
+                      ) $ L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
+
+outRegVarsMutable :: ArrowTy2 ty2 -> [RegVar]
+outRegVarsMutable ty = L.concatMap (\(LRM _ r _) -> case r of
+                                          SoAR _rr _fieldRegions -> [regionToVar r]
+                                          _ -> [regionToVar r] 
+                      ) $ L.filter (\(LRM _ _ m) -> m == OutputMutable) (locVars ty)
 
 inRegVars :: ArrowTy2 ty2 -> [RegVar]
 inRegVars ty = L.nub $ L.concatMap (\(LRM _ r _) -> case r of 

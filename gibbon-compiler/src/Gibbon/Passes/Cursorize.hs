@@ -178,6 +178,7 @@ data WindowIntoCursor = AoSWin Var | SoAWin Var [((DataCon, Int), Var)]
 cursorize :: Prog2 -> PassM Prog3
 cursorize Prog {ddefs, fundefs, mainExp} = do
   dflags <- getDynFlags
+  let userRequestedTailRec = gopt Opt_TailCallOptimize dflags
   fns' <- mapM (cursorizeFunDef ddefs fundefs . snd) (M.toList fundefs)
   let fundefs' = M.fromList $ L.map (\f -> (funName f, f)) fns'
       ddefs' = M.map eraseLocMarkers ddefs
@@ -192,13 +193,13 @@ cursorize Prog {ddefs, fundefs, mainExp} = do
       if hasPacked (unTy2 ty)
         then
           do 
-            (e', _, _, _) <- cursorizePackedExp M.empty M.empty False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
+            (e', _, _, _) <- cursorizePackedExp M.empty M.empty userRequestedTailRec M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
             Just . (,stripTyLocs (unTy2 ty))
               <$> fromDi
               <$> return e' 
         else
           do 
-          (e', _, _, _) <- cursorizeExp M.empty M.empty False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
+          (e', _, _, _) <- cursorizeExp M.empty M.empty userRequestedTailRec M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
           Just . (,stripTyLocs (unTy2 ty))
             <$> return e'
   pure (Prog ddefs' fundefs' mainExp')
@@ -276,7 +277,7 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
   let needOptTailCalls = userRequestedTailRec && isFunTailRec
   let inLocs = inLocVars funTy
       outLocs = outLocVars funTy
-      outRegs = outRegVars funTy
+      outRegs = (outRegVars funTy) ++ (L2.outRegVarsMutable funTy) 
       inRegs = inRegVars funTy
       in_tys = arrIns funTy
       out_ty = arrOut funTy
@@ -501,14 +502,25 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
     cursorizeArrowTy :: Bool -> ArrowTy2 Ty2 -> ([Ty3], Ty3)
     cursorizeArrowTy optTailRec ty@ArrowTy2 {arrIns, arrOut, locVars, locRets} =
       let -- Regions corresponding to ouput cursors. (See [Threading regions])
-          numOutRegs = length (outRegVars ty)
+          numOutRegs = length $ (outRegVars ty) ++ (L2.outRegVarsMutable ty)
           -- outRegs = L.map (\_ -> CursorTy) [1..numOutRegs]
 
           outRegs =
-            L.map
-              ( \r -> getCursorizeTyFromRegVar'' Nothing optTailRec r
+            (
+              L.map
+              ( \r -> getCursorizeTyFromRegVar'' (Just Output) optTailRec r
               )
               (outRegVars ty)
+            )
+            ++
+
+            (
+              L.map
+              ( \r -> getCursorizeTyFromRegVar'' (Just OutputMutable) optTailRec r
+              )
+              (L2.outRegVarsMutable ty)
+            )
+
 
           -- Adding additional outputs corresponding to end-of-input-value witnesses
           -- We've already computed additional location return value in RouteEnds
@@ -1118,8 +1130,8 @@ cursorizeExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv 
                                                                                -- wip audit, can we always just harcode cursorTy ?
                                                                                let deref_inst = (deref_var, [], CursorTy, Ext $ DerefMutCursor loc_seen_var)
                                                                                let m22 = M.insert (loc_seen) (deref_var, Nothing) m2
-                                                                               --let m11 = M.insert (loc_seen) (deref_var, Nothing) m1
-                                                                               return $ (Nothing, deref_var, [deref_inst], m1, m22)
+                                                                               let m11 = M.insert (loc_seen) (deref_var, Nothing) m1
+                                                                               return $ (Nothing, deref_var, [deref_inst], m11, m22)
                                                             _ -> return (Just loc_seen, loc_seen_var, [], m1, m2)
                                                              
 
@@ -1626,12 +1638,18 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
           start_tag_alloc <- gensym "start_tag_alloc"
           end_tag_alloc <- gensym "end_tag_alloc"
           start_scalars_alloc <- gensym "start_scalars_alloc"
+          needs_bump <- mutLocNeedsBump freeVarToVarEnv m1 m2 (Just sloc_loc) (Just sloc) (L3.LitE 1)
+          let needs_bump_lts = dbgTrace (minChatLvl) "Print the bump let!!" dbgTrace (minChatLvl) (sdoc (m1, needs_bump)) dbgTrace (minChatLvl) "End printing in bump let!!" case needs_bump of 
+                                  Just b -> [b]
+                                  Nothing -> []
           (,,,) <$> dl
             <$> LetE (start_tag_alloc, [], ProdTy [], Ext $ StartTagAllocation (sloc))
             <$> LetE (writetag, [], getCursorizeTyFromLocVar Nothing optTailCall (getDconLoc sloc_loc), Ext $ WriteTag dcon (sloc))
             <$> LetE (end_tag_alloc, [], ProdTy [], Ext $ EndTagAllocation (sloc))
             <$> LetE (start_scalars_alloc, [], ProdTy [], Ext $ StartScalarsAllocation (sloc))
-            <$> LetE (after_tag, [], getCursorizeTyFromLocVar Nothing optTailCall (getDconLoc sloc_loc), Ext $ AddCursor (sloc) (L3.LitE 1))
+            -- If any output mutable location points to the location we are doing add cursor on, then
+            -- we will need to add a bump mut loc to the mutable location.
+            <$> mkLets ([(after_tag, [], getCursorizeTyFromLocVar Nothing optTailCall (getDconLoc sloc_loc), Ext $ AddCursor (sloc) (L3.LitE 1))] ++ needs_bump_lts)
             <$> go2 False after_tag (zip args (lookupDataCon ddfs dcon))
             <*> return freeVarToVarEnv
             <*> return m1
@@ -2383,6 +2401,35 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
     go menv1 menv2 env = cursorizePackedExp menv1 menv2 optTailCall env lenv ddfs fundefs denv
     dl = Di
 
+mutLocNeedsBump :: M.Map FreeVarsTy Var -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> Maybe LocVar -> Maybe Var -> (PreExp E3Ext loc (UrTy loc)) -> PassM (Maybe (Var, [loc], (UrTy loc), (PreExp E3Ext loc (UrTy loc))))
+mutLocNeedsBump freeVarToVarEnv ptsEnv oldEnv lv v offset = do 
+                                       let mutBump = L.foldr (\(kl, (vpts, lpts)) mred -> case (lv, v) of 
+                                                                                         (Just lvv, Just vv) -> case lpts of 
+                                                                                                                      Nothing -> if (vv == vpts)
+                                                                                                                                 then Just kl
+                                                                                                                                 else mred  
+                                                                                                                      Just lptsv -> if (lvv == lptsv)
+                                                                                                                                    then Just kl
+                                                                                                                                    else mred
+                                                                                         (Just lvv, Nothing) -> case lpts of 
+                                                                                                                      Nothing -> mred
+                                                                                                                      Just lptsv -> if (lvv == lptsv)
+                                                                                                                                    then Just kl
+                                                                                                                                    else mred
+                                                                                         (Nothing, Just vv) -> if (vv == vpts)
+                                                                                                               then Just kl 
+                                                                                                               else mred
+                                                                                         (Nothing, Nothing) -> mred 
+                                                           
+                                                           ) Nothing (M.toList ptsEnv) 
+                                       case mutBump of
+                                               Just mutval -> do
+                                                               void_val <- gensym "void"
+                                                               let mutval_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mutval)
+                                                               let bind = (void_val, [], ProdTy [], Ext $ BumpCursorMutable mutval_name offset)
+                                                               return $ Just bind
+                                               Nothing -> return Nothing
+
 cursorizeReadPackedFile ::
   MutableLocPtsToEnv -> 
   MutableLocOldValueEnv ->
@@ -2440,47 +2487,174 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
   case locExp of
     AfterConstantLE i loc -> do
       (locs_var, use_this_loc, additional_bnds, bnds_after, mLocPtsToEnv', mLocOldValEnv') <- case (isMutModality $ fromJust $ getModality loc) of 
-                                                                    True -> if (M.member (toLocVar loc) mLocPtsToEnv)
-                                                                            -- The locations is already in the PtsToEnv 
-                                                                            -- therefore, we gets its value from the oldenv
-                                                                            then let old_val = M.lookup (toLocVar loc) mLocOldValEnv
-                                                                               in case old_val of 
-                                                                                        Nothing -> error "Expected to have a value for the mutable location!"
-                                                                                        -- VS: No need to bump the mutable location in case we use the old location.
-                                                                                        Just (vl, Just l) -> do 
-                                                                                                   -- let l_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l) 
-                                                                                                   pure (vl, l, [], [], mLocPtsToEnv, mLocOldValEnv)
-                                                                                        -- If the loc is not available, we just use the mut loc
-                                                                                        -- TODO. this may not be required / special handling?
-                                                                                        Just (vl, Nothing) -> do
-                                                                                                   pure (vl, (toLocVar loc), [], [], mLocPtsToEnv, mLocOldValEnv) 
-                                                                              
-                                                                            else 
+                                                                    -- True -> do 
+                                                                    --          let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                    --          let loc_var = toLocVar loc
+                                                                    --          needs_bump <- mutLocNeedsBump freeVarToVarEnv mLocPtsToEnv mLocOldValEnv (Just loc_var) (Just loc_name) (L3.LitE i)  
+                                                                    --          case needs_bump of
+                                                                    --             Nothing -> if (M.member (toLocVar loc) mLocPtsToEnv)
+                                                                    --                         -- The locations is already in the PtsToEnv 
+                                                                    --                         -- therefore, we gets its value from the oldenv
+                                                                    --                         then let old_val = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv, mLocOldValEnv, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case1.\n" M.lookup (toLocVar loc) mLocOldValEnv
+                                                                    --                           in case old_val of 
+                                                                    --                                     Nothing -> error "Expected to have a value for the mutable location!"
+                                                                    --                                     -- VS: No need to bump the mutable location in case we use the old location.
+                                                                    --                                     Just (vl, Just l) -> do 
+                                                                    --                                               -- let l_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l) 
+                                                                    --                                               pure (vl, l, [], [], mLocPtsToEnv, mLocOldValEnv)
+                                                                    --                                     -- If the loc is not available, we just use the mut loc
+                                                                    --                                     -- TODO. this may not be required / special handling?
+                                                                    --                                     Just (vl, Nothing) -> do
+                                                                    --                                               pure (vl, (toLocVar loc), [], [], mLocPtsToEnv, mLocOldValEnv) 
+                                                                                              
+                                                                    --                         else 
+                                                                    --                           do
+                                                                    --                         -- check if any output mutable locations point to loc. 
+                                                                    --                         -- if so, we need to update the pts to for that mutable loc to lvar
+                                                                    --                         -- let mLocPtsToElems = M.toList
+                                                                    --                         --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
+                                                                    --                         --                                         then (k, lvar)
+                                                                    --                         --                                         else (k, var)
+                                                                    --                         --                             ) mLocPtsToElems
+                                                                    --                         --   in ()
+                                                                    --                         -- We need to add a dereference instruction in order to access the 
+                                                                    --                         -- value of the OutputMutable location.
+                                                                    --                           new_deref <- gensym "deref"
+                                                                    --                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                    --                           let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
+                                                                    --                           let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
+                                                                    --                           bump_loc_var <- gensym "void"
+                                                                    --                           let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
+                                                                    --                           -- We need to make the mutable loc point to the dereferenced value 
+                                                                    --                           let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
+                                                                    --                           -- if there is no mapping of the mutable loc to its old value, we need to update it.
+                                                                    --                           let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                    --                                               then mLocOldValEnv
+                                                                    --                                               else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
+                                                                    --                           dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv'', mLocOldValEnv'', locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case2.\n" pure (new_deref, toLocVar loc, [derefInst], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
+                                                                    --             Just b -> do
+                                                                    --                       -- check if any output mutable locations point to loc. 
+                                                                    --                       -- if so, we need to update the pts to for that mutable loc to lvar
+                                                                    --                       -- let mLocPtsToElems = M.toList
+                                                                    --                       --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
+                                                                    --                       --                                         then (k, lvar)
+                                                                    --                       --                                         else (k, var)
+                                                                    --                       --                             ) mLocPtsToElems
+                                                                    --                       --   in ()
+                                                                    --                       -- We need to add a dereference instruction in order to access the 
+                                                                    --                       -- value of the OutputMutable location.
+                                                                    --                       new_deref <- gensym "deref"
+                                                                    --                       let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                    --                       let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
+                                                                    --                       let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
+                                                                    --                       -- bump_loc_var <- gensym "void"
+                                                                    --                       -- let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
+                                                                    --                       let bumpMutLoc = b
+                                                                    --                       -- We need to make the mutable loc point to the dereferenced value 
+                                                                    --                       let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
+                                                                    --                       -- if there is no mapping of the mutable loc to its old value, we need to update it.
+                                                                    --                       let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                    --                                           then mLocOldValEnv
+                                                                    --                                           else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
+                                                                    --                       dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv'', mLocOldValEnv'', locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Just b.\n" pure (new_deref, toLocVar loc, [derefInst], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
+                                                                    -- -- TODO We may need to change where output mutable locations points to.
+                                                                    True -> if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                            then do 
+                                                                              let val = M.lookup (toLocVar loc) mLocOldValEnv
+                                                                              let (vl, loc_pts) = fromJust val
+                                                                              needs_bump <- mutLocNeedsBump freeVarToVarEnv mLocPtsToEnv mLocOldValEnv loc_pts (Just vl) (L3.LitE i)
+                                                                              case needs_bump of
+                                                                                Nothing -> if (M.member (toLocVar loc) mLocPtsToEnv)
+                                                                                            -- The locations is already in the PtsToEnv 
+                                                                                            -- therefore, we gets its value from the oldenv
+                                                                                            then let old_val = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv, mLocOldValEnv, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case1.\n" M.lookup (toLocVar loc) mLocOldValEnv
+                                                                                              in case old_val of 
+                                                                                                        Nothing -> error "Expected to have a value for the mutable location!"
+                                                                                                        -- VS: No need to bump the mutable location in case we use the old location.
+                                                                                                        Just (vl, Just l) -> do 
+                                                                                                                  -- let l_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l) 
+                                                                                                                  pure (vl, l, [], [], mLocPtsToEnv, mLocOldValEnv)
+                                                                                                        -- If the loc is not available, we just use the mut loc
+                                                                                                        -- TODO. this may not be required / special handling?
+                                                                                                        Just (vl, Nothing) -> do
+                                                                                                                  pure (vl, (toLocVar loc), [], [], mLocPtsToEnv, mLocOldValEnv) 
+                                                                                              
+                                                                                            else 
+                                                                                              do
+                                                                                            -- check if any output mutable locations point to loc. 
+                                                                                            -- if so, we need to update the pts to for that mutable loc to lvar
+                                                                                            -- let mLocPtsToElems = M.toList
+                                                                                            --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
+                                                                                            --                                         then (k, lvar)
+                                                                                            --                                         else (k, var)
+                                                                                            --                             ) mLocPtsToElems
+                                                                                            --   in ()
+                                                                                            -- We need to add a dereference instruction in order to access the 
+                                                                                            -- value of the OutputMutable location.
+                                                                                              new_deref <- gensym "deref"
+                                                                                              let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                                              let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
+                                                                                              let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
+                                                                                              bump_loc_var <- gensym "void"
+                                                                                              let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
+                                                                                              -- We need to make the mutable loc point to the dereferenced value 
+                                                                                              let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
+                                                                                              -- if there is no mapping of the mutable loc to its old value, we need to update it.
+                                                                                              let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                                                                  then mLocOldValEnv
+                                                                                                                  else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
+                                                                                              dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv'', mLocOldValEnv'', locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case2.\n" pure (new_deref, toLocVar loc, [derefInst], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
+                                                                                Just b -> do
+                                                                                          -- check if any output mutable locations point to loc. 
+                                                                                          -- if so, we need to update the pts to for that mutable loc to lvar
+                                                                                          -- let mLocPtsToElems = M.toList
+                                                                                          --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
+                                                                                          --                                         then (k, lvar)
+                                                                                          --                                         else (k, var)
+                                                                                          --                             ) mLocPtsToElems
+                                                                                          --   in ()
+                                                                                          -- We need to add a dereference instruction in order to access the 
+                                                                                          -- value of the OutputMutable location.
+                                                                                          --new_deref <- gensym "deref"
+                                                                                          let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                                          let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
+                                                                                          --let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
+                                                                                          -- bump_loc_var <- gensym "void"
+                                                                                          -- let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
+                                                                                          let bumpMutLoc = b
+                                                                                          -- We need to make the mutable loc point to the dereferenced value 
+                                                                                          let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
+                                                                                          -- if there is no mapping of the mutable loc to its old value, we need to update it.
+                                                                                          --let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                                          --                    then mLocOldValEnv
+                                                                                          --                    else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
+                                                                                          dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv'', mLocOldValEnv, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Just b.\n" pure (vl, toLocVar loc, [], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv)
+                                                                              --pure (vl, (toLocVar loc), [], [], mLocPtsToEnv, mLocOldValEnv)
+                                                                            else
                                                                               do
-                                                                            -- check if any output mutable locations point to loc. 
-                                                                            -- if so, we need to update the pts to for that mutable loc to lvar
-                                                                            -- let mLocPtsToElems = M.toList
-                                                                            --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
-                                                                            --                                         then (k, lvar)
-                                                                            --                                         else (k, var)
-                                                                            --                             ) mLocPtsToElems
-                                                                            --   in ()
-                                                                            -- We need to add a dereference instruction in order to access the 
-                                                                            -- value of the OutputMutable location.
-                                                                              new_deref <- gensym "deref"
-                                                                              let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
-                                                                              let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
-                                                                              let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
-                                                                              bump_loc_var <- gensym "void"
-                                                                              let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
-                                                                              -- We need to make the mutable loc point to the dereferenced value 
-                                                                              let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
-                                                                              -- if there is no mapping of the mutable loc to its old value, we need to update it.
-                                                                              let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
-                                                                                                   then mLocOldValEnv
-                                                                                                   else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
-                                                                              pure (new_deref, toLocVar loc, [derefInst], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
-                                                                    -- TODO We may need to change where output mutable locations points to.
+                                                                              -- check if any output mutable locations point to loc. 
+                                                                              -- if so, we need to update the pts to for that mutable loc to lvar
+                                                                              -- let mLocPtsToElems = M.toList
+                                                                              --     mLocPtsToElems' = L.map (\(k, v) -> if l == (toLocVar loc)
+                                                                              --                                         then (k, lvar)
+                                                                              --                                         else (k, var)
+                                                                              --                             ) mLocPtsToElems
+                                                                              --   in ()
+                                                                              -- We need to add a dereference instruction in order to access the 
+                                                                              -- value of the OutputMutable location.
+                                                                                new_deref <- gensym "deref"
+                                                                                let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
+                                                                                let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
+                                                                                let derefInst = (new_deref, [], CursorTy, Ext $ DerefMutCursor loc_name)
+                                                                                bump_loc_var <- gensym "void"
+                                                                                let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
+                                                                                -- We need to make the mutable loc point to the dereferenced value 
+                                                                                let mLocPtsToEnv'' = M.insert (toLocVar loc) (lvar_name, Just lvar) mLocPtsToEnv 
+                                                                                -- if there is no mapping of the mutable loc to its old value, we need to update it.
+                                                                                let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
+                                                                                                      then mLocOldValEnv
+                                                                                                      else M.insert (toLocVar loc) (new_deref, Nothing) mLocOldValEnv
+                                                                                pure (new_deref, toLocVar loc, [derefInst], [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
                                                                     _ -> do
                                                                           let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
                                                                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
@@ -2503,7 +2677,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                                                                                                                                             else do 
                                                                                                                                                               return $ (kvals ++ [(key, (vval, lval))], bnds)
                                                                                                                                 ) ([], []) (M.toList mLocPtsToEnv)
-                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp.\n" M.fromList new_key_vals
+                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp False.\n" M.fromList new_key_vals
                                                                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
                                                                           pure (loc_name, toLocVar loc, [], after_bnds, mLocPtsToEnv'', mLocOldValEnv) 
       -- let locs_var = case (M.lookup ((fromLocVarToFreeVarsTy . toLocVar) loc) freeVarToVarEnv) of
@@ -2846,7 +3020,7 @@ cursorizeAppE m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv
             Nothing -> error $ "Unknown function: " ++ sdoc f
           in_tys = arrIns fnTy
           inLocs = inLocVars fnTy
-          numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
+          numRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs = (L.take numRegs locs) ++ (L.drop numRegs $ L.drop (length inLocs) $ locs)
           argTys = dbgTrace (minChatLvl) "Print locs in cursorize AppE " dbgTrace (minChatLvl) (sdoc (f, locs)) dbgTrace (minChatLvl) "End cursorize AppE\n" map (gRecoverType ddfs (Env2 tenv M.empty)) args
@@ -3296,7 +3470,7 @@ cursorizeLet m1 m2 optTailCall freeVarToVarEnv lenv isPackedContext ddfs fundefs
   | isPackedTy ty = do
       (_rhs, freeVarToVarEnv', m1', m2') <- dbgTrace (minChatLvl) "Print envs in CursorizeLet: " dbgTrace (minChatLvl) (sdoc (m1, m2)) dbgTrace (minChatLvl) "End printing envs in CursorizeLet.\n" cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       rhs' <- fromDi <$> return _rhs
-      fresh <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (locs)) dbgTrace (minChatLvl) "End cursorize Let\n" gensym "tup_packed"
+      fresh <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (locs, m1', m2')) dbgTrace (minChatLvl) "End cursorize Let\n" gensym "tup_packed"
       let cursor_ty_locs =
             map
               ( \loc ->

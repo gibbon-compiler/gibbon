@@ -30,9 +30,9 @@ id lst = lst
 
 gibbon_main = let 
 		lst = mkList 10000000
-                lst' = iterate (add1 lst)
-	        sum = iterate (sumList lst')
-               in sum
+                --lst' = iterate (add1 lst)
+	        --sum = iterate (sumList lst')
+               in sumList lst
 
 
 
