@@ -522,7 +522,7 @@ inferExp' ddefs env exp bound dest=
       bindAllUnbound e (lv:ls) = do
         r <- makeSoARegion lv
         e' <- bindAllUnbound e ls
-        return $ Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) e')))
+        return $ Ext (LetRegionE r Undefined RegionImmutable Nothing (Ext (LetLocE lv (StartOfRegionLE r) e')))
       bindAllUnbound e _ = return e
 
       bindAllLocations :: Result -> TiM Result
@@ -609,7 +609,7 @@ inferExp' ddefs env exp bound dest=
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AssignL lv1 lv2 -> Ext (LetLocE lv1 (AssignLE lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
-                      StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
+                      StartRegionL lv r -> Ext (LetRegionE r Undefined RegionImmutable Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
                       AfterTagL lv1 lv2 -> case lv2 of 
                                               Single{} -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
                                               SoA dloc flds -> let get_dcon_loc = LetLocE (Single dloc) (GetDataConLocSoA lv2)
@@ -655,7 +655,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
              b1 <- noAfterLoc lv' cs' cs'
              if b1
              then do (e'',ty'',cs'') <- bindTrivialAfterLoc lv' (e',ty',cs')
-                     return (Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv' (StartOfRegionLE r) e''))), ty'', cs'')
+                     return (Ext (LetRegionE r Undefined RegionImmutable Nothing (Ext (LetLocE lv' (StartOfRegionLE r) e''))), ty'', cs'')
              else return (e',ty',(StartRegionL lv r):cs')
       tryBindReg (e,ty,c:cs) =
           do (e',ty',cs') <- tryBindReg (e,ty,cs)
@@ -1696,7 +1696,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy tycon loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs'
-          tryBindReg ( Ext$ LetRegionE (MMapR r) Undefined Nothing $ Ext $ LetLocE loc (StartOfRegionLE (MMapR r)) $
+          tryBindReg ( Ext$ LetRegionE (MMapR r) Undefined RegionImmutable Nothing $ Ext $ LetLocE loc (StartOfRegionLE (MMapR r)) $
                         L2.LetE (vr,[],PackedTy tycon loc,rhs') bod''
                      , ty', fcs)
 
@@ -2000,9 +2000,9 @@ finishExp e =
              e' <- finishExp e
              return $ WithArenaE v e'
 
-      Ext (LetRegionE r sz ty e1) -> do
+      Ext (LetRegionE r sz endmut ty e1) -> do
              e1' <- finishExp e1
-             return $ Ext (LetRegionE r sz ty e1')
+             return $ Ext (LetRegionE r sz endmut ty e1')
       Ext (LetLocE loc lex e1) -> do
              loc' <- finalLocVar loc
              e1' <- finishExp e1
@@ -2144,8 +2144,8 @@ cleanExp e =
       SyncE -> (SyncE, S.empty)
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
-      Ext (LetRegionE r sz ty e) -> let (e',s') = cleanExp e
-                              in (Ext (LetRegionE r sz ty e'), s')
+      Ext (LetRegionE r sz endmut ty e) -> let (e',s') = cleanExp e
+                              in (Ext (LetRegionE r sz endmut ty e'), s')
       Ext (LetParRegionE r sz ty e) -> let (e',s') = cleanExp e
                                  in (Ext (LetParRegionE r sz ty e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
@@ -2301,7 +2301,7 @@ moveProjsAfterSync sv ex = case sv of
         SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
         Ext ext -> case ext of
-                     LetRegionE r sz ty bod -> Ext $ LetRegionE r sz ty $ go acc1 pending bod
+                     LetRegionE r sz endmut ty bod -> Ext $ LetRegionE r sz endmut ty $ go acc1 pending bod
                      LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
                      oth -> error $ "moveProjsAfterSync: extension not handled." ++ sdoc oth
@@ -2821,9 +2821,9 @@ fixRANs prg@(Prog defs funs main) = do
         ----------------------------------------
 
         Ext ext -> case ext of
-                     LetRegionE r sz ty bod -> do
+                     LetRegionE r sz endmut ty bod -> do
                        (bnds,bod') <- go bod
-                       return (bnds, Ext $ LetRegionE r sz ty bod')
+                       return (bnds, Ext $ LetRegionE r sz endmut ty bod')
 
                      LetParRegionE r sz ty bod -> do
                        (bnds,bod') <- go bod

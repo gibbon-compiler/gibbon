@@ -6,6 +6,7 @@ import qualified Data.Set as S
 import qualified Data.List as L
 import Gibbon.Common
 import Gibbon.NewL2.Syntax as NewL2
+import Gibbon.L2.Syntax (EndRegionModality)
 
 ---------------------------------------------------------------------------
 -- Hoist the bounds check expression to the top of each function
@@ -20,7 +21,7 @@ data HoistableExpr
   | LetLocExpr LocArg (PreLocExp LocArg)
   | LetRegExpr RegVar (PreRegExp LocArg)
   | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
-  | LetRegionExpr Region RegionSize (Maybe RegionType)
+  | LetRegionExpr Region RegionSize EndRegionModality (Maybe RegionType)
   deriving (Eq, Ord, Show)
 
 -- | Stores all the expressions that can be hoisted to the top of the function
@@ -93,9 +94,9 @@ collectBoundsCheckExprs env benv ex = do
           return (Ext $ LetRegE reg rhs bod', env')
         RetE {} -> return (ex, env)
         TagCursor {} -> return (ex, env)
-        LetRegionE r sz ty bod -> do
+        LetRegionE r sz endmut ty bod -> do
           (bod', env') <- collectBoundsCheckExprs env benv bod
-          return (Ext $ LetRegionE r sz ty bod', env')
+          return (Ext $ LetRegionE r sz endmut ty bod', env')
         LetParRegionE r sz ty bod -> do
           (bod', env') <- collectBoundsCheckExprs env benv bod
           return (Ext $ LetParRegionE r sz ty bod', env')
@@ -203,14 +204,14 @@ collectVarsForBoundsCheck vars env ex = do
               return (Ext $ LetRegE reg rhs bod', env'')
         RetE {} -> return (ex, env)
         TagCursor {} -> return (ex, env)
-        LetRegionE r sz ty bod -> do
-          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (regionToVar r)) vars S.empty (LetRegionExpr r sz ty) env
+        LetRegionE r sz endmut ty bod -> do
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (regionToVar r)) vars S.empty (LetRegionExpr r sz endmut ty) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do
               return (bod', env'')
             else do
-              return (Ext $ LetRegionE r sz ty bod', env'')
+              return (Ext $ LetRegionE r sz endmut ty bod', env'')
         LetParRegionE r sz ty bod -> do
           (bod', env') <- collectVarsForBoundsCheck vars env bod
           return (Ext $ LetParRegionE r sz ty bod', env')
@@ -326,7 +327,7 @@ hoistBoundsCheckHelper visited env l2exp = do
                     BoundsCheckVectorExpr bounds -> Just $ LetE ("_", [], MkTy2 IntTy, (Ext $ BoundsCheckVector bounds)) expr'
                     LetLocExpr l rhs -> Just $ Ext $ LetLocE l rhs expr'
                     LetRegExpr r rhs -> Just $ Ext $ LetRegE r rhs expr'
-                    LetRegionExpr r sz ty -> Just $ Ext $ LetRegionE r sz ty expr'
+                    LetRegionExpr r sz endmut ty -> Just $ Ext $ LetRegionE r sz endmut ty expr'
                     LetExpr bnds -> Just $ LetE bnds expr'
           -- release all lets
           -- call function recursively

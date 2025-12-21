@@ -785,7 +785,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       FoldE _ _ _ -> throwError $ UnsupportedExpTC exp
 
-      Ext (LetRegionE r _ _ e) -> do
+      Ext (LetRegionE r _ _ _ e) -> do
                regs' <- regionInsert exp r regs
                (ty,tstate) <- tcExp ddfs env funs constrs regs' tstatein e
                return (ty,tstate)

@@ -283,9 +283,9 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
 
         Ext (SSPop{}) -> pure (ex, delayedExprMap)
 
-        Ext (LetRegionE r sz ty bod) -> do
+        Ext (LetRegionE r sz endmut ty bod) -> do
             (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap bod
-            pure $ (Ext $ LetRegionE r sz ty bod', delayedExprMap')
+            pure $ (Ext $ LetRegionE r sz endmut ty bod', delayedExprMap')
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
 
@@ -434,9 +434,9 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
 
         Ext (SSPop{}) -> pure ex
 
-        Ext (LetRegionE r sz ty bod) -> do
+        Ext (LetRegionE r sz endmut ty bod) -> do
             bod' <- releaseExprsFunBody definedVars delayedExprMap bod
-            pure $ Ext $ LetRegionE r sz ty bod'
+            pure $ Ext $ LetRegionE r sz endmut ty bod'
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
         where
@@ -598,9 +598,9 @@ ensureLocationsAreDefinedForWrite definedVars ex = do
 
         Ext (SSPop{}) -> pure ex
 
-        Ext (LetRegionE r sz ty bod) -> do
+        Ext (LetRegionE r sz endmut ty bod) -> do
             bod' <- go bod
-            pure $ Ext $ LetRegionE r sz ty bod'
+            pure $ Ext $ LetRegionE r sz endmut ty bod'
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
     where
@@ -696,7 +696,7 @@ removeDuplicateLocations definedLocs ex = case ex of
 
         Ext (SSPop{}) -> pure ex
 
-        Ext (LetRegionE r sz ty bod) -> do
+        Ext (LetRegionE r sz endmut ty bod) -> do
             let doesRegionExist = S.member (fromRegVarToFreeVarsTy (regionToVar r)) definedLocs
             let definedLocs' = if doesRegionExist 
                                then definedLocs
@@ -704,7 +704,7 @@ removeDuplicateLocations definedLocs ex = case ex of
             bod' <- removeDuplicateLocations definedLocs' bod
             if doesRegionExist
             then pure bod'
-            else pure $ Ext $ LetRegionE r sz ty bod'
+            else pure $ Ext $ LetRegionE r sz endmut ty bod'
         
         _ -> error $ "reorderLetExprs : unexpected expression not handled!!" ++ sdoc ex
         _ -> pure ex

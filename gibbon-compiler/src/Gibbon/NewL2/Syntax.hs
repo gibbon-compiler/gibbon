@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
+    , toLocVar, toEndRegVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -117,6 +117,15 @@ toRegVar arg =
     EndOfReg_Tagged v -> v
     EndWitness {} -> error "toRegVar: EndWitness not handled"
 
+toEndRegVar :: LocArg -> RegVar
+toEndRegVar arg =
+  case arg of
+    Loc lrm        -> lremEndReg lrm
+    Reg v _        -> toEndVRegVar v
+    EndOfReg _ _ v -> v
+    EndOfReg_Tagged v -> v
+    EndWitness {} -> error "toRegVar: EndWitness not handled"
+
 fromVarToSingleRegVar :: Var -> RegVar
 fromVarToSingleRegVar v = SingleR v
 
@@ -200,7 +209,7 @@ instance FreeVars LocExp where
 instance Typeable (Old.E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
-      Old.LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      Old.LetRegionE _r _ _ _ bod    -> gRecoverType ddfs env2 bod
       Old.LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
       Old.StartOfPkdCursor{}       -> MkTy2 $ CursorTy
       Old.TagCursor{}      -> MkTy2 $ CursorTy
@@ -223,7 +232,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
-      Old.LetRegionE _r _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
+      Old.LetRegionE _r _ _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
       Old.LetParRegionE _r _ _ bod -> gRecoverTypeLoc ddfs env2 bod
       Old.StartOfPkdCursor{}       -> MkTy2 $ CursorTy
       Old.TagCursor{}      -> MkTy2 $ CursorTy
@@ -470,7 +479,7 @@ revertExp ex =
     WithArenaE v e -> WithArenaE v (revertExp e)
     Ext ext ->
       case ext of
-        Old.LetRegionE _ _ _ bod -> revertExp bod
+        Old.LetRegionE _ _ _ _ bod -> revertExp bod
         Old.LetParRegionE _ _ _ bod -> revertExp bod
         Old.LetLocE _ _ bod  -> revertExp bod
         Old.TagCursor _a _b -> error "revertExp cannot revert TagCursor" --Ext (L1.StartOfPkdCursor a)
@@ -545,7 +554,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FoldE{} -> acc
           Ext ext ->
             case ext of
-              Old.LetRegionE r _ _ rhs ->
+              Old.LetRegionE r _ _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetParRegionE r _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
@@ -602,7 +611,7 @@ allFreeVars ex =
     SpawnE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        Old.LetRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
+        Old.LetRegionE r _ _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetLocE loc locexp bod -> S.difference (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp)) ((S.singleton . fromLocVarToFreeVarsTy) (toLocVar loc))
         Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)

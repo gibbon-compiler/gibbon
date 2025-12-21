@@ -113,7 +113,7 @@ inferRegScopeExpHelper ex rhs r env =
                                           --                             ) fieldRegs
                                           -- let scoped_reg = SoAR scopedDcr scopedFieldRegs
                                           let scoped_reg = mkScopedRegion r defaultMul
-                                          Ext <$> LetRegionE scoped_reg Undefined Nothing <$> inferRegScopeExp (M.insert r scoped_reg env) rhs 
+                                          Ext <$> LetRegionE scoped_reg Undefined RegionImmutable Nothing <$> inferRegScopeExp (M.insert r scoped_reg env) rhs 
             _ -> let regV = regionToVar r
                      regVToVar = case regV of
                         SingleR v -> v
@@ -142,7 +142,7 @@ inferRegScopeExpHelper ex rhs r env =
                                   -- else (DynR regV mul)
                                   else (GlobR regVToVar defaultMul)
                         Ext <$>
-                             LetRegionE scoped_reg Undefined Nothing <$>
+                             LetRegionE scoped_reg Undefined RegionImmutable Nothing <$>
                              inferRegScopeExp (M.insert r scoped_reg env) rhs
       [] -> return ex
 
@@ -155,10 +155,10 @@ inferRegScopeExp env ex =
     Ext ext ->
       case ext of
         AddFixed{} -> return ex
-        LetRegionE r sz ty rhs ->
+        LetRegionE r sz endmut ty rhs ->
           case r of
             -- SoAR dcr fieldRegs -> reti
-            MMapR{} -> Ext . LetRegionE r sz ty <$> go rhs
+            MMapR{} -> Ext . LetRegionE r sz endmut ty <$> go rhs
             _ -> inferRegScopeExpHelper ex rhs r env
 
         LetParRegionE r sz ty rhs ->

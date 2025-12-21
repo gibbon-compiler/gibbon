@@ -71,10 +71,12 @@ type Ty3 = UrTy ()
 
 -- Take the current snapshot of a Mutable location
 -- For a Mutable Location, we store its current value in the env. (variable name, location value name)
-type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar)
+-- We also store the mutable end region in scope if it exists for a mutable location
+type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar)
 
 -- Store the old value of the mutable location.
-type MutableLocOldValueEnv = M.Map LocVar (Var, Maybe LocVar)
+-- Also store the mutable loc of the end of region
+type MutableLocOldValueEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar)
 
 --------------------------------------------------------------------------------
 
@@ -355,7 +357,7 @@ scalarToTy BoolS = BoolTy
 
 -- Takes in a Loc and checks if a mutable locations points to that loc
 checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
-checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv)) mbl -> case mlv of 
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv, _r)) mbl -> case mlv of 
                                                                                     Nothing -> mbl
                                                                                     Just lv -> if lv == loc
                                                                                                then Just k
@@ -620,7 +622,7 @@ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality ty =
     PDictTy k v   -> PDictTy (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
     -- Check if location in the packed type is a locations pointer to by 
     -- any mutable location, (We should not return start and end locations for such types) 
-    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml) -> case ml of 
+    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml, _r) -> case ml of 
                                                             Nothing -> []
                                                             Just vl -> [vl]
                                                   ) (M.elems mutLocsEnv)

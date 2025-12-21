@@ -152,9 +152,9 @@ bindReturns ex =
       pure $ WithArenaE v e'
     Ext ext ->
       case ext of
-        LetRegionE r sz ty bod -> do
+        LetRegionE r sz endmut ty bod -> do
           bod' <- bindReturns bod
-          pure $ Ext $ LetRegionE r sz ty bod'
+          pure $ Ext $ LetRegionE r sz endmut ty bod'
         LetParRegionE r sz ty bod -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetParRegionE r sz ty bod'
@@ -703,9 +703,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           WithArenaE v e -> WithArenaE v <$> go e
 
-          Ext (LetRegionE r sz ty e) -> do
+          Ext (LetRegionE r sz endmut ty e) -> do
             e' <- go e
-            return $ Ext (LetRegionE r sz ty e')
+            return $ Ext (LetRegionE r sz endmut ty e')
 
           Ext (LetParRegionE r sz ty e) -> do
             e' <- go e
