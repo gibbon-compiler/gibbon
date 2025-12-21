@@ -163,7 +163,7 @@ inferExp ddfs fenv env dps expr =
     MapE{} -> error "inferEffects: MapE not handled."
     FoldE{} -> error "inferEffects: FoldE not handled."
 
-    Ext (LetRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetRegionE _ _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetParRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (StartOfPkdCursor{}) -> (S.empty, Nothing)

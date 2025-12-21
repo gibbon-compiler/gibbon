@@ -96,7 +96,7 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
                      AfterConstantLE i loc2 ->
                        go (Map.insert (fromLocVarToFreeVarsTy loc) (DelayLoc (loc, (AfterConstantLE i loc2))) mp) bod
                      _ -> Ext $ LetLocE loc locexp $ goE (Set.insert (fromLocVarToFreeVarsTy loc) bound) mp bod
-            LetRegionE r sz ty bod -> Ext $ LetRegionE r sz ty $ go mp bod
+            LetRegionE r sz endmut ty bod -> Ext $ LetRegionE r sz endmut ty $ go mp bod
             LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty $ go mp bod
             _ -> handle' $ ex
 

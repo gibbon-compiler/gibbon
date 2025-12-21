@@ -13,7 +13,7 @@ import Gibbon.L2.Syntax
 import Text.PrettyPrint.GenericPretty
 
 data DelayedBind
-  = DelayRegion FreeVarsTy Region RegionSize (Maybe RegionType) -- define data type that can be Region, Loc, LocExp to store the delayed bindings
+  = DelayRegion FreeVarsTy Region RegionSize EndRegionModality (Maybe RegionType) -- define data type that can be Region, Loc, LocExp to store the delayed bindings
   | DelayLoc FreeVarsTy LocExp
   | DelayParRegion FreeVarsTy Region RegionSize (Maybe RegionType)
   deriving (Show, Generic)
@@ -51,10 +51,10 @@ placeRegionInwards env scopeSet ex =
   case ex of
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs -> do
+        LetRegionE r sz endmut ty rhs -> do
           -- take care of regions
           let key' = S.singleton (fromRegVarToFreeVarsTy $ regionToVar r)
-              val' = [DelayRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz ty]
+              val' = [DelayRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz endmut ty]
               env' = M.insert key' val' env
            in placeRegionInwards env' scopeSet rhs
         StartOfPkdCursor {} -> return ex
@@ -410,7 +410,7 @@ codeGen set env body =
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
   case delayed of
-    DelayRegion r r' sz ty -> Ext $ LetRegionE r' sz ty body
+    DelayRegion r r' sz endmut ty -> Ext $ LetRegionE r' sz endmut ty body
     DelayParRegion r r' sz ty -> Ext $ LetParRegionE r' sz ty body
     DelayLoc (FL loc) locexp -> Ext $ LetLocE loc locexp body
 
@@ -595,9 +595,9 @@ removeAliasedLocations env definedLocs ex =
   case ex of
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs -> do
+        LetRegionE r sz endmut ty rhs -> do
           rhs' <- go rhs
-          return $ Ext $ LetRegionE r sz ty rhs'
+          return $ Ext $ LetRegionE r sz endmut ty rhs'
         StartOfPkdCursor {} -> return ex
         TagCursor {} -> return ex
         LetLocE loc phs rhs -> do

@@ -132,7 +132,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map (go env) args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go env bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go env bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go env bod))
             {- TODO VS: fix for SOA case -}
             LetLocE loc (AfterConstantLE i loc2) bod ->
@@ -165,7 +165,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map go2 args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go2 bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go2 bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go2 bod))
             LetLocE loc rhs bod ->
               let bod' = go2 bod
@@ -195,7 +195,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f (map (substloc env2) locs) (map (go0 env1 env2) args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go0 env1 env2 bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go0 env1 env2 bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
             LetLocE loc rhs bod ->
               let rhs' = case rhs of

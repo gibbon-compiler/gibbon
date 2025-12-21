@@ -169,13 +169,13 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
     Ext ext ->
       case ext of
-        LetRegionE reg reg_size mb_ty bod -> do
+        LetRegionE reg reg_size endmut mb_ty bod -> do
           bod' <- go locenv env2 bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size endmut mb_ty bod'
 
         LetParRegionE reg reg_size mb_ty bod -> do
           bod' <- go locenv env2 bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size RegionImmutable mb_ty bod'
 
         LetLocE loc rhs bod -> do
           let rhs' = fmap (locenv #) rhs
@@ -390,13 +390,13 @@ toOldL2Exp ex =
 
     Ext ext ->
       case ext of
-        LetRegionE reg reg_size mb_ty bod -> do
+        LetRegionE reg reg_size endmut mb_ty bod -> do
           bod' <- go bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size endmut mb_ty bod'
 
         LetParRegionE reg reg_size mb_ty bod -> do
           bod' <- go bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size RegionImmutable mb_ty bod'
 
         LetLocE loc rhs bod -> do
           let rhs' = fmap New.toLocVar rhs

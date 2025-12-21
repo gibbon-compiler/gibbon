@@ -37,6 +37,7 @@ module Gibbon.L2.Syntax
   , Region(..)
   --, ExtendedRegion(..)
   , Modality(..)
+  , EndRegionModality(..)
   , LRM(..)
   , dummyLRM
   , Multiplicity(..)
@@ -131,6 +132,10 @@ data RegionSize = BoundedSize Int | Undefined
 data RegionType = IndirectionFree | RightwardLocalIndirections | LocalIndirections | NoSharing
   deriving (Eq, Ord, Read, Show, Generic, NFData, Out)
 
+-- Vidush: Weather the variable representing the end of the region can be mutable or immutable
+data EndRegionModality = RegionMutable | RegionImmutable
+  deriving (Eq, Ord, Read, Show, Generic, NFData, Out)
+
 
 -- | 'Undefined' is at the top of this lattice.
 instance Ord RegionSize where
@@ -160,7 +165,7 @@ instance Monoid RegionSize where
 
 -- | The extension that turns L1 into L2.
 data E2Ext loc dec
-  = LetRegionE    Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
+  = LetRegionE Region RegionSize EndRegionModality (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE loc (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
   | LetRegE RegVar (PreRegExp loc) (E2 loc dec) -- ^ Bind a new region.
@@ -250,7 +255,7 @@ data LocRet = EndOf LRM
 instance FreeVars (E2Ext l d) where
   gFreeVars e =
     case e of
-     LetRegionE _ _ _ bod   -> gFreeVars bod
+     LetRegionE _ _ _ _ bod   -> gFreeVars bod
      LetParRegionE _ _ _ bod   -> gFreeVars bod
      LetLocE _ rhs bod  -> (case rhs of
                               AfterVariableLE v _loc _ -> S.singleton v
@@ -312,7 +317,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
     case ex of
-      LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      LetRegionE _r _ _ _ bod    -> gRecoverType ddfs env2 bod
       LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       StartOfPkdCursor{}  -> CursorTy
@@ -335,7 +340,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
-      LetRegionE _r _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
+      LetRegionE _r _ _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
       LetParRegionE _r _ _ bod -> gRecoverTypeLoc ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverTypeLoc ddfs env2 bod
       StartOfPkdCursor{}  -> CursorTy
@@ -363,9 +368,9 @@ instance (Typeable (E2Ext l d),
 
   gFlattenGatherBinds ddfs env ex =
       case ex of
-          LetRegionE r sz ty bod -> do
+          LetRegionE r sz endmut ty bod -> do
                                 (bnds,bod') <- go bod
-                                return ([], LetRegionE r sz ty (flatLets bnds bod'))
+                                return ([], LetRegionE r sz endmut ty (flatLets bnds bod'))
 
           LetParRegionE r sz ty bod -> do
                                 (bnds,bod') <- go bod
@@ -400,7 +405,7 @@ instance (Typeable (E2Ext l d),
 instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2Ext l d) where
   gInlineTrivExt env ext =
     case ext of
-      LetRegionE r sz ty bod   -> LetRegionE r sz ty (gInlineTrivExp env bod)
+      LetRegionE r sz endmut ty bod   -> LetRegionE r sz endmut ty (gInlineTrivExp env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gInlineTrivExp env bod)
       LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
       TagCursor{} -> ext
@@ -423,7 +428,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
   gSubstExt old new ext =
     case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubst old new bod)
+      LetRegionE r sz endmut ty bod -> LetRegionE r sz endmut ty (gSubst old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubst old new bod)
       LetLocE l le bod -> LetLocE l le (gSubst old new bod)
       TagCursor{}   -> ext
@@ -444,7 +449,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
 
   gSubstEExt old new ext =
     case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubstE old new bod)
+      LetRegionE r sz endmut ty bod -> LetRegionE r sz endmut ty (gSubstE old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubstE old new bod)
       LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
       TagCursor{}   -> ext
@@ -466,7 +471,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
     case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gRename env bod)
+      LetRegionE r sz endmut ty bod -> LetRegionE r sz endmut ty (gRename env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gRename env bod)
       LetLocE l le bod -> LetLocE l le (gRename env bod)
       TagCursor a b -> TagCursor (gRename env a) (gRename env b)
@@ -935,7 +940,7 @@ revertExp ex =
     WithArenaE v e -> WithArenaE v (revertExp e)
     Ext ext ->
       case ext of
-        LetRegionE _ _ _ bod -> revertExp bod
+        LetRegionE _ _ _ _ bod -> revertExp bod
         LetParRegionE _ _ _ bod -> revertExp bod
         LetLocE _ _ bod  -> revertExp bod
         StartOfPkdCursor cur -> Ext (L1.StartOfPkdCursor cur)
@@ -996,7 +1001,7 @@ occurs w ex =
     WithArenaE v rhs -> v `S.member` w || go rhs
     Ext ext ->
       case ext of
-        LetRegionE _ _ _ bod  -> go bod
+        LetRegionE _ _ _ _ bod  -> go bod
         LetParRegionE _ _ _ bod  -> go bod
         LetLocE _ le bod  ->
           let oc_bod = go bod in
@@ -1134,7 +1139,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FoldE{} -> acc
           Ext ext ->
             case ext of
-              LetRegionE r _ _ rhs ->
+              LetRegionE r _ _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy (regionToVar r)) (S.toList $ allFreeVars rhs) acc) rhs
               LetParRegionE r _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy (regionToVar r)) (S.toList $ allFreeVars rhs) acc) rhs
@@ -1202,7 +1207,7 @@ allFreeVars ex =
     SpawnE _ locs args -> S.fromList (map fromLocVarToFreeVarsTy locs) `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        LetRegionE r _ _ bod -> let regVar = regionToVar r
+        LetRegionE r _ _ _ bod -> let regVar = regionToVar r
                                   in S.delete (R regVar) (allFreeVars bod)
         LetParRegionE r _ _ bod -> S.delete (R $ regionToVar r) (allFreeVars bod)
         LetLocE loc locexp bod -> let locs_locexp = case locexp of 
@@ -1279,7 +1284,7 @@ changeAppToSpawn v args2 ex1 =
     SyncE{}  -> ex1
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
+        LetRegionE r sz endmut ty rhs  -> Ext $ LetRegionE r sz endmut ty (go rhs)
         LetParRegionE r sz ty rhs  -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
         StartOfPkdCursor{} -> ex1

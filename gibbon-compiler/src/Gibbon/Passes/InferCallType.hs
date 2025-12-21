@@ -22,7 +22,7 @@ inferCallType Prog{ddefs, fundefs, mainExp} = do
     mainExp' <- case mainExp of 
                         Nothing -> return Nothing
                         Just (mexp, mty) -> do 
-                                     exp' <- inferCallTypeMainExp newFundefs mexp
+                                     (exp', _) <- inferCallTypeMainExp S.empty newFundefs mexp
                                      return $ Just (exp', mty)
     let newProg = Prog{ddefs = ddefs, fundefs = newFundefs, mainExp = mainExp'}
     pure $ newProg {- dbgTrace minChatLvl (sdoc newProg) dbgTrace minChatLvl (sdoc $ M.elems fundefs')-}
@@ -96,19 +96,21 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
 --  --dbgTrace minChatLvl (sdoc tailCallTy) pure f
 -- pure f
 
-inferCallTypeMainExp :: NewL2.FunDefs2 -> NewL2.Exp2 -> PassM NewL2.Exp2
-inferCallTypeMainExp fundefs exp2 = do 
+inferCallTypeMainExp :: S.Set LocArg -> NewL2.FunDefs2 -> NewL2.Exp2 -> PassM (NewL2.Exp2, S.Set LocArg)
+inferCallTypeMainExp mutLocs fundefs exp2 = do 
     case exp2 of 
-        VarE{} -> pure exp2
-        LitE{} -> pure exp2
-        CharE{} -> pure exp2
-        FloatE{} -> pure exp2
-        LitSymE{} -> pure exp2
+        VarE{} -> pure (exp2, mutLocs)
+        LitE{} -> pure (exp2, mutLocs)
+        CharE{} -> pure (exp2, mutLocs)
+        FloatE{} -> pure (exp2, mutLocs)
+        LitSymE{} -> pure (exp2, mutLocs)
         -- We should check the function type here
         -- If there are any output mutable locations
         -- we need to store and track them
         AppE v t locs args -> do 
-                                args' <- mapM (inferCallTypeMainExp fundefs) args
+                                retargs <- mapM (inferCallTypeMainExp mutLocs fundefs) args
+                                let args' = map fst retargs 
+                                let mutenv = S.unions $ map snd retargs
                                 let fundef = M.lookup v fundefs
                                 case fundef of 
                                         Nothing -> error "Expected function definition for function!"
@@ -122,71 +124,133 @@ inferCallTypeMainExp fundefs exp2 = do
                                                 -- output locations become output mutable
                                                 -- we likely need to add these locations to an env
                                                 -- Since we would 
-                                                let locs' = map (\loc -> case loc of 
-                                                                           Loc (LREM l r e m) -> if m == Output 
-                                                                                                 then Loc $ LREM l r e OutputMutable 
-                                                                                                 else Loc $ LREM l r e m
-                                                                           _ -> loc                                                                
-                                                                ) locs
-                                                return $ AppE v t locs' args'
-                                             else return $ AppE v t locs args'
+                                                let (locs', mutLocs') = foldl (\(newlocs, mutlocsenv) loc  -> case loc of 
+                                                                                    Loc (LREM l r e m) -> if m == Output 
+                                                                                                 then (newlocs ++ [Loc $ LREM l r e OutputMutable], S.insert loc mutlocsenv)
+                                                                                                 else (newlocs ++ [Loc $ LREM l r e m], mutlocsenv)
+                                                                                    EndOfReg r m er -> if m == Output 
+                                                                                                       then (newlocs ++ [EndOfReg r OutputMutable er], S.insert loc mutlocsenv)
+                                                                                                       else (newlocs ++ [loc], mutlocsenv)
+                                                                                    _ -> (newlocs ++ [loc], mutlocsenv)                                                                
+                                                                                ) ([], mutenv) locs
+                                                return $ (AppE v t locs' args', mutLocs')
+                                             else return $ (AppE v t locs args', mutenv)
                                              
-        PrimAppE p args -> PrimAppE p <$> mapM (inferCallTypeMainExp fundefs) args
-        LetE (v, loc, ty, rhs) bod -> do 
-                                       rhs' <- inferCallTypeMainExp fundefs rhs
-                                       bod' <- inferCallTypeMainExp fundefs bod 
-                                       return $ LetE (v, loc, ty, rhs') bod'
+        PrimAppE p args -> do 
+                           retargs <- mapM (inferCallTypeMainExp mutLocs fundefs) args
+                           let args' = map fst retargs 
+                           let mutenv = S.unions $ map snd retargs
+                           return $ (PrimAppE p args', mutenv)
+        LetE (v, locs, ty, rhs) bod -> do 
+                                       (rhs', mutlocs') <- inferCallTypeMainExp mutLocs fundefs rhs
+                                       (bod', mutlocs'') <- inferCallTypeMainExp mutlocs' fundefs bod 
+                                       let locsInTy' = NewL2.locsInTy ty
+                                       -- check for any mutable locations that need to be updated
+                                       let lstmutlocs = concatMap (\l -> case l of 
+                                                                        Loc (LREM _l _ _ _) -> [_l]
+                                                                        _ -> [] 
+                                                                  ) (S.toList mutlocs'')
+                                       let update = foldr (\l up -> if P.elem l  locsInTy'
+                                                                    then True 
+                                                                    else up
+                                                          ) False lstmutlocs
+                                       let locs' = map (\l -> case l of 
+                                                                   Loc (LREM _l r e m) -> if update && m == Output
+                                                                                          then Loc (LREM _l r e OutputMutable)
+                                                                                          else l
+                                                                --    EndOfReg r m er -> if update && m == Output 
+                                                                --                       then EndOfReg r OutputMutable er
+                                                                --                       else l
+                                                                   _ -> l                                        
+                                                       ) locs
+                                       return $ (LetE (v, locs', ty, rhs') bod', mutlocs'')
         IfE a b c -> do 
-                      a' <- inferCallTypeMainExp fundefs a
-                      b' <- inferCallTypeMainExp fundefs b 
-                      c' <- inferCallTypeMainExp fundefs c 
-                      return $ IfE a' b' c'
-        MkProdE ls -> MkProdE <$> mapM (inferCallTypeMainExp fundefs) ls
-        ProjE i e -> ProjE i <$> inferCallTypeMainExp fundefs e
-        CaseE _scrt _brs -> pure exp2
-        DataConE loc c args -> DataConE loc c <$> mapM (inferCallTypeMainExp fundefs) args
+                      (a', mutlocs') <- inferCallTypeMainExp mutLocs fundefs a
+                      (b', mutlocs'') <- inferCallTypeMainExp mutlocs' fundefs b 
+                      (c', mutlocs''') <- inferCallTypeMainExp mutlocs'' fundefs c 
+                      return $ (IfE a' b' c', mutlocs''')
+        MkProdE ls -> do
+                      retls <- mapM (inferCallTypeMainExp mutLocs fundefs) ls
+                      let ls' = map fst retls
+                      let mutlocs = S.unions $ map snd retls
+                      return $ (MkProdE ls', mutlocs)
+        ProjE i e -> do 
+                     (e', mutlocs') <- inferCallTypeMainExp mutLocs fundefs e
+                     return $ (ProjE i e', mutlocs')
+        -- TODO: Vidush
+        -- For now I am not expecting the main expression to contain any case expressions
+        -- However, it could be the case that main expression have a case so we'd need to modify this
+        CaseE _scrt _brs -> pure (exp2, mutLocs)
+        DataConE loc c args -> do 
+                                retargs <- mapM (inferCallTypeMainExp mutLocs fundefs) args 
+                                let args' = map fst retargs 
+                                let mutlocs = S.unions $ map snd retargs
+                                return $ (DataConE loc c args', mutlocs)
         TimeIt e d b -> do 
-                         e' <- inferCallTypeMainExp fundefs e
-                         return $ TimeIt e' d b 
+                         (e', mutlocs) <- inferCallTypeMainExp mutLocs fundefs e
+                         return $ (TimeIt e' d b, mutlocs) 
         MapE d e -> do 
-                     e' <- inferCallTypeMainExp fundefs e 
-                     return $ MapE d e'
+                     (e', mutlocs) <- inferCallTypeMainExp mutLocs fundefs e 
+                     return $ (MapE d e', mutlocs)
         FoldE i it e -> do 
-                         e' <- inferCallTypeMainExp fundefs e 
-                         return $ FoldE i it e'
-        SpawnE v locs exps -> SpawnE v locs <$> mapM (inferCallTypeMainExp fundefs) exps
-        SyncE -> pure exp2
+                         (e', mutlocs) <- inferCallTypeMainExp mutLocs fundefs e 
+                         return $ (FoldE i it e', mutlocs)
+        SpawnE v locs exps -> do 
+                               retexps <- mapM (inferCallTypeMainExp mutLocs fundefs) exps
+                               let exps' = map fst retexps 
+                               let mutlocs = S.unions $ map snd retexps
+                               return $ (SpawnE v locs exps', mutlocs)
+        SyncE -> pure (exp2, mutLocs)
         WithArenaE _v e -> do 
-                            e' <- inferCallTypeMainExp fundefs e 
-                            return $ WithArenaE _v e'
+                            (e', mutlocs) <- inferCallTypeMainExp mutLocs fundefs e 
+                            return $ (WithArenaE _v e', mutlocs)
         Ext ext ->
             case ext of
-                Old.LetRegionE r a b bod -> do 
-                                             bod' <- inferCallTypeMainExp fundefs bod 
-                                             return $ Ext $ Old.LetRegionE r a b bod'
+                Old.LetRegionE r a endmut b bod -> do 
+                                             (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod 
+                                             -- check if any mutable location uses the current region. 
+                                             -- if yes, then we can make the End mutable for the region.
+                                             let regvar = regionToVar r
+                                             let regmutable = foldr (\l ismut -> case l of 
+                                                                               Loc (LREM _ reg _ _) -> if reg == regvar 
+                                                                                                     then True
+                                                                                                     else ismut
+                                                                               _ -> ismut                                                  
+                                                
+                                                                    ) False (S.toList mutlocs)
+                                             let endmut' = if regmutable 
+                                                           then RegionMutable
+                                                           else endmut
+                                             return $ (Ext $ Old.LetRegionE r a endmut' b bod', mutlocs)
                 Old.LetParRegionE r a b bod -> do 
-                                                bod' <- inferCallTypeMainExp fundefs bod
-                                                return $ Ext $ Old.LetParRegionE r a b bod'
+                                                (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod
+                                                return $ (Ext $ Old.LetParRegionE r a b bod', mutlocs)
                 Old.LetLocE loc locexp bod -> do 
-                                               bod' <- inferCallTypeMainExp fundefs bod 
-                                               return $ Ext $ Old.LetLocE loc locexp bod'
+                                               (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod 
+                                               -- Check if the loc is in the outputMutable env
+                                               let loc' = if S.member loc mutlocs
+                                                      then case loc of 
+                                                                Loc (LREM l r e _) -> Loc (LREM l r e OutputMutable)
+                                                                _ -> loc
+                                                      else loc
+                                               return $ (Ext $ Old.LetLocE loc' locexp bod', mutlocs)
                 Old.LetRegE reg regexp bod -> do 
-                                               bod' <- inferCallTypeMainExp fundefs bod 
-                                               return $ Ext $ Old.LetRegE reg regexp bod'
-                Old.BoundsCheckVector _bounds -> pure exp2 
-                Old.RetE{} -> pure exp2
-                Old.StartOfPkdCursor{} -> pure exp2
-                Old.TagCursor{} -> pure exp2
-                Old.FromEndE{} -> pure exp2
-                Old.BoundsCheck{} -> pure exp2
-                Old.IndirectionE{} -> pure exp2
-                Old.AddFixed{}    -> pure exp2
-                Old.GetCilkWorkerNum -> pure exp2
-                Old.LetAvail{} -> pure exp2
-                Old.AllocateTagHere{} -> pure exp2
-                Old.AllocateScalarsHere{} -> pure exp2
-                Old.SSPush{} -> pure exp2
-                Old.SSPop{} -> pure exp2
+                                               (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod 
+                                               return $ (Ext $ Old.LetRegE reg regexp bod', mutlocs)
+                Old.BoundsCheckVector _bounds -> pure (exp2, mutLocs) 
+                Old.RetE{} -> pure (exp2, mutLocs)
+                Old.StartOfPkdCursor{} -> pure (exp2, mutLocs)
+                Old.TagCursor{} -> pure (exp2, mutLocs)
+                Old.FromEndE{} -> pure (exp2, mutLocs)
+                Old.BoundsCheck{} -> pure (exp2, mutLocs)
+                Old.IndirectionE{} -> pure (exp2, mutLocs)
+                Old.AddFixed{}    -> pure (exp2, mutLocs)
+                Old.GetCilkWorkerNum -> pure (exp2, mutLocs)
+                Old.LetAvail{} -> pure (exp2, mutLocs)
+                Old.AllocateTagHere{} -> pure (exp2, mutLocs)
+                Old.AllocateScalarsHere{} -> pure (exp2, mutLocs)
+                Old.SSPush{} -> pure (exp2, mutLocs)
+                Old.SSPop{} -> pure (exp2, mutLocs)
 
 
 backTrackLocs :: TrackLocVariables -> LocVar -> Bool -> M.Map LocVar Bool -> (Bool, M.Map LocVar Bool)
@@ -424,9 +488,9 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
          in (WithArenaE _v e', env', t)
     Ext ext ->
         case ext of
-            Old.LetRegionE r a b bod ->
+            Old.LetRegionE r a endmut b bod ->
                 let (bod', env', t) = inferCallTypeExp tailCallOptOn funName env bod
-                 in (Ext $ Old.LetRegionE r a b bod', env', t)
+                 in (Ext $ Old.LetRegionE r a endmut b bod', env', t)
             Old.LetParRegionE r a b bod ->
                 let (bod', env', t) = inferCallTypeExp tailCallOptOn funName env bod
                  in (Ext $ Old.LetParRegionE r a b bod', env', t)
@@ -807,9 +871,9 @@ markMutableLocsAfterInitialPass env _exp =
              in WithArenaE _v e'
         Ext ext ->
             case ext of
-                Old.LetRegionE r a b bod ->
+                Old.LetRegionE r a endmut b bod ->
                     let bod' = markMutableLocsAfterInitialPass env bod
-                     in Ext $ Old.LetParRegionE r a b bod'
+                     in Ext $ Old.LetRegionE r a endmut b bod'
                 Old.LetParRegionE r a b bod ->
                     let bod' = markMutableLocsAfterInitialPass env bod
                      in Ext $ Old.LetParRegionE r a b bod'
@@ -984,9 +1048,9 @@ copyOutputMutableBeforeCallsAndReplace _exp = case _exp of
         return $ WithArenaE _v e'
     Ext ext ->
         case ext of
-            Old.LetRegionE r a b bod -> do
+            Old.LetRegionE r a endmut b bod -> do
                 bod' <- copyOutputMutableBeforeCallsAndReplace bod
-                return $ Ext $ Old.LetParRegionE r a b bod'
+                return $ Ext $ Old.LetRegionE r a endmut b bod'
             Old.LetParRegionE r a b bod -> do
                 bod' <- copyOutputMutableBeforeCallsAndReplace bod
                 return $ Ext $ Old.LetParRegionE r a b bod'
@@ -1103,9 +1167,9 @@ replaceLocsHelper menv _exp = case _exp of
         return $ WithArenaE _v e'
     Ext ext ->
         case ext of
-            Old.LetRegionE r a b bod -> do
+            Old.LetRegionE r a endmut b bod -> do
                 bod' <- replaceLocsHelper menv bod
-                return $ Ext $ Old.LetParRegionE r a b bod'
+                return $ Ext $ Old.LetRegionE r a endmut b bod'
             Old.LetParRegionE r a b bod -> do
                 bod' <- replaceLocsHelper menv bod
                 return $ Ext $ Old.LetParRegionE r a b bod'

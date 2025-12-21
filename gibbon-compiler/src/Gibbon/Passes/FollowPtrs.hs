@@ -239,8 +239,8 @@ followPtrs (Prog ddefs fundefs mainExp) = do
           Ext (LetLocE loc rhs bod) ->
             Ext <$> (LetLocE loc rhs) <$> go env  out_ty funName funArgs funTy  bod
 
-          Ext (LetRegionE reg sz ty bod) ->
-            Ext <$> (LetRegionE reg sz ty) <$> go env  out_ty funName funArgs funTy  bod
+          Ext (LetRegionE reg sz endmut ty bod) ->
+            Ext <$> (LetRegionE reg sz endmut ty) <$> go env  out_ty funName funArgs funTy  bod
 
           Ext (LetParRegionE reg sz ty bod) ->
             Ext <$> (LetParRegionE reg sz ty) <$> go env  out_ty funName funArgs funTy  bod

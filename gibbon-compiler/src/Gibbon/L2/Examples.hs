@@ -32,7 +32,7 @@ ddtree = fromListDD [DDef (toVar "Tree") []
 
 
 tTypeable :: Exp2
-tTypeable =  Ext $ LetRegionE (VarR "r500") Undefined Nothing $
+tTypeable =  Ext $ LetRegionE (VarR "r500") Undefined RegionImmutable Nothing $
              Ext $ LetLocE (Single "l501") (StartOfRegionLE (VarR "r500")) $
              LetE ("v502",[], IntTy, LitE 42) $
              (VarE "v502")
@@ -83,7 +83,7 @@ add1FunBod = CaseE (VarE "tr1")
   ]
 
 add1MainExp :: Exp2
-add1MainExp = Ext $ LetRegionE (VarR "r99") Undefined Nothing $
+add1MainExp = Ext $ LetRegionE (VarR "r99") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (Single "l100") (StartOfRegionLE (VarR "r99")) $
               Ext $ LetLocE (Single "l101") (AfterConstantLE 1 (Single "l100")) $
               LetE ("x102",[],PackedTy "Tree" (Single "l101"),
@@ -94,7 +94,7 @@ add1MainExp = Ext $ LetRegionE (VarR "r99") Undefined Nothing $
               LetE ("z105",[],PackedTy "Tree" (Single "l100"),
                       DataConE (Single "l100") "Node" [VarE "x102",
                                                  VarE "y104"]) $
-              Ext $ LetRegionE (VarR "r106") Undefined Nothing $
+              Ext $ LetRegionE (VarR "r106") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (Single "l107") (StartOfRegionLE (VarR "r106")) $
               LetE ("a108",[], PackedTy "Tree" (Single "l107"),
                       AppE "add1" NotTailRec [(Single "l100"), (Single "l107")] [VarE "z105"]) $
@@ -108,7 +108,7 @@ add1Prog = Prog ddtree (M.fromList [( "add1", add1Fun)])
 --------------------------------------------------------------------------------
 
 leafMainExp :: Exp2
-leafMainExp = Ext $ LetRegionE (VarR "r150") Undefined Nothing $
+leafMainExp = Ext $ LetRegionE (VarR "r150") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (Single "l151") (StartOfRegionLE (VarR "r150")) $
               LetE ("x152",[],PackedTy "Tree" (Single "l151"),
                        DataConE (Single "l151") "Leaf" [LitE 1]) $
@@ -122,7 +122,7 @@ leafProg = Prog ddtree M.empty (Just (leafMainExp, PackedTy "Tree" (Single "l151
 
 -- writes node
 nodeMainExp :: Exp2
-nodeMainExp = Ext $ LetRegionE (VarR "r155") Undefined Nothing $
+nodeMainExp = Ext $ LetRegionE (VarR "r155") Undefined RegionImmutable Nothing $
                Ext $ LetLocE (Single "l156") (StartOfRegionLE (VarR "r155")) $
                Ext $ LetLocE (Single "l157") (AfterConstantLE 1 (Single "l156")) $
                LetE ("x158",[],PackedTy "Tree" (Single "l157"),
@@ -188,7 +188,7 @@ copyTreeFun = FunDef "copyTree" [ "tr22"] copyFunTy copyBod (FunMeta NotRec NoIn
                  ]
 
 copyTreeMainExp :: Exp2
-copyTreeMainExp = Ext $ LetRegionE (VarR "r200") Undefined Nothing $
+copyTreeMainExp = Ext $ LetRegionE (VarR "r200") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l201") (StartOfRegionLE (VarR "r200")) $
                   Ext $ LetLocE (Single "l202") (AfterConstantLE 1 (Single "l201")) $
                   LetE ("x203",[],PackedTy "Tree" (Single "l202"),
@@ -198,7 +198,7 @@ copyTreeMainExp = Ext $ LetRegionE (VarR "r200") Undefined Nothing $
                            DataConE (Single "r204") "Leaf" [LitE 2]) $
                   LetE ("z206",[],PackedTy "Tree" (Single "l201"),
                            DataConE (Single "l201") "Node" [VarE "x203", VarE "y205"]) $
-                  Ext $ LetRegionE (VarR "r207") Undefined Nothing $
+                  Ext $ LetRegionE (VarR "r207") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l208") (StartOfRegionLE (VarR "r207")) $
                   LetE ("a209",[], PackedTy "Tree" (Single "l208"),
                            AppE "copyTree" NotTailRec [(Single "l201"), (Single "l208")] [VarE "z206"]) $
@@ -238,7 +238,7 @@ copyOnId1Prog = Prog ddtree funs $ Just (copyOnId1MainExp, PackedTy "Tree" (Sing
                          ( "id1WithCopy", id1WithCopyFun)]
 
 copyOnId1MainExp :: Exp2
-copyOnId1MainExp = Ext $ LetRegionE (VarR "r220") Undefined Nothing $
+copyOnId1MainExp = Ext $ LetRegionE (VarR "r220") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l221") (StartOfRegionLE (VarR "r220")) $
                    Ext $ LetLocE (Single "l222") (AfterConstantLE 1 (Single "l221")) $
                    LetE ("l223",[],PackedTy "Tree" (Single "l222"),
@@ -248,7 +248,7 @@ copyOnId1MainExp = Ext $ LetRegionE (VarR "r220") Undefined Nothing $
                             DataConE (Single "l224") "Leaf" [LitE 2]) $
                    LetE ("z226",[],PackedTy "Tree" (Single "l221"),
                             DataConE (Single "l221") "Node" [VarE "l223", VarE "l225"]) $
-                   Ext $ LetRegionE (VarR "r227") Undefined Nothing $
+                   Ext $ LetRegionE (VarR "r227") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l228") (StartOfRegionLE (VarR "r227")) $
                    LetE ("a229",[], PackedTy "Tree" (Single "l228"),
                             AppE "id1WithCopy" NotTailRec [(Single "l221"), (Single "l228")] [VarE "z226"]) $
@@ -329,7 +329,7 @@ leftmostBod = CaseE (VarE "t111")
                 VarE "lm121")]
 
 leftmostMainExp :: Exp2
-leftmostMainExp = Ext $ LetRegionE (VarR "r122") Undefined Nothing $
+leftmostMainExp = Ext $ LetRegionE (VarR "r122") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l123") (StartOfRegionLE (VarR "r122")) $
                   Ext $ LetLocE (Single "l124") (AfterConstantLE 1 (Single "l123")) $
                   LetE ("x125",[],PackedTy "Tree" (Single "l124"),
@@ -374,7 +374,7 @@ rightmostBod = CaseE (VarE "t242")
                 )]
 
 rightmostMainExp :: Exp2
-rightmostMainExp = Ext $ LetRegionE (VarR "r253") Undefined Nothing $
+rightmostMainExp = Ext $ LetRegionE (VarR "r253") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l254") (StartOfRegionLE (VarR "r253")) $
                    Ext $ LetLocE (Single "l255") (AfterConstantLE 1 (Single "l254")) $
                    LetE ("x256",[],PackedTy "Tree" (Single "l255"),
@@ -412,7 +412,7 @@ buildLeafFun = FunDef "buildLeaf" [ "i125"] buildLeafTy buildLeafBod (FunMeta Re
 
 
 buildLeafMainExp :: Exp2
-buildLeafMainExp = Ext $ LetRegionE (VarR "r128") Undefined Nothing $
+buildLeafMainExp = Ext $ LetRegionE (VarR "r128") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l129") (StartOfRegionLE (VarR "r128")) $
                    AppE "buildLeaf" NotTailRec [(Single "l129")] [LitE 42]
 
@@ -451,7 +451,7 @@ buildTreeFun = FunDef "buildTree" [ "i270"] buildTreeTy buildTreeBod (FunMeta Re
 
 
 buildTreeMainExp :: Exp2
-buildTreeMainExp = Ext $ LetRegionE (VarR "r279") Undefined Nothing $
+buildTreeMainExp = Ext $ LetRegionE (VarR "r279") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l280") (StartOfRegionLE (VarR "r279")) $
                    AppE "buildTree" NotTailRec [(Single "l280")] [LitE 3]
 
@@ -484,9 +484,9 @@ buildTwoTreesFun = FunDef "buildTwoTrees" [ "i750"] buildTreeTy buildTreeBod (Fu
                    VarE "a755"
 
 buildTwoTreesMainExp :: Exp2
-buildTwoTreesMainExp = Ext $ LetRegionE (VarR "r756") Undefined Nothing $
+buildTwoTreesMainExp = Ext $ LetRegionE (VarR "r756") Undefined RegionImmutable Nothing $
                        Ext $ LetLocE (Single "l757") (StartOfRegionLE (VarR "r756")) $
-                       Ext $ LetRegionE (VarR "r758") Undefined Nothing $
+                       Ext $ LetRegionE (VarR "r758") Undefined RegionImmutable Nothing $
                        Ext $ LetLocE (Single "l759") (StartOfRegionLE (VarR "r758")) $
                        LetE ("treeprod", [], ProdTy [PackedTy "Tree" (Single "lout757"), PackedTy "Tree" (Single "lout759")],
                                 AppE "buildTwoTrees" NotTailRec [(Single "l757"), (Single "l759")] [LitE 2]) $
@@ -539,7 +539,7 @@ buildTreeSumFun = FunDef "buildTreeSum" [ "i302"] buildTreeSumTy buildTreeSumBod
 
 
 buildTreeSumMainExp :: Exp2
-buildTreeSumMainExp = Ext $ LetRegionE (VarR "r313") Undefined Nothing $
+buildTreeSumMainExp = Ext $ LetRegionE (VarR "r313") Undefined RegionImmutable Nothing $
                       Ext $ LetLocE (Single "l314") (StartOfRegionLE (VarR "r313")) $
                       LetE ("z315",[],ProdTy [IntTy, PackedTy "Tree" (Single "l314")],
                                AppE "buildTreeSum" NotTailRec [(Single "l314")] [LitE 3]) $
@@ -578,7 +578,7 @@ sumTreeFun = FunDef "sumTree" [ "tr762"] sumTreeTy sumTreeBod (FunMeta Rec NoInl
                    )]
 
 sumTreeMainExp :: Exp2
-sumTreeMainExp = Ext $ LetRegionE (VarR "r771") Undefined Nothing $
+sumTreeMainExp = Ext $ LetRegionE (VarR "r771") Undefined RegionImmutable Nothing $
                  Ext $ LetLocE (Single "l772") (StartOfRegionLE (VarR "r771")) $
                  LetE ("tr773", [], PackedTy "Tree" (Single "l772"),
                           AppE "buildTree" NotTailRec [(Single "l772")] [LitE 3]) $
@@ -595,7 +595,7 @@ sumTreeProg = Prog ddtree (M.fromList [( "buildTree", buildTreeFun),
 --------------------------------------------------------------------------------
 
 printTupMainExp :: Exp2
-printTupMainExp = Ext $ LetRegionE (VarR "r325") Undefined Nothing $
+printTupMainExp = Ext $ LetRegionE (VarR "r325") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l326") (StartOfRegionLE (VarR "r325")) $
                   LetE ("i327",[], IntTy, LitE 42) $
                   LetE ("x328",[], PackedTy "Tree" (Single "l326"),
@@ -610,7 +610,7 @@ printTupProg = Prog ddtree M.empty (Just (printTupMainExp, ProdTy [IntTy, Packed
 --------------------------------------------------------------------------------
 
 printTupMainExp2 :: Exp2
-printTupMainExp2 = Ext $ LetRegionE (VarR "r400") Undefined Nothing $
+printTupMainExp2 = Ext $ LetRegionE (VarR "r400") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l401") (StartOfRegionLE (VarR "r400")) $
                   LetE ("x402",[], PackedTy "Tree" (Single "l401"),
                            AppE "buildTree" NotTailRec [(Single "l401")] [LitE 2]) $
@@ -692,18 +692,18 @@ addTreesFun = FunDef "addTrees" [ "trees354"] addTreesTy addTreesBod (FunMeta Re
                     )]
 
 addTreesMainExp :: Exp2
-addTreesMainExp = Ext $ LetRegionE (VarR "r400") Undefined Nothing $
+addTreesMainExp = Ext $ LetRegionE (VarR "r400") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l401") (StartOfRegionLE (VarR "r400")) $
                   LetE ("x402",[], PackedTy "Tree" (Single "l401"),
                            AppE "buildTree" NotTailRec [(Single "l401")] [LitE 2]) $
                   -- Ext $ LetLocE "l403" (AfterVariableLE "x402" "l401" True) $
-                  Ext $ LetRegionE (VarR "r403") Undefined Nothing $
+                  Ext $ LetRegionE (VarR "r403") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l403") (StartOfRegionLE (VarR "r403")) $
                   LetE ("y404",[], PackedTy "Tree" (Single "l403"),
                            AppE "buildTree" NotTailRec [(Single "l403")] [LitE 2]) $
                   LetE ("z405",[], ProdTy [PackedTy "Tree" (Single "l401"), PackedTy "Tree" (Single "l403")],
                            MkProdE [VarE "x402", VarE "y404"]) $
-                  Ext $ LetRegionE (VarR "r405") Undefined Nothing $
+                  Ext $ LetRegionE (VarR "r405") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l406") (StartOfRegionLE (VarR "r405")) $
                   LetE ("a407",[],PackedTy "Tree" (Single "l406"),
                            AppE "addTrees" NotTailRec [(Single "l401"),(Single "l403"),(Single "l406")] [VarE "z405"]) $
@@ -767,7 +767,7 @@ testFlattenProg = Prog M.empty (M.fromList [( "intAdd",intAddFun)]) $ Just (test
   where
     testFlattenBod :: Exp2
     testFlattenBod =
-      Ext $ LetRegionE (VarR "_") Undefined Nothing $
+      Ext $ LetRegionE (VarR "_") Undefined RegionImmutable Nothing $
       Ext $ LetLocE (Single "_") (StartOfRegionLE (VarR "_")) $
       Ext $ LetLocE (Single "_") (AfterConstantLE 1 (Single "_")) $
       LetE ("v170",[],IntTy,
@@ -904,7 +904,7 @@ buildSTreeFun = FunDef "buildSTree" [ "i543"] buildSTreeTy buildSTreeBod (FunMet
 
 
 buildSTreeMainExp :: Exp2
-buildSTreeMainExp = Ext $ LetRegionE (VarR "r530") Undefined Nothing $
+buildSTreeMainExp = Ext $ LetRegionE (VarR "r530") Undefined RegionImmutable Nothing $
                     Ext $ LetLocE (Single "l531") (StartOfRegionLE (VarR "r530")) $
                     LetE ("x532",[], PackedTy "STree" (Single "l531"),
                              AppE "buildSTree" NotTailRec [(Single "l531")] [LitE 3]) $
@@ -946,7 +946,7 @@ sumSTreeFun = FunDef "sumSTree" [ "tr762"] sumSTreeTy sumSTreeBod (FunMeta Rec N
                    )]
 
 sumSTreeMainExp :: Exp2
-sumSTreeMainExp = Ext $ LetRegionE (VarR "r771") Undefined Nothing $
+sumSTreeMainExp = Ext $ LetRegionE (VarR "r771") Undefined RegionImmutable Nothing $
                  Ext $ LetLocE (Single "l772") (StartOfRegionLE (VarR "r771")) $
                  LetE ("tr773", [], PackedTy "STree" (Single "l772"),
                           AppE "buildSTree" NotTailRec [(Single "l772")] [LitE 3]) $
@@ -962,11 +962,11 @@ sumSTreeProg = Prog stree (M.fromList [( "buildSTree", buildSTreeFun),
 --------------------------------------------------------------------------------
 
 sumUpMainExp :: Exp2
-sumUpMainExp = Ext $ LetRegionE (VarR "r530") Undefined Nothing $
+sumUpMainExp = Ext $ LetRegionE (VarR "r530") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l531") (StartOfRegionLE (VarR "r530")) $
                   LetE ("x532",[], PackedTy "STree" (Single "l531"),
                            AppE "buildSTree" NotTailRec [(Single "l531")] [LitE 2]) $
-                  Ext $ LetRegionE (VarR "r536") Undefined Nothing $
+                  Ext $ LetRegionE (VarR "r536") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l537") (StartOfRegionLE (VarR "r536")) $
                   LetE ("z538",[],PackedTy "STree" (Single "l537"),
                            AppE "sumUp" NotTailRec [(Single "l531"),(Single "l537")] [VarE "x532"]) $
@@ -1058,11 +1058,11 @@ setEvenFun = FunDef "setEven" [ "tr570"] setEvenFunTy setEvenFunBod (FunMeta Rec
 
 
 setEvenMainExp :: Exp2
-setEvenMainExp = Ext $ LetRegionE (VarR "r592") Undefined Nothing $
+setEvenMainExp = Ext $ LetRegionE (VarR "r592") Undefined RegionImmutable Nothing $
                  Ext $ LetLocE (Single "l593") (StartOfRegionLE (VarR "r592")) $
                  LetE ("x594",[], PackedTy "STree" (Single "l593"),
                           AppE "buildSTree" NotTailRec [(Single "l593")] [LitE 2]) $
-                 Ext $ LetRegionE (VarR "r595") Undefined Nothing $
+                 Ext $ LetRegionE (VarR "r595") Undefined RegionImmutable Nothing $
                  Ext $ LetLocE (Single "l596") (StartOfRegionLE (VarR "r595")) $
                  LetE ("z597",[],PackedTy "STree" (Single "l596"),
                           AppE "setEven" NotTailRec [(Single "l593"),(Single "l596")] [VarE "x594"]) $
@@ -1147,11 +1147,11 @@ sumUpSetEvenFun = FunDef "sumUpSetEven" [ "tr600"] sumUpSetEvenFunTy sumUpSetEve
 
 
 sumUpSetEvenExp :: Exp2
-sumUpSetEvenExp = Ext $ LetRegionE (VarR "r628") Undefined Nothing $
+sumUpSetEvenExp = Ext $ LetRegionE (VarR "r628") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l629") (StartOfRegionLE (VarR "r628")) $
                   LetE ("z630",[], PackedTy "STree" (Single "l629"),
                            AppE "buildSTree" NotTailRec [(Single "l629")] [LitE 3]) $
-                  Ext $ LetRegionE (VarR "r631") Undefined Nothing $
+                  Ext $ LetRegionE (VarR "r631") Undefined RegionImmutable Nothing $
                   Ext $ LetLocE (Single "l632") (StartOfRegionLE (VarR "r631")) $
                   LetE ("z633",[],ProdTy [PackedTy "STree" (Single "l632"), IntTy],
                            AppE "sumUpSetEven" NotTailRec [(Single "l629"),(Single "l632")] [VarE "z630"]) $
@@ -1275,7 +1275,7 @@ substFun = FunDef "subst" [ "tr653"] substFunTy substFunBod (FunMeta Rec NoInlin
 
 
 substMainExp :: Exp2
-substMainExp = Ext $ LetRegionE (VarR "r720") Undefined Nothing $
+substMainExp = Ext $ LetRegionE (VarR "r720") Undefined RegionImmutable Nothing $
                Ext $ LetLocE (Single "l721") (StartOfRegionLE (VarR "r720")) $
                Ext $ LetLocE (Single "l722") (AfterConstantLE 1 (Single "l721")) $
                Ext $ LetLocE (Single "l723") (AfterConstantLE 8 (Single "l722")) $
@@ -1287,7 +1287,7 @@ substMainExp = Ext $ LetRegionE (VarR "r720") Undefined Nothing $
                LetE ("old726",[],IntTy,LitE 1) $
                LetE ("z727",[], PackedTy "Expr" (Single "l721"),
                         DataConE (Single "l721") "LETE" [VarE "old726", VarE "rhs724", VarE "bod725"]) $
-               Ext $ LetRegionE (VarR "r728") Undefined Nothing $
+               Ext $ LetRegionE (VarR "r728") Undefined RegionImmutable Nothing $
                Ext $ LetLocE (Single "l729") (StartOfRegionLE (VarR "r728")) $
                LetE ("new730",[],PackedTy "Expr" (Single "l729"),
                         DataConE (Single "l729") "VARREF" [LitE 42]) $
@@ -1354,7 +1354,7 @@ indrBuildTreeFun = FunDef "indrBuildTree" [ "i270"] indrBuildTreeTy indrBuildTre
                         VarE "a278")
 
 indrBuildTreeMainExp :: Exp2
-indrBuildTreeMainExp = Ext $ LetRegionE (VarR "r800") Undefined Nothing $
+indrBuildTreeMainExp = Ext $ LetRegionE (VarR "r800") Undefined RegionImmutable Nothing $
                        Ext $ LetLocE (Single "l801") (StartOfRegionLE (VarR "r800")) $
                        LetE ("tr802", [], PackedTy "Tree" (Single "l801"),
                                 AppE "indrBuildTree" NotTailRec [(Single "l801")] [LitE 3]) $
@@ -1386,7 +1386,7 @@ indrRightmostBod = CaseE (VarE "t742")
                  VarE "lm752")]
 
 indrRightmostMainExp :: Exp2
-indrRightmostMainExp = Ext $ LetRegionE (VarR "r753") Undefined Nothing $
+indrRightmostMainExp = Ext $ LetRegionE (VarR "r753") Undefined RegionImmutable Nothing $
                        Ext $ LetLocE (Single "l754") (StartOfRegionLE (VarR "r753")) $
                        LetE ("tr1", [], PackedTy "Tree" (Single "l754"),
                                 AppE "indrBuildTree" NotTailRec [(Single "l754")] [LitE 3]) $
@@ -1426,11 +1426,11 @@ indrIDFun = FunDef "indrID" [ "tr800"] indrIDTy indrIDBod (FunMeta NotRec NoInli
 --------------------------------------------------------------------------------
 
 indrIDMainExp :: Exp2
-indrIDMainExp = Ext $ LetRegionE (VarR "r806") Undefined Nothing $
+indrIDMainExp = Ext $ LetRegionE (VarR "r806") Undefined RegionImmutable Nothing $
                 Ext $ LetLocE (Single "l807") (StartOfRegionLE (VarR "r806")) $
                 LetE ("tr1",[], PackedTy "Tree" (Single "l807"),
                          AppE "indrBuildTree" NotTailRec [(Single "l807")] [LitE 2]) $
-                Ext $ LetRegionE (VarR "r808") Undefined Nothing $
+                Ext $ LetRegionE (VarR "r808") Undefined RegionImmutable Nothing $
                 Ext $ LetLocE (Single "l809") (StartOfRegionLE (VarR "r808")) $
                 LetE ("tr2",[], PackedTy "Tree" (Single "l809"),
                          AppE "indrID" NotTailRec [(Single "l807"), (Single "l809")] [VarE "tr1"]) $
@@ -1448,11 +1448,11 @@ indrIDProg = Prog ddtree' (M.fromList [( "indrBuildTree", indrBuildTreeFun)
 --------------------------------------------------------------------------------
 
 indrIDSumMainExp :: Exp2
-indrIDSumMainExp = Ext $ LetRegionE (VarR "r806") Undefined Nothing $
+indrIDSumMainExp = Ext $ LetRegionE (VarR "r806") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l807") (StartOfRegionLE (VarR "r806")) $
                    LetE ("tr1",[], PackedTy "Tree" (Single "l807"),
                          AppE "buildTree" NotTailRec [(Single "l807")] [LitE 10]) $
-                   Ext $ LetRegionE (VarR "r808") Undefined Nothing $
+                   Ext $ LetRegionE (VarR "r808") Undefined RegionImmutable Nothing $
                    Ext $ LetLocE (Single "l809") (StartOfRegionLE (VarR "r808")) $
                    LetE ("tr2",[], PackedTy "Tree" (Single "l809"),
                             AppE "indrID" NotTailRec [(Single "l807"), (Single "l809")] [VarE "tr1"]) $

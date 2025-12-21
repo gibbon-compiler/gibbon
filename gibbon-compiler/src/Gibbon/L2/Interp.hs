@@ -294,7 +294,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
     LetRegE{} -> error "L2.Interp: LetRegE not handled."
     BoundsCheckVector{} -> error "L2.Interp: BoundsCheckVector not handled."
-    LetRegionE reg _ _ bod -> do
+    LetRegionE reg _ _ _ bod -> do
       let regVar = case (regionToVar reg) of 
                              SingleR v -> v
                              SoARv _ _ -> error "interpExt: did not expect an SoA region!"
@@ -302,7 +302,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
       go env sizeEnv bod
 
     LetParRegionE reg sz ty bod ->
-      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg sz ty bod)
+      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg sz RegionImmutable ty bod)
 
     LetLocE loc locexp bod ->
       case locexp of

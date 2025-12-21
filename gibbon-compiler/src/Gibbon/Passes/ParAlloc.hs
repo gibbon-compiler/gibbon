@@ -224,7 +224,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
     SyncE{}  -> error "parAllocExp: unbound SyncE"
     Ext ext  ->
       case ext of
-        LetRegionE r sz ty bod       -> Ext <$> (LetRegionE r sz ty) <$>
+        LetRegionE r sz endmut ty bod       -> Ext <$> (LetRegionE r sz endmut ty) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (fromRegVarToFreeVarsTy $ regionToVar r) boundlocs) region_on_spawn bod
         LetParRegionE r sz ty bod    -> Ext <$> (LetParRegionE r sz ty) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (fromRegVarToFreeVarsTy $ regionToVar r) boundlocs) region_on_spawn bod
@@ -347,7 +347,7 @@ substLocInExp mp ex1 =
     SyncE{}  -> ex1
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
+        LetRegionE r sz endmut ty rhs  -> Ext $ LetRegionE r sz endmut ty (go rhs)
         LetParRegionE r sz ty rhs -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l (go2 lhs) (go rhs)
         StartOfPkdCursor v -> Ext $ StartOfPkdCursor v

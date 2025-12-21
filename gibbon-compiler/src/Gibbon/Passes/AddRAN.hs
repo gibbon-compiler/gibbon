@@ -432,7 +432,7 @@ we need random access for that type.
 
     Ext ext ->
       case ext of
-        LetRegionE _ _ _ bod -> go bod
+        LetRegionE _ _ _ _ bod -> go bod
         LetParRegionE _ _ _ bod -> go bod
         L2.StartOfPkdCursor{} -> S.empty
         LetLocE _loc FreeLE bod -> go bod

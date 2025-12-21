@@ -858,7 +858,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
               newlocs = dbgTrace (minChatLvl) "Print in RetE: " dbgTrace (minChatLvl) (sdoc (fnLocArgs, renv, region_locs, inregargs)) dbgTrace (minChatLvl) "End in RetE.\n" inregargs ++ outtyregargs
           return $ Ext $ RetE (newlocs ++ locs) v
         TagCursor a b -> return $ Ext $ TagCursor a b
-        LetRegionE r sz ty bod -> do
+        LetRegionE r sz endmut ty bod -> do
           -- shadowstack  ops
           --------------------
           let -- free = S.fromList $ freeLocVars bod
@@ -880,8 +880,8 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             then do
               let pre = mkLets (rpush ++ wpush)
                   post = mkLets (wpop ++ rpop) bod'
-              pure $ pre (Ext $ LetRegionE r sz ty post)
-            else pure $ Ext $ LetRegionE r sz ty bod'
+              pure $ pre (Ext $ LetRegionE r sz endmut ty post)
+            else pure $ Ext $ LetRegionE r sz endmut ty bod'
         LetParRegionE r sz ty bod -> Ext <$> LetParRegionE r sz ty <$> go bod
         FromEndE {} -> return ex
         BoundsCheck sz _bound cur -> do
@@ -1173,7 +1173,7 @@ findRetLocs e0 = go e0 []
         SyncE {} -> acc
         Ext ext ->
           case ext of
-            LetRegionE _ _ _ bod -> go bod acc
+            LetRegionE _ _ _ _ bod -> go bod acc
             LetParRegionE _ _ _ bod -> go bod acc
             LetLocE _ _ bod -> go bod acc
             StartOfPkdCursor {} -> acc
@@ -1286,7 +1286,7 @@ allFreeVars_sans_datacon_args ex =
     SpawnE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
     Ext ext ->
       case ext of
-        LetRegionE r _sz _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
+        LetRegionE r _sz _endmut _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetParRegionE r _sz _ty bod -> S.delete (fromRegVarToFreeVarsTy $ regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetLocE loc locexp bod -> S.delete (fromLocVarToFreeVarsTy (toLocVar loc)) (allFreeVars_sans_datacon_args bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
         StartOfPkdCursor cur -> S.singleton (fromVarToFreeVarsTy cur)
@@ -1322,7 +1322,7 @@ substEndReg loc_or_reg end_reg ex =
     SpawnE f locs args -> SpawnE f (map gosubst locs) (map go args)
     Ext ext ->
       case ext of
-        LetRegionE r sz ty bod -> Ext $ LetRegionE r sz ty (go bod)
+        LetRegionE r sz endmut ty bod -> Ext $ LetRegionE r sz endmut ty (go bod)
         LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty (go bod)
         LetLocE loc locexp bod -> Ext $ LetLocE loc locexp (go bod)
         RetE locs v -> Ext $ RetE (map gosubst locs) v
