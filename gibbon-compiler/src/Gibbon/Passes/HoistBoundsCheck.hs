@@ -19,7 +19,7 @@ data HoistableExpr
   = BoundsCheckExpr Int LocArg LocArg
   | BoundsCheckVectorExpr [(Int, LocArg, LocArg)]
   | LetLocExpr LocArg (PreLocExp LocArg)
-  | LetRegExpr RegVar (PreRegExp LocArg)
+  | LetRegExpr LocArg (PreRegExp LocArg)
   | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
   | LetRegionExpr Region RegionSize EndRegionModality (Maybe RegionType)
   deriving (Eq, Ord, Show)
@@ -195,7 +195,7 @@ collectVarsForBoundsCheck vars env ex = do
             else do
               return (Ext $ LetLocE loc rhs bod', env'')
         LetRegE reg rhs bod -> do
-          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy reg) vars S.empty (LetRegExpr reg rhs) env
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (fromLocVarToRegVar $ toLocVar reg)) vars S.empty (LetRegExpr reg rhs) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do

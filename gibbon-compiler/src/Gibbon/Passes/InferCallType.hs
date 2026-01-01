@@ -19,11 +19,15 @@ inferCallType :: NewL2.Prog2 -> PassM NewL2.Prog2
 inferCallType Prog{ddefs, fundefs, mainExp} = do
     fds' <- mapM (inferCallTypeFn ddefs) $ M.elems fundefs
     let newFundefs = M.fromList $ map (\f -> (funName f, f)) fds'
-    mainExp' <- case mainExp of 
+    dflags <- getDynFlags
+    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
+    mainExp' <- if optimize_tail_calls
+                then case mainExp of 
                         Nothing -> return Nothing
                         Just (mexp, mty) -> do 
                                      (exp', _) <- inferCallTypeMainExp S.empty newFundefs mexp
                                      return $ Just (exp', mty)
+                else return $ mainExp
     let newProg = Prog{ddefs = ddefs, fundefs = newFundefs, mainExp = mainExp'}
     pure $ newProg {- dbgTrace minChatLvl (sdoc newProg) dbgTrace minChatLvl (sdoc $ M.elems fundefs')-}
 
@@ -49,19 +53,29 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                         _ -> funRec
         funMeta' = meta{funRec=funRec'}
     let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
+    -- Vidush: For now we only want to do this optimization for tail recursive functions.
+    -- Even for SoA regions, we only do this for tail recursive functions.
     let (funTy', needs_update) = case optimize_tail_calls of 
                             True -> let (locVars', updateLocs) = P.foldr
                                                          (\lrm@(LRM l r m) (lvs, lcs) -> case (l, m) of
                                                                                             (Single{}, Input) -> (lvs ++ [LRM l r m], lcs)
                                                                                             (Single{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
-                                                                                            (SoA{}, Input) ->  (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            (SoA{}, Input) -> if funRec' == TailRec  
+                                                                                                              then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                                              else (lvs ++ [LRM l r Input], lcs)
                                                                                             (SoA{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             _ -> (lvs ++ [lrm], lcs) 
                                                          ) ([], []) locVars
                                         fty' = (ArrowTy2 locVars' arrIns _arrEffs arrOut _locRets _isPar)
                                       in (fty', updateLocs)
                             False -> (funTy, [])
-        funBody'' = if optimize_tail_calls then markMutableLocsAfterInitialPass needs_update funBody' else funBody'
+        -- Vidush, locs inside a SoA loc or SoA region become mutable dy design.
+        needs_update' = P.foldr (\fv accum -> case fv of 
+                                                       FL l -> (accum ++ (map FL (locsInLocVar l)))
+                                                       R r -> accum ++ (map R (regsInRegVar r))
+                                                       V{} -> error "Did not expect variable to be updates for modality!!"
+                                    ) needs_update needs_update
+        funBody'' = if optimize_tail_calls then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
 
 
         -- If a function is identified to be tailRecursive
@@ -546,6 +560,8 @@ freeLoc _exp = case _exp of
     AfterConstantLE _c loc -> Just (toLocVar loc)
     AfterVariableLE _v loc _b -> Just (toLocVar loc)
     FromEndLE loc -> Just (toLocVar loc)
+    GetDataConLocSoA loc -> Just (toLocVar loc)
+    GetFieldLocSoA (_dcon, _fidx) lc -> Just (toLocVar lc)
     _ -> Nothing
 
 changeLocData :: PreLocExp LocArg -> LocVar -> PreLocExp LocArg
@@ -906,7 +922,18 @@ markMutableLocsAfterInitialPass env _exp =
                                                                          loc' = updateLocArg loc env'
                                                                          bod' = markMutableLocsAfterInitialPass env' bod 
                                                                        in Ext $ Old.LetLocE loc' (FromEndLE lc') bod'
-                                                     _ -> error "Not implemented!"
+                                                     GetDataConLocSoA lc -> let lc' = updateLocArg lc env
+                                                                                loc' = updateLocArg loc env
+                                                                                bod' = markMutableLocsAfterInitialPass env bod
+                                                                             in Ext $ Old.LetLocE loc' (GetDataConLocSoA lc') bod'
+                                                     GetFieldLocSoA (_dcon, _idx) lc -> let lc' = updateLocArg lc env
+                                                                                            loc' = updateLocArg loc env
+                                                                                            bod' = markMutableLocsAfterInitialPass env bod
+                                                                                           in Ext $ Old.LetLocE loc' (GetFieldLocSoA (_dcon, _idx) lc') bod'
+                                                     GenSoALoc{} -> let 
+                                                                      bod' = markMutableLocsAfterInitialPass env bod 
+                                                                     in Ext $ Old.LetLocE loc locexp bod'
+                                                     _ -> error $ "Not implemented!\n" ++ show (loc, locexp)
                                                     --  GenSoALoc lc flocs ->
                                                     --  GetDataConLocSoA lc ->
                                                     --  GetFieldLocSoA (dcon, fidx) lc ->
@@ -921,6 +948,28 @@ markMutableLocsAfterInitialPass env _exp =
                                                  in Ext $ Old.AllocateScalarsHere loc'
                 Old.RetE locs v -> let locs' = map (\l -> updateLocArg l env) locs
                                     in Ext $ Old.RetE locs' v
+                -- The case for a letReg is not handled
+                -- So no recursion is done on the body of the let reg.
+                -- TODO: Vidush, need to handle all the region expressions
+                -- Need to pattern match on the region expressions.
+                -- GetDataConRegSoA loc
+                -- GetFieldRegSoA (DataCon, FieldIndex) loc
+                -- GenSoAReg loc [((DataCon, FieldIndex), loc)]
+                Old.LetRegE v regexpr bod -> case regexpr of 
+                                                    GetDataConRegSoA loc -> let v' = updateLocArg v env
+                                                                                loc' = updateLocArg loc env
+                                                                                bod' = markMutableLocsAfterInitialPass env bod
+                                                                              in Ext $ Old.LetRegE v' (GetDataConRegSoA loc') bod'
+                                                    GetFieldRegSoA (dcon, fidx) loc -> let v' = updateLocArg v env
+                                                                                           loc' = updateLocArg loc env
+                                                                                           bod' = markMutableLocsAfterInitialPass env bod
+                                                                                         in Ext $ Old.LetRegE v' (GetFieldRegSoA (dcon, fidx) loc') bod'
+                                                    -- Vidush: Skip since making things mutable should get these removed from the IR.
+                                                    GenSoAReg dconreg fieldregs -> let v' = updateLocArg v env
+                                                                                       bod' = markMutableLocsAfterInitialPass env bod
+                                                                                       dconreg' = updateLocArg dconreg env
+                                                                                       fieldregs' = map (\(k, arg) -> (k, updateLocArg arg env)) fieldregs
+                                                                                     in Ext $ Old.LetRegE v' (GenSoAReg dconreg' fieldregs') bod'  
                 _ -> Ext ext
 
 -- Old.StartOfPkdCursor v -> [NoTail]

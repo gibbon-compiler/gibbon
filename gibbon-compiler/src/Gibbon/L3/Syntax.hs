@@ -28,7 +28,11 @@ module Gibbon.L3.Syntax
   , linearizeRegVar
   , getVarNameFromFreeVar
   , isMutModality
+  , isMutModality'
   , checkIfLocIsPointedToByOutputMutLoc
+  , checkIfVarIsMutable
+  , findMutableLocationInSameRegion
+  , findMutableLocationPointingToVar
   , fst4
   , snd4
   , thd4
@@ -50,6 +54,7 @@ import           Gibbon.Common
 import           Gibbon.Language                hiding (mapMExprs)
 import qualified Gibbon.NewL2.Syntax as L2
 import Data.Vector.Internal.Check (HasCallStack)
+import Gibbon.L2.Syntax (EndRegionModality)
 
 -------------------------------------------------------------------------------- 
 
@@ -72,11 +77,13 @@ type Ty3 = UrTy ()
 -- Take the current snapshot of a Mutable location
 -- For a Mutable Location, we store its current value in the env. (variable name, location value name)
 -- We also store the mutable end region in scope if it exists for a mutable location
-type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar)
+-- We also store any aliases that may exist for the loc we are keeping track of
+type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
 
 -- Store the old value of the mutable location.
 -- Also store the mutable loc of the end of region
-type MutableLocOldValueEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar)
+-- We also store any aliases that may exist for the loc we are keeping track of
+type MutableLocOldValueEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
 
 --------------------------------------------------------------------------------
 
@@ -104,16 +111,18 @@ data E3Ext loc dec =
   | DerefMutCursor Var                             -- ^ Explicitly de-reference a mutable cursor
   | CastPtr Var dec                                -- ^ Cast a pointer to the specified type
   | SubPtr Var Var                                 -- ^ Pointer subtraction
-  | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
+  | NewBuffer L2.Multiplicity EndRegionModality    -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | NewParBuffer L2.Multiplicity         -- ^ Create a new buffer for parallel allocations, and return a cursor
   | ScopedParBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer for parallel allocations, and return a cursor
-  | EndOfBuffer L2.Multiplicity
+  | EndOfBuffer L2.Multiplicity EndRegionModality
   | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
-  | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
+  | BoundsCheck Int Var Var (Maybe (Var, Var)) L2.Modality  -- ^ Bytes required, region, write cursor
+                                                            -- if mutable vars exist we keep them stored
+  -- | BoundsCheckMut Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec) -- Bounds check for OutputMutable locations and their end regions.
   | BoundsCheckVector [(Int, Var, Var, (Var, Var))] -- ^ Bytes required, region, write cursor but for a vector of cursors and regions
   | IndirectionBarrier TyCon (Var,Var,Var,Var)
     -- ^ Do one of the following:
@@ -150,6 +159,12 @@ isMutModality :: L2.Modality -> Bool
 isMutModality modal = case modal of 
                           L2.InputMutable -> True
                           L2.OutputMutable -> True 
+                          _ -> False
+
+isMutModality' :: Maybe L2.Modality -> Bool 
+isMutModality' modal = case modal of 
+                          Just L2.InputMutable -> True
+                          Just L2.OutputMutable -> True 
                           _ -> False
 
 fst4 :: (a, b, c, d) -> a
@@ -308,7 +323,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       MMapFileSize v     -> MMapFileSize (go v)
       SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
       SizeOfScalar v     -> SizeOfScalar (go v)
-      BoundsCheck i a b  -> BoundsCheck i (go a) (go b)
+      BoundsCheck i a b mb bmod  -> BoundsCheck i (go a) (go b) mb bmod
       IndirectionBarrier tycon (a,b,c,d) ->
         IndirectionBarrier tycon (go a, go b, go c, go d)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
@@ -357,12 +372,52 @@ scalarToTy BoolS = BoolTy
 
 -- Takes in a Loc and checks if a mutable locations points to that loc
 checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
-checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv, _r)) mbl -> case mlv of 
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv, _r, _aliases)) mbl -> case mlv of 
                                                                                     Nothing -> mbl
                                                                                     Just lv -> if lv == loc
                                                                                                then Just k
                                                                                                else mbl
                                                           ) Nothing (M.toList mlocenv)
+
+-- Check if a Variable if a mutable variable or not
+checkIfVarIsMutable :: Var -> MutableLocPtsToEnv -> Bool 
+checkIfVarIsMutable var mlocenv = L.foldr (\(_k, (v, _mlv, _r, aliases)) b -> if S.null aliases 
+                                                                              then (v == var) || b
+                                                                              else let 
+                                                                                    isAlias = S.member var aliases 
+                                                                                    direct = v == var
+                                                                                   in isAlias || direct || b
+                                          ) False (M.toList mlocenv)
+
+findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, _aliases)) acc -> if v == vv 
+                                                                                             then Just k
+                                                                                             else acc
+                                                    ) Nothing (M.toList mlocenv)
+  
+findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
+findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, (v, _mlv, rr, _aliases)) acc -> case rr of 
+                                                                                                Nothing -> acc 
+                                                                                                Just rr' -> if r == rr' 
+                                                                                                            then Just (v, k)
+                                                                                                            else acc
+                                                    ) Nothing (M.toList mlocenv)
+
+-- Vidush: Implement two functions that insert and update the key in the environment for both the pts to env and for the old env.
+-- TODO: Implement some simple logic to tell if the old variable can be an alias. Tough problem. 
+-- For starters, if its a concrete update like AddCursor then let us say no, they cannot alias 
+-- For Make SoA locations, these might alias so we can store them as aliases in the updated entry.
+-- (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
+
+updateMLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
+updateMLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+                                                                    -- If the key does not exists we just make an entry for it
+                                                                    -- in the env.
+                                                                    Nothing -> M.insert key (v, lc, reg, aliases) env
+                                                                    Just key' -> 
+
+
+
 
 -- For a single location variable, its modality will determine which type of 
 -- Cursor will be assigned to it. 
@@ -622,7 +677,7 @@ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality ty =
     PDictTy k v   -> PDictTy (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
     -- Check if location in the packed type is a locations pointer to by 
     -- any mutable location, (We should not return start and end locations for such types) 
-    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml, _r) -> case ml of 
+    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml, _r, _aliases) -> case ml of 
                                                             Nothing -> []
                                                             Just vl -> [vl]
                                                   ) (M.elems mutLocsEnv)

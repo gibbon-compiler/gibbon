@@ -22,7 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, toEndRegVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
+    , toLocVar, toEndRegVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar, toRegVar, isRegionLocArg, inLocArgs
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -107,6 +107,18 @@ data LocArg = Loc LREM
 
 instance Out LocArg
 instance NFData LocArg
+
+isRegionLocArg :: LocArg -> Bool 
+isRegionLocArg loc = case loc of 
+                          Loc{} -> False
+                          EndWitness{} -> False
+                          Reg{} -> True
+                          EndOfReg{} -> True
+                          EndOfReg_Tagged{} -> True 
+
+inLocArgs :: L2.ArrowTy2 ty2 -> [LocArg]
+inLocArgs ty = L.map (\lrm -> Loc $ fromLRM lrm) $
+               L.filter (\(L2.LRM _ _ m) -> m == L2.Input || m == L2.InputMutable) (L2.locVars ty)
 
 toRegVar :: LocArg -> RegVar
 toRegVar arg =

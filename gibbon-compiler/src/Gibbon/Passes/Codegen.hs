@@ -31,6 +31,7 @@ import qualified Gibbon.Language as GL
 import           Gibbon.DynFlags
 import           Gibbon.L2.Syntax ( Multiplicity(..) )
 import           Gibbon.L4.Syntax
+import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
@@ -824,6 +825,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  AddP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
+                 BumpCursorMutable -> let [(_outV,_outT)] = bnds
+                                          [pleft,pright] = rnds in pure
+                                      [C.BlockStm [cstm| *($(codegenTriv venv pleft)) += $(codegenTriv venv pright); |]] 
                  SubP -> let (outV,outT) = Sf.headErr bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) - $(codegenTriv venv pright); |] ]
@@ -934,19 +938,21 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  IntHashLookup -> let [(outV,ty)] = bnds
                                       [(VarTriv hash),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = gib_lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
-
-                 NewBuffer mul -> do
+                 NewBuffer mul endregmod -> do
                    dflags <- getDynFlags
                    let countRegions = gopt Opt_CountAllRegions dflags
-                   let [(reg, CursorTy),(outV,CursorTy),(endV,CursorTy)] = bnds
+                   let [(reg, CursorTy),(outV,CursorTy), (endV, CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
+                   let additional_bnds = if endregmod == L2.RegionMutable
+                                         then [C.BlockDecl [cdecl| $ty:(codegenTy MutCursorTy) $id:(toEndV outV) = &($id:endV); |]]
+                                         else []
                    if countRegions
                    then
-                     pure
+                     pure $
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($exp:bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start; |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->end; |]
-                       ]
+                       ] ++ additional_bnds
                    else
                      pure $
                        (if genGC
@@ -954,7 +960,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         else [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region_on_heap($exp:bufsize); |] ]) ++
                           [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start; |]
                           , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg.end; |]
-                          ]
+                          ] ++ additional_bnds
 
 
                  NewParBuffer mul -> do
@@ -1092,25 +1098,48 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        tycon_t = (C.Id (tycon ++ "_T") noLoc)
                    in pure [ C.BlockStm [cstm| gib_indirection_barrier($id:from_loc, $id:end_from_reg, $id:to_loc, $id:end_to_reg, $id:tycon_t); |] ]
 
-                 BoundsCheck -> do
+                 BoundsCheck mode -> do
                    _new_chunk   <- gensym "new_chunk"
                    _chunk_start <- gensym "chunk_start"
                    _chunk_end   <- gensym "chunk_end"
-                   let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
-                       {-
-                       bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_grow_region($id:bound); |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start; |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end; |]
-                             , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
-                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = GIB_REDIRECTION_TAG; |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
-                             , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
-                             , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
-                             ]
-                   return [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
-                        -}
-                       bck = [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
-                   pure [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
+                   case mode of 
+                     L2.Output -> do
+                        let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
+                            {-
+                            bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_grow_region($id:bound); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start; |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end; |]
+                                  , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
+                                  , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = GIB_REDIRECTION_TAG; |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
+                                  , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
+                                  , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
+                                  ]
+                        return [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
+                              -}
+                            bck = [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
+                        pure [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
+                     L2.OutputMutable -> do
+                        let [(IntTriv i),(VarTriv bound), (VarTriv cur), (VarTriv mutbounds), (VarTriv mutcur)] = rnds
+                            {-
+                            bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_grow_region($id:bound); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start; |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end; |]
+                                  , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
+                                  , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = GIB_REDIRECTION_TAG; |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
+                                  , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
+                                  , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
+                                  ]
+                        return [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
+                              -}
+                            bck = [ C.BlockStm  [cstm|  gib_grow_region($id:mutcur, $id:mutbounds); |]
+                                    , C.BlockStm  [cstm|  $id:bound = *($id:mutbounds); |]
+                                    , C.BlockStm  [cstm|  $id:cur = *($id:mutcur); |]
+                                  ]
+                        pure [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
+                     _ -> error "no other mode expected!"
+                    
 
                  BoundsCheckVector -> do
                    --_new_chunk   <- gensym "new_chunk"
@@ -1122,14 +1151,23 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    ifBody <- mapM (\(ProdTriv [_, _, _, ProdTriv [(VarTriv b), (VarTriv c)]]) -> do
                                        {- TODO: VS: Maybe we should check loc too, but i think we desinged this such that it is 
                                         not needed! -}
+                                      -- Audit : Assumption, in mutable case both loc and reg are mutable.
                                        let bty = M.lookup b venv
                                        case bty of 
                                             Just CursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:c, & $id:b); |] ]
-                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:c, $id:b); |] ]
+                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region($id:c, $id:b); |] ]
+                                            _ -> error "Did not expect variable type in gib_grow_region!\n"
+                                  ) rnds
+                   ifBody_update <- mapM (\(ProdTriv [_, _, (VarTriv cur), ProdTriv [_, (VarTriv c)]]) -> do
+                                       let cty = M.lookup c venv
+                                       case cty of 
+                                            Just CursorTy -> pure []
+                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  ($id:cur = *$id:c); |] ]
                                             _ -> error "Did not expect variable type in gib_grow_region!\n"
                                   ) rnds
                    let condExpr = foldr1 (\c1 c2 -> [cexp| $exp:c1 || $exp:c2 |]) ifConds
-                   let ifBody' = concat ifBody
+                   let ifBody_update' = concat ifBody_update
+                   let ifBody' = (concat ifBody) ++ ifBody_update'
                    pure [ C.BlockStm [cstm| if ($exp:condExpr) { $items:ifBody' } |] ]
 
                  SizeOfPacked -> let [(sizeV,IntTy)] = bnds
@@ -1640,7 +1678,15 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     let [(outV, outT)] = bnds
                         [expr] = rnds 
                         expr' = codegenTriv venv expr
-                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($exp:expr'); |] ] 
+                    case expr of 
+                        IndexCursorArrayTriv{} -> do 
+                          -- tmp <- gensym "tmp_copy"
+                          return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($exp:expr'); |] ] 
+                        _ -> do 
+                             tmp <- gensym "tmp_copy"
+                             return [ 
+                              C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:tmp =  $exp:expr'; |],
+                              C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($id:tmp); |] ] 
 
                  DerefMutCursor -> do 
                     let [(outV, outT)] = bnds

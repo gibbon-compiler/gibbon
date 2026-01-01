@@ -168,7 +168,7 @@ data E2Ext loc dec
   = LetRegionE Region RegionSize EndRegionModality (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE loc (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
-  | LetRegE RegVar (PreRegExp loc) (E2 loc dec) -- ^ Bind a new region.
+  | LetRegE loc (PreRegExp loc) (E2 loc dec) -- ^ Bind a new region.
   -- Commented this out since it is not very ideal. 
   -- | LetSoALocE LocVar (E2 loc dec) -- ^ Bind a new SoA loc
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.

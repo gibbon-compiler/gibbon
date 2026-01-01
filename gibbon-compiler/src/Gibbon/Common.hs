@@ -35,7 +35,7 @@ module Gibbon.Common
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
        , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
        , varsInLocVar, varsInRegVar, getAllFieldRegsSoA
-       , appendNameToLocVar 
+       , appendNameToLocVar, locsInLocVar, regsInRegVar
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
@@ -551,6 +551,11 @@ locsInLocVar :: LocVar -> [LocVar]
 locsInLocVar loc = case loc of 
                         Single _ -> [loc]
                         SoA dcon fieldLocs -> [(singleLocVar dcon)] ++ L.map (\(_, l) -> l) fieldLocs
+
+regsInRegVar :: RegVar -> [RegVar]
+regsInRegVar loc = case loc of 
+                        SingleR _ -> [loc]
+                        SoARv dcon fieldLocs -> [dcon] ++ L.map (\(_, l) -> l) fieldLocs
 
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
