@@ -240,6 +240,7 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                 L4.ProdTriv ls -> L4.ProdTriv (map (gotriv env) ls)
                 L4.ProjTriv i t -> L4.ProjTriv i (gotriv env t)
                 L4.UninitTriv v _ _ -> L4.VarTriv v
+                L4.IndexCursorArrayTriv i idxtrv -> L4.IndexCursorArrayTriv i (gotriv env idxtrv)  
                 _ -> trv
 
         goalts env alts =

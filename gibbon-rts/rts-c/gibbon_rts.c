@@ -128,6 +128,18 @@ GibSym gib_read_gensym_counter(void)
     return gib_global_gensym_counter;
 }
 
+#ifndef GIB_PTR_ALIGN
+#define GIB_PTR_ALIGN 8
+#endif
+
+static inline size_t gib_align_up_sz_rt(size_t n, size_t a) {
+    return (n + (a - 1)) & ~(a - 1);
+}
+
+static inline uintptr_t gib_align_up_ptr_rt(uintptr_t p, uintptr_t a) {
+    return (p + (a - 1)) & ~(a - 1);
+}
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
@@ -1155,25 +1167,43 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
+// GibChunk gib_alloc_region_on_heap(size_t size)
+// {
+//     size_t size_aligned = gib_align_up_sz(size, GIB_PTR_ALIGN);
+// char *heap_start = gib_alloc(size_aligned);
+// if (heap_start == NULL) {
+//     fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu", size_aligned);
+//     exit(1);
+// }
+// char *heap_end = heap_start + size_aligned;
+// char *footer_start = gib_init_footer_at(heap_end, size_aligned, 1);
+// #ifdef _GIBBON_GCSTATS
+//     GC_STATS->oldgen_regions++;
+//     GC_STATS->mem_allocated_in_oldgen += size;
+// #endif
+//
+// #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+//         fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
+//                 size, heap_start, footer_start);
+// #endif
+//
+//     return (GibChunk) {heap_start, footer_start};
+// }
+
 GibChunk gib_alloc_region_on_heap(size_t size)
 {
-    char *heap_start = gib_alloc(size);
+    size_t size_aligned = gib_align_up_sz(size, GIB_PTR_ALIGN);
+
+    char *heap_start = (char *) gib_alloc(size_aligned);
     if (heap_start == NULL) {
-        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu",size);
+        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu", size_aligned);
         exit(1);
     }
-    char *heap_end = heap_start + size;
-    char *footer_start = gib_init_footer_at(heap_end, size, 1);
 
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->oldgen_regions++;
-    GC_STATS->mem_allocated_in_oldgen += size;
-#endif
+    char *heap_end = heap_start + size_aligned;
 
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
-                size, heap_start, footer_start);
-#endif
+    // IMPORTANT: pass size_aligned consistently.
+    char *footer_start = gib_init_footer_at(heap_end, size_aligned, 1);
 
     return (GibChunk) {heap_start, footer_start};
 }

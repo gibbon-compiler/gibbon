@@ -174,12 +174,18 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                             let dcreg = regionToVar dcReg
                                 dcEndReg = toEndVRegVar dcreg
                                 dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
-                                regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                regInst = [LetRegE (dcRegArg) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
                                 regInst' =
                                   concatMap
                                     ( \(d, freg) -> case freg of
-                                        SoAR _ _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
-                                        _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                        SoAR _ _ -> let fregv = regionToVar freg
+                                                        fregEndReg = toEndVRegVar fregv
+                                                        fregRegArg = NewL2.EndOfReg fregv mode fregEndReg
+                                                      in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
+                                        _ -> let fregv = regionToVar freg
+                                                 fregEndReg = toEndVRegVar fregv
+                                                 fregRegArg = NewL2.EndOfReg fregv mode fregEndReg
+                                               in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
                                     )
                                     fieldRegs
                              in regInst ++ regInst'
@@ -250,15 +256,22 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     
                                     ends_fields = map (\(i, floc) -> (i, toEndVRegVar $ regionToVar floc)) fieldRegs
                                     regen_region = SoARv dcEndReg ends_fields
+                                    regen_region' = Reg (SoARv dcEndReg ends_fields) mode
                                     ends_fields' = map (\(ind, floc) -> (ind, (NewL2.EndOfReg (regionToVar floc) mode (toEndVRegVar (regionToVar floc))))) fieldRegs
-                                    new_reg_Inst = [LetRegE regen_region (GenSoAReg (NewL2.EndOfReg dcreg mode (dcEndReg)) ends_fields')]
+                                    new_reg_Inst = [LetRegE regen_region' (GenSoAReg (NewL2.EndOfReg dcreg mode (dcEndReg)) ends_fields')]
                                     boundsCheckVector = [("_", [], MkTy2 IntTy, Ext $ BoundsCheckVector (boundsCheckDcon ++ boundsCheckFields))]
-                                    regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                    regInst = [LetRegE (dcRegArg) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
                                     regInst' =
                                       concatMap
                                         ( \(d, freg) -> case freg of
-                                            SoAR _ _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
-                                            _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                            SoAR _ _ -> let fregv = regionToVar freg
+                                                            fregEndReg = toEndVRegVar fregv
+                                                            fregRegArg = NewL2.EndOfReg fregv mode fregEndReg
+                                                         in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
+                                            _ -> let fregv = regionToVar freg
+                                                     fregEndReg = toEndVRegVar fregv
+                                                     fregRegArg = NewL2.EndOfReg fregv mode fregEndReg
+                                                   in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) mode (toEndVRegVar $ regionToVar reg)))]
                                         )
                                         fieldRegs
                                     -- Just in case the locations are not present, we release them here
@@ -275,12 +288,18 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                 let dcreg = regionToVar dcReg
                                     dcEndReg = toEndVRegVar dcreg
                                     dcRegArg = NewL2.EndOfReg dcreg mode dcEndReg
-                                    regInst = [LetRegE (fromLocVarToRegVar (NewL2.toLocVar dcRegArg)) (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                    regInst = [LetRegE dcRegArg (GetDataConRegSoA (NewL2.EndOfReg (regionToVar reg) Input (toEndVRegVar $ regionToVar reg)))]
                                     regInst' =
                                       concatMap
                                         ( \(d, freg) -> case freg of
-                                            SoAR _ _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
-                                            _ -> [LetRegE (toEndVRegVar $ regionToVar freg) (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Output (toEndVRegVar $ regionToVar reg)))]
+                                            SoAR _ _ -> let fregv = regionToVar freg
+                                                            fregEndReg = toEndVRegVar fregv
+                                                            fregRegArg = NewL2.EndOfReg fregv mode fregEndReg 
+                                                         in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Input (toEndVRegVar $ regionToVar reg)))]
+                                            _ -> let fregv = regionToVar freg
+                                                     fregEndReg = toEndVRegVar fregv
+                                                     fregRegArg = NewL2.EndOfReg fregv mode fregEndReg 
+                                                   in [LetRegE fregRegArg (GetFieldRegSoA d (NewL2.EndOfReg (regionToVar reg) Input (toEndVRegVar $ regionToVar reg)))]
                                         )
                                         fieldRegs
                                  in (([], []), regInst ++ regInst')

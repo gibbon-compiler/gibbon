@@ -31,6 +31,7 @@ import           Gibbon.Common
 import qualified Gibbon.Language  as L
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L2.Syntax (EndRegionModality)
 
 
 --------------------------------------------------------------------------------
@@ -288,7 +289,7 @@ data Prim
     | WritePackedFile FilePath TyCon
     | ReadArrayFile (Maybe (FilePath, Int)) Ty
 
-    | NewBuffer L2.Multiplicity
+    | NewBuffer L2.Multiplicity EndRegionModality
     -- ^ Allocate a new buffer, return a cursor.
 
     | NewParBuffer L2.Multiplicity
@@ -302,7 +303,7 @@ data Prim
     | ScopedParBuffer L2.Multiplicity
     -- ^ Like ScopedBuffer, but for parallel allocations.
 
-    | EndOfBuffer L2.Multiplicity
+    | EndOfBuffer L2.Multiplicity EndRegionModality
 
     | MMapFileSize Var
 
@@ -335,7 +336,7 @@ data Prim
     | ReadVector
     | WriteVector
 
-    | BoundsCheck
+    | BoundsCheck L2.Modality
 
     | BoundsCheckVector
 
@@ -381,6 +382,7 @@ data Prim
     | CastPtr
     | AddrOfCursor 
     | DerefMutCursor
+    | BumpCursorMutable
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 

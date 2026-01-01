@@ -29,6 +29,7 @@ import           Gibbon.DynFlags
 import           Gibbon.L3.Syntax
 import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as T
+import qualified Gibbon.L2.Syntax as L2
 
 -- Generating unpack functions from Packed->Pointer representation:
 -------------------------------------------------------------------------------
@@ -763,6 +764,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                              , triv sym_tbl "addCursor offset" e] <$>
          tail free_reg sym_tbl bod
 
+    LetE (v, _, _, (Ext (BumpCursorMutable mutcur e))) bod ->
+      T.LetPrimCallT [(v, T.ProdTy [])] T.BumpCursorMutable [triv sym_tbl "bumpMutCur base" (VarE mutcur), triv sym_tbl "bump offset" e] <$>
+       tail free_reg sym_tbl bod
+
     LetE (v, _, _, (Ext (IndexCursorArray cur idx))) bod ->
       T.LetPrimCallT [(v, T.CursorTy)] T.IndexCursorArray [ triv sym_tbl "base pointer" (VarE cur)  
                                                           , triv sym_tbl "index_into_base_pointer" (LitE idx)] <$>
@@ -771,6 +776,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, _, (Ext (AddrOfCursor i@(Ext (IndexCursorArray _cur _idx))))) bod -> do
       --i' <- tail free_reg sym_tbl i  
       T.LetPrimCallT [(v, T.MutCursorTy)] T.AddrOfCursor [triv sym_tbl "addofexpr" i ] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (AddrOfCursor i@(VarE _cur)))) bod -> do
+      T.LetPrimCallT [(v, T.MutCursorTy)] T.AddrOfCursor [triv sym_tbl "addrofvar" i] <$>
         tail free_reg sym_tbl bod
 
     LetE (v, _, _, (Ext (DerefMutCursor cur))) bod -> 
@@ -818,9 +827,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
         [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv sym_tbl "WriteTag cursor" (VarE cursIn) ] <$>
         tail free_reg sym_tbl bod
 
-    LetE (v,_,_,  (Ext (NewBuffer mul))) bod -> do
+    LetE (v,_,_,  (Ext (NewBuffer mul endregmod))) bod -> do
       reg <- gensym "region"
-      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(toEndV v,T.CursorTy)] (T.NewBuffer mul) [] <$>
+      end_var <- if endregmod == L2.RegionMutable
+                       then do 
+                             ev <- gensym "end_tmp"
+                             return ev
+                       else return $ toEndV v 
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(end_var, T.CursorTy)] (T.NewBuffer mul endregmod) [] <$>
                tail free_reg sym_tbl bod
       if gopt Opt_DisableGC dflags -- -- || not free_reg
          then pure tl'
@@ -852,8 +866,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedParBuffer mul) [] <$>
          tail free_reg sym_tbl bod
 
-    LetE (v,_,_,  (Ext (EndOfBuffer mul))) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul) [] <$>
+    LetE (v,_,_,  (Ext (EndOfBuffer mul endregmod))) bod -> do
+      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul endregmod) [] <$>
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do
@@ -865,9 +879,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
         tail free_reg sym_tbl bod
 
     -- Just a side effect
-    LetE(_,_,_,  (Ext (BoundsCheck i bound cur))) bod -> do
-      let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
-      T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
+    LetE(_,_,_,  (Ext (BoundsCheck i bound cur mb mode))) bod -> do
+      let args = if mode == L2.Output 
+                 then [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
+                 else
+                   let Just (mutbound, mutcur) = mb 
+                    in [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur, T.VarTriv mutbound, T.VarTriv mutcur]
+      T.LetPrimCallT [] (T.BoundsCheck mode) args <$> tail free_reg sym_tbl bod
 
     LetE(_,_,_, (Ext (BoundsCheckVector bounds))) bod -> do 
       let args = map (\(i, bound, cur, (b', c')) -> 

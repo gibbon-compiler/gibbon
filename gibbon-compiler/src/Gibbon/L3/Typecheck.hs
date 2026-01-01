@@ -19,6 +19,7 @@ import Prelude hiding (exp)
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
 import Gibbon.L3.Syntax
+import qualified Gibbon.L2.Syntax as L2
 
 
 -- | Typecheck a L1 expression
@@ -147,7 +148,9 @@ tcExp isPacked ddfs env exp = do
         ScopedBuffer{} -> return CursorTy
         ScopedParBuffer{} -> return CursorTy
 
-        EndOfBuffer{} -> return CursorTy
+        EndOfBuffer _ endregmod -> if endregmod == L2.RegionMutable
+                                   then return MutCursorTy
+                                   else return CursorTy
 
         MMapFileSize{} -> return IntTy
 
@@ -167,7 +170,7 @@ tcExp isPacked ddfs env exp = do
           else throwError $ GenericTC ("Unknown scalar type: " ++ sdoc sty) exp
 
         -- The IntTy is just a placeholder. BoundsCheck is a side-effect
-        BoundsCheck _ bound cur -> do
+        BoundsCheck _ bound cur _ _ -> do
           rty <- lookupVar env bound exp
           ensureEqualTyModCursor ddfs exp rty CursorTy
           cty <- lookupVar env cur exp

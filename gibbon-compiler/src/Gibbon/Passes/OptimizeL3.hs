@@ -129,19 +129,19 @@ removeReDefsExp env ex =
       pure (Ext $ DerefMutCursor v)
     Ext (SubPtr a b) -> do
       pure (Ext $ SubPtr a b)
-    Ext (NewBuffer _) -> return ex
+    Ext (NewBuffer _ _) -> return ex
     Ext (ScopedBuffer _) -> return ex
     Ext (NewParBuffer _) -> return ex
     Ext (ScopedParBuffer _) -> return ex
-    Ext (EndOfBuffer _) -> return ex
+    Ext (EndOfBuffer _ _) -> return ex
     Ext (MMapFileSize v) -> do
       pure $ Ext (MMapFileSize v)
     Ext (SizeOfPacked a b) -> do
       pure (Ext $ SizeOfPacked a b)
     Ext (SizeOfScalar v) -> do
       pure $ Ext (SizeOfScalar v)
-    Ext (BoundsCheck i a b) -> do
-      pure $ Ext (BoundsCheck i a b)
+    Ext (BoundsCheck i a b c d) -> do
+      pure $ Ext (BoundsCheck i a b c d)
     Ext (BoundsCheckVector{}) -> pure ex
     Ext (IndirectionBarrier _ (_, _, _, _)) -> pure ex
     Ext (BumpArenaRefCount _ _) -> pure ex
