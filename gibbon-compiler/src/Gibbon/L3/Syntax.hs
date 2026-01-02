@@ -39,6 +39,8 @@ module Gibbon.L3.Syntax
   , fth4
   , MutableLocPtsToEnv
   , MutableLocOldValueEnv
+  , updateMutableLocPtsToEnv
+  , updateMutableLocOldValueEnv
   , module Gibbon.Language
   )
 where
@@ -390,7 +392,7 @@ checkIfVarIsMutable var mlocenv = L.foldr (\(_k, (v, _mlv, _r, aliases)) b -> if
                                           ) False (M.toList mlocenv)
 
 findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, _aliases)) acc -> if v == vv 
+findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, aliases)) acc -> if v == vv || S.member v aliases 
                                                                                              then Just k
                                                                                              else acc
                                                     ) Nothing (M.toList mlocenv)
@@ -409,12 +411,39 @@ findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, (v, _mlv, rr, _aliases
 -- For Make SoA locations, these might alias so we can store them as aliases in the updated entry.
 -- (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
 
-updateMLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
-updateMLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
+updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key (v, lc, reg, aliases) env
-                                                                    Just key' -> 
+                                                                    Just (v', lc', reg', aliases') -> if reg /= reg' 
+                                                                                                      then error "Expected region for location to not change!!\n"
+                                                                                                      else if mayalias
+                                                                                                      then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
+                                                                                                      else M.insert key (v', lc', reg', aliases') env
+
+updateMutableLocOldValueEnv :: LocVar -> MutableLocOldValueEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> PassM (MutableLocOldValueEnv, [Binds Exp3])
+updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+                                                                              Nothing -> do
+                                                                                         case key of 
+                                                                                              Single{} -> do 
+                                                                                                          deref_var <- gensym "deref"
+                                                                                                          let bnd = [(deref_var, [], CursorTy, Ext $ DerefMutCursor v)]                                                                                
+                                                                                                          pure (M.insert key (deref_var, lc, reg, aliases) env, bnd) 
+                                                                                              SoA{} -> do 
+                                                                                                       cpy <- gensym "cpy"
+                                                                                                       let cpy_ty = getCursorizeTyFromLocVar'' Nothing True key
+                                                                                                       let memcpy_intr = [(cpy, [], cpy_ty, Ext $ InitCursor cpy_ty), ("_", [], ProdTy [], Ext $ MemCpy cpy v cpy_ty)]
+                                                                                                       pure (M.insert key (cpy, lc, reg, aliases) env, memcpy_intr) 
+
+
+
+                                                                              Just (v', lc', reg', aliases') -> if reg /= reg'
+                                                                                                                then error "Expected region for location to not change!!\n"
+                                                                                                                else if mayalias 
+                                                                                                                then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
+                                                                                                                else return (M.insert key (v', lc', reg', aliases') env, [])
+
 
 
 

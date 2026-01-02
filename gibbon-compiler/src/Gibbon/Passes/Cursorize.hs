@@ -2999,15 +2999,19 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
       -- () <- case modality of 
       --                                           Just OutputMutable -> pure (M.insert loc_from_locarg (loc_var, Nothing, Just loc_region) mLocPtsToEnv, M.insert loc_from_locarg (loc_var, Nothing, Just loc_region) mLocOldValEnv) 
       --                                           _ -> pure (mLocPtsToEnv, mLocOldValEnv)
-      (mLocPtsToEnv', mLocOldValEnv', rhs, additional_lets) <- case (isMutModality' modality) of 
-                                                                      True -> let 
+      (mLocPtsToEnv', mLocOldValEnv', rhs, additional_lets, lets_before) <- case (isMutModality' modality) of 
+                                                                      True -> do 
                                                                                 --m1 = M.insert loc_from_locarg (loc_var, Nothing, Just loc_region, S.empty) mLocPtsToEnv
                                                                                 --m2 = M.insert loc_from_locarg (loc_var, Nothing, Just loc_region, S.empty) mLocOldValEnv
-                                                                                m1 = M.insert lvar (lvar_name, Just lvar, Just loc_region, S.empty) mLocPtsToEnv
-                                                                               in case field_loc of 
+                                                                                --m1 = M.insert lvar (lvar_name, Just lvar, Just loc_region, S.empty) mLocPtsToEnv
+                                                                                let m1 = updateMutableLocPtsToEnv lvar mLocPtsToEnv (lvar_name, Just lvar, Just loc_region, S.empty) False
+                                                                                let m1' = updateMutableLocPtsToEnv loc_from_locarg m1 (loc_var, Just lvar, Just loc_region, S.empty) True
+                                                                                (m2, deref_bnds) <- updateMutableLocOldValueEnv lvar mLocOldValEnv (lvar_name, Just lvar, Just loc_region, S.empty) False
+                                                                                (m2', deref_bnds') <- updateMutableLocOldValueEnv loc_from_locarg m2 (loc_var, Just lvar, Just loc_region, S.empty) True
+                                                                                case field_loc of 
                                                                                   Single{} -> do
                                                                                             let (start, end, _) = getIndexPositionOfSoALocVar optTailCall Nothing field_locs field_loc 
-                                                                                            return $ (m1, m2, Ext $ AddrOfCursor $ Ext $ IndexCursorArray loc_var start, [])
+                                                                                            return $ (m1', m2', Ext $ AddrOfCursor $ Ext $ IndexCursorArray loc_var start, [], deref_bnds ++ deref_bnds')
                                                                                   SoA _ fregs -> do
                                                                                             let CursorArrayTy sz = getCursorizeTyFromLocVar Nothing optTailCall field_loc
                                                                                             let (start, end, _) = getIndexPositionOfSoALocVar optTailCall Nothing field_locs field_loc
@@ -3019,11 +3023,11 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                                                                                           ) [] [(start)..(end - 1)]
                                                                                             let vars = map fst res
                                                                                             let bnds = map snd res
-                                                                                            return $ (m1, m2, Ext $ MakeCursorArray (length vars) vars, bnds)
+                                                                                            return $ (m1', m2', Ext $ MakeCursorArray (length vars) vars, bnds, deref_bnds ++ deref_bnds')
                                                                       False -> case field_loc of 
                                                                                   Single{} -> do
                                                                                             let (start, end, _) = getIndexPositionOfSoALocVar optTailCall Nothing field_locs field_loc 
-                                                                                            return $ (mLocPtsToEnv, mLocOldValEnv, Ext $ IndexCursorArray loc_var start, [])
+                                                                                            return $ (mLocPtsToEnv, mLocOldValEnv, Ext $ IndexCursorArray loc_var start, [], [])
                                                                                   SoA _ fregs -> do
                                                                                             let CursorArrayTy sz = getCursorizeTyFromLocVar Nothing optTailCall field_loc
                                                                                             let (start, end, _) = getIndexPositionOfSoALocVar optTailCall Nothing field_locs field_loc
@@ -3035,9 +3039,9 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                                                                                           ) [] [(start)..(end - 1)]
                                                                                             let vars = map fst res
                                                                                             let bnds = map snd res
-                                                                                            return $ (mLocPtsToEnv, mLocOldValEnv, Ext $ MakeCursorArray (length vars) vars, bnds)
+                                                                                            return $ (mLocPtsToEnv, mLocOldValEnv, Ext $ MakeCursorArray (length vars) vars, bnds, [])
       if isBound loc_var tenv
-            then pure $ (Right (rhs, additional_lets, [], tenv, senv),  mLocPtsToEnv', mLocOldValEnv')
+            then pure $ (Right (rhs, additional_lets, lets_before, tenv, senv),  mLocPtsToEnv', mLocOldValEnv')
             else pure $ (Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc_from_locarg) (additional_lets ++ [(lvar_name, [], CursorTy, rhs)]) denv,  mLocPtsToEnv', mLocOldValEnv')
     GenSoALoc dloc flocs -> do
             {- VS: TODO: don't use unwrap loc var and keep an env mapping loc to its variable name in the program -}
@@ -4324,6 +4328,8 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
         let first_var = dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 2.\n" field_cur
         let scrut_loc = locationVar
         -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
+        -- In case of any mutable variable, we also need to update the m1 and m2 env.
+        -- Vidush TODO.
         (field_lets, field_v_lst, freeVarToVarEnv') <-
           dbgTrace
             (minChatLvl)
