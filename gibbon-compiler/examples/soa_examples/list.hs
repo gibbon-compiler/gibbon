@@ -29,7 +29,7 @@ id :: List -> List
 id lst = lst
 
 gibbon_main = let 
-		lst = mkList 1000000
+		lst = mkList 10000000
                 --lst' = add1 lst
                 lst' = iterate (add1 lst)
 	        --sum = iterate (sumList lst')
