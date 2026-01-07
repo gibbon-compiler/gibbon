@@ -416,11 +416,21 @@ updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key (v, lc, reg, aliases) env
-                                                                    Just (v', lc', reg', aliases') -> if reg /= reg' 
-                                                                                                      then error "Expected region for location to not change!!\n"
-                                                                                                      else if mayalias
-                                                                                                      then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
-                                                                                                      else M.insert key (v', lc', reg', aliases') env
+                                                                    Just (v', lc', reg', aliases') -> case reg' of 
+                                                                                                          Nothing -> if mayalias
+                                                                                                                     then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
+                                                                                                                     else M.insert key (v', lc', reg, aliases') env
+                                                                                                          Just rr -> case reg of 
+                                                                                                                          Nothing -> if mayalias
+                                                                                                                                     then M.insert key (v, lc, reg', S.union (S.insert v' aliases') aliases) env
+                                                                                                                                     else M.insert key (v', lc', reg', aliases') env
+                                                                                                                          Just rr' -> if rr /= rr'
+                                                                                                                                      then error "Expected the regions to be the same!\n"
+                                                                                                                                      else if mayalias
+                                                                                                                                      then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
+                                                                                                                                      else M.insert key (v', lc', reg', aliases') env
+                                                                                                            
+                                                                                                                     
 
 updateMutableLocOldValueEnv :: LocVar -> MutableLocOldValueEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> PassM (MutableLocOldValueEnv, [Binds Exp3])
 updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
@@ -438,11 +448,19 @@ updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.look
 
 
 
-                                                                              Just (v', lc', reg', aliases') -> if reg /= reg'
-                                                                                                                then error "Expected region for location to not change!!\n"
-                                                                                                                else if mayalias 
-                                                                                                                then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
-                                                                                                                else return (M.insert key (v', lc', reg', aliases') env, [])
+                                                                              Just (v', lc', reg', aliases') -> case reg' of 
+                                                                                                                      Nothing -> if mayalias 
+                                                                                                                                 then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
+                                                                                                                                 else return (M.insert key (v', lc', reg, aliases') env, [])
+                                                                                                                      Just rr -> case reg of 
+                                                                                                                                      Nothing -> if mayalias 
+                                                                                                                                                 then return (M.insert key (v, lc, reg', S.union (S.insert v' aliases') aliases) env, [])
+                                                                                                                                                 else return (M.insert key (v', lc', reg', aliases') env, [])
+                                                                                                                                      Just rr' -> if rr /= rr'
+                                                                                                                                                  then error "Expected region for location to not change!!\n"
+                                                                                                                                                  else if mayalias 
+                                                                                                                                                  then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
+                                                                                                                                                  else return (M.insert key (v', lc', reg', aliases') env, [])
 
 
 
