@@ -2631,7 +2631,7 @@ cursorizeLocExp :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> M.Map 
 cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv senv lvararg locExp =
   case locExp of
     AfterConstantLE i loc -> do
-      let lvar = toLocVar lvararg
+      let lvar = dbgTrace (minChatLvl) "Print the environments: " dbgTrace (minChatLvl) (sdoc (M.member (toLocVar loc) mLocOldValEnv, loc)) dbgTrace (minChatLvl) "End in print the env in cursorizeLocExp.\n" toLocVar lvararg
       (locs_var, use_this_loc, additional_bnds, bnds_after, mLocPtsToEnv', mLocOldValEnv') <- case ((isMutModality $ fromJust $ getModality loc) || M.member (toLocVar loc) mLocOldValEnv) of 
                                                                     -- True -> do 
                                                                     --          let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
@@ -2823,7 +2823,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                                                                                                                                             else do 
                                                                                                                                                               return $ (kvals ++ [(key, (vval, lval, endreg, aliases))], bnds)
                                                                                                                                 ) ([], []) (M.toList mLocPtsToEnv)
-                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp False.\n" M.fromList new_key_vals
+                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds, locExp, mLocPtsToEnv, mLocOldValEnv)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp False.\n" M.fromList new_key_vals
                                                                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
                                                                           pure (loc_name, toLocVar loc, [], after_bnds, mLocPtsToEnv'', mLocOldValEnv) 
       -- let locs_var = case (M.lookup ((fromLocVarToFreeVarsTy . toLocVar) loc) freeVarToVarEnv) of
