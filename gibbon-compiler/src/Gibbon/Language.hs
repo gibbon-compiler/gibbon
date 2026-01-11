@@ -467,7 +467,7 @@ mkProdTy :: [UrTy a]-> UrTy a
 mkProdTy [t] = t
 mkProdTy ls  = ProdTy ls
 
-projTy :: (Out a) => Int -> UrTy a -> UrTy a
+projTy :: HasCallStack => (Out a) => Int -> UrTy a -> UrTy a
 projTy 0 (ProdTy (ty:_))  = ty
 projTy n (ProdTy (_:tys)) = projTy (n-1) (ProdTy tys)
 projTy _ ty = error $ "projTy: " ++ sdoc ty ++ " is not a projection!"

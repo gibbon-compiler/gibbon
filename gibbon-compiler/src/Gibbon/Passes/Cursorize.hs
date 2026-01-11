@@ -2646,7 +2646,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
       let loc_var_aftc = (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc)))
       let mut_loc_var = findMutableLocationPointingToVar loc_var_aftc mLocPtsToEnv
       let lvar = dbgTrace (minChatLvl) "Print the environments: " dbgTrace (minChatLvl) (sdoc (loc, mut_loc_var, loc_var_aftc)) dbgTrace (minChatLvl) "End in print the env in cursorizeLocExp.\n" toLocVar lvararg
-      (locs_var, use_this_loc, additional_bnds, bnds_after, mLocPtsToEnv', mLocOldValEnv') <- case ((isMutModality $ fromJust $ getModality loc) || Mb.isJust mut_loc_var) of 
+      (locs_var, use_this_loc, additional_bnds, bnds_after, mLocPtsToEnv', mLocOldValEnv') <- case ((isMutModality $ fromJust $ getModality loc) || (Mb.isJust mut_loc_var && (isInputModality (getModality loc)))) of 
                                                                     -- True -> do 
                                                                     --          let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
                                                                     --          let loc_var = toLocVar loc
