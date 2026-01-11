@@ -29,6 +29,7 @@ module Gibbon.L3.Syntax
   , getVarNameFromFreeVar
   , isMutModality
   , isMutModality'
+  , isInputModality
   , checkIfLocIsPointedToByOutputMutLoc
   , checkIfVarIsMutable
   , findMutableLocationInSameRegion
@@ -162,6 +163,12 @@ isMutModality modal = case modal of
                           L2.InputMutable -> True
                           L2.OutputMutable -> True 
                           _ -> False
+
+
+isInputModality :: Maybe L2.Modality -> Bool
+isInputModality modal = case modal of 
+                              Just L2.Input -> True
+                              _ -> False 
 
 isMutModality' :: Maybe L2.Modality -> Bool 
 isMutModality' modal = case modal of 

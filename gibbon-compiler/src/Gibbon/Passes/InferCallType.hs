@@ -306,7 +306,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
          in (AppE v t locs args', env', tailTy)
     PrimAppE p args ->
         let results = P.map (inferCallTypeExp tailCallOptOn funName env) args
@@ -320,7 +320,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
          in (PrimAppE p args', env', tailTy)
     LetE (v, loc, ty, rhs) bod -> case rhs of
         AppE v' _ locs' args' ->
@@ -359,7 +359,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             ) ret_lst
                         ret_lst'' = case ret_lst' of 
                                             [] -> Nothing 
-                                            rst -> Just $ P.minimum rst
+                                            rst -> Just $ P.maximum rst
                      in (LetE (v, loc, ty, rhs'') bod', env''', ret_lst'')
                 else
                     let (rhs', env', t1) = inferCallTypeExp tailCallOptOn funName env rhs
@@ -371,7 +371,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             ) ret_lst
                         ret_lst'' = case ret_lst' of 
                                             [] -> Nothing 
-                                            rst -> Just $ P.minimum rst
+                                            rst -> Just $ P.maximum rst
                      in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
         _ ->
             let (rhs', env', tailTy) = inferCallTypeExp tailCallOptOn funName env rhs
@@ -383,7 +383,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             ) ret_lst
                 ret_lst'' = case ret_lst' of 
                                             [] -> Nothing 
-                                            rst -> Just $ P.minimum rst
+                                            rst -> Just $ P.maximum rst
              in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
     IfE a b c ->
         let (a', e1, t) = inferCallTypeExp tailCallOptOn funName env a
@@ -396,7 +396,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             ) ret_lst
             ret_lst'' = case ret_lst' of 
                                             [] -> Nothing 
-                                            rst -> Just $ P.minimum rst
+                                            rst -> Just $ P.maximum rst
          in (IfE a' b' c', e3, ret_lst'')
     MkProdE ls ->
         let results = P.map (inferCallTypeExp tailCallOptOn funName env) ls
@@ -410,7 +410,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst' 
+                                                 _ -> Just $ P.maximum lst' 
          in (MkProdE ls', env', tailTy)
     ProjE i e ->
         let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
@@ -419,9 +419,11 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
     CaseE scrt brs ->
         let results =
                 P.map
-                    ( \(a, b, c) ->
-                        let (c', env', t) = inferCallTypeExp tailCallOptOn funName env c
-                         in ((a, b, c'), env', t)
+                    ( \(a, b, c) -> if not (isIndirectionTag a || isRedirectionTag a)
+                                    then 
+                                      let (c', env', t) = inferCallTypeExp tailCallOptOn funName env c
+                                       in ((a, b, c'), env', t)
+                                    else ((a, b, c), env, Nothing)
                     )
                     brs
             brs' = P.map fst3 results
@@ -434,7 +436,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
          in (CaseE scrt brs', env'', tailTy)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     DataConE loc c args ->
@@ -453,7 +455,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
                      in (DataConE loc c args', env', tailTy)
                 (True, _) ->
                     let loc' = case loc of
@@ -470,7 +472,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
                      in (DataConE loc' c args', env', tailTy)
     TimeIt e d b ->
         let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
@@ -494,7 +496,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                              ) lst 
                                         in case lst' of 
                                                  [] -> Nothing 
-                                                 _ -> Just $ P.minimum lst'
+                                                 _ -> Just $ P.maximum lst'
          in (SpawnE v locs exps', env', tailTy)
     SyncE -> (exp2, env, Nothing)
     WithArenaE _v e ->
