@@ -479,7 +479,9 @@ singleLocToCursorBasedOnModality :: LocVar -> Maybe L2.Modality -> Bool -> Ty3
 singleLocToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False 
                                                                           then MutCursorTy
                                                                           else case modality of 
-                                                                                  Nothing -> CursorTy 
+                                                                                  Nothing -> if _isTailAndOverrideModality
+                                                                                             then MutCursorTy
+                                                                                             else CursorTy 
                                                                                   Just m -> case (lc, m) of
                                                                                               (Single{}, L2.Input) -> CursorTy
                                                                                               (Single{}, L2.InputMutable) -> MutCursorTy
@@ -493,7 +495,9 @@ singleLocToCursorBasedOnModalityL2 :: LocVar -> Maybe L2.Modality -> Bool -> L2.
 singleLocToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if False
                                                                             then L2.MkTy2 MutCursorTy
                                                                             else case modality of 
-                                                                             Nothing -> L2.MkTy2 CursorTy
+                                                                             Nothing -> if _isTailAndOverrideModality
+                                                                                        then L2.MkTy2 MutCursorTy
+                                                                                        else L2.MkTy2 CursorTy
                                                                              Just m -> case (lc, m) of
                                                                                            (Single{}, L2.Input) -> L2.MkTy2 CursorTy
                                                                                            (Single{}, L2.InputMutable) -> L2.MkTy2 MutCursorTy
@@ -507,7 +511,9 @@ singleLocToCursorBasedOnModalityUrTy :: LocVar -> Maybe L2.Modality -> Bool -> U
 singleLocToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if False
                                                                               then MutCursorTy 
                                                                               else case modality of 
-                                                                                        Nothing -> CursorTy
+                                                                                        Nothing -> if _isTailAndOverrideModality 
+                                                                                                   then MutCursorTy
+                                                                                                   else CursorTy
                                                                                         Just m -> case (lc, m) of
                                                                                                        (Single{}, L2.Input) -> CursorTy
                                                                                                        (Single{}, L2.InputMutable) -> MutCursorTy
@@ -523,7 +529,9 @@ singleRegToCursorBasedOnModality :: RegVar -> Maybe L2.Modality -> Bool -> Ty3
 singleRegToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False
                                                                                    then MutCursorTy
                                                                                    else case modality of 
-                                                                                              Nothing -> CursorTy
+                                                                                              Nothing -> if _isTailAndOverrideModality
+                                                                                                         then MutCursorTy
+                                                                                                         else CursorTy
                                                                                               Just m -> case (lc, m) of
                                                                                                              (SingleR{}, L2.Input) -> CursorTy
                                                                                                              (SingleR{}, L2.InputMutable) -> MutCursorTy
@@ -538,7 +546,9 @@ singleRegToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if F
                                                                             then L2.MkTy2 MutCursorTy
                                                                             else
                                                                              case modality of 
-                                                                              Nothing -> L2.MkTy2 CursorTy
+                                                                              Nothing -> if _isTailAndOverrideModality 
+                                                                                         then L2.MkTy2 CursorTy
+                                                                                         else L2.MkTy2 MutCursorTy
                                                                               Just m -> case (lc, m) of
                                                                                                    (SingleR{}, L2.Input) -> L2.MkTy2 CursorTy
                                                                                                    (SingleR{}, L2.InputMutable) -> L2.MkTy2 MutCursorTy
@@ -554,7 +564,9 @@ singleRegToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if
                                                                               then MutCursorTy 
                                                                               else 
                                                                                case modality of 
-                                                                                    Nothing -> CursorTy
+                                                                                    Nothing -> if _isTailAndOverrideModality
+                                                                                               then MutCursorTy
+                                                                                               else CursorTy
                                                                                     Just m -> case (lc, m) of
                                                                                                    (SingleR{}, L2.Input) -> CursorTy
                                                                                                    (SingleR{}, L2.InputMutable) -> MutCursorTy

@@ -369,10 +369,11 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                           var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') of
                             Just v -> v
                             Nothing -> error "cursorizeFunDef: unexpected location variable"
-                          needs_to_be_mutable = case loc of 
-                                                     Single{} -> False
-                                                     SoA{} -> True && needOptTailCalls
-                          packed_cursor_ty = getCursorizeTyFromLocVar Nothing needs_to_be_mutable loc
+                          needs_to_be_mutable = isMutModality' modality
+                          --needs_to_be_mutable = case loc of 
+                          --                           Single{} -> False
+                          --                           SoA{} -> True && needOptTailCalls
+                          packed_cursor_ty = getCursorizeTyFromLocVar modality needs_to_be_mutable loc
                           m11' = case (isMutModality' modality) of
                                             True -> let varNameToUseForLoc = case proj of 
                                                                                   VarE v -> v
@@ -488,10 +489,12 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
         FloatTy -> FloatTy
         SymTy -> SymTy
         BoolTy -> BoolTy
-        ProdTy ls -> ProdTy $ L.map (cursorizeInTy  optTail modality) ls
+        ProdTy ls -> ProdTy $ L.map (cursorizeInTy optTail modality) ls
         SymDictTy ar _ty -> SymDictTy ar CursorTy
         PDictTy k v -> PDictTy (cursorizeInTy optTail modality k) (cursorizeInTy optTail modality v)
-        PackedTy _ l -> getCursorizeTyFromLocVar'' modality optTail l
+        PackedTy _ l -> if optTail 
+                        then MutCursorTy
+                        else getCursorizeTyFromLocVar'' modality optTail l
         VectorTy el_ty -> VectorTy $ cursorizeInTy optTail modality el_ty
         ListTy el_ty -> ListTy $ cursorizeInTy optTail modality el_ty
         PtrTy -> PtrTy
@@ -1626,6 +1629,22 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
                     <*> return freeVarToVarEnv 
                     <*> return m1
                     <*> return m2
+        -- We need to dereference a mutable cursor to get its value.
+        MutCursorTy -> do
+                       deref_val <- gensym "deref_val"
+                       let additional_deref_let = mkLets [(deref_val, [], CursorTy, Ext $ DerefMutCursor v)]
+                       let tenv' = M.insert deref_val (MkTy2 CursorTy) tenv
+                       let output_mut_loc_scrut = findMutableLocationPointingToVar v m1
+                       (m1', m2') <- case output_mut_loc_scrut of 
+                                            Nothing -> error "Did not expect mutable cursor!\n"
+                                            Just outloc -> do let m1i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m1
+                                                              let m2i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m2
+                                                              return (m1i, m2i)
+                       (,,,) <$> (dl <$> additional_deref_let <$> CaseE (VarE $ deref_val))
+                                        <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
+                                  <*> return freeVarToVarEnv 
+                                  <*> return m1'
+                                  <*> return m2'
         
         CursorArrayTy {} -> (,,,) <$> dl
             <$> dcon_let_bind
@@ -4047,6 +4066,7 @@ cursorizeLet m1 m2 optTailCall freeVarToVarEnv lenv isPackedContext ddfs fundefs
                                                                                   EndOfReg r m er -> if m == Output
                                                                                                      then [(loc_to_variable, [], CursorTy, Ext $ DerefMutCursor (getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy $ fromJust endreg)))]
                                                                                                      else []
+                                                                                  -- EndWitness lrem lvar -> 
                                                                                   -- should this be empty??
                                                                                   -- Vidush: Check this!!
                                                                                   _ -> []
@@ -4316,6 +4336,26 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                     then unpackWithRelRAN field_cur
                     else unpackRegularDataCon m1 m2 (AoSWin field_cur) freeVarToVarEnv
             )
+    -- MutCursorTy -> do
+    --   field_cur <- gensym "field_cur_mut"
+    --   -- Vidush: We need to find the output mut location which points to this value
+    --   -- (scrutCurVal, m2') <-
+    --   let mutLoc = findMutableLocationPointingToVar scrtCur m1
+    --   case mutLoc of 
+    --         Nothing -> error "Expected to have get corresponding mutable location for scrutinee value!\n"
+    --         Just outmutloc -> do
+    --                           deref_val <- gensym "deref_mut_cur"
+    --                           let deref_mut_cur = [(deref_val, [], CursorTy, Ext $ DerefMutCursor )]
+    --   dbgTrace (minChatLvl) "Print scrutCur MutCursor Case: " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur, mutLoc)) dbgTrace (minChatLvl) "End print scrutCur mutcur 1.\n" (dcon,[],)
+    --     -- Advance the cursor by 1 byte so that it points to the first field
+    --     <$> mkLets [(field_cur, [], CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
+    --     <$> ( if isAbsRANDataCon dcon
+    --             then unpackWithAbsRAN (AoSWin field_cur) freeVarToVarEnv
+    --             else
+    --               if isRelRANDataCon dcon
+    --                 then unpackWithRelRAN field_cur
+    --                 else unpackRegularDataCon m1 m2 (AoSWin field_cur) freeVarToVarEnv
+    --         )
     CursorArrayTy size -> do
       -- dcon_var <- gensym "dcon"
       let first_var = dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 2.\n" field_cur
@@ -4486,6 +4526,7 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                   let loc = fromLocArgToFreeVarsTy locarg
                    in case ty of
                         -- Int, Float, Sym, or Bool
+                        -- Vidush: Handle mutable input cases for tail recursion: TODO.
                         _ | isScalarTy ty -> do
                           loc_var <- lookupVariable loc fenv
                           (tenv', binds) <- scalarBinds ty v loc_var locarg tenv
