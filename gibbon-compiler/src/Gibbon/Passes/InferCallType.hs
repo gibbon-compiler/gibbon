@@ -58,11 +58,16 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
     let (funTy', needs_update) = case optimize_tail_calls of 
                             True -> let (locVars', updateLocs) = P.foldr
                                                          (\lrm@(LRM l r m) (lvs, lcs) -> case (l, m) of
-                                                                                            (Single{}, Input) -> (lvs ++ [LRM l r m], lcs)
-                                                                                            (Single{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            (Single{}, Input) -> if funRec' == TailRec
+                                                                                                                 then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                                                 else (lvs ++ [LRM l r Input], lcs)
+                                                                                            (Single{}, Output) -> if funRec' == TailRec 
+                                                                                                                  then (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                                                  else (lvs ++ [LRM l r Output], lcs) 
                                                                                             (SoA{}, Input) -> if funRec' == TailRec  
                                                                                                               then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                                               else (lvs ++ [LRM l r Input], lcs)
+                                                                                            -- Vidush: We might only want to do this for tail recursive functions
                                                                                             (SoA{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             _ -> (lvs ++ [lrm], lcs) 
                                                          ) ([], []) locVars
