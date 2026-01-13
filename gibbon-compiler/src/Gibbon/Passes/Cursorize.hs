@@ -4325,7 +4325,14 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
         Just (MkTy2 ty) -> ty
         Nothing -> error "unpackDataCon: unexpected location variable"
   case ty_of_scrut of
-    CursorTy ->
+    CursorTy -> do
+      let mut_loc = findMutableLocationPointingToVar scrtCur m1
+      m1' <- case mut_loc of
+            Nothing -> error "Expected to have an output mutable location pointing to the value of the cursor!\n" 
+            Just l -> do
+                      let m1inner = updateMutableLocPtsToEnv l m1 (field_cur, mut_loc, Nothing, S.empty) False
+                      return m1inner
+      -- (m1', m2')
       dbgTrace (minChatLvl) "Print scrutCur " dbgTrace (minChatLvl) (sdoc (scrtCur, ty_of_scrut, field_cur)) dbgTrace (minChatLvl) "End print scrutCur 1.\n" (dcon,[],)
         -- Advance the cursor by 1 byte so that it points to the first field
         <$> mkLets [(field_cur, [], CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
@@ -4334,7 +4341,7 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                 else
                   if isRelRANDataCon dcon
                     then unpackWithRelRAN field_cur
-                    else unpackRegularDataCon m1 m2 (AoSWin field_cur) freeVarToVarEnv
+                    else unpackRegularDataCon m1' m2 (AoSWin field_cur) freeVarToVarEnv
             )
     -- MutCursorTy -> do
     --   field_cur <- gensym "field_cur_mut"
