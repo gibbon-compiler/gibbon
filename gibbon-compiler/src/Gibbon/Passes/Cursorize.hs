@@ -4328,7 +4328,7 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
     CursorTy -> do
       let mut_loc = findMutableLocationPointingToVar scrtCur m1
       m1' <- case mut_loc of
-            Nothing -> error "Expected to have an output mutable location pointing to the value of the cursor!\n" 
+            Nothing -> return m1
             Just l -> do
                       let m1inner = updateMutableLocPtsToEnv l m1 (field_cur, mut_loc, Nothing, S.empty) False
                       return m1inner
@@ -4543,6 +4543,8 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                               -- corresponding variable was also bound and we shouldn't create duplicate
                               -- bindings (checked in the LetLocE cases).
                               loc_var <- lookupVariable loc fenv
+                              -- here we need to make sure that any mutable loc pointing to cur 
+                              -- is aliased to loc_var now.
                               let binds' = ((loc_var), [], CursorTy, VarE cur) : binds
                                   tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
                               bod <- go m1 m2 (AoSWin (toEndV v)) fenv rst_vlocs rst_tys canBind denv tenv''
