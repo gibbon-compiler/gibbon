@@ -490,7 +490,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               AddCursor _ ex   -> go ex
               BumpCursorMutable _ ex -> go ex
               SubPtr{}         -> syms
-              WriteCursor _ ex -> go ex
+              WriteCursorMutable _ ex -> go ex
               TagCursor{}    -> syms
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
@@ -962,8 +962,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteVector [triv sym_tbl "WriteVector arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
-    LetE (v, _, _,  (Ext (WriteCursor cur e))) bod ->
-      T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursor [triv sym_tbl "WriteCursor arg" e, T.VarTriv cur] <$>
+    LetE (v, _, _,  (Ext (WriteCursorMutable cur e))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursorMutable [triv sym_tbl "WriteCursorMutable arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
     LetE (_, _, _,  (Ext (IndirectionBarrier tycon (l1, end_r1, l2, end_r2)))) bod ->

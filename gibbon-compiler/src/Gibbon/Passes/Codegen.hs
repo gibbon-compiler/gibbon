@@ -1064,10 +1064,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
                                ]
 
-                 WriteCursor -> let [(outV,CursorTy)] = bnds
-                                    [val,(VarTriv cur)] = rnds in pure
-                                 [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv venv val); |]
-                                 , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
+                 WriteCursorMutable -> let [(_outV,CursorTy)] = bnds
+                                           [val,(VarTriv cur)] = rnds in pure
+                                       -- , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |]
+                                       [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv venv val); |]]
 
                  WriteList    -> let [(outV,CursorTy)] = bnds
                                      [val,(VarTriv cur)] = rnds

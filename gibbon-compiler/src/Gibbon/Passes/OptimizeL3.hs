@@ -106,9 +106,9 @@ removeReDefsExp env ex =
       pure (Ext $ ReadTaggedCursor v)
     Ext (ReadCursor v) -> do
       pure (Ext $ ReadCursor v)
-    Ext (WriteCursor v e) -> do
+    Ext (WriteCursorMutable v e) -> do
       e' <- go e
-      pure (Ext $ WriteCursor v e')
+      pure (Ext $ WriteCursorMutable v e')
     Ext (ReadList v ty) -> do
       pure (Ext $ ReadList v ty)
     Ext (WriteList v e ty) -> do

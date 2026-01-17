@@ -50,6 +50,7 @@ import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.List as L
+import qualified Data.Maybe as Mb
 import Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -101,7 +102,7 @@ data E3Ext loc dec =
   | MemCpy Var Var dec                           -- ^ Do a mem copy from right address into left address of type dec
   | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
-  | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
+  | WriteCursorMutable Var (PreExp E3Ext loc dec) -- ^ Write some value to a Mutable cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
   | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
   | ReadVector Var dec                             -- ^ Read a pointer to a vector
@@ -201,7 +202,7 @@ instance FreeVars (E3Ext l d) where
       WriteTaggedCursor v ex -> S.insert v (gFreeVars ex)
       MemCpy a b _ -> S.fromList [a, b]
       ReadCursor v       -> S.singleton v
-      WriteCursor c ex   -> S.insert c (gFreeVars ex)
+      WriteCursorMutable c ex   -> S.insert c (gFreeVars ex)
       ReadList v _       -> S.singleton v
       WriteList c ex  _  -> S.insert c (gFreeVars ex)
       AddCursor v ex -> S.insert v (gFreeVars ex)
@@ -281,7 +282,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
   gSubstExt old new ext =
     case ext of
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
-      WriteCursor v bod    -> WriteCursor v (gSubst old new bod)
+      WriteCursorMutable v bod    -> WriteCursorMutable v (gSubst old new bod)
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
       SubPtr v w           -> SubPtr v w
       LetAvail ls bod      -> LetAvail ls (gSubst old new bod)
@@ -294,7 +295,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
   gSubstEExt old new ext =
     case ext of
       WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
-      WriteCursor v bod -> WriteCursor v (gSubstE old new bod)
+      WriteCursorMutable v bod -> WriteCursorMutable v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
       SubPtr v w        -> SubPtr v w
       LetAvail ls b     -> LetAvail ls (gSubstE old new b)
@@ -314,7 +315,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
       MemCpy a b ty -> MemCpy (go a) (go b) ty 
       ReadCursor v       -> ReadCursor (go v)
-      WriteCursor v bod  -> WriteCursor (go v) (go bod)
+      WriteCursorMutable v bod  -> WriteCursorMutable (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
       WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty
       ReadVector v el_ty      -> ReadVector (go v) el_ty
@@ -423,19 +424,19 @@ updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key (v, lc, reg, aliases) env
-                                                                    Just (v', lc', reg', aliases') -> case reg' of 
+                                                                    Just (v', _lc', reg', aliases') -> case reg' of 
                                                                                                           Nothing -> if mayalias
                                                                                                                      then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
-                                                                                                                     else M.insert key (v', lc', reg, aliases') env
+                                                                                                                     else M.insert key (v, lc, reg, aliases) env
                                                                                                           Just rr -> case reg of 
                                                                                                                           Nothing -> if mayalias
                                                                                                                                      then M.insert key (v, lc, reg', S.union (S.insert v' aliases') aliases) env
-                                                                                                                                     else M.insert key (v', lc', reg', aliases') env
+                                                                                                                                     else M.insert key (v, lc, reg', aliases) env
                                                                                                                           Just rr' -> if rr /= rr'
                                                                                                                                       then error "Expected the regions to be the same!\n"
                                                                                                                                       else if mayalias
                                                                                                                                       then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
-                                                                                                                                      else M.insert key (v', lc', reg', aliases') env
+                                                                                                                                      else M.insert key (v, lc, reg', aliases) env
                                                                                                             
                                                                                                                      
 
@@ -730,31 +731,30 @@ eraseLocMarkers (DDef tyargs tyname ls layout) = DDef tyargs tyname (L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs (L2.unTy2 ty))) ls')
 
-cursorizeTy :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Maybe L2.Modality -> UrTy LocVar -> UrTy b
-cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality ty =
+cursorizeTy :: M.Map FreeVarsTy Var -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Maybe L2.Modality -> UrTy LocVar -> UrTy b
+cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality ty =
   case ty of
     IntTy     -> IntTy
     CharTy    -> CharTy
     FloatTy   -> FloatTy
     SymTy     -> SymTy
     BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality) ls
+    ProdTy ls -> ProdTy $ L.map (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality) ls
     SymDictTy v _ -> SymDictTy v CursorTy
-    PDictTy k v   -> PDictTy (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
+    PDictTy k v   -> PDictTy (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
     -- Check if location in the packed type is a locations pointer to by 
     -- any mutable location, (We should not return start and end locations for such types) 
-    PackedTy _ l    -> if L.elem l (L.concatMap (\(_v, ml, _r, _aliases) -> case ml of 
-                                                            Nothing -> []
-                                                            Just vl -> [vl]
-                                                  ) (M.elems mutLocsEnv)
-                                     )
-                       then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
-                       -- If the location in questionk itself is a mutable location.
-                       else if M.member l oldLocsToMutEnv
-                       then ProdTy []
-                       else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
-    VectorTy el_ty' -> VectorTy $ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
-    ListTy el_ty'   -> ListTy $ cursorizeTy mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
+    PackedTy _ l    -> let lname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l) 
+                           mut_l = findMutableLocationPointingToVar lname mutLocsEnv
+                        in 
+                          if Mb.isJust mut_l
+                          then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
+                          -- If the location in questionk itself is a mutable location.
+                          else if M.member l oldLocsToMutEnv
+                          then ProdTy []
+                          else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
+    VectorTy el_ty' -> VectorTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
+    ListTy el_ty'   -> ListTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     CursorArrayTy sz -> CursorArrayTy sz 

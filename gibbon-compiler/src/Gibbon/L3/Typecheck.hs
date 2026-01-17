@@ -86,12 +86,12 @@ tcExp isPacked ddfs env exp = do
           ensureEqualTyModCursor ddfs exp vty CursorTy
           return $ ProdTy [CursorTy, CursorTy]
 
-        WriteCursor cur val -> do
+        WriteCursorMutable cur val -> do
           curty  <- lookupVar env cur exp
-          ensureEqualTyModCursor ddfs exp curty CursorTy
+          ensureEqualTyModCursor ddfs exp curty MutCursorTy
           valty <- go val
           ensureEqualTyModCursor ddfs exp valty CursorTy
-          return CursorTy
+          return $ ProdTy []
 
         ReadList v ty -> do
           vty <- lookupVar env v exp
