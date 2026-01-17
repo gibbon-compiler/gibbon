@@ -325,7 +325,7 @@ data Prim
     | ReadCursor
     -- ^ Read and return a cursor
 
-    | WriteCursor
+    | WriteCursorMutable
 
     | ReadScalar L3.Scalar
     | WriteScalar L3.Scalar
