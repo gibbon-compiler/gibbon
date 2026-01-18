@@ -686,7 +686,7 @@ updateEnv lcarg env = case lcarg of
 
 modalityNeedsUpdate :: LocVar -> Modality -> Bool
 modalityNeedsUpdate lc m = case (lc, m) of 
-                                    (Single{}, Input) -> False 
+                                    (Single{}, Input) -> True 
                                     (Single{}, Output) -> True
                                     (SoA{}, Input) -> True
                                     (SoA{}, Output) -> True
@@ -694,7 +694,7 @@ modalityNeedsUpdate lc m = case (lc, m) of
 
 modalityNeedsUpdateReg :: RegVar -> Modality -> Bool
 modalityNeedsUpdateReg lc m = case (lc, m) of 
-                                    (SingleR{}, Input) -> False 
+                                    (SingleR{}, Input) -> True 
                                     (SingleR{}, Output) -> True
                                     (SoARv{}, Input) -> True
                                     (SoARv{}, Output) -> True
