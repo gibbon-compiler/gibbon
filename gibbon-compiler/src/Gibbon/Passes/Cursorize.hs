@@ -3036,8 +3036,8 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                                   let m1' = updateMutableLocPtsToEnv mloc mLocPtsToEnv (lvar_name, Just mloc, Nothing, S.singleton locs_var) True
                                                   return m1'
       if isBound locs_var tenv
-      then pure $ (Right (VarE locs_var, [], [], tenv, senv),  mLocPtsToEnv', mLocOldValEnv)
-      else dbgTrace (minChatLvl) "Print in cursorizeLocExp FromEndLE: " dbgTrace (minChatLvl) (sdoc (loc, lvar, lvar_name)) dbgTrace (minChatLvl) "End printing in cursorizeLocExp FromEndE.\n" pure $ (Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc) [(lvar_name, [], CursorTy, VarE locs_var)] denv,  mLocPtsToEnv', mLocOldValEnv)
+      then dbgTrace (minChatLvl) "Print in cursorizeLocExp FromEndLE: " dbgTrace (minChatLvl) (sdoc (loc, lvar, lvar_name, mLocPtsToEnv')) dbgTrace (minChatLvl) "End printing in cursorizeLocExp Right case FromEndE.\n" pure $ (Right (VarE locs_var, [], [], tenv, senv),  mLocPtsToEnv', mLocOldValEnv)
+      else dbgTrace (minChatLvl) "Print in cursorizeLocExp FromEndLE: " dbgTrace (minChatLvl) (sdoc (loc, lvar, lvar_name, mLocPtsToEnv')) dbgTrace (minChatLvl) "End printing in cursorizeLocExp Left case FromEndE.\n" pure $ (Left $ M.insertWith (++) (fromLocVarToFreeVarsTy loc) [(lvar_name, [], CursorTy, VarE locs_var)] denv,  mLocPtsToEnv', mLocOldValEnv)
     StartOfRegionLE r -> case r of
       GlobR v _ -> do
                     let lvar = toLocVar lvararg
@@ -4188,9 +4188,9 @@ cursorizeLet m1 m2 optTailCall freeVarToVarEnv lenv isPackedContext ddfs fundefs
                                                                                                                           mut_loc = findMutableLocationPointingToVar witness_var m1
                                                                                                                         in case mut_loc of
                                                                                                                                   -- return no bnds, in case we cannot find a mut_loc
-                                                                                                                                  Nothing -> (lbndsi, m1i, m2i)
+                                                                                                                                  Nothing -> dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 1.\n" (lbndsi, m1i, m2i)
                                                                                                                                   Just l -> let 
-                                                                                                                                              locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
+                                                                                                                                              locs_var = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var)) dbgTrace (minChatLvl) "End in Print case EndWitness Just case AppE 1.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
                                                                                                                                               -- update the mut loc points to env to point to the correct value, in this case the end witness.
                                                                                                                                               m1i' = updateMutableLocPtsToEnv l m1i (locs_var, Just l, Nothing, S.empty) False
                                                                                                                                               mut_l_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
@@ -4322,13 +4322,13 @@ cursorizeLet m1 m2 optTailCall freeVarToVarEnv lenv isPackedContext ddfs fundefs
                                                                                                                                             mut_loc = findMutableLocationPointingToVar witness_var m1
                                                                                                                                           in case mut_loc of
                                                                                                                                                             -- return no bnds, in case we cannot find a mut_loc
-                                                                                                                                                      Nothing -> (lbndsi, m1i, m2i)
+                                                                                                                                                      Nothing -> dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" (lbndsi, m1i, m2i)
                                                                                                                                                       Just l -> let 
                                                                                                                                                                   locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
                                                                                                                                                                   m1i' = updateMutableLocPtsToEnv l m1i (locs_var, Just l, Nothing, S.empty) False
                                                                                                                                                                   mut_l_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
                                                                                                                                                                   bnd = [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_l_var)]
-                                                                                                                                                                in (bnd, m1i', m2i)
+                                                                                                                                                                in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case EndWitness Just case AppE 2.\n" (bnd, m1i', m2i)
                                                                                                                   _ -> (lbndsi, m1i, m2i)
                                                          ) ([], m1', m2') (zip locs [0 ..])
                                       case start_loc of 
@@ -4788,6 +4788,7 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
       exp_unp <- go m1 m2 field_cur freeVarToVarEnv_unpack vlocs1 tys1 True denv1 tenv1'
       return exp_unp
       where
+        -- Vidush: Change function signature to return the mutable loc pts to envs etc.
         go :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
         go m1 m2 curw fenv vlocs tys canBind denv tenv = do
           case curw of
@@ -4953,8 +4954,14 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                                   bod
                             else do
                               -- Cannot read this. Instead, we add it to DepEnv.
+                              let mut_loc = findMutableLocationPointingToVar loc_var m1
+                              m1' <- case mut_loc of 
+                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur, m1)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS False can bind Scalar!\n" return m1 
+                                            Just l -> do 
+                                                       let m1inner = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.fromList [cur, loc_var]) True
+                                                       dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS False can bind Scalar 2!\n" return m1inner
                               let denv' = M.insertWith (++) (loc) [(v, [], CursorTy, VarE (loc_var))] denv
-                              go m1 m2 (AoSWin (toEndV v)) fenv rst_vlocs rst_tys False denv' tenv'
+                              go m1' m2 (AoSWin (toEndV v)) fenv rst_vlocs rst_tys False denv' tenv'
                         _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v, loc) ++ ":" ++ sdoc ty
                 _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs, tys)
             {- VS: TODO: handle other cases. Right now, it is only scalar and packed -}
