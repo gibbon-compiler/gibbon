@@ -17,10 +17,10 @@ add1Tree t =
     Leaf x y -> Leaf (x + 1) y
     Node i j k l x1 x2 x3 x4 -> Node (i + 1) (j + 1) (k + 1) l (add1Tree x1) (add1Tree x2) (add1Tree x3) (add1Tree x4) 
 
-rightmost :: Tree -> Int
-rightmost tree = case tree of 
-		      Leaf i _ -> i
-                      Node a b c d l r ll rr -> rightmost r 
+--rightmost :: Tree -> Int
+--rightmost tree = case tree of 
+--		      Leaf i _ -> i
+--                      Node a b c d l r ll rr -> rightmost r 
 
 sumTree :: Tree -> Int
 sumTree tr =
@@ -39,7 +39,7 @@ gibbon_main =
        _ = printsym (quote "(sum: ")
        _ = printint val 
        _ = printsym (quote ", rightmost: ")
-       rmost = (rightmost tree'')
-       _ = printint rmost
+       --rmost = (rightmost tree'')
+       --_ = printint rmost
        _ = printsym (quote ")\n\n")
      in val
