@@ -937,9 +937,12 @@ markMutableLocsAfterInitialPass env _exp =
                                                                                             loc' = updateLocArg loc env
                                                                                             bod' = markMutableLocsAfterInitialPass env bod
                                                                                            in Ext $ Old.LetLocE loc' (GetFieldLocSoA (_dcon, _idx) lc') bod'
-                                                     GenSoALoc{} -> let 
-                                                                      bod' = markMutableLocsAfterInitialPass env bod 
-                                                                     in Ext $ Old.LetLocE loc locexp bod'
+                                                     GenSoALoc dloc flocs -> let
+                                                                               dloc' = updateLocArg dloc env
+                                                                               flocs' = map (\(k, l) -> (k, updateLocArg l env)) flocs 
+                                                                               bod' = markMutableLocsAfterInitialPass env bod 
+                                                                               locexp' = GenSoALoc dloc' flocs'
+                                                                              in Ext $ Old.LetLocE loc locexp' bod'
                                                      _ -> error $ "Not implemented!\n" ++ show (loc, locexp)
                                                     --  GenSoALoc lc flocs ->
                                                     --  GetDataConLocSoA lc ->
