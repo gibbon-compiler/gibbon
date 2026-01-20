@@ -34,6 +34,7 @@ module Gibbon.L3.Syntax
   , checkIfVarIsMutable
   , findMutableLocationInSameRegion
   , findMutableLocationPointingToVar
+  , findMutableLocationPointingToEndVar
   , fst4
   , snd4
   , thd4
@@ -156,7 +157,11 @@ data E3Ext loc dec =
 
 getVarNameFromFreeVar :: HasCallStack => M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
 getVarNameFromFreeVar env fvar = case M.lookup fvar env of 
-                                        Nothing -> error "Did not find variable name!\n"
+                                        Nothing -> case fvar of 
+                                                         R l -> case l of 
+                                                                    SingleR rl -> rl 
+                                                                    _ -> error "Did not find variable name!\n"
+                                                         _ -> error "Did not find variable name!\n"
                                         Just v -> v
 
 isMutModality :: L2.Modality -> Bool 
@@ -404,7 +409,14 @@ findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, alias
                                                                                              then Just k
                                                                                              else acc
                                                     ) Nothing (M.toList mlocenv)
-  
+
+findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, aliases)) acc -> if (v == (toEndV vv)) || S.member v aliases 
+                                                                                               then Just k
+                                                                                               else acc
+                                                    ) Nothing (M.toList mlocenv)
+
+
 findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
 findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, (v, _mlv, rr, _aliases)) acc -> case rr of 
                                                                                                 Nothing -> acc 
