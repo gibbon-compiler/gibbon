@@ -1568,11 +1568,11 @@ addRepairFns (Prog dfs fds me) = do
   newFns <- concat <$>
               mapM (\d -> do
                     copy_fn  <- genCopyFn d
-                    copy2_fn <- genCopySansPtrsFn d
+                    --copy2_fn <- genCopySansPtrsFn d
                     trav_fn  <- genTravFn d
                     print_fn <- genPrintFn d
                     -- copy2_fn
-                    return [copy_fn, copy2_fn, trav_fn, print_fn])
+                    return [copy_fn, trav_fn, print_fn])
                     --return [trav_fn, print_fn])
               (filter (not . isVoidDDef) (M.elems dfs))
   let fds' = fds `M.union` (M.fromList $ map (\f -> (funName f, f)) newFns)
