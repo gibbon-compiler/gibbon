@@ -3,7 +3,7 @@ module Tree where
 data Tree = Leaf Int Float
           | Node Int Int Int Float Tree Tree Tree Tree
   deriving Show
-{-# ANN type Tree "Factored" #-}
+{-# ANN type Tree "Linear" #-}
 
 mkTree :: Int -> Tree
 mkTree d =
