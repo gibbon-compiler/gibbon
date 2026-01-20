@@ -3660,7 +3660,7 @@ cursorizeAppE m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv
                                   Just mutl' -> case (isRegionLocArg loc) of 
                                                           False -> dbgTrace (minChatLvl) "Print in false case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc)) dbgTrace (minChatLvl) "End in false case out." return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy mutl'))])
                                                           True -> let (rvar,_,_,_) = fromJust $ M.lookup mutl' m1 
-                                                                    in dbgTrace (minChatLvl) "Print in true case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc)) dbgTrace (minChatLvl) "End in true case out." return $ (bnds, args ++ [VarE rvar])
+                                                                    in dbgTrace (minChatLvl) "Print in true case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc, rvar)) dbgTrace (minChatLvl) "End in true case out." return $ (bnds, args ++ [VarE rvar])
                     ) ([], []) outs
                 return $ mkLets additional_bnds (AppE f _cty [] (appe_args ++ starts))
       asserts <-
@@ -4321,10 +4321,13 @@ cursorizeLet m1 m2 optTailCall freeVarToVarEnv lenv isPackedContext ddfs fundefs
                                                                                                                                                                                                                                     regName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
                                                                                                                                                                                                                                     mut_loc_lc = findMutableLocationPointingToVar regName m1'
                                                                                                                                                                                                                                     loc_endwit = toLocVar locarg
+                                                                                                                                                                                                                                    loc_loc = toLocVar loc
+                                                                                                                                                                                                                                    -- loc_loc_name = case loc_loc of 
+                                                                                                                                                                                                                                    --                       Single r -> r
+                                                                                                                                                                                                                                    --                       _ -> regName 
                                                                                                                                                                                                                                   in case mut_loc_lc of 
-                                                                                                                                                                                                                                              Nothing -> let
-                                                                                                                                                                                                                                                           loc_loc = toLocVar loc
-                                                                                                                                                                                                                                                           m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 21.\n" M.insert loc_loc (endName, Just loc_loc, Just reg, S.empty) m1ii
+                                                                                                                                                                                                                                              Nothing -> let 
+                                                                                                                                                                                                                                                           m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 21.\n" M.insert loc_loc (endName, Just loc_loc, Just reg, S.fromList []) m1ii
                                                                                                                                                                                                                                                           in (ret, m1'', m2ii)
                                                                                                                                                                                                                                               Just l -> let 
                                                                                                                                                                                                                                                           mk = fromJust $ M.lookup l m1'
@@ -6464,7 +6467,7 @@ giveStarts tenv fenv optTailCall ftailrec mlocptsenv moldenv ty e = do
     PackedTy _ loc -> do
                       if optTailCall
                       then case M.lookup loc moldenv of 
-                                        Nothing -> error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
+                                        Nothing -> return e --error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
                                         Just (oldv, oldl, _, _) -> let locName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy loc)
                                                                        locTy = M.lookup locName tenv 
                                                                      in case ftailrec of
