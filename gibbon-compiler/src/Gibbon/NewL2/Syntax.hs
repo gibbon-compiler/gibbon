@@ -645,3 +645,9 @@ allFreeVars ex =
 
 freeLocVars :: Exp2 -> [LocVar]
 freeLocVars ex = L.map getLocVarFromFreeVarsTy (S.toList $ (allFreeVars ex))
+
+
+
+-- Vidush: I need to make a function that checks wheather a variable is dead or not.
+-- In case a addCursor operation is dead code, we should not do a side-effect of bumping 
+-- a mutable cursor for it.
