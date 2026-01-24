@@ -750,7 +750,7 @@ isLocAlive loc exp accum = case exp of
                                                                                    else False
                                                 Old.SSPush _ _a _b _ -> accum 
                                                 Old.SSPop _ _a _b -> accum
-                                                Old.LetRegE {} -> error "allFreeVars: LetRegE not handled"
+                                                Old.LetRegE _ _ bod -> isLocAlive loc bod accum 
                                                 Old.BoundsCheckVector {} -> error "allFreeVars: BoundsCheckVector not handled"
 
                                 _ -> accum  
