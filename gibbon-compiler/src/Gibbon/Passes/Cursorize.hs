@@ -936,8 +936,6 @@ cursorizeExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv 
             Just (MkTy2 ty) -> ty
             Nothing -> error "unpackDataCon: unexpected location variable"
       dcon_var <- gensym "dcon"
-      let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-      let dcon_let_bind = mkLets dcon_let
       -- Vidush: 
       -- We need to check if the scrutinee variable is a mutable variable.
       let scrutMutable = checkIfVarIsMutable v m1
@@ -978,10 +976,31 @@ cursorizeExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv 
                                     <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
                        dbgTrace (minChatLvl) "Print in MutCursorCase: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing MutCursorCase.\n" return (case_expr, freeVarToVarEnv, m1', m2')
         CursorArrayTy {} -> do
+          -- check if v points to any mutable location
+          let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+          (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
+                                                            Nothing -> do 
+                                                                       let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                            Just ml -> do
+                                                                        dcon_var_deref <- gensym "deref_dcon_var"
+                                                                        let dcon_loc = getDconLoc ml
+                                                                        let (dcon_loc_name, freeVarToVarEnv_i) = if M.member (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv' 
+                                                                                                                 then (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy dcon_loc), freeVarToVarEnv')
+                                                                                                                 else case dcon_loc of 
+                                                                                                                        Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
+                                                                                                                        SoA{} -> error "Did not expect SoA location for data constructor region!\n"
+                                                                        let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
+                                                                        let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+          --let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+          let dcon_let_bind = mkLets dcon_let
           case_expr <- dcon_let_bind
-            <$> CaseE (VarE $ dcon_var)
-            <$> mapM (unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
-          dbgTrace (minChatLvl) "Print in CursorArrayTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing CursorArrayTy.\n" return (case_expr, freeVarToVarEnv', m1, m2)
+            <$> CaseE (VarE $ dcon_var')
+            <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
+          dbgTrace (minChatLvl) "Print in CursorArrayTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing CursorArrayTy.\n" return (case_expr, freeVarToVarEnv'', m1', m2')
         PackedTy _ scrutLoc -> case scrutLoc of
           Single _ -> do
             case_expr <- CaseE (VarE $ v)
@@ -989,10 +1008,30 @@ cursorizeExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv 
             dbgTrace (minChatLvl) "Print in PackedTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing PackedTy Single.\n" return (case_expr, freeVarToVarEnv', m1, m2)
 
           SoA _ _ -> do
+            -- check if v points to any mutable location
+            let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+            (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
+                                                            Nothing -> do 
+                                                                       let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                            Just ml -> do
+                                                                        dcon_var_deref <- gensym "deref_dcon_var"
+                                                                        let dcon_loc = getDconLoc ml
+                                                                        let (dcon_loc_name, freeVarToVarEnv_i) = if M.member (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv' 
+                                                                                                                 then (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy dcon_loc), freeVarToVarEnv')
+                                                                                                                 else case dcon_loc of 
+                                                                                                                        Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
+                                                                                                                        SoA{} -> error "Did not expect SoA location for data constructor region!\n"
+                                                                        let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
+                                                                        let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+            let dcon_let_bind = mkLets dcon_let
             case_expr <- dcon_let_bind
-              <$> CaseE (VarE $ dcon_var)
-              <$> mapM (unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
-            dbgTrace (minChatLvl) "Print in PackedTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing PackedTy SoA.\n" return (case_expr, freeVarToVarEnv', m1, m2)
+              <$> CaseE (VarE $ dcon_var')
+              <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
+            dbgTrace (minChatLvl) "Print in PackedTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing PackedTy SoA.\n" return (case_expr, freeVarToVarEnv'', m1', m2')
         
         _ -> do
           case_expr <- CaseE (VarE $ v)
@@ -1132,7 +1171,9 @@ cursorizeExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv senv 
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> do 
                      (bod', env, m1'', m2'') <- cursorizeExp m1' m2' optTailCall freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
-                     return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
+                     if M.member loc m1 
+                     then return (mkLets (bnds' ++ bnds_after ++ bnds) bod', env, m1'', m2'')
+                     else return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
             Left denv' -> cursorizeExp m1' m2' optTailCall freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
@@ -1630,8 +1671,6 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
             Just (MkTy2 ty) -> ty
             Nothing -> error "unpackDataCon: unexpected location variable"
       dcon_var <- gensym "dcon"
-      let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-      let dcon_let_bind = mkLets dcon_let
       let scrutMutable = checkIfVarIsMutable v m1
       {-VS: TODO: get location of scrutinee, send it to unpack data con. Get the L2 location!!!-}
       -- Don't think we need this for now.
@@ -1671,13 +1710,34 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
                                   <*> return m1'
                                   <*> return m2'
         
-        CursorArrayTy {} -> (,,,) <$> dl
-            <$> dcon_let_bind
-            <$> CaseE (VarE $ dcon_var)
-            <$> mapM (unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
-            <*> return freeVarToVarEnv 
-            <*> return m1 
-            <*> return m2
+        CursorArrayTy {} -> do
+            -- check if v points to any mutable location
+            let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+            (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
+                                                            Nothing -> do 
+                                                                       let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                            Just ml -> do
+                                                                        dcon_var_deref <- gensym "deref_dcon_var"
+                                                                        let dcon_loc = getDconLoc ml
+                                                                        let (dcon_loc_name, freeVarToVarEnv_i) = if M.member (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv' 
+                                                                                                                 then (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy dcon_loc), freeVarToVarEnv')
+                                                                                                                 else case dcon_loc of 
+                                                                                                                        Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
+                                                                                                                        SoA{} -> error "Did not expect SoA location for data constructor region!\n"
+                                                                        let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
+                                                                        let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+            let dcon_let_bind = mkLets dcon_let
+            (,,,) <$> dl
+              <$> dcon_let_bind
+              <$> CaseE (VarE $ dcon_var')
+              <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
+              <*> return freeVarToVarEnv'' 
+              <*> return m1' 
+              <*> return m2'
         
         PackedTy _ scrutLoc -> case scrutLoc of
           Single _ -> (,,,) <$> dl
@@ -1687,14 +1747,34 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
                       <*> return m1
                       <*> return m2
           
-          SoA _ _ ->
+          SoA _ _ -> do
+              -- check if v points to any mutable location
+              let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+              (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
+                                                            Nothing -> do 
+                                                                       let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                            Just ml -> do
+                                                                        dcon_var_deref <- gensym "deref_dcon_var"
+                                                                        let dcon_loc = getDconLoc ml
+                                                                        let (dcon_loc_name, freeVarToVarEnv_i) = if M.member (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv' 
+                                                                                                                 then (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy dcon_loc), freeVarToVarEnv')
+                                                                                                                 else case dcon_loc of 
+                                                                                                                        Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
+                                                                                                                        SoA{} -> error "Did not expect SoA location for data constructor region!\n"
+                                                                        let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
+                                                                        let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+              let dcon_let_bind = mkLets dcon_let
               (,,,) <$> dl
-              <$> dcon_let_bind
-              <$> CaseE (VarE $ dcon_var)
-              <$> mapM (unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
-              <*> return freeVarToVarEnv
-              <*> return m1
-              <*> return m2
+                <$> dcon_let_bind
+                <$> CaseE (VarE $ dcon_var')
+                <$> mapM (unpackDataCon m1' m2' optTailCall dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
+                <*> return freeVarToVarEnv''
+                <*> return m1'
+                <*> return m2'
 
         _ ->
             (,,,) <$> dl
@@ -2313,7 +2393,11 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
                 _ ->
                   do 
                   (bod', freeVarToVarEnv'', m1'', m2'') <- go m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
-                  return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
+                  -- if loc is dead we may just want to remove it completey from the code
+                  -- onDi (mkLets (bnds' ++ bnds_after ++ bnds))
+                  if (M.member loc m1 || (not $ isLocAlive loc bod False))
+                  then return (bod', freeVarToVarEnv'', m1'', m2'')
+                  else return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
 
             Left denv' -> do
               (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1extended m2' optTailCall freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
@@ -5160,15 +5244,30 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                                       else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                                   -- v is the variable i want to send to the call.
                                   -- In this case v is the soa variable where all redirections are unpacked.
-                                  binds =
-                                    [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
-                                      (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                                      ((loc_var), [], CursorTy, VarE dcur),
-                                      (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
-                                      (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
-                                      (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
-                                      (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
-                                    ]
+
+                                  -- Vidush: We need to update the mutable env accordingly here.
+                                  mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1
+                                  (binds, m1d) = case mut_loc_pointing_to_dcur of 
+                                                      Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                   (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                   ((loc_var), [], CursorTy, VarE dcur),
+                                                                   (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
+                                                                   (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                   (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
+                                                                   (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
+                                                                 ], m1)
+                                                      Just l -> let
+                                                                 lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
+                                                                 m1' = updateMutableLocPtsToEnv l m1 (redirection_var_dcon, Just l, Nothing, S.empty) False
+                                                                 in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                   (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                   ((loc_var), [], CursorTy, VarE dcur),
+                                                                   (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
+                                                                   ("_", [], ProdTy [], Ext $ WriteCursorMutable lName (VarE redirection_var_dcon)),
+                                                                   (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                   (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
+                                                                   (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
+                                                                  ], m1')
 
                                   -- generate binds for all fields.
                                   (_, binds_flields, m1', m2') =
@@ -5234,7 +5333,7 @@ unpackDataCon m1 m2 optTailCall dcon_var freeVarToVarEnv lenv ddfs fundefs denv1
                                                                         rst -> error $ "Did not expect multiple variables for type " ++ show ty_of_field
                                                    in (index + L.length (redir_vars), res ++ new_binds, m1out, m2i)
                                       )
-                                      (0, [], m1, m2)
+                                      (0, [], m1d, m2)
                                       res
                                   -- Vidush : TODO this needs to change since type changed
                                   soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
