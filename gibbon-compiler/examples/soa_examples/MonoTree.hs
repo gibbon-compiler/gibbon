@@ -33,7 +33,7 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = let 
-                tree = (mkTree 23 0) 
+                tree = (mkTree 20 0) 
                 tree' =  iterate (add1Tree tree)
                 val = (sumTree tree') 
                in val
