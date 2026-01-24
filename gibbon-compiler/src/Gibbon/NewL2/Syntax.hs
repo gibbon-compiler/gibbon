@@ -654,10 +654,10 @@ freeLocVars ex = L.map getLocVarFromFreeVarsTy (S.toList $ (allFreeVars ex))
 isLocAlive :: LocVar -> Exp2 -> Bool -> Bool
 isLocAlive loc exp accum = case exp of 
                                 VarE{} -> accum
-                                LetE (_v,locs,_,rhs) bod -> let check = isLocAliveHelperList loc locs
-                                                                checkRhs = isLocAlive loc rhs check
-                                                                isAliveBod = isLocAlive loc bod checkRhs
-                                                              in isAliveBod
+                                LetE (_,locs,_,rhs) bod -> let check = isLocAliveHelperList loc locs
+                                                               checkRhs = isLocAlive loc rhs accum
+                                                               isAliveBod = isLocAlive loc bod accum
+                                                              in (check || checkRhs || isAliveBod)
                                 LitE{}    -> accum
                                 CharE{}  -> accum
                                 FloatE{}  -> accum
@@ -670,16 +670,16 @@ isLocAlive loc exp accum = case exp of
                                                        checkArgs' = foldr (\b a -> b || a) False checkArgs
                                                      in checkArgs'
                                 IfE a b c  -> let checkA = isLocAlive loc a accum
-                                                  checkB = isLocAlive loc b checkA 
-                                                  checkC = isLocAlive loc c checkB
-                                               in checkC
+                                                  checkB = isLocAlive loc b accum 
+                                                  checkC = isLocAlive loc c accum
+                                               in (checkA || checkB || checkC)
                                 MkProdE ls -> let checkLs = map (\e -> isLocAlive loc e accum) ls
                                                   checkLs' = foldr (\b a -> b || a) False checkLs
                                                 in checkLs' 
                                 ProjE _ e  -> let checkE = isLocAlive loc e accum 
                                                in checkE
                                 -- assuming scrutinee is in ANF
-                                CaseE (VarE _v) mp ->
+                                CaseE _scrt mp ->
                                   L.foldr (\(_,vlocs,e) acc ->
                                             let (_vars,locs) = unzip vlocs
                                                 isLocUsedInLst = isLocAliveHelperList loc locs
@@ -707,13 +707,19 @@ isLocAlive loc exp accum = case exp of
                                 SyncE          -> accum
                                 MapE{}  -> accum
                                 FoldE{} -> accum
-                                Ext ext -> case ext of 
-                                                Old.RetE locs _ -> isLocAliveHelperList loc locs
+                                Ext ext -> case ext of
+                                                Old.BoundsCheckVector lst -> foldr (\(_, _r, l) a  -> let ll = toLocVar l 
+                                                                                                   in if ll == loc 
+                                                                                                      then True || a 
+                                                                                                      else a
+                                                                                   ) accum lst
+                                                Old.RetE locs _ -> isLocAliveHelperList loc locs || accum
                                                 Old.LetRegionE _r _ _ _ bod -> isLocAlive loc bod accum
                                                 Old.LetParRegionE _r _ _ bod -> isLocAlive loc bod accum
-                                                Old.LetLocE _lc _locexp bod -> let 
+                                                Old.LetLocE _lc locexp bod -> let 
                                                                                 checkBod = isLocAlive loc bod accum
-                                                                               in checkBod
+                                                                                checkLocExp = checkLocUsedInLocExp loc locexp
+                                                                               in (checkBod || checkLocExp)
                                                 Old.StartOfPkdCursor _v -> accum
                                                 Old.TagCursor _a _b -> accum 
                                                 Old.FromEndE lc -> let lcl = toLocVar lc
@@ -750,16 +756,51 @@ isLocAlive loc exp accum = case exp of
                                                                                    else False
                                                 Old.SSPush _ _a _b _ -> accum 
                                                 Old.SSPop _ _a _b -> accum
-                                                Old.LetRegE _ _ bod -> isLocAlive loc bod accum 
-                                                Old.BoundsCheckVector {} -> error "allFreeVars: BoundsCheckVector not handled"
+                                                Old.LetRegE _ _ bod -> isLocAlive loc bod accum
 
-                                _ -> accum  
+                                -- _ -> accum  
+
+checkLocUsedInLocExp :: LocVar -> L2.PreLocExp LocArg -> Bool
+checkLocUsedInLocExp lc exp = case exp of
+                                  Old.StartOfRegionLE _r -> False  
+                                  Old.AfterConstantLE _ loc   -> let loc_l = toLocVar loc 
+                                                                  in if lc == loc_l 
+                                                                     then True
+                                                                     else False
+                                  Old.AfterVariableLE _v loc _ -> let loc_l = toLocVar loc 
+                                                                  in if lc == loc_l
+                                                                     then True
+                                                                     else False
+                                  Old.InRegionLE _r  -> False
+                                  Old.FromEndLE loc -> let loc_l = toLocVar loc 
+                                                        in if lc == loc_l 
+                                                           then True
+                                                           else False
+                                  Old.FreeLE -> False
+                                  Old.GenSoALoc dloc flocs -> let dloc_l = toLocVar dloc
+                                                                  flocs_l = map (\(_k, l) -> toLocVar l) flocs 
+                                                                in if dloc_l == lc || L.elem lc flocs_l
+                                                                   then True 
+                                                                   else False 
+                                  Old.GetDataConLocSoA parent -> let parent_l = toLocVar parent 
+                                                                  in if parent_l == lc 
+                                                                     then True 
+                                                                     else False
+                                  Old.GetFieldLocSoA _ parent -> let parent_l = toLocVar parent
+                                                                   in if parent_l == lc 
+                                                                      then True 
+                                                                      else False
+                                  Old.AssignLE loc -> let loc_l = toLocVar loc 
+                                                       in if loc_l == lc 
+                                                          then True 
+                                                          else False
+
 
 
 isLocAliveHelperList :: LocVar -> [LocArg] -> Bool
 isLocAliveHelperList lc lst = let used = foldr (\li ac -> let li' = toLocVar li 
                                                            in if li' == lc 
-                                                              then True
+                                                              then True || ac
                                                               else ac  
                                                ) False lst
                                in used
