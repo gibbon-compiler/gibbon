@@ -2395,7 +2395,8 @@ cursorizePackedExp m1 m2 optTailCall freeVarToVarEnv lenv ddfs fundefs denv tenv
                   (bod', freeVarToVarEnv'', m1'', m2'') <- go m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
                   -- if loc is dead we may just want to remove it completey from the code
                   -- onDi (mkLets (bnds' ++ bnds_after ++ bnds))
-                  if (M.member loc m1 || (not $ isLocAlive loc bod False))
+                  -- || (not $ isLocAlive loc bod False)
+                  if (M.member loc m1 )
                   then return (bod', freeVarToVarEnv'', m1'', m2'')
                   else return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
 
