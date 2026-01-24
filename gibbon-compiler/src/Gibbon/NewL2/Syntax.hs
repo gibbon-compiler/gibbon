@@ -26,7 +26,7 @@ module Gibbon.NewL2.Syntax
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
-    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar, genSymRegVar
+    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar, genSymRegVar, isLocAlive
 
     , module Gibbon.Language
     )
@@ -651,3 +651,115 @@ freeLocVars ex = L.map getLocVarFromFreeVarsTy (S.toList $ (allFreeVars ex))
 -- Vidush: I need to make a function that checks wheather a variable is dead or not.
 -- In case a addCursor operation is dead code, we should not do a side-effect of bumping 
 -- a mutable cursor for it.
+isLocAlive :: LocVar -> Exp2 -> Bool -> Bool
+isLocAlive loc exp accum = case exp of 
+                                VarE{} -> accum
+                                LetE (_v,locs,_,rhs) bod -> let check = isLocAliveHelperList loc locs
+                                                                checkRhs = isLocAlive loc rhs check
+                                                                isAliveBod = isLocAlive loc bod checkRhs
+                                                              in isAliveBod
+                                LitE{}    -> accum
+                                CharE{}  -> accum
+                                FloatE{}  -> accum
+                                LitSymE{} -> accum
+                                AppE _ _ locs args -> let checkArgs = map (\e -> isLocAlive loc e accum) args
+                                                          checkArgs' = foldr (\b a -> b || a) False checkArgs
+                                                          checkLocs = isLocAliveHelperList loc locs 
+                                                        in checkArgs' || checkLocs    
+                                PrimAppE _ args -> let checkArgs = map (\e -> isLocAlive loc e accum) args
+                                                       checkArgs' = foldr (\b a -> b || a) False checkArgs
+                                                     in checkArgs'
+                                IfE a b c  -> let checkA = isLocAlive loc a accum
+                                                  checkB = isLocAlive loc b checkA 
+                                                  checkC = isLocAlive loc c checkB
+                                               in checkC
+                                MkProdE ls -> let checkLs = map (\e -> isLocAlive loc e accum) ls
+                                                  checkLs' = foldr (\b a -> b || a) False checkLs
+                                                in checkLs' 
+                                ProjE _ e  -> let checkE = isLocAlive loc e accum 
+                                               in checkE
+                                -- assuming scrutinee is in ANF
+                                CaseE (VarE _v) mp ->
+                                  L.foldr (\(_,vlocs,e) acc ->
+                                            let (_vars,locs) = unzip vlocs
+                                                isLocUsedInLst = isLocAliveHelperList loc locs
+                                                checkE = isLocAlive loc e (acc || isLocUsedInLst)
+                                             in checkE
+                                          )
+                                          accum
+                                          mp
+                                DataConE dl _ args -> let locFromLocArg = toLocVar dl
+                                                          checkDconLoc = if loc == locFromLocArg 
+                                                                         then True 
+                                                                         else False
+                                                          argsCheck = map (\a -> isLocAlive loc a accum) args
+                                                          argsCheck' = foldr (\b a -> b || a) False argsCheck 
+                                                        in (checkDconLoc || argsCheck')
+                                TimeIt e _ _ -> let checkE = isLocAlive loc e accum 
+                                                 in checkE
+                                WithArenaE _ e -> let checkE = isLocAlive loc e accum 
+                                                   in checkE
+                                SpawnE _ lst ls  -> let 
+                                                      isLocUsedInLst = isLocAliveHelperList loc lst
+                                                      checkLS = map (\a -> isLocAlive loc a accum) ls 
+                                                      checkLS' = foldr (\b a -> b || a) False checkLS
+                                                     in (checkLS' || isLocUsedInLst)
+                                SyncE          -> accum
+                                MapE{}  -> accum
+                                FoldE{} -> accum
+                                Ext ext -> case ext of 
+                                                Old.RetE locs _ -> isLocAliveHelperList loc locs
+                                                Old.LetRegionE _r _ _ _ bod -> isLocAlive loc bod accum
+                                                Old.LetParRegionE _r _ _ bod -> isLocAlive loc bod accum
+                                                Old.LetLocE _lc _locexp bod -> let 
+                                                                                checkBod = isLocAlive loc bod accum
+                                                                               in checkBod
+                                                Old.StartOfPkdCursor _v -> accum
+                                                Old.TagCursor _a _b -> accum 
+                                                Old.FromEndE lc -> let lcl = toLocVar lc
+                                                                       checkLC = if lcl == loc 
+                                                                                 then True 
+                                                                                 else False
+                                                                     in (accum || checkLC)
+                                                Old.BoundsCheck _ _reg cur -> let curLoc = toLocVar cur 
+                                                                                  curCheck = if curLoc == loc 
+                                                                                            then True
+                                                                                            else False
+                                                                               in (accum || curCheck)
+                                                Old.IndirectionE _ _ (a,b) (c,d) e -> let 
+                                                                                        la = toLocVar a 
+                                                                                        lb = toLocVar b 
+                                                                                        lc = toLocVar c 
+                                                                                        ld = toLocVar d 
+                                                                                        checkA = if la == loc then True else False
+                                                                                        checkB = if lb == loc then True else False
+                                                                                        checkC = if lc == loc then True else False
+                                                                                        checkD = if ld == loc then True else False
+                                                                                        checkE = isLocAlive loc e accum 
+                                                                                      in (checkA || checkB || checkC || checkD || checkE)
+                                                Old.AddFixed _v _    -> accum
+                                                Old.GetCilkWorkerNum-> accum
+                                                Old.LetAvail _vs _bod -> accum
+                                                Old.AllocateTagHere lct _ -> let lct'= toLocVar lct 
+                                                                               in if lct' == loc 
+                                                                                  then True 
+                                                                                  else False 
+                                                Old.AllocateScalarsHere lct -> let lct' = toLocVar lct 
+                                                                                in if lct' == loc 
+                                                                                   then True 
+                                                                                   else False
+                                                Old.SSPush _ _a _b _ -> accum 
+                                                Old.SSPop _ _a _b -> accum
+                                                Old.LetRegE {} -> error "allFreeVars: LetRegE not handled"
+                                                Old.BoundsCheckVector {} -> error "allFreeVars: BoundsCheckVector not handled"
+
+                                _ -> accum  
+
+
+isLocAliveHelperList :: LocVar -> [LocArg] -> Bool
+isLocAliveHelperList lc lst = let used = foldr (\li ac -> let li' = toLocVar li 
+                                                           in if li' == lc 
+                                                              then True
+                                                              else ac  
+                                               ) False lst
+                               in used
