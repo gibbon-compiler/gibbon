@@ -3698,7 +3698,7 @@ cursorizeAppE m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs d
                                         case mut_loc of 
                                               Nothing -> do  
                                                          (a', _, _, _) <- cursorizePackedExp m1 m2 optTailCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
-                                                         dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args)) dbgTrace (minChatLvl) "End printing in AppE 1.\n" fromDi <$> return a'
+                                                         dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" fromDi <$> return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
                                                          (a', _, _, _) <- cursorizePackedExp m1 m2 optTailCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
@@ -3708,7 +3708,7 @@ cursorizeAppE m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs d
                                         case mut_loc of 
                                               Nothing -> do  
                                                          (a', _, _, _) <- cursorizeExp m1 m2 optTailCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
-                                                         dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args)) dbgTrace (minChatLvl) "End printing in AppE 1.\n" return a'
+                                                         dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
                                                          (a', _, _, _) <- cursorizeExp m1 m2 optTailCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
@@ -3761,28 +3761,54 @@ cursorizeAppE m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs d
                                                                                   return $ (bnds, args ++ [VarE mlName])
 
                                                                  
-                                                      Just Input -> do 
-                                                                     let varName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
-                                                                         mut_l_pointing_to_cur = dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End print in AppE Just Input arg.\n" findMutableLocationPointingToVar varName m1
-                                                                     case mut_l_pointing_to_cur of 
-                                                                                Just ml -> let (rvar,_,_,_) = fromJust $ M.lookup ml m1
-                                                                                             in dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc, rvar)) dbgTrace (minChatLvl) "End print in AppE Just Input Just ml arg.\n" return $ (bnds, args ++ [VarE rvar])
-                                                                                Nothing -> do 
-                                                                                            case M.lookup varName tenv of 
-                                                                                                            Nothing -> dbgTrace (minChatLvl) "Print in Nothing case curAppE:  " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End in Nothing case curAppE." return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
-                                                                                                            Just ty -> dbgTrace (minChatLvl) "Print in Just ty case curAppE:  " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End in Just ty case curAppE." do 
-                                                                                                                        case (unTy2 ty) of 
-                                                                                                                              MutCursorTy -> do 
-                                                                                                                                              deref <- gensym "deref"
-                                                                                                                                              let derefInst = [(deref, [], CursorTy, Ext $ DerefMutCursor varName)]
-                                                                                                                                              return (bnds ++ derefInst, args ++ [VarE deref])
-                                                                                                                              CursorArrayTy{} -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]                 
-                                                                                                                              CursorTy -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                      Just Input -> do
+                                                                    case optTailCallStarts of 
+                                                                             True -> do  
+                                                                                      let varName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
+                                                                                          mut_l_pointing_to_cur = dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End print in AppE Just Input arg.\n" findMutableLocationPointingToVar varName m1
+                                                                                      case mut_l_pointing_to_cur of 
+                                                                                                  Just ml -> let (rvar,_,_,_) = fromJust $ M.lookup ml m1
+                                                                                                              in dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc, rvar)) dbgTrace (minChatLvl) "End print in AppE Just Input Just ml arg.\n" return $ (bnds, args ++ [VarE rvar])
+                                                                                                  Nothing -> do 
+                                                                                                              case M.lookup varName tenv of 
+                                                                                                                              Nothing -> dbgTrace (minChatLvl) "Print in Nothing case curAppE:  " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End in Nothing case curAppE." return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                                                                                              Just ty -> dbgTrace (minChatLvl) "Print in Just ty case curAppE:  " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End in Just ty case curAppE." do 
+                                                                                                                                          case (unTy2 ty) of 
+                                                                                                                                                MutCursorTy -> do 
+                                                                                                                                                                deref <- gensym "deref"
+                                                                                                                                                                let derefInst = [(deref, [], CursorTy, Ext $ DerefMutCursor varName)]
+                                                                                                                                                                return (bnds ++ derefInst, args ++ [VarE deref])
+                                                                                                                                                CursorArrayTy{} -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]                 
+                                                                                                                                                CursorTy -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                                             False -> do
+                                                                                       let varName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
+                                                                                       case M.lookup varName tenv of
+                                                                                              Nothing -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                                                              Just ty -> case (unTy2 ty) of 
+                                                                                                              MutCursorTy -> do
+                                                                                                                              deref <- gensym "deref"
+                                                                                                                              let derefInst = [(deref, [], CursorTy, Ext $ DerefMutCursor varName)]
+                                                                                                                              return (bnds ++ derefInst, args ++ [VarE deref])
+                                                                                                              CursorTy -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                                                                              _ -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+
                                                       Just _ -> do
                                                                  let loc_name = dbgTrace (minChatLvl) "Print in Just _ case: " dbgTrace (minChatLvl) (sdoc (mutl, loc)) dbgTrace (minChatLvl) "End in Just _ case." (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))
                                                                      mut_l_pointing_to_cur = findMutableLocationPointingToVar loc_name m1 
                                                                   in case  mut_l_pointing_to_cur of 
-                                                                                Nothing -> return $ (bnds, args ++ [VarE loc_name]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]
+                                                                                Nothing -> let ty_locName = M.lookup loc_name tenv
+                                                                                             in case ty_locName of 
+                                                                                                        Nothing -> return $ (bnds, args ++ [VarE loc_name]) 
+                                                                                                        Just ty -> case (unTy2 ty) of 
+                                                                                                                        CursorTy -> do
+                                                                                                                                     if isMutModality' (getModality loc)
+                                                                                                                                     then do
+                                                                                                                                      address <- gensym "address"
+                                                                                                                                      let address_bnd = [(address, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_name))]
+                                                                                                                                      return $ (bnds, args ++ [mkLets address_bnd $ VarE address])
+                                                                                                                                     else do return $ (bnds, args ++ [VarE loc_name])
+                                                                                                                        MutCursorTy -> return $ (bnds, args ++ [VarE loc_name]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]
+                                                                                                                        _ -> return $ (bnds, args ++ [VarE loc_name])
                                                                                 Just mutl' -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy mutl'))])
                                                         
                                                         
@@ -4287,8 +4313,10 @@ cursorizeLet m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv isPackedContext
                                                                                                 -- TODO, i might need to implement other cases here??
                                                                                                 EndOfReg r m er -> if m == Output
                                                                                                                    then case regVarLoc of
-                                                                                                                       SingleR{} -> (lbndsi ++ [(loc_to_variable, [], varNameTy, VarE varNameReg)], m1i, m2i)
-                                                                                                                       SoARv{} ->  (lbndsi ++ [(loc_to_variable, [], cursor_ty, VarE varNameReg)], m1i, m2i)
+                                                                                                                       SingleR{} -> case varNameTy of 
+                                                                                                                                            CursorTy -> (lbndsi ++ [(loc_to_variable, [], cursor_ty, VarE varNameReg)], m1i, m2i) 
+                                                                                                                                            MutCursorTy -> (lbndsi ++ [(loc_to_variable, [], cursor_ty, Ext $ DerefMutCursor varNameReg)], m1i, m2i) 
+                                                                                                                       SoARv{} -> (lbndsi ++ [(loc_to_variable, [], cursor_ty, VarE varNameReg)], m1i, m2i)
                                                                                                                    -- We need to find output locations that belong to this region.
                                                                                                                    else if (m == OutputMutable)
                                                                                                                     -- We need to check which one is an output location
@@ -4322,7 +4350,7 @@ cursorizeLet m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv isPackedContext
                                                                                                                                                              EndWitness lrem _ -> let mlrem = lremMode lrem 
                                                                                                                                                                                     in case mlrem of 
                                                                                                                                                                                               InputMutable -> let 
-                                                                                                                                                                                                                end = lremEndReg lrem
+                                                                                                                                                                                                                end = lremReg lrem
                                                                                                                                                                                                                 endName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy end)
                                                                                                                                                                                                                 mut_loc_lc = findMutableLocationPointingToVar endName m1'
                                                                                                                                                                                                                 loc = toLocVar locarg
@@ -4460,8 +4488,8 @@ cursorizeLet m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv isPackedContext
                                                                                                                                                                                 EndWitness lrem _ -> let mlrem = lremMode lrem 
                                                                                                                                                                                                         in case mlrem of 
                                                                                                                                                                                                                   InputMutable -> let 
-                                                                                                                                                                                                                                    end = lremEndReg lrem
                                                                                                                                                                                                                                     reg = lremReg lrem
+                                                                                                                                                                                                                                    end =  toEndVRegVar reg
                                                                                                                                                                                                                                     endName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy end)
                                                                                                                                                                                                                                     regName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
                                                                                                                                                                                                                                     mut_loc_lc = findMutableLocationPointingToVar regName m1'
@@ -6682,12 +6710,12 @@ unpackDataCon m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarEnv lenv ddfs 
       return (tenv', binds ++ binds', m1', m2)
 
 giveStarts :: TyEnv Var Ty2 -> M.Map FreeVarsTy Var -> Bool -> Bool -> Bool -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> OldTy2 -> Exp3 -> PassM Exp3
-giveStarts tenv fenv optTailCall ftailrec isInsideTimeIt mlocptsenv moldenv ty e = do
+giveStarts tenv fenv optTailCall isInsideTimeIt ftailrec mlocptsenv moldenv ty e = do
   case ty of
     PackedTy _ loc -> do
                       if optTailCall
                       then case M.lookup loc moldenv of 
-                                        Nothing -> return e --error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
+                                        Nothing -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, e)) dbgTrace (minChatLvl) "End in give starts Packed Nothing!\n" return e --error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
                                         Just (oldv, oldl, _, _) -> let locName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy loc)
                                                                        locTy = M.lookup locName tenv 
                                                                      in case ftailrec of
@@ -6709,7 +6737,7 @@ giveStarts tenv fenv optTailCall ftailrec isInsideTimeIt mlocptsenv moldenv ty e
                       else return $ mkProj 0 e
     -- NOTE : mkProj . MkProdE == id
     ProdTy tys -> do
-                  args <- mapM (\(ty', n) -> giveStarts tenv fenv optTailCall ftailrec isInsideTimeIt mlocptsenv moldenv ty' (mkProj n e)) (zip tys [0 ..])
+                  args <- mapM (\(ty', n) -> giveStarts tenv fenv optTailCall isInsideTimeIt ftailrec mlocptsenv moldenv ty' (mkProj n e)) (zip tys [0 ..])
                   return $ MkProdE args 
     CursorArrayTy{} -> case e of 
                           VarE v -> let mutloc = findMutableLocationPointingToVar v mlocptsenv
@@ -6720,13 +6748,13 @@ giveStarts tenv fenv optTailCall ftailrec isInsideTimeIt mlocptsenv moldenv ty e
                                                          return $ VarE mlVarName
                           _ -> return e  
     _ -> case e of 
-             VarE vv -> let mutl = findMutableLocationPointingToVar vv mlocptsenv
+             VarE vv -> let mutl = dbgTrace (minChatLvl) "Print in give starts VarE v case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts VarE v.\n" findMutableLocationPointingToVar vv mlocptsenv
                          in case mutl of 
                                 Nothing -> dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts rest of the case 1!\n" return e 
-                                Just ml -> let mlName = dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
-                                             in return $ VarE mlName
+                                Just ml -> let mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
+                                             in dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv, mlName)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" return $ VarE mlName
 
-             _ -> return e
+             _ -> dbgTrace (minChatLvl) "Print in give starts _ case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts wildcard v.\n" return e
 
 
 projValTy :: (Out a) => UrTy a -> UrTy a
