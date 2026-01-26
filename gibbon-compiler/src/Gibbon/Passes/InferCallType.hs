@@ -35,7 +35,9 @@ inferCallTypeFn :: NewL2.DDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
     dflags <- getDynFlags
     let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
-    let (funBody', _env, _tailTy) = inferCallTypeExp optimize_tail_calls funName M.empty funBody
+    let (funBody', _env, _tailTy) = if optimize_tail_calls 
+                                    then inferCallTypeExp optimize_tail_calls funName M.empty funBody
+                                    else (funBody, M.empty, Nothing)
         --(ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
         -- locVars' =
         --     P.map
@@ -51,7 +53,12 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                         Just TailCall -> TailRec 
                         Just TailModuloCons -> TailRec 
                         _ -> funRec
-        funMeta' = meta{funRec=funRec'}
+        funRecInferredTail = case funRec' of 
+                                    TailRec -> True
+                                    _ -> False
+        funMeta' = if optimize_tail_calls 
+                   then meta{funRec=funRec'}
+                   else meta
     let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
     -- Vidush: For now we only want to do this optimization for tail recursive functions.
     -- Even for SoA regions, we only do this for tail recursive functions.
@@ -80,7 +87,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                                        R r -> accum ++ (map R (regsInRegVar r))
                                                        V{} -> error "Did not expect variable to be updates for modality!!"
                                     ) needs_update needs_update
-        funBody'' = if optimize_tail_calls then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
+        funBody'' = if (optimize_tail_calls && funRecInferredTail) then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
 
 
         -- If a function is identified to be tailRecursive
@@ -95,7 +102,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
         -- 1.) We make all inputs/outputs mutable and try to make the function 
         -- return void.
     --funBody''' <- copyOutputMutableBeforeCallsAndReplace funBody''
-    dbgTrace minChatLvl "Print tail call type!" dbgTrace minChatLvl (sdoc (funName, _tailTy)) dbgTrace minChatLvl "End tail call type!" return $ FunDef funName funArgs funTy' funBody'' funMeta'
+    dbgTrace minChatLvl "Print tail call type!" dbgTrace minChatLvl (sdoc (funName, _tailTy, _env)) dbgTrace minChatLvl "End tail call type!" return $ FunDef funName funArgs funTy' funBody'' funMeta'
 
 --  if tailCallTy == TMC
 --  then
@@ -147,8 +154,10 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                                                                                     Loc (LREM l r e m) -> if m == Output 
                                                                                                  then (newlocs ++ [Loc $ LREM l r e OutputMutable], S.insert loc mutlocsenv)
                                                                                                  else (newlocs ++ [Loc $ LREM l r e m], mutlocsenv)
-                                                                                    EndOfReg r m er -> if m == Output 
+                                                                                    EndOfReg r m er -> if m == Output
                                                                                                        then (newlocs ++ [EndOfReg r OutputMutable er], S.insert loc mutlocsenv)
+                                                                                                       else if m == Input 
+                                                                                                       then (newlocs ++ [EndOfReg r InputMutable er], S.insert loc mutlocsenv)
                                                                                                        else (newlocs ++ [loc], mutlocsenv)
                                                                                     _ -> (newlocs ++ [loc], mutlocsenv)                                                                
                                                                                 ) ([], mutenv) locs
@@ -433,15 +442,27 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                     brs
             brs' = P.map fst3 results
             env'' = M.unionsWith unionMapLambda $ P.map snd3 results
-            tailTy = case P.map thd3 results of 
-                                [] -> Nothing
-                                lst -> let lst' = concatMap (\l -> case l of 
-                                                                  Nothing -> []
-                                                                  Just x -> [x]
-                                                             ) lst 
-                                        in case lst' of 
-                                                 [] -> Nothing 
-                                                 _ -> Just $ P.maximum lst'
+            -- tailTy = case P.map thd3 results of 
+            --                     [] -> Nothing
+            --                     lst -> let lst' = concatMap (\l -> case l of 
+            --                                                       Nothing -> []
+            --                                                       Just x -> [x]
+            --                                                  ) lst 
+            --                             in case lst' of 
+            --                                      [] -> Nothing 
+            --                                      _ -> Just $ P.maximum lst'
+            tailTy = foldr (\(_, _, c) acc -> case c of 
+                                                 Nothing -> acc
+                                                 Just cty -> case acc of 
+                                                                 Nothing -> Nothing 
+                                                                 Just cty' -> case cty of 
+                                                                                UnknownTailType -> Just UnknownTailType
+                                                                                NotTailRec -> Just NotTailRec
+                                                                                TailCall -> if cty' > cty 
+                                                                                            then Just cty'
+                                                                                            else Just cty
+                                                                                TailModuloCons -> Just cty
+                           ) (Just TailModuloCons) results
          in (CaseE scrt brs', env'', tailTy)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     DataConE loc c args ->
