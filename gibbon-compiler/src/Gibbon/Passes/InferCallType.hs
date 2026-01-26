@@ -53,7 +53,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                         Just TailCall -> TailRec 
                         Just TailModuloCons -> TailRec 
                         _ -> funRec
-        funRecInferredTail = case funRec' of 
+        _funRecInferredTail = case funRec' of 
                                     TailRec -> True
                                     _ -> False
         funMeta' = if optimize_tail_calls 
@@ -67,13 +67,15 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                                          (\lrm@(LRM l r m) (lvs, lcs) -> case (l, m) of
                                                                                             (Single{}, Input) -> if funRec' == TailRec
                                                                                                                  then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
-                                                                                                                 else (lvs ++ [LRM l r Input], lcs)
+                                                                                                                 -- Vidush: For functions that are not tail recursive, we still want to make Inputs Mutable
+                                                                                                                 else (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             (Single{}, Output) -> if funRec' == TailRec 
                                                                                                                   then (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                                                   else (lvs ++ [LRM l r Output], lcs) 
                                                                                             (SoA{}, Input) -> if funRec' == TailRec  
                                                                                                               then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
-                                                                                                              else (lvs ++ [LRM l r Input], lcs)
+                                                                                                              -- Vidush: For functions that are not tail recursive, we still want to make Inputs Mutable
+                                                                                                              else (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             -- Vidush: We might only want to do this for tail recursive functions
                                                                                             (SoA{}, Output) -> (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             _ -> (lvs ++ [lrm], lcs) 
@@ -87,7 +89,8 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                                        R r -> accum ++ (map R (regsInRegVar r))
                                                        V{} -> error "Did not expect variable to be updates for modality!!"
                                     ) needs_update needs_update
-        funBody'' = if (optimize_tail_calls && funRecInferredTail) then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
+        -- (optimize_tail_calls && funRecInferredTail
+        funBody'' = if (optimize_tail_calls) then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
 
 
         -- If a function is identified to be tailRecursive

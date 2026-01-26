@@ -298,7 +298,8 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                             TailRec -> True 
                             _ -> False
   -- Vidush: This is true if we mush optimize the function for tail recursion.
-  let needOptTailCalls = userRequestedTailRec && isFunTailRec
+  -- && isFunTailRec
+  let needOptTailCalls = userRequestedTailRec
   let inLocs = inLocVars funTy
       inLocA = inLocArgs funTy
       outLocs = outLocVars funTy
