@@ -41,7 +41,7 @@ module Gibbon.Common
        , truePrinted, falsePrinted
 
        , getLocVarFromFreeVarsTy, getRegVarFromFreeVarsTy, getVarFromFreeVarsTy, fromVarToFreeVarsTy, fromLocVarToFreeVarsTy
-       , fromRegVarToFreeVarsTy, getDataConRegFromRegVar, getFieldRegFromRegVar
+       , fromRegVarToFreeVarsTy, getDataConRegFromRegVar, getFieldRegFromRegVar, getVarNameFromFreeVar, getVarNameFromFreeVar'
        --, fromLocVarToRegVar
        )
 where
@@ -645,6 +645,26 @@ getRegVarFromFreeVarsTy _ = error "getRegVarFromFreeVarsTy: unexpected case."
 getVarFromFreeVarsTy :: FreeVarsTy -> Var
 getVarFromFreeVarsTy (V var) = var
 getVarFromFreeVarsTy _ = error "getVarFromFreeVarsTy: unexpected case."
+
+getVarNameFromFreeVar :: HasCallStack => M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
+getVarNameFromFreeVar env fvar = case M.lookup fvar env of 
+                                        Nothing -> case fvar of 
+                                                         R l -> case l of 
+                                                                    SingleR rl -> rl 
+                                                                    _ -> error "Did not find variable name!\n"
+                                                         _ -> error "Did not find variable name!\n"
+                                        Just v -> v
+
+
+getVarNameFromFreeVar' :: M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
+getVarNameFromFreeVar' env fvar = case M.lookup fvar env of 
+                                        Nothing -> case fvar of 
+                                                         R l -> case l of 
+                                                                    SingleR rl -> rl 
+                                                                    _ -> ""
+                                                         _ -> ""
+                                        Just v -> v
+                                  
 
 fromVarToFreeVarsTy :: Var -> FreeVarsTy
 fromVarToFreeVarsTy v = V v

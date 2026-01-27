@@ -26,7 +26,6 @@ module Gibbon.L3.Syntax
   , getIndexPositionOfSoARegVar
   , linearizeLocVar
   , linearizeRegVar
-  , getVarNameFromFreeVar
   , isMutModality
   , isMutModality'
   , isInputModality
@@ -58,7 +57,6 @@ import           Gibbon.Common
 -- import qualified Gibbon.L2.Syntax               as L2
 import           Gibbon.Language                hiding (mapMExprs)
 import qualified Gibbon.NewL2.Syntax as L2
-import Data.Vector.Internal.Check (HasCallStack)
 import Gibbon.L2.Syntax (EndRegionModality)
 
 -------------------------------------------------------------------------------- 
@@ -153,16 +151,6 @@ data E3Ext loc dec =
   | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
     -- ^ Analogous to L2's extensions.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
-
-
-getVarNameFromFreeVar :: HasCallStack => M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
-getVarNameFromFreeVar env fvar = case M.lookup fvar env of 
-                                        Nothing -> case fvar of 
-                                                         R l -> case l of 
-                                                                    SingleR rl -> rl 
-                                                                    _ -> error "Did not find variable name!\n"
-                                                         _ -> error "Did not find variable name!\n"
-                                        Just v -> v
 
 isMutModality :: L2.Modality -> Bool 
 isMutModality modal = case modal of 
