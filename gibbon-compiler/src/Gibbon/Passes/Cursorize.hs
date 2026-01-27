@@ -3728,7 +3728,7 @@ cursorizeAppE m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs d
           (zip in_tys args)
       let optTailCallStarts = case funRec fmeta of 
                                       TailRec -> True 
-                                      _ -> False
+                                      _ -> True
       starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv optTailCall insideTimeIt optTailCallStarts m1 m2 ty arg) (zip (map unTy2 argTys) args')
       -- let loc_var = toLocVar loc
       -- let loc_to_variable = case (M.lookup (fromLocVarToFreeVarsTy loc_var) freeVarToVarEnv) of
@@ -4730,7 +4730,10 @@ cursorizeLet m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv isPackedContext
         _ -> do
           fresh <- gensym "tup_scalar"
           let rhs'' = VarE fresh
-              ty' = ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1 m2 optTailCall Nothing ty])
+              -- Vidush: TODO rename optTailCall to something like useMutableCursors... 
+              ty' = if optTailCall 
+                    then cursorizeTy freeVarToVarEnv' m1' m2' optTailCall Nothing ty
+                    else ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1 m2 optTailCall Nothing ty])
               -- We cannot resuse ty' here because TyEnv Ty2 and expresssions are
               -- tagged with different
               ty'' = stripTyLocs ty'
@@ -4747,20 +4750,38 @@ cursorizeLet m1 m2 optTailCall insideTimeIt freeVarToVarEnv lenv isPackedContext
                            in (loc_to_variable, MkTy2 cursorType)
                       )
                       locs
-              bnds =
-                [(fresh, [], ty'', rhs')]
-                  ++ map
-                    ( \(loc, n) ->
-                        let loc_var = fromLocArgToFreeVarsTy loc
-                            loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
-                              Just v -> v
-                              Nothing -> error "cursorizeLet: unexpected location variable"
-                            cursorType = cursor_ty_locs' !! n
-                         in (loc_to_variable, [], cursorType, ProjE n rhs'')
-                    )
-                    (zip locs [0 ..])
-                  ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) rhs'')]
-          (bod', freeVarToVarEnv'', m1', m2') <- go insideTimeIt m1 m2 (M.union freeVarToVarEnv' freeVarToVarEnv) tenv' bod
+          (bnds, m1b, m2b) <- if optTailCall
+                              then 
+                                   return ([(v, [], ty'', rhs')]
+                                     -- Vidush: TODO, we still need to handle the locs. 
+                                     -- Instead of getting them from the projection, we need to dereference 
+                                     -- the output mutable locations and regions in order to get them.
+                                     -- ++ map
+                                     --   ( \(loc, n) ->
+                                     --       let loc_var = fromLocArgToFreeVarsTy loc
+                                     --           loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
+                                     --             Just v -> v
+                                     --             Nothing -> error "cursorizeLet: unexpected location variable"
+                                     --           cursorType = cursor_ty_locs' !! n
+                                     --       in (loc_to_variable, [], cursorType, ProjE n rhs'')
+                                     --   )
+                                     --   (zip locs [0 ..])
+                                     -- ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) rhs'')]
+                                      , m1, m2)
+                                 else return ([(fresh, [], ty'', rhs')]
+                                      ++ map
+                                        ( \(loc, n) ->
+                                            let loc_var = fromLocArgToFreeVarsTy loc
+                                                loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
+                                                  Just v -> v
+                                                  Nothing -> error "cursorizeLet: unexpected location variable"
+                                                cursorType = cursor_ty_locs' !! n
+                                            in (loc_to_variable, [], cursorType, ProjE n rhs'')
+                                        )
+                                        (zip locs [0 ..])
+                                      ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) rhs'')]
+                                      , m1, m2)
+          (bod', freeVarToVarEnv'', m1', m2') <- go insideTimeIt m1b m2b (M.union freeVarToVarEnv' freeVarToVarEnv) tenv' bod
           return (mkLets bnds bod', freeVarToVarEnv'', m1', m2')
   where
     go intime m1g m2g fenv t x =

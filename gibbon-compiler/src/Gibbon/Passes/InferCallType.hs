@@ -144,8 +144,10 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                                 case fundef of 
                                         Nothing -> error "Expected function definition for function!"
                                         Just _f@FunDef{funTy, funMeta} -> do
-                                             let fnrecTy = funRec funMeta
-                                             if fnrecTy == TailRec
+                                             let _fnrecTy = funRec funMeta
+                                             -- We need a better way to define when we need to make certain locations mutable or not.
+                                             -- We don't want to drive this based on tail recursion anymore
+                                             if True --fnrecTy == TailRec
                                              -- we need to find change locs to be output mutable
                                              then 
                                                 do
