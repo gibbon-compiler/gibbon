@@ -214,8 +214,8 @@ mangle vars = toVar $ "mangle" ++ (L.foldr (\v acc -> acc ++ "_" ++ (fromVar v))
 -- (Int, Int) is the start and end locations of that field.
 -- Lots of operations on cursor might need to change in case we are using mutable cursors 
 -- For instance, MakeCusroArray may be irrelevant.
-handleIndexingSoACursors :: Maybe (Var, LocArg) -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> (LocVar, Var) -> (Int, Int) -> LocVar -> M.Map FreeVarsTy Var -> PassM (Var, M.Map FreeVarsTy Var, [(Var, [()], Ty3, Exp3)], MutableLocPtsToEnv, MutableLocOldValueEnv)
-handleIndexingSoACursors mbvarlarg m1 m2 forceMutable (arrLoc, arrName) (start, end) locvar var_env = do
+handleIndexingSoACursors :: TyEnv Var Ty2 -> Maybe (Var, LocArg) -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> (LocVar, Var) -> (Int, Int) -> LocVar -> M.Map FreeVarsTy Var -> PassM (Var, M.Map FreeVarsTy Var, [(Var, [()], Ty3, Exp3)], MutableLocPtsToEnv, MutableLocOldValueEnv, TyEnv Var Ty2)
+handleIndexingSoACursors tenv mbvarlarg m1 m2 forceMutable (arrLoc, arrName) (start, end) locvar var_env = do
                                            let par_var = case (M.lookup (fromLocVarToFreeVarsTy locvar) var_env) of 
                                                                           Just v -> v 
                                                                           Nothing -> case locvar of 
@@ -237,15 +237,17 @@ handleIndexingSoACursors mbvarlarg m1 m2 forceMutable (arrLoc, arrName) (start, 
                                                                                                                                       [(v, _, _, _)] -> v
                                                                                                                                       [] -> arrName
                                                                                                                   let m1' = updateMutableLocPtsToEnv arrLoc m1 (arrName, Just arrLoc, Nothing, S.fromList [arrLocNameInsideCase, arrLocNameInsideCase, deref_var]) True
-                                                                                                                  return (deref_var, var_env, [(arrName, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray par_var start)] ++ deref_bnd, m1', m2')
+                                                                                                                  let tenv' = M.insert arrName (MkTy2 MutCursorTy) tenv
+                                                                                                                  return (deref_var, var_env, [(arrName, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray par_var start)] ++ deref_bnd, m1', m2', tenv')
                                                                                  Nothing -> do
                                                                                               (m2', deref_bnd) <- updateMutableLocOldValueEnv arrLoc m2 (arrName, Just arrLoc, Nothing, S.empty) True
                                                                                               let deref_var = case deref_bnd of 
                                                                                                               [(v, _, _, _)] -> v
                                                                                                               [] -> arrName
                                                                                               let m1' = updateMutableLocPtsToEnv arrLoc m1 (arrName, Just arrLoc, Nothing, S.singleton deref_var) True
-                                                                                              return (deref_var, var_env, [(arrName, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray par_var start)] ++ deref_bnd, m1', m2')
-                                                                    False -> return (arrName, var_env, [(arrName, [], CursorTy, Ext $ IndexCursorArray par_var start)], m1, m2)
+                                                                                              let tenv' = M.insert arrName (MkTy2 MutCursorTy) tenv
+                                                                                              return (deref_var, var_env, [(arrName, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray par_var start)] ++ deref_bnd, m1', m2', tenv')
+                                                                    False -> return (arrName, var_env, [(arrName, [], CursorTy, Ext $ IndexCursorArray par_var start)], m1, m2, M.insert arrName (MkTy2 CursorTy) tenv)
                                                 SoA{} -> do
                                                          let linearized_locs = (linearizeLocVar locvar)
                                                          (vars, bnds, var_env') <- foldlM (\(v, b, env) (i, l) -> do
@@ -260,7 +262,7 @@ handleIndexingSoACursors mbvarlarg m1 m2 forceMutable (arrLoc, arrName) (start, 
                                                            
                                                                                     ) ([], [], var_env) (zip [start..end] (take (end - start) (drop start linearized_locs)) )
                                                          let make_cur_arr_let = [(arrName, [], getCursorizeTyFromLocVar Nothing forceMutable arrLoc, Ext $ MakeCursorArray (length vars) vars)]
-                                                         return (arrName, var_env, bnds ++ make_cur_arr_let, m1, m2)
+                                                         return (arrName, var_env, bnds ++ make_cur_arr_let, m1, m2, tenv)
 
 handleIndexingSoARegCursors :: Bool -> (RegVar, Var) -> (Int, Int) -> RegVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var, [(Var, [()], UrTy (), (PreExp E3Ext () (UrTy ())))])
 handleIndexingSoARegCursors forceMutable (arrLoc, arrName) (start, end) locvar var_env = do
@@ -2417,13 +2419,19 @@ cursorizePackedExp m1 m2 optTailCall insideTimeit freeVarToVarEnv lenv ddfs fund
                 -- Discharge bindings that were waiting on 'loc'.
                 _ ->
                   do 
-                  (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeit m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
+                  -- (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeit m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
                   -- if loc is dead we may just want to remove it completey from the code
                   -- onDi (mkLets (bnds' ++ bnds_after ++ bnds))
                   -- || (not $ isLocAlive loc bod False)
                   if (M.member loc m1 || (not $ isLocAlive loc bod False))
-                  then dbgTrace (minChatLvl) "Print isLocAlive: " dbgTrace (minChatLvl) (sdoc (bod, loc)) dbgTrace (minChatLvl) "End isLocAlive.\n" return (bod', freeVarToVarEnv'', m1'', m2'')
-                  else return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
+                  then do 
+                       --let (vptsloc, _, _, _) = fromJust $ M.lookup loc m1
+                       --let freeVarToVarEnv_update_loc = M.insert (fromLocVarToFreeVarsTy loc) vptsloc (M.delete (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') 
+                       (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeit m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
+                       dbgTrace (minChatLvl) "Print isLocAlive: " dbgTrace (minChatLvl) (sdoc (bod, loc, bnds')) dbgTrace (minChatLvl) "End isLocAlive.\n" return (bod', freeVarToVarEnv'', m1'', m2'')
+                  else do 
+                       (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeit m1extended m2' freeVarToVarEnv' (M.insert locs_var locs_ty2 tenv''') senv' bod
+                       return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
 
             Left denv' -> do
               (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1extended m2' optTailCall insideTimeit freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
@@ -3350,7 +3358,16 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv optTailCall freeVarToVarEnv denv tenv
                                         Single{} -> case modality_floc of 
                                                             Just OutputMutable -> case M.lookup locfromlocarg mLocOldValEnv of 
                                                                                                 Nothing -> error "Expected to have location in env!"
-                                                                                                Just (var, _, _, _) -> pure $ [(var, [])] 
+                                                                                                Just (var, _, _, _) -> pure $ [(var, [])]
+                                                            Just InputMutable -> case M.lookup locfromlocarg mLocPtsToEnv of 
+                                                                                                Nothing -> error "Expected to have location in env!"
+                                                                                                Just (var, _, _, _) -> case M.lookup var tenv of 
+                                                                                                                                    Nothing -> pure $ [(var, [])]
+                                                                                                                                    Just ty -> case (unTy2 ty) of 
+                                                                                                                                                      MutCursorTy -> do 
+                                                                                                                                                                     deref_val <- gensym "deref"
+                                                                                                                                                                     pure $ [(deref_val, [(deref_val, [], CursorTy, Ext $ DerefMutCursor var)])]
+                                                                                                                                                      CursorTy -> pure $ [(var, [])]
                                                             _ -> case (M.lookup (fromLocVarToFreeVarsTy (toLocVar loc)) freeVarToVarEnv) of
                                                                               Just v -> pure $ [(v, [])]
                                                                               Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected field location variable"
@@ -4872,7 +4889,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                 else
                   if isRelRANDataCon dcon
                     then unpackWithRelRAN field_cur
-                    else unpackRegularDataCon aliveBuffers m1' m2 (AoSWin field_cur) freeVarToVarEnv
+                    else unpackRegularDataCon tenv1 aliveBuffers m1' m2 (AoSWin field_cur) freeVarToVarEnv
             )
     -- MutCursorTy -> do
     --   field_cur <- gensym "field_cur_mut"
@@ -4906,7 +4923,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
             Nothing -> error "unpackDataCon: Did not find a location for scrutinee!"
 
       -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
-      (field_lets, field_v_lst, freeVarToVarEnv', m1', m2') <-
+      (field_lets, field_v_lst, freeVarToVarEnv', m1', m2', tenv1') <-
         dbgTrace
           (minChatLvl)
           "Print scrut_loc "
@@ -4917,7 +4934,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
           (minChatLvl)
           "end scrut_loc.\n"
           foldlM
-          ( \(acc1, acc2, acc3, mi1, mi2) (key@(dcon', idx), loc) -> do
+          ( \(acc1, acc2, acc3, mi1, mi2, tenvi) (key@(dcon', idx), loc) -> do
               let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
               let case_var_loc = if dcon' == dcon 
                                  then Just $ vlocs1 !! idx
@@ -4926,12 +4943,12 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
               let acc3' = dbgTrace (minChatLvl) "print loc: " dbgTrace (minChatLvl) (sdoc (loc, scrut_loc)) dbgTrace (minChatLvl) "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
               let field_cursor_ty = getCursorizeTyFromLocVar Nothing optTailCall loc
               let (start, end, _) = getIndexPositionOfSoALocVar optTailCall Nothing (getAllFieldLocsSoA scrut_loc) loc
-              (field_var', acc3'', field_let, mi1', mi2') <- handleIndexingSoACursors case_var_loc mi1 mi2 optTailCall (loc, field_var) (start, end) scrut_loc acc3'
+              (field_var', acc3'', field_let, mi1', mi2', tenv_handle_indexing) <- handleIndexingSoACursors tenvi case_var_loc mi1 mi2 optTailCall (loc, field_var) (start, end) scrut_loc acc3'
               --let field_let = [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1 + idx_elem))]
               let curr_window = dbgTrace (minChatLvl) "Print environments: " dbgTrace (minChatLvl) (sdoc (mi2', loc, field_var)) dbgTrace (minChatLvl) "End printing environments after handleIndexingSoACursors.\n" [((dcon', idx), field_var')]
-              return (acc1 ++ field_let, acc2 ++ curr_window, acc3'', mi1', mi2')
+              return (acc1 ++ field_let, acc2 ++ curr_window, acc3'', mi1', mi2', tenv_handle_indexing)
           )
-          ([], [], freeVarToVarEnv, m1, m2)
+          ([], [], freeVarToVarEnv, m1, m2, tenv1)
           (getAllFieldLocsSoA scrut_loc)
       dcon_end <- gensym "dcon_end"
       let dcon_end_let = (dcon_end, [], CursorTy, Ext $ AddCursor dcon_var (LitE 1))
@@ -4942,7 +4959,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
             else
               if isRelRANDataCon dcon
                 then unpackWithRelRAN field_cur
-                else unpackRegularDataCon aliveBuffers m1' m2' (SoAWin dcon_var field_v_lst) freeVarToVarEnv'
+                else unpackRegularDataCon tenv1' aliveBuffers m1' m2' (SoAWin dcon_var field_v_lst) freeVarToVarEnv'
         )
       let lets = mkLets ([dcon_end_let] ++ field_lets) bod
       dbgTrace (minChatLvl) "Print scrut loc: " dbgTrace (minChatLvl) (sdoc scrut_loc) dbgTrace (minChatLvl) "End loc\n" return (dcon, [], lets)
@@ -4956,7 +4973,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                   else
                     if isRelRANDataCon dcon
                       then unpackWithRelRAN field_cur
-                      else unpackRegularDataCon aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
+                      else unpackRegularDataCon tenv1 aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
               )
       SoA _ _ -> do
         -- dcon_var <- gensym "dcon"
@@ -4965,7 +4982,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
         -- let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray scrtCur 0)]
         -- In case of any mutable variable, we also need to update the m1 and m2 env.
         -- Vidush TODO.
-        (field_lets, field_v_lst, freeVarToVarEnv', m1', m2') <-
+        (field_lets, field_v_lst, freeVarToVarEnv', m1', m2', tenv1') <-
           dbgTrace
             (minChatLvl)
             "Print scrut_loc "
@@ -4976,22 +4993,24 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
             (minChatLvl)
             "end scrut_loc.\n"
             foldlM
-            ( \(acc1, acc2, acc3, mi1, mi2) (key@(dcon', idx), loc) -> do
+            ( \(acc1, acc2, acc3, mi1, mi2, tenvi) (key@(dcon', idx), loc) -> do
                 let idx_elem = fromJust $ L.elemIndex (key, loc) (getAllFieldLocsSoA scrut_loc)
                 field_var <- gensym $ toVar $ (fromVar "soa_field_") ++ (show idx_elem)
                 let acc3' = dbgTrace (minChatLvl) "print loc: " dbgTrace (minChatLvl) (sdoc (loc, scrut_loc)) dbgTrace (minChatLvl) "End cursorize print loc.\n" M.insert (fromLocVarToFreeVarsTy loc) field_var acc3
                 let field_cursor_ty = getCursorizeTyFromLocVar Nothing optTailCall loc
+                let field_cursor_ty2 = getCursorizeTyFromLocVar' Nothing optTailCall loc
                 let scrut_loc_is_mutable = M.member scrut_loc mi1
-                (field_var', field_let) <- case scrut_loc_is_mutable of
+                (field_var', field_let, tenvi') <- case scrut_loc_is_mutable of
                                                   True -> do 
                                                            deref_field_var <- gensym "deref"
                                                            let field_cursor_ty' = getCursorizeTyFromLocVar (Just OutputMutable) optTailCall loc
-                                                           return (deref_field_var, [(deref_field_var, [], field_cursor_ty', Ext $ AddrOfCursor $ Ext $ IndexCursorArray scrtCur (1 + idx_elem))])
-                                                  False -> return (field_var, [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1 + idx_elem))])
+                                                           let field_cursor_ty2' = getCursorizeTyFromLocVar' (Just OutputMutable) optTailCall loc
+                                                           return (deref_field_var, [(deref_field_var, [], field_cursor_ty', Ext $ AddrOfCursor $ Ext $ IndexCursorArray scrtCur (1 + idx_elem))], M.insert deref_field_var field_cursor_ty2' tenvi)
+                                                  False -> return (field_var, [(field_var, [], field_cursor_ty, Ext $ IndexCursorArray scrtCur (1 + idx_elem))], M.insert field_var field_cursor_ty2 tenvi)
                 let curr_window = [((dcon', idx), field_var')]
-                return (acc1 ++ field_let, acc2 ++ curr_window, acc3', mi1, mi2)
+                return (acc1 ++ field_let, acc2 ++ curr_window, acc3', mi1, mi2, tenvi')
             )
-            ([], [], freeVarToVarEnv, m1, m2)
+            ([], [], freeVarToVarEnv, m1, m2, tenv1)
             (getAllFieldLocsSoA scrut_loc)
         dcon_end <- gensym "dcon_end"
         let dcon_end_let = (dcon_end, [], CursorTy, Ext $ AddCursor dcon_var (LitE 1))
@@ -5001,7 +5020,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
               else
                 if isRelRANDataCon dcon
                   then unpackWithRelRAN field_cur
-                  else unpackRegularDataCon aliveBuffers m1' m2' (SoAWin dcon_var field_v_lst) freeVarToVarEnv'
+                  else unpackRegularDataCon tenv1' aliveBuffers m1' m2' (SoAWin dcon_var field_v_lst) freeVarToVarEnv'
           )
         let lets = mkLets ([dcon_end_let] ++ field_lets) bod
         return (dcon, [], lets)
@@ -5014,7 +5033,7 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                 else
                   if isRelRANDataCon dcon
                     then unpackWithRelRAN field_cur
-                    else unpackRegularDataCon aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
+                    else unpackRegularDataCon tenv1 aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
             )
   where
     tys1 = lookupDataCon ddfs dcon
@@ -5044,13 +5063,13 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
     -- Otherwise, we add things to the dependency environment. `canBind` is set
     -- to true initially, and we flip it as soon as we see a packed value.
     --
-    unpackRegularDataCon :: S.Set (DataCon, Int) -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
-    unpackRegularDataCon aliveBuffersi m1 m2 field_cur freeVarToVarEnv_unpack = do
-      let tenv1' = case field_cur of
-            AoSWin cf -> (M.insert cf (MkTy2 CursorTy) tenv1)
-            SoAWin dcf fieldfvs ->
-              let tenv1'' = M.insert dcf (MkTy2 CursorTy) tenv1
-               in foldr (\(x, y) acc -> M.insert y (MkTy2 CursorTy) acc) tenv1'' fieldfvs
+    unpackRegularDataCon :: M.Map Var Ty2 -> S.Set (DataCon, Int) -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
+    unpackRegularDataCon tenv1' aliveBuffersi m1 m2 field_cur freeVarToVarEnv_unpack = do
+      -- let tenv1'' = case field_cur of
+      --       AoSWin cf -> (M.insert cf (MkTy2 CursorTy) tenv1')
+      --       SoAWin dcf fieldfvs ->
+      --         let tenv1'' = M.insert dcf (MkTy2 CursorTy) tenv1
+      --          in foldr (\(x, y) acc -> M.insert y (MkTy2 CursorTy) acc) tenv1'' fieldfvs
       (exp_unp, _, _) <- go m1 m2 field_cur freeVarToVarEnv_unpack vlocs1 tys1 True denv1 tenv1'
       return exp_unp
       where
@@ -5477,19 +5496,36 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                           if isIndirectionTag dcon || isRedirectionTag dcon
                                             then Ext (ReadTaggedCursor var_dcon_next)
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                        binds =
-                                          [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
-                                            --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                                             (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
-                                             ("_", [], ProdTy [], Ext (MemCpy v var_dcon_next locs_ty3))
-                                             -- ,
-                                            -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
-                                            -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
-                                            -- End of region needs to be calculated differently
-                                            -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
-                                            -- ((loc_var), [], locs_ty3, VarE v)
-                                          ]
-                                    (bod, m1', m2') <- go m1 m2 curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
+                                        mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1    
+                                        (binds, m1d) = case mut_loc_pointing_to_dcur of 
+                                                              Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                            --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                           (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
+                                                                           ("_", [], ProdTy [], Ext (MemCpy v var_dcon_next locs_ty3))
+                                                                            -- ,
+                                                                            -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                            -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                                                            -- End of region needs to be calculated differently
+                                                                            -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                                                            -- ((loc_var), [], locs_ty3, VarE v)
+                                                                          ], m1) 
+                                                              Just l -> let 
+                                                                          lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
+                                                                          m1' = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.empty) False
+                                                                         in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                               --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                               -- (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
+                                                                               ("_", [], ProdTy [], Ext (MemCpy lName var_dcon_next locs_ty3))
+                                                                               -- ,
+                                                                               -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                               -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                                                               -- End of region needs to be calculated differently
+                                                                               -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                                                               -- ((loc_var), [], locs_ty3, VarE v)
+                                                                          ], m1d)
+
+                                          
+                                    (bod, m1', m2') <- go m1d m2 curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
                                     return (mkLets binds bod, m1', m2')
                                     -- TODO:
                                     -- Vidush: The GC case for indirection will require us to take the indirection for nested SoA locations too!
@@ -5758,19 +5794,46 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                           if isIndirectionTag dcon || isRedirectionTag dcon
                                             then Ext (ReadTaggedCursor var_dcon_next)
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                        binds =
-                                          [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
-                                            --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                                             (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
-                                             ("_", [], ProdTy [], Ext (MemCpy v var_dcon_next locs_ty3))
-                                             -- ,
-                                            -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
-                                            -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
-                                            -- End of region needs to be calculated differently
-                                            -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
-                                            -- ((loc_var), [], locs_ty3, VarE v)
-                                          ]
-                                    (bod, m1', m2') <- go m1 m2 curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
+                                        mut_loc_pointing_to_dcur = findMutableLocationInSameRegion reg m1
+                                        (binds, m1d) = case mut_loc_pointing_to_dcur of 
+                                                              Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                            --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                           (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
+                                                                           ("_", [], ProdTy [], Ext (MemCpy v var_dcon_next locs_ty3))
+                                                                            -- ,
+                                                                            -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                            -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                                                            -- End of region needs to be calculated differently
+                                                                            -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                                                            -- ((loc_var), [], locs_ty3, VarE v)
+                                                                          ], m1) 
+                                                              Just (_, l) -> let 
+                                                                          lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
+                                                                          m1' = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.empty) False
+                                                                         in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                               --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                               -- (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
+                                                                               ("_", [], ProdTy [], Ext (MemCpy lName var_dcon_next locs_ty3))
+                                                                               -- ,
+                                                                               -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                               -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                                                               -- End of region needs to be calculated differently
+                                                                               -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                                                               -- ((loc_var), [], locs_ty3, VarE v)
+                                                                          ], m1')
+                                        -- binds =
+                                        --   [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                        --     --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                        --      (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
+                                        --      ("_", [], ProdTy [], Ext (MemCpy v var_dcon_next locs_ty3))
+                                        --      -- ,
+                                        --     -- (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                                        --     -- (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                                        --     -- End of region needs to be calculated differently
+                                        --     -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
+                                        --     -- ((loc_var), [], locs_ty3, VarE v)
+                                        --   ]
+                                    (bod, m1', m2') <- go m1d m2 curw fenv rst_vlocs rst_tys canBind denv tenv' -- (toEndV v)
                                     return (mkLets binds bod, m1', m2')
                                    else do
                                     let linearizedLocs = case loc of 
@@ -5826,18 +5889,32 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                                         -- v is the variable i want to send to the call.
                                         -- In this case v is the soa variable where all redirections are unpacked.
-                                        binds = [ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
-                                                  (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
-                                                  ((loc_var), [], CursorTy, VarE dcur),
-                                                  (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
-                                                  (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
-                                                  (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
-                                                  (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
-                                                ]
+                                        mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1
+                                        (binds, m1d) = case mut_loc_pointing_to_dcur of 
+                                                                Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                             (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                             ((loc_var), [], CursorTy, VarE dcur),
+                                                                             (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
+                                                                             (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                             (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
+                                                                             (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
+                                                                            ], m1)
+                                                                Just l -> let 
+                                                                            lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
+                                                                            m1' = updateMutableLocPtsToEnv l m1 (redirection_var_dcon, Just l, Nothing, S.empty) False
+                                                                          in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
+                                                                             (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                                                                             ((loc_var), [], CursorTy, VarE dcur),
+                                                                             (redirection_var_dcon, [], CursorTy, ProjE 0 (VarE tmp)),
+                                                                             ("_", [], ProdTy [], Ext $ WriteCursorMutable lName (VarE redirection_var_dcon)),
+                                                                             (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
+                                                                             (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
+                                                                             (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
+                                                                            ], m1')
                                         -- generate binds for all fields.
-                                        binds_flields =
+                                        (_, binds_flields, m1', m2') =
                                           L.foldl
-                                            ( \(index, res) ((dcon', idx), var, redir_vars) ->
+                                            ( \(index, res, m1i, m2i) ((dcon', idx), var, redir_vars) ->
                                               let read_cursor_f idx =
                                                       if isIndirectionTag dcon || isRedirectionTag dcon
                                                       then Ext (ReadTaggedCursor (vars_next_fields !! idx))
@@ -5846,16 +5923,16 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                                   ty_of_field = (lookupDataCon ddfs dcon') !! idx
                                                in case ty_of_field of
                                                     (MkTy2 PackedTy {}) ->
-                                                        let new_binds = case redir_vars of 
-                                                                                [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                        let (new_binds, m1iout) = case redir_vars of 
+                                                                                [v] -> ([ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
                                                                                         (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
                                                                                         ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
                                                                                         (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
                                                                                         (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                                                      ]
-                                                                                rst -> snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
+                                                                                      ], m1i)
+                                                                                rst -> (snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
                                                                                                     (vars_next_fields !! i, [], CursorTy, Ext (AddCursor (tmp_unpack !! i) (LitE 1))), 
                                                                                                     (tmpf i, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f i),
                                                                                                     -- ((loc_var)     , [], CursorTy, VarE dcur),
@@ -5865,20 +5942,20 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                                                                                     (toEndFromTaggedV (redirection_var_flds !! i), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! i) (VarE (toTagV (redirection_var_flds !! i))))
                                                                                                    ]
                                                                                                    )
-                                                                                           ) (index, []) rst
-                                                         in (index + L.length (redir_vars), res ++ new_binds)
+                                                                                           ) (index, []) rst, m1i)
+                                                         in (index + L.length (redir_vars), res ++ new_binds, m1iout, m2i)
                                                     (MkTy2 CursorArrayTy {}) ->
-                                                        let new_binds = case redir_vars of 
-                                                                                [v] -> [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                        let (new_binds, m1iout) = case redir_vars of 
+                                                                                [v] -> ([ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
                                                                                         (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
                                                                                         ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
                                                                                         (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
                                                                                         (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                                                      ]
+                                                                                      ], m1i)
                                                                                 -- (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))
-                                                                                rst -> snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
+                                                                                rst -> (snd $ foldl (\(i, bnds) v -> (i + 1, bnds ++ [ (tmp_unpack !! i, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst))),
                                                                                                     (vars_next_fields !! i, [], CursorTy, Ext (AddCursor (tmp_unpack !! i) (LitE 1))),
                                                                                                     (tmpf i, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f i),
                                                                                                     -- ((loc_var)     , [], CursorTy, VarE dcur),
@@ -5888,30 +5965,54 @@ unpackDataCon aliveBuffers m1 m2 optTailCall insideTimeIt dcon_var freeVarToVarE
                                                                                                     (toEndFromTaggedV (redirection_var_flds !! i), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! i) (VarE (toTagV (redirection_var_flds !! i))))
                                                                                                    ]
                                                                                                    )
-                                                                                           ) (index, []) rst
-                                                         in (index + L.length (redir_vars), res ++ new_binds)
+                                                                                           ) (index, []) rst, m1i)
+                                                         in (index + L.length (redir_vars), res ++ new_binds, m1iout, m2i)
                                                     _ ->
-                                                        let new_binds = case redir_vars of 
-                                                                                [v] ->
-                                                                                      [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
-                                                                                        (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
-                                                                                        -- ((loc_var)     , [], CursorTy, VarE dcur),
-                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
-                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
-                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
-                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
-                                                                                      ]
+                                                        let (new_binds, m1out) = case redir_vars of 
+                                                                                [v] -> let mut_loc_pts_var = findMutableLocationPointingToVar var m1i
+                                                                                        in case mut_loc_pts_var of
+                                                                                                 Nothing -> let bnds = [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                                                         (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
+                                                                                                                         -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                                                        ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index)),
+                                                                                                                        (toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
+                                                                                                                        (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
+                                                                                                                        (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                                                                       ]
+                                                                                                              in (bnds, m1i)
+                                                                                                 Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1i ((redirection_var_flds !! index), Just ml, Nothing, S.empty) False
+                                                                                                                isFieldAlive = S.member (dcon', idx) aliveBuffersi
+                                                                                                                -- write to the mutable location, we need to write the (redirection_var_flds !! index) value.
+                                                                                                                mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
+                                                                                                                bnd_write_to_mut_var = if isFieldAlive
+                                                                                                                                       then [("_", [], ProdTy [], Ext $ WriteCursorMutable mlName (VarE (redirection_var_flds !! index)))]
+                                                                                                                                       else []
+                                                                                                                bnds' = [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
+                                                                                                                          (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
+                                                                                                                          -- ((loc_var)     , [], CursorTy, VarE dcur),
+                                                                                                                          ((redirection_var_flds !! index), [], CursorTy, ProjE 0 (VarE $ tmpf index))] ++ 
+                                                                                                                          bnd_write_to_mut_var ++ 
+                                                                                                                         [(toEndV (redirection_var_flds !! index), [], CursorTy, ProjE 1 (VarE $ tmpf index)),
+                                                                                                                          (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
+                                                                                                                          (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
+                                                                                                                         ]
+                                                                                                      in (bnds', m1i') 
                                                                                 _ -> error $ "Did not expect multiple variables for ty: " ++ show ty_of_field
-                                                         in (index + L.length (redir_vars), res ++ new_binds)
-                                            ) (0, []) res
+                                                         in (index + L.length (redir_vars), res ++ new_binds, m1out, m2i)
+                                            ) (0, [], m1d, m2) res
                                         soa_redir_bind = [(v, [], CursorArrayTy (1 + length (redirection_var_flds)), Ext (MakeCursorArray (1 + length (redirection_var_flds)) ([redirection_var_dcon] ++ redirection_var_flds)))]
+                                        mut_loc_in_same_reg = findMutableLocationInSameRegion reg m1'
+                                        m1'' = case mut_loc_in_same_reg of 
+                                                    Nothing -> m1' 
+                                                    Just (_v, lv) -> let m1i = updateMutableLocPtsToEnv lv m1' (v, Just lv, Nothing, S.empty) False
+                                                                      in m1i
                                         tenv'' = M.union
                                                 ( M.fromList
                                                   [ (v, MkTy2 $ CursorArrayTy (1 + length (redirection_var_flds)))
                                                   ]
                                                 ) tenv
-                                    (bod, m1', m2') <- go m1 m2 curw fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
-                                    return (mkLets (binds ++ (snd binds_flields) ++ soa_redir_bind) bod, m1', m2')
+                                    (bod, m1''', m2'') <- go m1'' m2' curw fenv rst_vlocs rst_tys canBind denv tenv'' -- (toEndV v)
+                                    return (mkLets (binds ++ (binds_flields) ++ soa_redir_bind) bod, m1''', m2'')
                                 else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
 
                         VectorTy el_ty -> do
