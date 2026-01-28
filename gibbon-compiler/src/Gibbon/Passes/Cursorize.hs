@@ -958,16 +958,18 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
       --                                                        let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
       --                                                        let dcon_let_bind = mkLets dcon_let
       --                                                        return (dcon_var, dcon_let_bind)
-      -- let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
-      --                                                                                              then
-      --                                                                                                 let id = fromJust $ L.elemIndex e var_locs
-      --                                                                                                     acc' = S.insert (dcon, id) acc
-      --                                                                                                  in acc'
-      --                                                                                              else acc
-      --                                                                            ) env var_locs
-      --                                                            in env'
-      --                              ) S.empty brs
-      let alive_buffers = S.empty
+      let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
+                                                                                                   then
+                                                                                                      let id = fromJust $ L.elemIndex e var_locs
+                                                                                                          acc' = S.insert (dcon, id) acc
+                                                                                                       in acc'
+                                                                                                   else let 
+                                                                                                         id = fromJust $ L.elemIndex e var_locs
+                                                                                                         in S.insert (dcon, id) acc-- acc
+                                                                                 ) env var_locs
+                                                                 in env'
+                                   ) S.empty brs
+      --let alive_buffers = S.empty
       case ty_of_scrut of
         CursorTy -> do 
           case_expr <- 
@@ -1703,16 +1705,17 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
       --                                                        let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
       --                                                        let dcon_let_bind = mkLets dcon_let
       --                                                        return (dcon_var, dcon_let_bind)
-      -- let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
-      --                                                                                              then
-      --                                                                                                 let id = fromJust $ L.elemIndex e var_locs
-      --                                                                                                     acc' = S.insert (dcon, id) acc
-      --                                                                                                  in acc'
-      --                                                                                              else acc
-      --                                                                            ) env var_locs
-      --                                                            in env'
-      --                              ) S.empty brs
-      let alive_buffers = S.empty
+      let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
+                                                                                                   then
+                                                                                                      let id = fromJust $ L.elemIndex e var_locs
+                                                                                                          acc' = S.insert (dcon, id) acc
+                                                                                                       in acc'
+                                                                                                   else let id = fromJust $ L.elemIndex e var_locs
+                                                                                                         in S.insert (dcon, id) acc --acc
+                                                                                 ) env var_locs
+                                                                 in env'
+                                   ) S.empty brs
+      --let alive_buffers = S.empty
       case ty_of_scrut of
         CursorTy -> (,,,) <$> (dl <$> CaseE (VarE $ v))
                           <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
