@@ -21,8 +21,8 @@ reduce lst = case lst of
                   Nil -> 0
                   Cons a b c d e f g h i j rst -> a + reduce rst
 
--- id :: lst -> lst 
--- id l = l
+id :: lst -> lst 
+id l = l
 
 gibbon_main =
     let lst = mkList 1000000

@@ -20,8 +20,9 @@ inferCallType Prog{ddefs, fundefs, mainExp} = do
     fds' <- mapM (inferCallTypeFn ddefs) $ M.elems fundefs
     let newFundefs = M.fromList $ map (\f -> (funName f, f)) fds'
     dflags <- getDynFlags
-    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
-    mainExp' <- if optimize_tail_calls
+    let useMutableCursors = gopt Opt_UseMutableCursors dflags
+    let _optimize_tail_calls = gopt Opt_TailCallOptimize dflags
+    mainExp' <- if useMutableCursors
                 then case mainExp of 
                         Nothing -> return Nothing
                         Just (mexp, mty) -> do 
@@ -34,9 +35,18 @@ inferCallType Prog{ddefs, fundefs, mainExp} = do
 inferCallTypeFn :: NewL2.DDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
     dflags <- getDynFlags
-    let optimize_tail_calls = gopt Opt_TailCallOptimize dflags
-    let (funBody', _env, _tailTy) = if optimize_tail_calls 
-                                    then inferCallTypeExp optimize_tail_calls funName M.empty funBody
+    let meta@FunMeta{funRec} = funMeta
+    let isInputFunRec = case funRec of 
+                             Rec -> True
+                             TailRec -> True
+                             _ -> False
+    -- Vidush: 
+    -- We only want to use mutable cursors for recursive functions for now.
+    -- I don't think it worth it to make cursors mutable for non recursive functions at the moment.
+    let useMutableCursors = (gopt Opt_UseMutableCursors dflags) && isInputFunRec
+    let _optimize_tail_calls = gopt Opt_TailCallOptimize dflags
+    let (funBody', _env, _tailTy) = if useMutableCursors 
+                                    then inferCallTypeExp useMutableCursors funName M.empty funBody
                                     else (funBody, M.empty, Nothing)
         --(ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
         -- locVars' =
@@ -48,7 +58,6 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
         --         locVars
         -- funTy' = (ArrowTy2 locVars' arrIns _arrEffs arrOut _locRets _isPar)
         --funBody'' = markMutableLocsAfterInitialPass env funBody'
-        meta@FunMeta{funRec} = funMeta
         funRec' = case _tailTy of 
                         Just TailCall -> TailRec 
                         Just TailModuloCons -> TailRec 
@@ -56,19 +65,21 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
         _funRecInferredTail = case funRec' of 
                                     TailRec -> True
                                     _ -> False
-        funMeta' = if optimize_tail_calls 
+        funMeta' = if useMutableCursors 
                    then meta{funRec=funRec'}
                    else meta
     let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) = dbgTrace minChatLvl "Print env at the end." dbgTrace minChatLvl (sdoc (_env, M.elems _env)) dbgTrace minChatLvl "End\n" funTy
     -- Vidush: For now we only want to do this optimization for tail recursive functions.
     -- Even for SoA regions, we only do this for tail recursive functions.
-    let (funTy', needs_update) = case optimize_tail_calls of 
+    let (funTy', needs_update) = case useMutableCursors of 
                             True -> let (locVars', updateLocs) = P.foldr
                                                          (\lrm@(LRM l r m) (lvs, lcs) -> case (l, m) of
                                                                                             (Single{}, Input) -> if funRec' == TailRec
                                                                                                                  then (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                                                  -- Vidush: For functions that are not tail recursive, we still want to make Inputs Mutable
                                                                                                                  else (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
+                                                                                            -- Vidush for output types, we only make them mutable if the function is tail recursive.
+                                                                                            -- If not we don't make the OutputMutable.
                                                                                             (Single{}, Output) -> if funRec' == TailRec 
                                                                                                                   then (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                                                   else (lvs ++ [LRM l r Output], lcs) 
@@ -90,7 +101,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                                        V{} -> error "Did not expect variable to be updates for modality!!"
                                     ) needs_update needs_update
         -- (optimize_tail_calls && funRecInferredTail
-        funBody'' = if (optimize_tail_calls) then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
+        funBody'' = if (useMutableCursors) then markMutableLocsAfterInitialPass needs_update' funBody' else funBody'
 
 
         -- If a function is identified to be tailRecursive
@@ -144,10 +155,9 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                                 case fundef of 
                                         Nothing -> error "Expected function definition for function!"
                                         Just _f@FunDef{funTy, funMeta} -> do
-                                             let _fnrecTy = funRec funMeta
-                                             -- We need a better way to define when we need to make certain locations mutable or not.
-                                             -- We don't want to drive this based on tail recursion anymore
-                                             if True --fnrecTy == TailRec
+                                             let fnrecTy = funRec funMeta
+                                            -- We only want to do this for Recursive functions.
+                                             if fnrecTy == TailRec || fnrecTy == Rec
                                              -- we need to find change locs to be output mutable
                                              then 
                                                 do
@@ -307,14 +317,14 @@ backTrackLocs env v accum visited = case M.lookup v env of
          in (accum'', visited'')
 
 inferCallTypeExp :: Bool -> Var -> TrackLocVariables -> NewL2.Exp2 -> (NewL2.Exp2, TrackLocVariables, Maybe TailRecType)
-inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
+inferCallTypeExp useMutableCursors funName env exp2 = case exp2 of
     VarE v -> (VarE v, env, Nothing)
     LitE l -> (LitE l, env, Nothing)
     CharE c -> (CharE c, env, Nothing)
     FloatE f -> (FloatE f, env, Nothing)
     LitSymE v -> (LitSymE v, env, Nothing)
     AppE v t locs args ->
-        let results = P.map (inferCallTypeExp tailCallOptOn funName env) args
+        let results = P.map (inferCallTypeExp useMutableCursors funName env) args
             args' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -328,7 +338,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                  _ -> Just $ P.maximum lst'
          in (AppE v t locs args', env', tailTy)
     PrimAppE p args ->
-        let results = P.map (inferCallTypeExp tailCallOptOn funName env) args
+        let results = P.map (inferCallTypeExp useMutableCursors funName env) args
             args' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -369,8 +379,8 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                     env
                                     locs'
                         rhs' = dbgTrace minChatLvl "Print tailCallType: " dbgTrace minChatLvl (sdoc tailCallType) dbgTrace minChatLvl "End tailCallType!\n" AppE v' tailCallType locs' args'
-                        (rhs'', env'', t1) = inferCallTypeExp tailCallOptOn funName env' rhs'
-                        (bod', env''', t2) = inferCallTypeExp tailCallOptOn funName env'' bod
+                        (rhs'', env'', t1) = inferCallTypeExp useMutableCursors funName env' rhs'
+                        (bod', env''', t2) = inferCallTypeExp useMutableCursors funName env'' bod
                         ret_lst = [Just tailCallType, t1, t2]
                         ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -381,8 +391,8 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             rst -> Just $ P.maximum rst
                      in (LetE (v, loc, ty, rhs'') bod', env''', ret_lst'')
                 else
-                    let (rhs', env', t1) = inferCallTypeExp tailCallOptOn funName env rhs
-                        (bod', env'', t2) = inferCallTypeExp tailCallOptOn funName env' bod
+                    let (rhs', env', t1) = inferCallTypeExp useMutableCursors funName env rhs
+                        (bod', env'', t2) = inferCallTypeExp useMutableCursors funName env' bod
                         ret_lst = [t1, t2]
                         ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -393,8 +403,8 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             rst -> Just $ P.maximum rst
                      in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
         _ ->
-            let (rhs', env', tailTy) = inferCallTypeExp tailCallOptOn funName env rhs
-                (bod', env'', tailTy') = inferCallTypeExp tailCallOptOn funName env' bod
+            let (rhs', env', tailTy) = inferCallTypeExp useMutableCursors funName env rhs
+                (bod', env'', tailTy') = inferCallTypeExp useMutableCursors funName env' bod
                 ret_lst = [tailTy, tailTy']
                 ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -405,9 +415,9 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             rst -> Just $ P.maximum rst
              in (LetE (v, loc, ty, rhs') bod', env'', ret_lst'')
     IfE a b c ->
-        let (a', e1, t) = inferCallTypeExp tailCallOptOn funName env a
-            (b', e2, t1) = inferCallTypeExp tailCallOptOn funName e1 b
-            (c', e3, t2) = inferCallTypeExp tailCallOptOn funName e2 c
+        let (a', e1, t) = inferCallTypeExp useMutableCursors funName env a
+            (b', e2, t1) = inferCallTypeExp useMutableCursors funName e1 b
+            (c', e3, t2) = inferCallTypeExp useMutableCursors funName e2 c
             ret_lst = [t, t1, t2]
             ret_lst' = concatMap (\l -> case l of 
                                                        Nothing -> [] 
@@ -418,7 +428,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                             rst -> Just $ P.maximum rst
          in (IfE a' b' c', e3, ret_lst'')
     MkProdE ls ->
-        let results = P.map (inferCallTypeExp tailCallOptOn funName env) ls
+        let results = P.map (inferCallTypeExp useMutableCursors funName env) ls
             ls' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -432,7 +442,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                  _ -> Just $ P.maximum lst' 
          in (MkProdE ls', env', tailTy)
     ProjE i e ->
-        let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
+        let (e', env', t) = inferCallTypeExp useMutableCursors funName env e
          in (ProjE i e', env', t)
     -- [(DataCon, [(Var,loc)], EXP)]
     CaseE scrt brs ->
@@ -440,7 +450,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                 P.map
                     ( \(a, b, c) -> if not (isIndirectionTag a || isRedirectionTag a)
                                     then 
-                                      let (c', env', t) = inferCallTypeExp tailCallOptOn funName env c
+                                      let (c', env', t) = inferCallTypeExp useMutableCursors funName env c
                                        in ((a, b, c'), env', t)
                                     else ((a, b, c), env, Nothing)
                     )
@@ -473,9 +483,9 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
     DataConE loc c args ->
         let locInDataCon = dbgTrace minChatLvl "In DataCon:" dbgTrace minChatLvl (sdoc (env, M.elems env)) dbgTrace minChatLvl ("End\n") toLocVar loc
             (val1, val2) = (backTrackLocs env locInDataCon False M.empty)
-         in case (val1 && tailCallOptOn, val2)  of
+         in case (val1 && useMutableCursors, val2)  of
                 (False, _) ->
-                    let results = P.map (inferCallTypeExp tailCallOptOn funName env) args
+                    let results = P.map (inferCallTypeExp useMutableCursors funName env) args
                         args' = P.map fst3 results
                         env' = M.unionsWith unionMapLambda $ P.map snd3 results
                         tailTy = case P.map thd3 results of 
@@ -492,7 +502,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                     let loc' = case loc of
                             NewL2.Loc lrem -> NewL2.Loc lrem{lremMode = OutputMutable}
                             _ -> loc
-                        results = P.map (inferCallTypeExp tailCallOptOn funName env) args
+                        results = P.map (inferCallTypeExp useMutableCursors funName env) args
                         args' = P.map fst3 results
                         env' = M.unionsWith unionMapLambda $ P.map snd3 results
                         tailTy = case P.map thd3 results of 
@@ -506,17 +516,17 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                                                  _ -> Just $ P.maximum lst'
                      in (DataConE loc' c args', env', tailTy)
     TimeIt e d b ->
-        let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
+        let (e', env', t) = inferCallTypeExp useMutableCursors funName env e
          in (TimeIt e' d b, env', t)
     MapE d e ->
-        let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
+        let (e', env', t) = inferCallTypeExp useMutableCursors funName env e
          in (MapE d e', env', t)
     FoldE i it e ->
-        let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
+        let (e', env', t) = inferCallTypeExp useMutableCursors funName env e
          in (FoldE i it e', env', t)
     -- TODO: Check map for any mutable output locations, if they are in the data con then mark them outputMutable
     SpawnE v locs exps ->
-        let results = P.map (inferCallTypeExp tailCallOptOn funName env) exps
+        let results = P.map (inferCallTypeExp useMutableCursors funName env) exps
             exps' = P.map fst3 results
             env' = M.unionsWith unionMapLambda $ P.map snd3 results
             tailTy = case P.map thd3 results of 
@@ -531,22 +541,22 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
          in (SpawnE v locs exps', env', tailTy)
     SyncE -> (exp2, env, Nothing)
     WithArenaE _v e ->
-        let (e', env', t) = inferCallTypeExp tailCallOptOn funName env e
+        let (e', env', t) = inferCallTypeExp useMutableCursors funName env e
          in (WithArenaE _v e', env', t)
     Ext ext ->
         case ext of
             Old.LetRegionE r a endmut b bod ->
-                let (bod', env', t) = inferCallTypeExp tailCallOptOn funName env bod
+                let (bod', env', t) = inferCallTypeExp useMutableCursors funName env bod
                  in (Ext $ Old.LetRegionE r a endmut b bod', env', t)
             Old.LetParRegionE r a b bod ->
-                let (bod', env', t) = inferCallTypeExp tailCallOptOn funName env bod
+                let (bod', env', t) = inferCallTypeExp useMutableCursors funName env bod
                  in (Ext $ Old.LetParRegionE r a b bod', env', t)
             Old.LetLocE loc locexp bod ->
                 let locInExp = freeLoc locexp
                     env' = case locInExp of
                         Nothing -> env
                         Just l -> M.insert l (S.singleton (toLocVar loc), False) env
-                    (bod', env'', t) = inferCallTypeExp tailCallOptOn funName env' bod
+                    (bod', env'', t) = inferCallTypeExp useMutableCursors funName env' bod
                     -- locexp' = case locInExp of
                     --     Nothing -> locexp
                     --     Just l -> case (backTrackLocs env'' l False M.empty) of
@@ -554,7 +564,7 @@ inferCallTypeExp tailCallOptOn funName env exp2 = case exp2 of
                     --         (True, _) -> changeLocData locexp l
                  in (Ext $ Old.LetLocE loc locexp bod', env'', t)
             Old.LetRegE reg regexp bod -> 
-                let (bod', env', t) = inferCallTypeExp tailCallOptOn funName env bod
+                let (bod', env', t) = inferCallTypeExp useMutableCursors funName env bod
                  in (Ext $ Old.LetRegE reg regexp bod', env', t)
             Old.BoundsCheckVector _bounds -> (exp2, env, Nothing)
             Old.RetE{} -> (exp2, env, Nothing)
