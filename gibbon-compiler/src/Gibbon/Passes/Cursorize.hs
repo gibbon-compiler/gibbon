@@ -963,9 +963,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                                                                                                       let id = fromJust $ L.elemIndex e var_locs
                                                                                                           acc' = S.insert (dcon, id) acc
                                                                                                        in acc'
-                                                                                                   else let 
-                                                                                                         id = fromJust $ L.elemIndex e var_locs
-                                                                                                         in S.insert (dcon, id) acc-- acc
+                                                                                                   else acc
                                                                                  ) env var_locs
                                                                  in env'
                                    ) S.empty brs
@@ -976,7 +974,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
             CaseE (VarE $ v)
             <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
           -- Vidush: For now we just return the environment.
-          dbgTrace (minChatLvl) "Print in CursorTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing CursorTy.\n" return (case_expr, freeVarToVarEnv, m1, m2)
+          dbgTrace (minChatLvl) "Print in CursorTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt, alive_buffers)) dbgTrace (minChatLvl) "End printing CursorTy.\n" return (case_expr, freeVarToVarEnv, m1, m2)
         -- We need to dereference a mutable cursor to get its value.
         MutCursorTy -> do
                        deref_val <- gensym "deref_val"
@@ -991,14 +989,14 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                        case_expr <- additional_deref_let 
                                     <$> CaseE (VarE $ deref_val)
                                     <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
-                       dbgTrace (minChatLvl) "Print in MutCursorCase: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing MutCursorCase.\n" return (case_expr, freeVarToVarEnv, m1', m2')
+                       dbgTrace (minChatLvl) "Print in MutCursorCase: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt, alive_buffers)) dbgTrace (minChatLvl) "End printing MutCursorCase.\n" return (case_expr, freeVarToVarEnv, m1', m2')
         CursorArrayTy {} -> do
           -- check if v points to any mutable location
           let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
           (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
                                                             Just ml -> do
                                                                         dcon_var_deref <- gensym "deref_dcon_var"
                                                                         let dcon_loc = getDconLoc ml
@@ -1011,7 +1009,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                                                                         let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
-                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
           --let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
           let dcon_let_bind = mkLets dcon_let
           case_expr <- dcon_let_bind
@@ -1150,11 +1148,16 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                   Single lvarrr -> lvarrr
                   SoA _ _ -> error "cursorizeExp: LetLocE: unexpected location variable"
           (rhs_either, m1', m2') <- cursorizeLocExp m1 m2 useMutableCursorsCall freeVarToVarEnv' denv tenv senv locarg rhs
-          let (bnds, tenv') = dbgTrace (minChatLvl) "Print envs after cursorizeLocExp: " dbgTrace (minChatLvl) (sdoc (m1', m2')) dbgTrace (minChatLvl) "End print envs after cursorizeLocExp.\n" case M.lookup (fromLocVarToFreeVarsTy loc) denv of
-                Nothing -> ([], tenv)
+          let (bnds, tenv', m1mextended) = dbgTrace (minChatLvl) "Print envs after cursorizeLocExp: " dbgTrace (minChatLvl) (sdoc (m1', m2')) dbgTrace (minChatLvl) "End print envs after cursorizeLocExp.\n" case M.lookup (fromLocVarToFreeVarsTy loc) denv of
+                Nothing -> ([], tenv, m1')
                 Just vs ->
                   let extended = M.fromList [(v, MkTy2 CursorTy) | (v, _, CursorTy, _) <- vs]
-                   in (vs, M.union extended tenv)
+                      mextended = foldr (\((v, _, _, _)) mfld -> let mutloc = findMutableLocationPointingToVar locs_variable m1'
+                                                                          in case mutloc of 
+                                                                              Nothing -> mfld
+                                                                              Just ml -> updateMutableLocPtsToEnv ml mfld (v, Just ml, Nothing, S.empty) True        
+                                        ) m1' vs 
+                   in (vs, M.union extended tenv, mextended)
           case rhs_either of
             -- Check if the location is already bound before. If so, don't
             -- create a duplicate binding. This only happens when we
@@ -1179,19 +1182,19 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
               case rhs of
                 FromEndLE {} ->
                   if isBound locs_var tenv
-                    then cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                    then cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                     -- Discharge bindings that were waiting on 'loc'.
                     else
                       do 
-                        (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                        (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                         return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> do 
-                     (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
+                     (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
                      if M.member loc m1 
                      then return (mkLets (bnds' ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                      else return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
-            Left denv' -> cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+            Left denv' -> cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg sz endmut _ bod -> do
@@ -1710,8 +1713,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                                                                       let id = fromJust $ L.elemIndex e var_locs
                                                                                                           acc' = S.insert (dcon, id) acc
                                                                                                        in acc'
-                                                                                                   else let id = fromJust $ L.elemIndex e var_locs
-                                                                                                         in S.insert (dcon, id) acc --acc
+                                                                                                   else acc
                                                                                  ) env var_locs
                                                                  in env'
                                    ) S.empty brs
@@ -1719,7 +1721,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
       case ty_of_scrut of
         CursorTy -> (,,,) <$> (dl <$> CaseE (VarE $ v))
                           <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
-                    <*> return freeVarToVarEnv 
+                    <*> dbgTrace (minChatLvl) "Print in Cursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v, alive_buffers)) dbgTrace (minChatLvl) "End print in Cursor Case.\n" return freeVarToVarEnv 
                     <*> return m1
                     <*> return m2
         -- We need to dereference a mutable cursor to get its value.
@@ -1727,7 +1729,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                        deref_val <- gensym "deref_val"
                        let additional_deref_let = mkLets [(deref_val, [], CursorTy, Ext $ DerefMutCursor v)]
                        let tenv' = M.insert deref_val (MkTy2 CursorTy) tenv
-                       let output_mut_loc_scrut = dbgTrace (minChatLvl) "Print in MutCursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v)) dbgTrace (minChatLvl) "End print in MutCursor Case.\n" findMutableLocationPointingToVar v m1
+                       let output_mut_loc_scrut = dbgTrace (minChatLvl) "Print in MutCursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v, alive_buffers)) dbgTrace (minChatLvl) "End print in MutCursor Case.\n" findMutableLocationPointingToVar v m1
                        (m1', m2') <- case output_mut_loc_scrut of 
                                             Nothing -> error "Did not expect mutable cursor!\n"
                                             Just outloc -> do let m1i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m1
@@ -1745,7 +1747,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
             (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
                                                             Just ml -> do
                                                                         dcon_var_deref <- gensym "deref_dcon_var"
                                                                         let dcon_loc = getDconLoc ml
@@ -1758,7 +1760,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                                         let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
-                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
+                                                                        dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
             let dcon_let_bind = mkLets dcon_let
             (,,,) <$> dl
               <$> dcon_let_bind
@@ -7019,8 +7021,8 @@ giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv molden
                       then case M.lookup loc moldenv of 
                                         Nothing -> case e of 
                                                        MkProdE ls -> do 
-                                                                     case L.head ls of 
-                                                                            VarE return_var -> do 
+                                                                     case ls of 
+                                                                            (VarE return_var):rst -> do 
                                                                                                 case M.lookup return_var tenv of 
                                                                                                       Nothing -> return $ mkProj 0 e
                                                                                                       Just ty -> case (unTy2 ty) of 
