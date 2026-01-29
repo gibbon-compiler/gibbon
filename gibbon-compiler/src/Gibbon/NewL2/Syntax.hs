@@ -809,11 +809,22 @@ isLocAliveHelperList lc lst = let used = foldr (\li ac -> let li' = toLocVar li
 
 isVariableReadOrWrittenTo :: Var -> M.Map FreeVarsTy Var -> Exp2 -> Bool -> Bool
 isVariableReadOrWrittenTo v fenv exp b = case exp of
-                                      VarE{} -> b 
+                                      VarE v' -> if v' == v 
+                                                 then b || True
+                                                 else b  
                                       LetE (v',_locs,_,rhs) bod -> let checkRHS = isVariableReadOrWrittenTo v fenv rhs False
                                                                        checkBodV = isVariableReadOrWrittenTo v fenv bod b
                                                                        checkVPr = isVariableReadOrWrittenTo v' fenv bod False 
-                                                                    in if (checkVPr && checkRHS)
+                                                                       check_side_effect = case rhs of 
+                                                                                                PrimAppE f _ -> case f of  
+                                                                                                                    PrintInt -> True 
+                                                                                                                    PrintBool -> True 
+                                                                                                                    PrintChar -> True 
+                                                                                                                    PrintSym -> True
+                                                                                                                    PrintFloat -> True
+                                                                                                                    _ -> False
+                                                                                                _ -> False
+                                                                    in if ((checkVPr || check_side_effect) && checkRHS)
                                                                       then True
                                                                       else if checkBodV
                                                                       then True
@@ -821,7 +832,9 @@ isVariableReadOrWrittenTo v fenv exp b = case exp of
                                       LitE{} -> b
                                       CharE{} -> b
                                       FloatE{} -> b
-                                      LitSymE{} -> b
+                                      LitSymE v' -> if v' == v 
+                                                    then b || True 
+                                                    else b
                                       AppE _ _ _locs args -> let 
                                                               map_args = map (\a -> isVariableReadOrWrittenTo v fenv a b) args
                                                              in foldr (\bb a -> bb || a) False map_args    
