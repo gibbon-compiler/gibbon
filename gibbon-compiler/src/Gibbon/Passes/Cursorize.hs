@@ -5034,7 +5034,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
         -- Advance the cursor by 1 byte so that it points to the first field
         <$> mkLets ([(field_cur, [], CursorTy, Ext $ AddCursor scrtCur (LitE 1))] ++ bump_bnds)
         <$> ( if isAbsRANDataCon dcon
-                then unpackWithAbsRAN (AoSWin field_cur) freeVarToVarEnv
+                then unpackWithAbsRAN tenv1 aliveBuffers m1' m2 (AoSWin field_cur) freeVarToVarEnv
                 else
                   if isRelRANDataCon dcon
                     then unpackWithRelRAN field_cur
@@ -5104,7 +5104,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
       bod <-
         ( if isAbsRANDataCon dcon
             then do      
-              unpackWithAbsRAN (SoAWin dcon_end field_v_lst) freeVarToVarEnv'
+              unpackWithAbsRAN tenv1' aliveBuffers m1' m2' (SoAWin dcon_end field_v_lst) freeVarToVarEnv'
             else
               if isRelRANDataCon dcon
                 then unpackWithRelRAN field_cur
@@ -5118,7 +5118,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
           -- Advance the cursor by 1 byte so that it points to the first field
           <$> mkLets [(field_cur, [], CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
           <$> ( if isAbsRANDataCon dcon
-                  then unpackWithAbsRAN (AoSWin field_cur) freeVarToVarEnv
+                  then unpackWithAbsRAN tenv1 aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
                   else
                     if isRelRANDataCon dcon
                       then unpackWithRelRAN field_cur
@@ -5165,7 +5165,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
         let dcon_end_let = (dcon_end, [], CursorTy, Ext $ AddCursor dcon_var (LitE 1))
         bod <-
           ( if isAbsRANDataCon dcon
-              then unpackWithAbsRAN (SoAWin dcon_end field_v_lst) freeVarToVarEnv'
+              then unpackWithAbsRAN tenv1' aliveBuffers m1' m2' (SoAWin dcon_end field_v_lst) freeVarToVarEnv'
               else
                 if isRelRANDataCon dcon
                   then unpackWithRelRAN field_cur
@@ -5178,7 +5178,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
         -- Advance the cursor by 1 byte so that it points to the first field
         <$> mkLets [(field_cur, [], CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
         <$> ( if isAbsRANDataCon dcon
-                then unpackWithAbsRAN (AoSWin field_cur) freeVarToVarEnv
+                then unpackWithAbsRAN tenv1 aliveBuffers m1 m2 (AoSWin field_cur) freeVarToVarEnv
                 else
                   if isRelRANDataCon dcon
                     then unpackWithRelRAN field_cur
@@ -6338,8 +6338,8 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
 
     -- We have access to all fields in this constructor, and can create
     -- bindings for everything. We begin by unpacking the random access nodes.
-    unpackWithAbsRAN :: WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
-    unpackWithAbsRAN field_cur freeVarToVarEnv_unpack =
+    unpackWithAbsRAN :: M.Map Var Ty2 -> S.Set (DataCon, Int) -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> PassM Exp3
+    unpackWithAbsRAN tenv alive_buffers m1 m2 field_cur freeVarToVarEnv_unpack =
       -- A map from a variable to a tuple containing it's location and
       -- the RAN field it depends on. Consider this constructor:
       --
@@ -6367,15 +6367,15 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                in -- VS: TODO: This is assuming that each field is cursorTy
                   -- we should change this OR we can reply on addCasts to fix casting??
                   foldr (\(x, y) acc -> M.insert y (MkTy2 CursorTy) acc) tenv1'' fieldfvs
-       in go field_cur freeVarToVarEnv_unpack vlocs1 tys1 ran_mp denv1 tenv1'
+       in go False m1 m2 field_cur freeVarToVarEnv_unpack vlocs1 tys1 ran_mp denv1 tenv1'
       where
-        go :: WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var, Var) -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
-        go curw fenv vlocs tys indirections_env denv tenv = do
+        go :: Bool -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> M.Map Var (Var, Var) -> DepEnv -> TyEnv Var Ty2 -> PassM Exp3
+        go isFirstPacked m1g m2g curw fenv vlocs tys indirections_env denv tenv = do
           case curw of
             AoSWin cur -> do
               case (vlocs, tys) of
                 ([], []) -> do 
-                             (exp, _, _) <- processRhs m1 m2 denv tenv
+                             (exp, _, _) <- processRhs m1g m2g denv tenv
                              return exp
                 ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
                   let loc = fromLocArgToFreeVarsTy locarg
@@ -6400,6 +6400,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                         -}
 
                         CursorTy -> do
+                          -- TODO: We need to handle shortcut pointers in case of mutable location.
                           tmp <- gensym "readcursor_shortcut"
                           locs_var <- lookupVariable loc fenv
                           let tenv' =
@@ -6423,13 +6424,29 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (toTagV v, [], IntTy, ProjE 2 (VarE tmp)),
                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))
                                 ]
-                          bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv'
-                          return $ mkLets binds bod
+                          let checkMutLoc = findMutableLocationPointingToVar cur m1g 
+                          (m1g', add_bnds) <- case checkMutLoc of 
+                                          Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Cursor, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Cursor Nothing case.\n" return (m1g, []) 
+                                          Just ml -> do
+                                                     let m1inner = updateMutableLocPtsToEnv ml m1g (toEndV v, Just ml, Nothing, S.empty) False
+                                                     void_var <- gensym "void"
+                                                     let mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
+                                                     -- Vidush: perhaps better to get the size from the type rather than hardcode the size of 8 here. ? 
+                                                     let bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable mlName (LitE 8))]
+                                                     dbgTrace (minChatLvl) "Print in unpack abs ran Cursor, Just l case: " dbgTrace (minChatLvl) (sdoc (cur, ml)) dbgTrace (minChatLvl) "End in unpack abs ran Cursor Just l case.\n" return (m1inner, bnd)
+                          bod <- go isFirstPacked m1g' m2g (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv'
+                          return $ mkLets (binds ++ add_bnds)  bod
 
                         -- Int, Sym, or Bool
                         _ | isScalarTy ty -> do
                           locs_var <- lookupVariable loc fenv
-                          (tenv', binds, m1', m2') <- scalarBinds True fenv m1 m2 ty v locs_var locarg tenv
+                          let mut_loc = findMutableLocationPointingToVar cur m1g
+                          m1' <- case mut_loc of
+                                            Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Scalar, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Scalar Nothing case.\n" return m1g
+                                            Just l -> do
+                                                       let m1inner = updateMutableLocPtsToEnv l m1g (locs_var, Just l, Nothing, S.singleton cur) True
+                                                       dbgTrace (minChatLvl) "Print in unpack abs ran Scalar, Just l case: " dbgTrace (minChatLvl) (sdoc (cur, l)) dbgTrace (minChatLvl) "End in unpack abs ran Scalar Just l case.\n" return m1inner
+                          (tenv', binds, m1'', m2') <- scalarBinds True fenv m1' m2 ty v locs_var locarg tenv
                           let loc_bind = case M.lookup v indirections_env of
                                 Nothing ->
                                   (locs_var, [], CursorTy, VarE cur)
@@ -6438,7 +6455,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (locs_var, [], CursorTy, VarE ind_var)
                               binds' = loc_bind : binds
                               tenv'' = M.insert locs_var (MkTy2 CursorTy) tenv'
-                          bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
+                          bod <- go isFirstPacked m1'' m2' (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
                           return $ mkLets binds' bod
 
                         VectorTy el_ty -> do
@@ -6466,7 +6483,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (locs_var, [], CursorTy, VarE ind_var)
                               binds' = loc_bind : binds
                               tenv'' = M.insert locs_var (MkTy2 CursorTy) tenv'
-                          bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
+                          bod <- go isFirstPacked m1g m2g (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
                           return $ mkLets binds' bod
 
                         ListTy el_ty -> do
@@ -6494,7 +6511,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (locs_var, [], CursorTy, VarE ind_var)
                               binds' = loc_bind : binds
                               tenv'' = M.insert locs_var (MkTy2 CursorTy) tenv'
-                          bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
+                          bod <- go isFirstPacked m1g m2g (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv''
                           return $ mkLets binds' bod
 
                         PackedTy {} -> do
@@ -6507,15 +6524,33 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                       ]
                                   )
                                   tenv
-                              loc_bind = case M.lookup v indirections_env of
+                              (loc_bind, var_used) = case M.lookup v indirections_env of
                                 -- This is the first packed value. We can unpack this.
                                 Nothing ->
-                                  (locs_var, [], CursorTy, VarE cur)
+                                  ((locs_var, [], CursorTy, VarE cur), cur)
                                 -- We need to access this using a random access node
                                 Just (_var_loc, ind_var) ->
-                                  (locs_var, [], CursorTy, VarE ind_var)
-                          bod <- go (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv'
-                          return $ mkLets [loc_bind, (v, [], CursorTy, VarE locs_var)] bod
+                                  ((locs_var, [], CursorTy, VarE ind_var), ind_var)
+                          let mut_var = findMutableLocationPointingToVar cur m1g
+                          -- Vidush: For now this breaks,
+                          -- I think to really fix the code here, the mutable loc env shoud be keyed by 
+                          -- var or, (loc,var) to keep the current code functionining.
+                          (m1g', addl_bnds, isFirstPacked') <- case mut_var of 
+                                                  Nothing -> return (m1g, [], isFirstPacked) 
+                                                  Just ml -> do
+                                                             if (isLocAlive (getLocVarFromFreeVarsTy loc) rhs False && isFirstPacked)
+                                                             then do 
+                                                              let m1inner = updateMutableLocPtsToEnv ml m1g (v, Just ml, Nothing, S.fromList [locs_var, var_used]) True
+                                                              void <- gensym "void"
+                                                              let mlname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
+                                                              let bump_bnd = [(void, [], ProdTy [], Ext $ WriteCursorMutable mlname (VarE var_used))]
+                                                              pure (m1inner, bump_bnd, True)
+                                                             else do
+                                                                -- let m1inner = updateMutableLocPtsToEnv ml m1g ((toEndV v), Just ml, Nothing, S.fromList [locs_var, var_used]) True
+                                                                pure (m1g, [], isFirstPacked)
+                                                              
+                          bod <- go isFirstPacked' m1g' m2g (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv'
+                          return $ mkLets ([loc_bind, (v, [], CursorTy, VarE locs_var)] ++ addl_bnds) bod
 
                         _ -> error $ "unpackWitnAbsRAN: Unexpected field " ++ sdoc (v, loc) ++ ":" ++ sdoc ty
 
@@ -6572,7 +6607,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))
                                 ]
                           let curw' = SoAWin (toEndV v) _field_cur 
-                          bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
+                          bod <- go isFirstPacked m1g m2g curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
                           return $ mkLets binds bod
 
                         CursorArrayTy sz -> do
@@ -6608,7 +6643,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                         (toEndV v, [], CursorTy, Ext $ AddCursor dcur_end (LitE (8 * sz)))
                                       ]
                           let curw' = SoAWin (toEndV v) _field_cur 
-                          bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
+                          bod <- go isFirstPacked m1g m2g curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
                           return $ mkLets binds bod
 
 
@@ -6628,7 +6663,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (locs_var, [], CursorTy, VarE ind_var)
                               binds' = loc_bind : binds
                               tenv'' = dbgTrace (minChatLvl) "Print in scalar ty: " dbgTrace (minChatLvl) (sdoc (loc_bind)) dbgTrace (minChatLvl) "End in scalar ty SoA unpackDcon!\n." M.insert locs_var (MkTy2 CursorTy) tenv'
-                          bod <- go (SoAWin dcur_end field_cur') fenv rst_vlocs rst_tys indirections_env denv tenv''
+                          bod <- go isFirstPacked m1g m2g (SoAWin dcur_end field_cur') fenv rst_vlocs rst_tys indirections_env denv tenv''
                           return $ mkLets binds' bod
 
                         -- _ | isScalarTy ty -> do
@@ -6748,7 +6783,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                  let let_mk_cur_arr = (locs_var, [], ty3_of_field2, makeCurArr)
                                                  let dcon_nxt = [(dcon_next, [], CursorTy, VarE cur)] ++ [let_mk_cur_arr, (v, [], ty3_of_field2, VarE (locs_var))]
                                                  let curw' = SoAWin dcon_next _field_cur
-                                                 bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
+                                                 bod <- go isFirstPacked m1g m2g curw' fenv rst_vlocs rst_tys indirections_env denv tenv'
                                                  return $ mkLets dcon_nxt bod
                                               -- We need to access this using a random access node
                                               Just (_var_loc, ind_var) -> do
@@ -6757,7 +6792,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                 let bnd = (locs_var, [], ty3_of_field2, VarE ind_var)
                                                 let dcon_nxt = [(dcon_next, [], CursorTy, VarE cur)] ++ [bnd, (v, [], ty3_of_field2, VarE (locs_var))]
                                                 let curw' = SoAWin dcon_next _field_cur
-                                                bod <- go curw' fenv rst_vlocs rst_tys indirections_env denv tenv''
+                                                bod <- go isFirstPacked m1g m2g curw' fenv rst_vlocs rst_tys indirections_env denv tenv''
                                                 return $ mkLets dcon_nxt bod
                                 -- VS: TODO: needs to be fixed when packed type is not self recursive.
                                 False -> do
@@ -6780,7 +6815,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                               -- We need to access this using a random access node
                                               Just (_var_loc, ind_var) ->
                                                 (locs_var, [], ty3_of_field2, VarE ind_var)
-                                   bod <- go curw fenv rst_vlocs rst_tys indirections_env denv tenv'
+                                   bod <- go isFirstPacked m1g m2g curw fenv rst_vlocs rst_tys indirections_env denv tenv'
                                    return $ mkLets [loc_bind, (v, [], ty3_of_field2, VarE locs_var)] bod
 
                         -- Flip canBind to indicate that the subsequent fields
@@ -7004,7 +7039,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                 let size_of_scalar = sizeOfTy ty
                                 let lvar = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
                                 let bump_bns = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable lvar (LitE (fromJust $ size_of_scalar)))]
-                                return (m1inner, bump_bns)
+                                dbgTrace (minChatLvl) "Print inside scalar binds: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, bump_bns)) dbgTrace (minChatLvl) "End printing inside Just l case scalar binds!\n"  return (m1inner, bump_bns)
                               else do
                                     -- we are still updating the env, even though the field is dead.
                                     -- This makes the algorithm work fine.
@@ -7059,9 +7094,12 @@ giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv molden
                                                                                                       let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE oldv))
                                                                                                       dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec Single!\n" return $ mkLets [additional_bnd] (VarE take_address)
                                                                                           SoA{} -> case isInsideTimeIt of 
-                                                                                                          False -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec but SoA!\n" return $ VarE oldv
-                                                                                                          True -> do
-                                                                                                                   copy_var <- gensym "copy_start_timeit"
+                                                                                                          -- False -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec but SoA!\n" return $ VarE oldv
+                                                                                                          -- True
+                                                                                                          -- Vidush: we always copy the address of the start
+                                                                                                          -- Since the cursors are mutable, their address may be updated. 
+                                                                                                          _ -> do
+                                                                                                                   copy_var <- gensym "copy_address"
                                                                                                                    let variable_holding_start_vals = oldv
                                                                                                                        ty_of_loc = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
                                                                                                                        make_copy_binds = [ (copy_var, [], ty_of_loc, Ext $ InitCursor ty_of_loc), ("_", [], ProdTy [], Ext $ MemCpy copy_var oldv ty_of_loc)]
