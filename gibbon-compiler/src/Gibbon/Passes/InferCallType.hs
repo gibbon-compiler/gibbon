@@ -652,6 +652,10 @@ inferCallTypeFnBodyHelper depth exp2 = case exp2 of
                 -- TODO
                 -- Here, check if the data con is the one that's in the return type.
                 -- Then, also return the output loc that in the datacon, only that loc should be marked as OutputMutable
+                Ext ext -> case ext of 
+                             -- We also just skip TacCursor calls, since these just unpack random access nodes
+                             TagCursor{} -> inferCallTypeFnBodyHelper depth bod
+                             _ -> NotTailRec
                 DataConE _loc _d _args -> inferCallTypeFnBodyHelper (depth + 1) bod {-dbgTrace minChatLvl ("Here2!") dbgTrace minChatLvl (sdoc rhs)-}
                 -- TODO: figure out a way to get the return type of the function
                 --let tyConOfDataConE = getTyOfDataCon ddefs d
