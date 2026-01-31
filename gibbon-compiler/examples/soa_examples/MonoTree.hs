@@ -4,7 +4,7 @@ module MonoTree where
 data Tree = Leaf Int
           | Node Int Tree Tree
   deriving Show
-{-# ANN type Tree "Factored" #-}
+{-# ANN type Tree "Linear" #-}
 
 mkTree :: Int -> Int -> Tree
 mkTree d acc =

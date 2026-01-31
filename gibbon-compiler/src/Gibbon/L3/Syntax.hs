@@ -81,7 +81,7 @@ type Ty3 = UrTy ()
 -- For a Mutable Location, we store its current value in the env. (variable name, location value name)
 -- We also store the mutable end region in scope if it exists for a mutable location
 -- We also store any aliases that may exist for the loc we are keeping track of
-type MutableLocPtsToEnv = M.Map LocVar (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
+type MutableLocPtsToEnv = M.Map LocVar [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)]
 
 -- Store the old value of the mutable location.
 -- Also store the mutable loc of the end of region
@@ -375,42 +375,55 @@ scalarToTy BoolS = BoolTy
 
 -- Takes in a Loc and checks if a mutable locations points to that loc
 checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
-checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, (_v, mlv, _r, _aliases)) mbl -> case mlv of 
-                                                                                    Nothing -> mbl
-                                                                                    Just lv -> if lv == loc
-                                                                                               then Just k
-                                                                                               else mbl
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, lst) mbl ->
+                                                            foldr (\(_v, mlv, _r, _aliases) mbl' -> case mlv of 
+                                                                                                      Nothing -> mbl'
+                                                                                                      Just lv -> if lv == loc
+                                                                                                               then Just k
+                                                                                                               else mbl'
+                                                                  ) mbl lst
                                                           ) Nothing (M.toList mlocenv)
 
 -- Check if a Variable if a mutable variable or not
 checkIfVarIsMutable :: Var -> MutableLocPtsToEnv -> Bool 
-checkIfVarIsMutable var mlocenv = L.foldr (\(_k, (v, _mlv, _r, aliases)) b -> if S.null aliases 
-                                                                              then (v == var) || b
+checkIfVarIsMutable var mlocenv = L.foldr (\(_k, lst) b -> 
+                                                  foldr (\(v, _mlv, _r, aliases) b'  -> 
+                                                                              if S.null aliases 
+                                                                              then (v == var) || b'
                                                                               else let 
                                                                                     isAlias = S.member var aliases 
                                                                                     direct = v == var
-                                                                                   in isAlias || direct || b
+                                                                                   in isAlias || direct || b'
+                                                        ) b lst
                                           ) False (M.toList mlocenv)
 
 findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, aliases)) acc -> if v == vv || S.member v aliases 
+findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc -> 
+                                                            foldr (\(vv, _mlv, _rr, aliases) acc' ->
+                                                                                             if v == vv || S.member v aliases 
                                                                                              then Just k
-                                                                                             else acc
+                                                                                             else acc'
+                                                                  ) acc lst 
                                                     ) Nothing (M.toList mlocenv)
 
 findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, (vv, _mlv, _rr, aliases)) acc -> if (v == (toEndV vv)) || S.member v aliases 
+findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
+                                                              foldr (\(vv, _mlv, _rr, aliases) acc' -> 
+                                                                                               if (v == (toEndV vv)) || S.member v aliases 
                                                                                                then Just k
-                                                                                               else acc
+                                                                                               else acc'
+                                                                    ) acc lst
                                                     ) Nothing (M.toList mlocenv)
 
 
 findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
-findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, (v, _mlv, rr, _aliases)) acc -> case rr of 
-                                                                                                Nothing -> acc 
-                                                                                                Just rr' -> if r == rr' 
-                                                                                                            then Just (v, k)
-                                                                                                            else acc
+findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, lst) acc ->
+                                                            foldr (\(v, _mlv, rr, _aliases) acc' -> case rr of 
+                                                                                                        Nothing -> acc' 
+                                                                                                        Just rr' -> if r == rr' 
+                                                                                                                    then Just (v, k)
+                                                                                                                    else acc'
+                                                                  ) acc lst
                                                     ) Nothing (M.toList mlocenv)
 
 -- Vidush: Implement two functions that insert and update the key in the environment for both the pts to env and for the old env.
@@ -419,24 +432,42 @@ findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, (v, _mlv, rr, _aliases
 -- For Make SoA locations, these might alias so we can store them as aliases in the updated entry.
 -- (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
 
+
+findAValidRegion :: [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)] -> Maybe RegVar
+findAValidRegion lst = case lst of 
+                            [] -> Nothing
+                            -- Vidush: Maybe its good to assert that all the regions are the same.
+                            (_v, _lc, reg, _aliases):xs -> case reg of
+                                                              Nothing -> findAValidRegion xs
+                                                              Just{} -> reg 
+
 updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
 updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
-                                                                    Nothing -> M.insert key (v, lc, reg, aliases) env
-                                                                    Just (v', _lc', reg', aliases') -> case reg' of 
-                                                                                                          Nothing -> if mayalias
-                                                                                                                     then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
-                                                                                                                     else M.insert key (v, lc, reg, aliases) env
-                                                                                                          Just rr -> case reg of 
-                                                                                                                          Nothing -> if mayalias
-                                                                                                                                     then M.insert key (v, lc, reg', S.union (S.insert v' aliases') aliases) env
-                                                                                                                                     else M.insert key (v, lc, reg', aliases) env
-                                                                                                                          Just rr' -> if rr /= rr'
-                                                                                                                                      then error "Expected the regions to be the same!\n"
-                                                                                                                                      else if mayalias
-                                                                                                                                      then M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env
-                                                                                                                                      else M.insert key (v, lc, reg', aliases) env
+                                                                    Nothing -> M.insert key [(v, lc, reg, aliases)] env
+                                                                    Just lst ->  if mayalias
+                                                                                 then M.insert key (lst ++ [(v, lc, reg, aliases)]) env
+                                                                                 else M.insert key ([(v, lc, reg, aliases)]) env 
+                                                                      
+                                                                      
+                                                                      
+                                                                      -- let reg' = (findAValidRegion lst) 
+                                                                      --             in case reg' of 
+                                                                      --                         Nothing -> -- M.insert key (lst ++ [(v, lc, reg, aliases)]) env
+                                                                      --                                     if mayalias
+                                                                      --                                     then M.insert key (lst ++ [(v, lc, reg, aliases)]) env
+                                                                      --                                     else M.insert key ([(v, lc, reg, aliases)]) env
+                                                                      --                         Just rr -> case reg of 
+                                                                      --                                          Nothing -> -- M.insert key (lst ++ [(v, lc, reg, aliases)]) env
+                                                                      --                                                      if mayalias
+                                                                      --                                                      then M.insert key (lst ++ [(v, lc, reg', aliases)]) env
+                                                                      --                                                      else M.insert key ([(v, lc, reg', aliases)]) env
+                                                                      --                                          Just rr' -> if rr /= rr'
+                                                                      --                                                      then error "Expected the regions to be the same!\n"
+                                                                      --                                                      else if mayalias
+                                                                      --                                                      then M.insert key (lst ++ [(v, lc, reg', aliases)]) env
+                                                                      --                                                      else M.insert key ([(v, lc, reg', aliases)]) env
                                                                                                             
                                                                                                                      
 
