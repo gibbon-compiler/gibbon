@@ -10,7 +10,7 @@ module Gibbon.L3.Syntax
   (
     -- * Extended language
     E3Ext(..), Prog3, DDef3, DDefs3, FunDef3, FunDefs3 , Exp3, Ty3
-  , Scalar(..), mkScalar, scalarToTy
+  , Scalar(..), MutableLocPtsToValueEntry(..), mkScalar, scalarToTy
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars
@@ -81,7 +81,14 @@ type Ty3 = UrTy ()
 -- For a Mutable Location, we store its current value in the env. (variable name, location value name)
 -- We also store the mutable end region in scope if it exists for a mutable location
 -- We also store any aliases that may exist for the loc we are keeping track of
-type MutableLocPtsToEnv = M.Map LocVar [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)]
+
+data MutableLocPtsToValueEntry = CurrentScope (Var, Maybe LocVar, Maybe RegVar, S.Set Var) 
+                               | FutureScope (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
+                                 deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+instance Out MutableLocPtsToValueEntry
+ 
+type MutableLocPtsToEnv = M.Map LocVar [MutableLocPtsToValueEntry]
 
 -- Store the old value of the mutable location.
 -- Also store the mutable loc of the end of region
@@ -374,57 +381,179 @@ scalarToTy BoolS = BoolTy
 
 
 -- Takes in a Loc and checks if a mutable locations points to that loc
+-- foldr (\(_v, mlv, _r, _aliases) mbl' -> case mlv of 
+--                                           Nothing -> mbl'
+--                                           Just lv -> if lv == loc
+--                                                    then Just k
+--                                                    else mbl'
+--       ) mbl lst  
 checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
-checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, lst) mbl ->
-                                                            foldr (\(_v, mlv, _r, _aliases) mbl' -> case mlv of 
-                                                                                                      Nothing -> mbl'
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, lst) mbl -> case lst of 
+                                                                                 CurrentScope (_v, mlv, _r, _aliases):_rst -> case mlv of 
+                                                                                                      Nothing -> mbl
                                                                                                       Just lv -> if lv == loc
                                                                                                                then Just k
-                                                                                                               else mbl'
-                                                                  ) mbl lst
+                                                                                                               else mbl
+                                                                                 -- Vidush: Should we do though any of the future values? 
+                                                                                 -- Maybe, but ideally it should be enough to check the 
+                                                                                 -- current scope of the mutable location.
+                                                                                 _ -> Nothing
                                                           ) Nothing (M.toList mlocenv)
 
 -- Check if a Variable if a mutable variable or not
 checkIfVarIsMutable :: Var -> MutableLocPtsToEnv -> Bool 
-checkIfVarIsMutable var mlocenv = L.foldr (\(_k, lst) b -> 
-                                                  foldr (\(v, _mlv, _r, aliases) b'  -> 
-                                                                              if S.null aliases 
-                                                                              then (v == var) || b'
-                                                                              else let 
-                                                                                    isAlias = S.member var aliases 
-                                                                                    direct = v == var
-                                                                                   in isAlias || direct || b'
-                                                        ) b lst
+checkIfVarIsMutable var mlocenv = L.foldr (\(_k, lst) b -> case lst of 
+                                                                CurrentScope (v, _mlv, _r, aliases):rst -> if S.null aliases 
+                                                                                                            then (v == var) || b
+                                                                                                            else let 
+                                                                                                                    isAlias = S.member var aliases 
+                                                                                                                    direct = v == var
+                                                                                                                    -- We also need to check all the future scopes.
+                                                                                                                    checkFutures = foldr (\fval b' -> case fval of 
+                                                                                                                                                          FutureScope (v', _mlv', _r', aliases') -> 
+                                                                                                                                                                          if S.null aliases
+                                                                                                                                                                          then (v' == var || b')
+                                                                                                                                                                          else let 
+                                                                                                                                                                                  isAlias' = S.member var aliases'
+                                                                                                                                                                                  direct' = v' == var
+                                                                                                                                                                                in isAlias' || direct' || b'
+                                                                                                                                                          -- Vidush: By design ideally this should not happen
+                                                                                                                                                          -- Maybe we should error out here instead
+                                                                                                                                                          CurrentScope{} -> b'
+                                                                                                                                                                
+                                                                                                                                         ) False rst
+                                                                                                                  in isAlias || direct || b || checkFutures
+                                                                FutureScope{}:_rst -> let checkFutures = foldr (\fval b' -> case fval of 
+                                                                                                                                   FutureScope (v', _mlv', _r', aliases') -> 
+                                                                                                                                                    if S.null aliases'
+                                                                                                                                                    then (v' == var || b')
+                                                                                                                                                    else let 
+                                                                                                                                                           isAlias' = S.member var aliases'
+                                                                                                                                                           direct' = v' == var
+                                                                                                                                                          in isAlias' || direct' || b'
+                                                                                                                                   -- Vidush: By design ideally this should not happen
+                                                                                                                                   -- Maybe we should error out here instead 
+                                                                                                                                   CurrentScope{} -> b'
+                                                                                                               ) False lst
+                                                                                       in checkFutures
+                                                                [] -> b
                                           ) False (M.toList mlocenv)
 
-findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc -> 
-                                                            foldr (\(vv, _mlv, _rr, aliases) acc' ->
-                                                                                             if v == vv || S.member v aliases 
-                                                                                             then Just k
-                                                                                             else acc'
-                                                                  ) acc lst 
-                                                    ) Nothing (M.toList mlocenv)
+findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> (Maybe LocVar, MutableLocPtsToEnv)
+findMutableLocationPointingToVar v mlocenv = let result = L.foldr (\(k, lst) acc@(_ml, mlenv) -> case lst of 
+                                                                [] -> acc
+                                                                CurrentScope (vv, _mlv, _rr, aliases):_rst -> if v == vv || S.member v aliases 
+                                                                                                             then (Just k, mlocenv)
+                                                                                                             -- check if any future values point to the var
+                                                                                                             -- If yes, we need to update the current entry
+                                                                                                             else 
+                                                                                                              let (newCur, lst') =
+                                                                                                                   foldr 
+                                                                                                                    (\entr acc'@(c, alst) -> 
+                                                                                                                          case entr of
+                                                                                                                             -- we just skip this
+                                                                                                                             CurrentScope{} -> acc' 
+                                                                                                                             FutureScope ent@(vv', _mlv, _rr, aliases') -> 
+                                                                                                                                                                     if v == vv' || S.member v aliases'
+                                                                                                                                                                     then 
+                                                                                                                                                                      (Just (CurrentScope ent), alst)
+                                                                                                                                                                     else 
+                                                                                                                                                                      (c, [FutureScope ent] ++ alst) 
+                                                                                                                    ) (Nothing, []) lst
+                                                                                                                in case newCur of 
+                                                                                                                         Nothing -> acc
+                                                                                                                         Just cur -> (Just k, M.insert k ([cur] ++ lst') mlenv)
+                                                                _ ->  let (newCur, lst') =
+                                                                                foldr 
+                                                                                  (\entr acc'@(c, alst) -> 
+                                                                                          case entr of
+                                                                                               -- we just skip this
+                                                                                               CurrentScope{} -> acc' 
+                                                                                               FutureScope ent@(vv, _mlv, _rr, aliases) -> 
+                                                                                                          if v == vv || S.member v aliases
+                                                                                                          then 
+                                                                                                            (Just (CurrentScope ent), alst)
+                                                                                                          else 
+                                                                                                            (c, [FutureScope ent] ++ alst) 
+                                                                                  ) (Nothing, []) lst
+                                                                        in case newCur of 
+                                                                                 Nothing -> acc
+                                                                                 Just cur -> (Just k, M.insert k ([cur] ++ lst') mlenv)  
+                                                    ) (Nothing, mlocenv) (M.toList mlocenv)
+                                                in result
 
-findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
-                                                              foldr (\(vv, _mlv, _rr, aliases) acc' -> 
-                                                                                               if (v == (toEndV vv)) || S.member v aliases 
-                                                                                               then Just k
-                                                                                               else acc'
-                                                                    ) acc lst
-                                                    ) Nothing (M.toList mlocenv)
+-- findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+-- findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
+--                                                               foldr (\(vv, _mlv, _rr, aliases) acc' -> 
+--                                                                                                if (v == (toEndV vv)) || S.member v aliases 
+--                                                                                                then Just k
+--                                                                                                else acc'
+--                                                                     ) acc lst
+--                                                         ) Nothing (M.toList mlocenv)
+
+findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> (Maybe LocVar, MutableLocPtsToEnv)
+findMutableLocationPointingToEndVar v mlocenv = let result = L.foldr (\(k, lst) acc@(_ml, mlenv) -> case lst of 
+                                                                                [] -> acc
+                                                                                CurrentScope (vv, _mlv, _rr, aliases):_rst -> if v == (toEndV vv) || S.member v aliases 
+                                                                                                                            then (Just k, mlocenv)
+                                                                                                                            -- check if any future values point to the var
+                                                                                                                            -- If yes, we need to update the current entry
+                                                                                                                            else 
+                                                                                                                              let (newCur, lst') =
+                                                                                                                                        foldr 
+                                                                                                                                          (\entr acc'@(c, alst) -> 
+                                                                                                                                                case entr of
+                                                                                                                                                  -- we just skip this
+                                                                                                                                                  CurrentScope{} -> acc' 
+                                                                                                                                                  FutureScope ent@(vv', _mlv, _rr, aliases') -> 
+                                                                                                                                                                                          if v == (toEndV vv') || S.member v aliases'
+                                                                                                                                                                                          then 
+                                                                                                                                                                                            (Just (CurrentScope ent), alst)
+                                                                                                                                                                                          else 
+                                                                                                                                                                                            (c, [FutureScope ent] ++ alst) 
+                                                                                                                                          ) (Nothing, []) lst
+                                                                                                                                      in case newCur of 
+                                                                                                                                              Nothing -> acc
+                                                                                                                                              Just cur -> (Just k, M.insert k ([cur] ++ lst') mlenv)
+                                                                                _ ->  let (newCur, lst') =
+                                                                                                foldr 
+                                                                                                  (\entr acc'@(c, alst) -> 
+                                                                                                          case entr of
+                                                                                                              -- we just skip this
+                                                                                                              CurrentScope{} -> acc' 
+                                                                                                              FutureScope ent@(vv, _mlv, _rr, aliases) -> 
+                                                                                                                          if v == (toEndV vv) || S.member v aliases
+                                                                                                                          then 
+                                                                                                                            (Just (CurrentScope ent), alst)
+                                                                                                                          else 
+                                                                                                                            (c, [FutureScope ent] ++ alst) 
+                                                                                                  ) (Nothing, []) lst
+                                                                                        in case newCur of 
+                                                                                                Nothing -> acc
+                                                                                                Just cur -> (Just k, M.insert k ([cur] ++ lst') mlenv)  
+                                                                    ) (Nothing, mlocenv) (M.toList mlocenv)
+                                                in result
 
 
 findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
-findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, lst) acc ->
-                                                            foldr (\(v, _mlv, rr, _aliases) acc' -> case rr of 
-                                                                                                        Nothing -> acc' 
-                                                                                                        Just rr' -> if r == rr' 
-                                                                                                                    then Just (v, k)
-                                                                                                                    else acc'
-                                                                  ) acc lst
-                                                    ) Nothing (M.toList mlocenv)
+findMutableLocationInSameRegion r mlocenv = let (res, _) = L.foldr (\(k, lst) (acc, found) ->
+                                                                      foldr (\ent (acc', found') -> case ent of 
+                                                                                                CurrentScope (v, _mlv, rr, _aliases) -> 
+                                                                                                                case rr of 
+                                                                                                                    Nothing -> (acc', found') 
+                                                                                                                    Just rr' -> if (not found') && r == rr' 
+                                                                                                                                then (Just (v, k), True)
+                                                                                                                                else (acc', found')
+                                                                                                FutureScope (v, _mlv, rr, _aliases) -> 
+                                                                                                                case rr of 
+                                                                                                                      Nothing -> (acc', found') 
+                                                                                                                      Just rr' -> if (not found') && r == rr'
+                                                                                                                                  then (Just (v, k), True)
+                                                                                                                                  else (acc', found')
+                                                                            ) (acc, found) lst
+                                                                   ) (Nothing, False) (M.toList mlocenv)
+                                             in res
+
 
 -- Vidush: Implement two functions that insert and update the key in the environment for both the pts to env and for the old env.
 -- TODO: Implement some simple logic to tell if the old variable can be an alias. Tough problem. 
@@ -442,13 +571,21 @@ findAValidRegion lst = case lst of
                                                               Just{} -> reg 
 
 updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
-updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+updateMutableLocPtsToEnv key env (v, lc, reg, aliases) isfuture = 
+                                                                case M.lookup key env of 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
-                                                                    Nothing -> M.insert key [(v, lc, reg, aliases)] env
-                                                                    Just lst ->  if mayalias
-                                                                                 then M.insert key (lst ++ [(v, lc, reg, aliases)]) env
-                                                                                 else M.insert key ([(v, lc, reg, aliases)]) env 
+                                                                    Nothing -> if isfuture
+                                                                               then M.insert key [FutureScope (v, lc, reg, aliases)] env
+                                                                               else M.insert key [CurrentScope (v, lc, reg, aliases)] env
+                                                                    Just lst ->  if isfuture
+                                                                                 then M.insert key (lst ++ [FutureScope (v, lc, reg, aliases)]) env
+                                                                                 else 
+                                                                                  case lst of 
+                                                                                        [] -> M.insert key ([CurrentScope (v, lc, reg, aliases)]) env
+                                                                                        CurrentScope (_v', _lc', _reg', _aliases'):xs -> M.insert key ([CurrentScope (v, lc, reg, S.union _aliases' aliases)] ++ xs) env
+                                                                                        FutureScope (_v', _lc', _reg', _aliases'):_xs -> M.insert key ([CurrentScope (v, lc, reg, S.union _aliases' aliases)] ++ lst) env    
+                                                                                   
                                                                       
                                                                       
                                                                       
@@ -776,14 +913,14 @@ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality t
     -- Check if location in the packed type is a locations pointer to by 
     -- any mutable location, (We should not return start and end locations for such types) 
     PackedTy _ l    -> let lname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l) 
-                           mut_l = findMutableLocationPointingToVar lname mutLocsEnv
+                           (mut_l, mutLocsEnv') = findMutableLocationPointingToVar lname mutLocsEnv
                         in 
                           if Mb.isJust mut_l
-                          then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
+                          then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv')) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
                           -- If the location in questionk itself is a mutable location.
                           else if M.member l oldLocsToMutEnv
                           then ProdTy []
-                          else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
+                          else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv')) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
     VectorTy el_ty' -> VectorTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     PtrTy    -> PtrTy

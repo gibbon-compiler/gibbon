@@ -1,6 +1,6 @@
 -- data A = CA Int A | ANil
 data List = Cons Int Int Int Int Int Int Int Int Int Int List | Nil
-{-# ANN type List "Factored" #-}
+{-# ANN type List "Linear" #-}
 -- {-# ANN type A "Linear" #-}
 
 

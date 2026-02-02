@@ -980,10 +980,10 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                        deref_val <- gensym "deref_val"
                        let additional_deref_let = mkLets [(deref_val, [], CursorTy, Ext $ DerefMutCursor v)]
                        let tenv' = M.insert deref_val (MkTy2 CursorTy) tenv
-                       let output_mut_loc_scrut = findMutableLocationPointingToVar v m1
+                       let (output_mut_loc_scrut, mupdated) = findMutableLocationPointingToVar v m1
                        (m1', m2') <- case output_mut_loc_scrut of 
                                             Nothing -> error "Did not expect mutable cursor!\n"
-                                            Just outloc -> do let m1i = updateMutableLocPtsToEnv outloc m1 (deref_val, Just outloc, Nothing, S.empty) False
+                                            Just outloc -> do let m1i = updateMutableLocPtsToEnv outloc mupdated (deref_val, Just outloc, Nothing, S.empty) False
                                                               let m2i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m2
                                                               return (m1i, m2i)
                        case_expr <- additional_deref_let 
@@ -992,7 +992,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                        dbgTrace (minChatLvl) "Print in MutCursorCase: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt, alive_buffers)) dbgTrace (minChatLvl) "End printing MutCursorCase.\n" return (case_expr, freeVarToVarEnv, m1', m2')
         CursorArrayTy {} -> do
           -- check if v points to any mutable location
-          let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+          let (mut_loc_pointing_to_v, m1updated) = findMutableLocationPointingToVar v m1
           (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
@@ -1006,7 +1006,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                                                                                                                         Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
                                                                                                                         SoA{} -> error "Did not expect SoA location for data constructor region!\n"
                                                                         let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
-                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1updated (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
                                                                         dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
@@ -1024,11 +1024,11 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
 
           SoA _ _ -> do
             -- check if v points to any mutable location
-            let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+            let (mut_loc_pointing_to_v, m1updated) = findMutableLocationPointingToVar v m1
             (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1updated, m2, freeVarToVarEnv')
                                                             Just ml -> do
                                                                         dcon_var_deref <- gensym "deref_dcon_var"
                                                                         let dcon_loc = getDconLoc ml
@@ -1038,7 +1038,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                                                                                                                         Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
                                                                                                                         SoA{} -> error "Did not expect SoA location for data constructor region!\n"
                                                                         let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
-                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1updated (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
                                                                         dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
@@ -1152,10 +1152,10 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                 Nothing -> ([], tenv, m1')
                 Just vs ->
                   let extended = M.fromList [(v, MkTy2 CursorTy) | (v, _, CursorTy, _) <- vs]
-                      mextended = foldr (\((v, _, _, _)) mfld -> let mutloc = findMutableLocationPointingToVar locs_variable m1'
+                      mextended = foldr (\((v, _, _, _)) mfld -> let (mutloc, m1updated) = findMutableLocationPointingToVar locs_variable mfld
                                                                           in case mutloc of 
-                                                                              Nothing -> mfld
-                                                                              Just ml -> updateMutableLocPtsToEnv ml mfld (v, Just ml, Nothing, S.empty) True        
+                                                                              Nothing -> m1updated
+                                                                              Just ml -> updateMutableLocPtsToEnv ml m1updated (v, Just ml, Nothing, S.empty) True        
                                         ) m1' vs 
                    in (vs, M.union extended tenv, mextended)
           case rhs_either of
@@ -1729,10 +1729,10 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                        deref_val <- gensym "deref_val"
                        let additional_deref_let = mkLets [(deref_val, [], CursorTy, Ext $ DerefMutCursor v)]
                        let tenv' = M.insert deref_val (MkTy2 CursorTy) tenv
-                       let output_mut_loc_scrut = dbgTrace (minChatLvl) "Print in MutCursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v, alive_buffers)) dbgTrace (minChatLvl) "End print in MutCursor Case.\n" findMutableLocationPointingToVar v m1
+                       let (output_mut_loc_scrut, m1updated) = dbgTrace (minChatLvl) "Print in MutCursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v, alive_buffers)) dbgTrace (minChatLvl) "End print in MutCursor Case.\n" findMutableLocationPointingToVar v m1
                        (m1', m2') <- case output_mut_loc_scrut of 
                                             Nothing -> error "Did not expect mutable cursor!\n"
-                                            Just outloc -> do let m1i = updateMutableLocPtsToEnv outloc m1 (deref_val, Just outloc, Nothing, S.empty) False 
+                                            Just outloc -> do let m1i = updateMutableLocPtsToEnv outloc m1updated (deref_val, Just outloc, Nothing, S.empty) False 
                                                               let m2i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m2
                                                               return (m1i, m2i)
                        (,,,) <$> (dl <$> additional_deref_let <$> CaseE (VarE $ deref_val))
@@ -1743,11 +1743,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
         
         CursorArrayTy {} -> do
             -- check if v points to any mutable location
-            let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+            let (mut_loc_pointing_to_v, m1updated) = findMutableLocationPointingToVar v m1
             (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1updated, m2, freeVarToVarEnv')
                                                             Just ml -> do
                                                                         dcon_var_deref <- gensym "deref_dcon_var"
                                                                         let dcon_loc = getDconLoc ml
@@ -1757,7 +1757,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                                                                                         Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
                                                                                                                         SoA{} -> error "Did not expect SoA location for data constructor region!\n"
                                                                         let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
-                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1updated (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
                                                                         dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v, alive_buffers)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
@@ -1780,11 +1780,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
           
           SoA _ _ -> do
               -- check if v points to any mutable location
-              let mut_loc_pointing_to_v = findMutableLocationPointingToVar v m1
+              let (mut_loc_pointing_to_v, m1updated) = findMutableLocationPointingToVar v m1
               (dcon_var', dcon_let, m1', m2', freeVarToVarEnv'') <- case mut_loc_pointing_to_v of 
                                                             Nothing -> do 
                                                                        let dcon_let_bind = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
-                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1, m2, freeVarToVarEnv')
+                                                                       dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Nothing cursor array ty.\n" return (dcon_var, dcon_let_bind, m1updated, m2, freeVarToVarEnv')
                                                             Just ml -> do
                                                                         dcon_var_deref <- gensym "deref_dcon_var"
                                                                         let dcon_loc = getDconLoc ml
@@ -1794,7 +1794,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                                                                                         Single l -> (l, M.insert (fromLocVarToFreeVarsTy dcon_loc) l freeVarToVarEnv')   
                                                                                                                         SoA{} -> error "Did not expect SoA location for data constructor region!\n"
                                                                         let dcon_let_bind = [(dcon_loc_name, [], MutCursorTy, Ext $ AddrOfCursor $ Ext $ IndexCursorArray v 0)]
-                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1 (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
+                                                                        let m1i = updateMutableLocPtsToEnv dcon_loc m1updated (dcon_var_deref, Just dcon_loc, Nothing, S.empty) True
                                                                         let m2i = M.insert dcon_loc (dcon_var_deref, Just dcon_loc, Nothing, S.empty) m2
                                                                         let deref_dcon_mut = [(dcon_var_deref, [], CursorTy, Ext $ DerefMutCursor dcon_loc_name)]
                                                                         dbgTrace (minChatLvl) "Print in case Cursor ArrayTy: " dbgTrace (minChatLvl) (sdoc (mut_loc_pointing_to_v, v)) dbgTrace (minChatLvl) "End in print case Just ml cursor array ty.\n" return (dcon_var_deref, (dcon_let_bind ++ deref_dcon_mut), m1i, m2i, freeVarToVarEnv_i)
@@ -1874,16 +1874,16 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                   -- Int, Float, Sym, or Bool
                   _ | isScalarTy ty -> do
                     (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
-                    let mut_loc_pts = dbgTrace (minChatLvl) "Print in DataConE: " dbgTrace (minChatLvl) (sdoc (additional_bnds, m1, m1')) dbgTrace (minChatLvl) "End in DataConE Case.\n" findMutableLocationPointingToVar d m1'
+                    let (mut_loc_pts, m1updated) = dbgTrace (minChatLvl) "Print in DataConE: " dbgTrace (minChatLvl) (sdoc (additional_bnds, m1, m1')) dbgTrace (minChatLvl) "End in DataConE Case.\n" findMutableLocationPointingToVar d m1'
                     (additional_bnds, m1'') <- case mut_loc_pts of 
-                                                      Nothing -> return ([], m1')
+                                                      Nothing -> return ([], m1updated)
                                                       Just ml -> do
                                                                   void_var <- gensym "void"
                                                                   let mlName = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy ml)
                                                                   let sizeTy = sizeOfTy ty
                                                                   let add_bnds = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable mlName (LitE (fromJust sizeTy)))]
-                                                                  let m1'' = updateMutableLocPtsToEnv ml m1' (d', Just ml, Nothing, S.empty) False
-                                                                  return (add_bnds, m1'') 
+                                                                  let m1updated' = updateMutableLocPtsToEnv ml m1updated (d', Just ml, Nothing, S.empty) False
+                                                                  return (add_bnds, m1updated') 
                     (res, m1g', m2g') <- go2 m1'' m2 marker_added d' rst
                     let finalExpr = LetE (d', [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc, Ext $ WriteScalar (mkScalar ty) d rnd') (mkLets additional_bnds res)
                     return (finalExpr, m1g', m2g')
@@ -2121,11 +2121,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                                                     Nothing -> (Nothing, oldv)
                                                                                     Just ol -> (Just ol, oldv)
                     let let_assign_write_cur = LetE (write_scalars_at, [], CursorTy, (VarE floc_var'))
-                    let mut_loc_pointing_at_scalar = findMutableLocationPointingToVar floc_var' mdc1
+                    let (mut_loc_pointing_at_scalar, mdc1updated) = findMutableLocationPointingToVar floc_var' mdc1
                     mdc1' <- case mut_loc_pointing_at_scalar of 
-                                              Nothing -> return mdc1
+                                              Nothing -> return mdc1updated
                                               Just ml -> do
-                                                          let mdc1i = updateMutableLocPtsToEnv ml mdc1 (write_scalars_at, Just ml, Nothing, S.singleton floc_var') True
+                                                          let mdc1i = updateMutableLocPtsToEnv ml mdc1updated (write_scalars_at, Just ml, Nothing, S.singleton floc_var') True
                                                           return mdc1i 
                     {- Update, aft_flocs with the correct location for the scalar field -}
                     {- TODO: Audit aft_flocs'  and fvarenv'-}
@@ -2140,11 +2140,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                             aft_flocs
                     let fvarenv'' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv'
                     (rest, mdc1'', mdc2') <- go2 marker_added mdc1' mdc2 fvarenv'' aft_dloc from_rec_end aft_flocs' rst
-                    let mut_loc_pointing_at_write_scalar = findMutableLocationPointingToVar write_scalars_at mdc1''
+                    let (mut_loc_pointing_at_write_scalar, mdc1prprupdated) = findMutableLocationPointingToVar write_scalars_at mdc1''
                     (bump_bnds, mdc1''') <- case mut_loc_pointing_at_write_scalar of 
-                                               Nothing -> return ([], mdc1'') 
+                                               Nothing -> return ([], mdc1prprupdated) 
                                                Just ml -> do 
-                                                           let mdc1i = updateMutableLocPtsToEnv ml mdc1'' (d', Just ml, Nothing, S.empty) False
+                                                           let mdc1i = updateMutableLocPtsToEnv ml mdc1prprupdated (d', Just ml, Nothing, S.empty) False
                                                            void_var <- gensym "void"
                                                            let ml_name = getVarNameFromFreeVar fvarenv' (fromLocVarToFreeVarsTy ml)
                                                            let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
@@ -2322,14 +2322,14 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
               )
               (additional_bnds, freeVarToVarEnv', 1)
               field_locs
-          let mut_loc_sloc_dcon = findMutableLocationPointingToVar sloc_dcon m1
+          let (mut_loc_sloc_dcon, m1updated) = findMutableLocationPointingToVar sloc_dcon m1
           (mut_loc_ad_bnds, m1') <- dbgTrace (minChatLvl) "Print in SoA Dcon case: " dbgTrace (minChatLvl) (sdoc (m1, sloc_dcon)) dbgTrace (minChatLvl) "End in print dcon case SoA!!\n" case mut_loc_sloc_dcon of 
-                                              Nothing -> return ([], m1)
+                                              Nothing -> return ([], m1updated)
                                               Just ml -> do 
                                                           void <- gensym "void"
                                                           let ml_name = getVarNameFromFreeVar freeVarToVarEnv'' (fromLocVarToFreeVarsTy ml)
                                                           let bnd = [(void, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE 1))]
-                                                          let mi1 = updateMutableLocPtsToEnv ml m1 (after_tag, Just ml, Nothing, S.empty) False
+                                                          let mi1 = updateMutableLocPtsToEnv ml m1updated (after_tag, Just ml, Nothing, S.empty) False
                                                           return (bnd, mi1)
           (go2expr, m1'', m2') <- go2 False m1' m2 freeVarToVarEnv'' after_tag Nothing field_locs locs_tys
           (,,,) <$> dl
@@ -2390,10 +2390,10 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                 Nothing -> ([], tenv, m1')
                 Just vs ->
                   let extended = M.fromList [(v, MkTy2 CursorTy) | (v, _, CursorTy, _) <- vs]
-                      mextended = foldr (\((v, _, _, _)) mfld -> let mutloc = findMutableLocationPointingToVar locs_var m1'
+                      mextended = foldr (\((v, _, _, _)) mfld -> let (mutloc, mfldupdated) = findMutableLocationPointingToVar locs_var mfld
                                                                           in case mutloc of 
-                                                                              Nothing -> mfld
-                                                                              Just ml -> updateMutableLocPtsToEnv ml mfld (v, Just ml, Nothing, S.empty) True        
+                                                                              Nothing -> mfldupdated
+                                                                              Just ml -> updateMutableLocPtsToEnv ml mfldupdated (v, Just ml, Nothing, S.empty) True        
                                         ) m1' vs                      
                    in (vs, M.union extended tenv, mextended)
           case rhs_either of
@@ -2815,7 +2815,14 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
 mutLocNeedsBump :: M.Map FreeVarsTy Var -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> Maybe LocVar -> Maybe Var -> (PreExp E3Ext loc (UrTy loc)) -> PassM (Maybe ((Var, [loc], (UrTy loc), (PreExp E3Ext loc (UrTy loc))), LocVar))
 mutLocNeedsBump freeVarToVarEnv ptsEnv oldEnv lv v offset = do 
                                        let mutBump = L.foldr (\(kl, lst) mred -> 
-                                                                        foldr (\(vpts, lpts, _endreg, _aliases) mred' -> 
+                                                                        foldr (\ent mred' -> 
+                                                                                  case ent of 
+                                                                                       CurrentScope (vpts, lpts, _endreg, _aliases) ->  
+                                                                                                                  case v of 
+                                                                                                                      Just vv -> if (vv == vpts)
+                                                                                                                                 then Just kl
+                                                                                                                                 else mred'
+                                                                                       FutureScope (vpts, lpts, _endreg, _aliases) ->  
                                                                                                                   case v of 
                                                                                                                       Just vv -> if (vv == vpts)
                                                                                                                                  then Just kl
@@ -2889,7 +2896,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
   case locExp of
     AfterConstantLE i loc -> do
       let loc_var_aftc = (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc)))
-      let mut_loc_var = findMutableLocationPointingToVar loc_var_aftc mLocPtsToEnv
+      let (mut_loc_var, mLocPtsToEnvUpdated) = findMutableLocationPointingToVar loc_var_aftc mLocPtsToEnv
       let lvar = dbgTrace (minChatLvl) "Print the environments: " dbgTrace (minChatLvl) (sdoc (loc, mut_loc_var, loc_var_aftc)) dbgTrace (minChatLvl) "End in print the env in cursorizeLocExp.\n" toLocVar lvararg
       (locs_var, use_this_loc, additional_bnds, bnds_after, mLocPtsToEnv', mLocOldValEnv') <- case ((isMutModality $ fromJust $ getModality loc) || (Mb.isJust mut_loc_var && (isInputModality (getModality loc)))) of 
                                                                     -- True -> do 
@@ -2967,22 +2974,22 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                             then do 
                                                                               let val = M.lookup (toLocVar loc) mLocOldValEnv
                                                                               let (vl, loc_pts, _, _) = fromJust val
-                                                                              needs_bump <- mutLocNeedsBump freeVarToVarEnv mLocPtsToEnv mLocOldValEnv loc_pts (Just vl) (L3.LitE i)
+                                                                              needs_bump <- mutLocNeedsBump freeVarToVarEnv mLocPtsToEnvUpdated mLocOldValEnv loc_pts (Just vl) (L3.LitE i)
                                                                               case needs_bump of
-                                                                                Nothing -> if (M.member (toLocVar loc) mLocPtsToEnv)
+                                                                                Nothing -> if (M.member (toLocVar loc) mLocPtsToEnvUpdated)
                                                                                             -- The locations is already in the PtsToEnv 
                                                                                             -- therefore, we gets its value from the oldenv
-                                                                                            then let old_val = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnv, mLocOldValEnv, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case1.\n" M.lookup (toLocVar loc) mLocOldValEnv
+                                                                                            then let old_val = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (mLocPtsToEnvUpdated, mLocOldValEnv, locExp)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp Nothing case1.\n" M.lookup (toLocVar loc) mLocOldValEnv
                                                                                               in case old_val of 
                                                                                                         Nothing -> error "Expected to have a value for the mutable location!"
                                                                                                         -- VS: No need to bump the mutable location in case we use the old location.
                                                                                                         Just (vl, Just l, _, _) -> do 
                                                                                                                   -- let l_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l) 
-                                                                                                                  pure (vl, l, [], [], mLocPtsToEnv, mLocOldValEnv)
+                                                                                                                  pure (vl, l, [], [], mLocPtsToEnvUpdated, mLocOldValEnv)
                                                                                                         -- If the loc is not available, we just use the mut loc
                                                                                                         -- TODO. this may not be required / special handling?
                                                                                                         Just (vl, Nothing, _, _) -> do
-                                                                                                                  pure (vl, (toLocVar loc), [], [], mLocPtsToEnv, mLocOldValEnv) 
+                                                                                                                  pure (vl, (toLocVar loc), [], [], mLocPtsToEnvUpdated, mLocOldValEnv) 
                                                                                               
                                                                                             else 
                                                                                               do
@@ -3003,7 +3010,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                               bump_loc_var <- gensym "void"
                                                                                               let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
                                                                                               -- We need to make the mutable loc point to the dereferenced value 
-                                                                                              let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnv (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False
+                                                                                              let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnvUpdated (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False
                                                                                               -- if there is no mapping of the mutable loc to its old value, we need to update it.
                                                                                               let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
                                                                                                                   then mLocOldValEnv
@@ -3028,7 +3035,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                           -- let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
                                                                                           let bumpMutLoc = b
                                                                                           -- We need to make the mutable loc point to the dereferenced value 
-                                                                                          let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnv (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False 
+                                                                                          let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnvUpdated (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False 
                                                                                           -- if there is no mapping of the mutable loc to its old value, we need to update it.
                                                                                           --let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
                                                                                           --                    then mLocOldValEnv
@@ -3057,7 +3064,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                 bump_loc_var <- gensym "void_ij"
                                                                                 let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable (mut_loc_varname) (LitE i))
                                                                                 -- We need to make the mutable loc point to the dereferenced value 
-                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv mut_loc mLocPtsToEnv (lvar_name, Just mut_loc, Nothing, S.empty) True
+                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv mut_loc mLocPtsToEnvUpdated (lvar_name, Just mut_loc, Nothing, S.empty) True
                                                                                 -- if there is no mapping of the mutable loc to its old value, we need to update it.
                                                                                 (mLocOldValEnv'', nbmoldenv) <- do 
                                                                                                     if (M.member mut_loc mLocOldValEnv)
@@ -3083,7 +3090,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                 bump_loc_var <- gensym "void"
                                                                                 let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable loc_name (LitE i))
                                                                                 -- We need to make the mutable loc point to the dereferenced value 
-                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnv (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False
+                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv (toLocVar loc) mLocPtsToEnvUpdated (lvar_name, Just lvar, Just $ toEndRegVar lvararg, S.empty) False
                                                                                 -- if there is no mapping of the mutable loc to its old value, we need to update it.
                                                                                 let mLocOldValEnv'' = if (M.member (toLocVar loc) mLocOldValEnv)
                                                                                                       then mLocOldValEnv
@@ -3093,7 +3100,9 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                           let lvar_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lvar)
                                                                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
                                                                           (new_key_vals, after_bnds) <- foldlM (\(kvals, bnds) (key, lst) -> 
-                                                                                                                      foldlM (\(kvals', bnds') (vval, lval, endreg, aliases) ->
+                                                                                                                      foldlM (\(kvals', bnds') ent ->
+                                                                                                                                 case ent of 
+                                                                                                                                   CurrentScope (vval, lval, endreg, aliases) -> 
                                                                                                                                             case lval of 
                                                                                                                                                   Nothing -> if vval == loc_name
                                                                                                                                                              then
@@ -3101,20 +3110,39 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                                                                                               let key_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy key) 
                                                                                                                                                               bump_loc_var <- gensym "void"    
                                                                                                                                                               let aft_bnd = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable key_name (LitE i)) 
-                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [(lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
-                                                                                                                                                             else return $ (kvals' ++ [(key, (lst ++ [(vval, lval, endreg, aliases)]))], bnds')
+                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [CurrentScope (lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
+                                                                                                                                                             else return $ (kvals' ++ [(key, (lst ++ [CurrentScope (vval, lval, endreg, aliases)]))], bnds')
                                                                                                                                                   Just l -> if l == (toLocVar loc)
                                                                                                                                                             then
                                                                                                                                                               do
                                                                                                                                                               let key_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy key)
                                                                                                                                                               bump_loc_var <- gensym "void"
                                                                                                                                                               let aft_bnd = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable key_name (LitE i)) 
-                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [(lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
+                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [CurrentScope (lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
                                                                                                                                                             else do 
-                                                                                                                                                              return $ (kvals' ++ [(key, (lst ++ [(vval, lval, endreg, aliases)]))], bnds')
+                                                                                                                                                              return $ (kvals' ++ [(key, (lst ++ [CurrentScope (vval, lval, endreg, aliases)]))], bnds')
+                                                                                                                                   FutureScope (vval, lval, endreg, aliases) -> 
+                                                                                                                                            case lval of 
+                                                                                                                                                  Nothing -> if vval == loc_name
+                                                                                                                                                             then
+                                                                                                                                                              do
+                                                                                                                                                              let key_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy key) 
+                                                                                                                                                              bump_loc_var <- gensym "void"    
+                                                                                                                                                              let aft_bnd = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable key_name (LitE i)) 
+                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [FutureScope (lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
+                                                                                                                                                             else return $ (kvals' ++ [(key, (lst ++ [FutureScope (vval, lval, endreg, aliases)]))], bnds')
+                                                                                                                                                  Just l -> if l == (toLocVar loc)
+                                                                                                                                                            then
+                                                                                                                                                              do
+                                                                                                                                                              let key_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy key)
+                                                                                                                                                              bump_loc_var <- gensym "void"
+                                                                                                                                                              let aft_bnd = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable key_name (LitE i)) 
+                                                                                                                                                              return (kvals' ++ [(key, (lst ++ [FutureScope (lvar_name, Just lvar, Just $ toEndRegVar lvararg, aliases)]))], bnds' ++ [aft_bnd])
+                                                                                                                                                            else do 
+                                                                                                                                                              return $ (kvals' ++ [(key, (lst ++ [FutureScope (vval, lval, endreg, aliases)]))], bnds')
                                                                                                                           ) (kvals, bnds) lst
-                                                                                                                                ) ([], []) (M.toList mLocPtsToEnv)
-                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds, locExp, mLocPtsToEnv, mLocOldValEnv)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp False.\n" M.fromList new_key_vals
+                                                                                                                                ) ([], []) (M.toList mLocPtsToEnvUpdated)
+                                                                          let mLocPtsToEnv'' = dbgTrace (minChatLvl) "Print tailrecimplt in cursorizeLocExp:" dbgTrace (minChatLvl) (sdoc (new_key_vals, after_bnds, locExp, mLocPtsToEnvUpdated, mLocOldValEnv)) dbgTrace (minChatLvl) "End printing tailrecimplt in cursorizeLocExp False.\n" M.fromList new_key_vals
                                                                           let loc_name = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy (toLocVar loc))
                                                                           pure (loc_name, toLocVar loc, [], after_bnds, mLocPtsToEnv'', mLocOldValEnv) 
       -- let locs_var = case (M.lookup ((fromLocVarToFreeVarsTy . toLocVar) loc) freeVarToVarEnv) of
@@ -3159,10 +3187,10 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
             Just v -> v
             Nothing -> error "cursorizeLocExp: AfterConstantLE: unexpected location variable"
           -- find mutable location pointing to loc
-          mut_loc_pointing_to_loc = findMutableLocationPointingToVar (toEndV v) mLocPtsToEnv
+          (mut_loc_pointing_to_loc, mLocPtsToEnvUpdated) = findMutableLocationPointingToVar (toEndV v) mLocPtsToEnv
           mLocPtsToEnv' = case mut_loc_pointing_to_loc of 
-                                      Nothing -> mLocPtsToEnv
-                                      Just l -> let m1 = updateMutableLocPtsToEnv l mLocPtsToEnv (lvar_name, Just lvar, Nothing, S.empty) False
+                                      Nothing -> mLocPtsToEnvUpdated
+                                      Just l -> let m1 = updateMutableLocPtsToEnv l mLocPtsToEnvUpdated (lvar_name, Just lvar, Nothing, S.empty) False
                                                  in m1
           bod = dbgTrace (minChatLvl) "Print in cursorizeLocExp AfterVariableLE: " dbgTrace (minChatLvl) (sdoc (lvar, mut_loc_pointing_to_loc, locs_var, v)) dbgTrace (minChatLvl) "End in cursorizelocexp AfterVariableLE.\n"  case unTy2 vty of
             PackedTy {} -> VarE (toEndV v)
@@ -3214,11 +3242,11 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
           lvar_name = case (M.lookup (fromLocVarToFreeVarsTy lvar) freeVarToVarEnv) of
             Just v -> v
             Nothing -> error $ "cursorizeRegExp: GetDataConRegSoA: unexpected location variable: " ++ "(" ++ show locExp ++ "," ++ (show (lvar)) ++ ")" ++ show freeVarToVarEnv
-          mut_loc_pointing_to_loc = findMutableLocationPointingToVar locs_var mLocPtsToEnv
+          (mut_loc_pointing_to_loc, mLocPtsToEnvUpdated)  = findMutableLocationPointingToVar locs_var mLocPtsToEnv
       mLocPtsToEnv' <- case mut_loc_pointing_to_loc of 
-                                    Nothing -> return mLocPtsToEnv
+                                    Nothing -> return mLocPtsToEnvUpdated
                                     Just mloc -> do 
-                                                  let m1' = updateMutableLocPtsToEnv mloc mLocPtsToEnv (lvar_name, Just mloc, Nothing, S.singleton locs_var) True
+                                                  let m1' = updateMutableLocPtsToEnv mloc mLocPtsToEnvUpdated (lvar_name, Just mloc, Nothing, S.singleton locs_var) True
                                                   return m1'
       if isBound locs_var tenv
       then dbgTrace (minChatLvl) "Print in cursorizeLocExp FromEndLE: " dbgTrace (minChatLvl) (sdoc (lvar, lvar_name, loc,locs_var, mLocPtsToEnv')) dbgTrace (minChatLvl) "End printing in cursorizeLocExp FromEndE Right case.\n" pure $ (Right (VarE locs_var, [], [], tenv, senv),  mLocPtsToEnv', mLocOldValEnv)
@@ -3379,14 +3407,15 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                                 Just lst -> case lst of
                                                                                                                   -- Vidush: we just take the first variable for now.
                                                                                                                   -- TODO: Check this
-                                                                                                                  (var, _,_, _):xs -> case M.lookup var tenv of 
+                                                                                                                  CurrentScope (var, _,_, _):xs -> case M.lookup var tenv of 
                                                                                                                                         Nothing -> pure $ [(var, [])]
                                                                                                                                         Just ty -> case (unTy2 ty) of 
                                                                                                                                                       MutCursorTy -> do 
                                                                                                                                                                      deref_val <- gensym "deref"
                                                                                                                                                                      pure $ [(deref_val, [(deref_val, [], CursorTy, Ext $ DerefMutCursor var)])]
                                                                                                                                                       CursorTy -> pure $ [(var, [])]
-                                                                                                                  [] -> error "Expected to have variable in env!"
+                                                                                                                  _ -> error "Expected to have a Current scope!!"
+                                                                                                                  -- [] -> error "Expected to have variable in env!"
                                                             _ -> case (M.lookup (fromLocVarToFreeVarsTy (toLocVar loc)) freeVarToVarEnv) of
                                                                               Just v -> pure $ [(v, [])]
                                                                               Nothing -> error "cursorizeLocExp: GenSoALoc: unexpected field location variable"
@@ -3469,8 +3498,10 @@ findMutSoALocPtsToSoALoc locvar locsvar env =
          in case mutsoa of 
                     Nothing -> dbgTrace (minChatLvl) "Print in findMutSoALocPtsToSoALoc: " dbgTrace (minChatLvl) (sdoc (dconloc, dconlocmut, fldlocs, fldlocs')) dbgTrace (minChatLvl) "End in findMutSoALocPtsToSoALoc!\n" env -- error $ "expected mutloc in env!!" ++ show (constructed_soa_loc)
                     Just ls -> case ls of
-                             (_var, _l, r, aliases):xs -> dbgTrace (minChatLvl) "Print in findMutSoALocPtsToSoALoc: " dbgTrace (minChatLvl) (sdoc (dconloc, dconlocmut, fldlocs, fldlocs')) dbgTrace (minChatLvl) "End Not null in findMutSoALocPtsToSoALoc!\n" updateMutableLocPtsToEnv constructed_soa_loc env (locsvar, Just locvar, r, S.insert _var aliases) False
-                             [] -> error "Expected to have variable keys in env!\n"
+                             CurrentScope (_var, _l, r, aliases):xs -> dbgTrace (minChatLvl) "Print in findMutSoALocPtsToSoALoc: " dbgTrace (minChatLvl) (sdoc (dconloc, dconlocmut, fldlocs, fldlocs')) dbgTrace (minChatLvl) "End Not null in findMutSoALocPtsToSoALoc!\n" updateMutableLocPtsToEnv constructed_soa_loc env (locsvar, Just locvar, r, S.insert _var aliases) False
+                             -- Vidush: Debug why we are having a lst starting with a Future scope!!!
+                             FutureScope (_var, _l, r, aliases):xs -> dbgTrace (minChatLvl) "Print in findMutSoALocPtsToSoALoc: " dbgTrace (minChatLvl) (sdoc (dconloc, dconlocmut, fldlocs, fldlocs')) dbgTrace (minChatLvl) "End Not null in findMutSoALocPtsToSoALoc!\n" updateMutableLocPtsToEnv constructed_soa_loc env (locsvar, Just locvar, r, S.insert _var aliases) False
+                             _ -> error $ "Expected to have variable keys in env!\n" ++ show ls
 
 cursorizeRegExp :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> M.Map FreeVarsTy Var -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> RegVar -> RegExp -> PassM (Either DepEnv (Exp3, [Binds Exp3], TyEnv Var Ty2, SyncEnv), MutableLocPtsToEnv, MutableLocOldValueEnv)
 cursorizeRegExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv denv tenv senv lvar regExp =
@@ -3755,24 +3786,24 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                   if hasPacked (unTy2 t)
                                     then 
                                       do 
-                                        let mut_loc = findMutableLocationPointingToVar av m1
+                                        let (mut_loc, m1updated) = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizePackedExp m1updated m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" fromDi <$> return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizePackedExp m1updated m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" fromDi <$> return a'
                                     else do 
-                                        let mut_loc = findMutableLocationPointingToVar av m1
+                                        let (mut_loc, m1updated) = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizeExp m1updated m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizeExp m1updated m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" return a'
 
                                         
@@ -3811,7 +3842,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                              case (getModality loc) of 
                                                       Nothing -> do
                                                                  let lName = (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))
-                                                                 let mut_l = findMutableLocationPointingToVar lName m1
+                                                                 let (mut_l, _m1updated) = findMutableLocationPointingToVar lName m1
                                                                  case mut_l of 
                                                                       Nothing -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
                                                                       Just ml -> do 
@@ -3823,10 +3854,10 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                                                     case useMutableCursorsCall of 
                                                                              True -> do  
                                                                                       let varName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
-                                                                                          mut_l_pointing_to_cur = dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End print in AppE Just Input arg.\n" findMutableLocationPointingToVar varName m1
+                                                                                          (mut_l_pointing_to_cur, m1updated) = dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End print in AppE Just Input arg.\n" findMutableLocationPointingToVar varName m1
                                                                                       case mut_l_pointing_to_cur of 
                                                                                                              -- Vidush: Again just getting the first variable
-                                                                                                  Just ml -> let (rvar,_,_,_):xs = fromJust $ M.lookup ml m1
+                                                                                                  Just ml -> let CurrentScope (rvar,_,_,_):xs = fromJust $ M.lookup ml m1updated
                                                                                                               in dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc, rvar)) dbgTrace (minChatLvl) "End print in AppE Just Input Just ml arg.\n" return $ (bnds, args ++ [VarE rvar])
                                                                                                   Nothing -> do 
                                                                                                               case M.lookup varName tenv of 
@@ -3853,7 +3884,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
 
                                                       Just _ -> do
                                                                  let loc_name = dbgTrace (minChatLvl) "Print in Just _ case: " dbgTrace (minChatLvl) (sdoc (mutl, loc)) dbgTrace (minChatLvl) "End in Just _ case." (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))
-                                                                     mut_l_pointing_to_cur = findMutableLocationPointingToVar loc_name m1 
+                                                                     (mut_l_pointing_to_cur, _m1updated) = findMutableLocationPointingToVar loc_name m1 
                                                                   in case  mut_l_pointing_to_cur of 
                                                                                 Nothing -> let ty_locName = M.lookup loc_name tenv
                                                                                              in case ty_locName of 
@@ -3875,7 +3906,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                                           False -> let locName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy mutl')
                                                                     in dbgTrace (minChatLvl) "Print in false case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc, locName)) dbgTrace (minChatLvl) "End in false case out." return $ (bnds, args ++ [VarE locName])
                                                                   -- Vidush: Just getting the first value, TODO: Fixme 
-                                                          True -> let (rvar,_,_,_):xs = fromJust $ M.lookup mutl' m1 
+                                                          True -> let CurrentScope (rvar,_,_,_):xs = fromJust $ M.lookup mutl' m1 
                                                                     in dbgTrace (minChatLvl) "Print in true case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc, rvar)) dbgTrace (minChatLvl) "End in true case out." return $ (bnds, args ++ [VarE rvar])
                     ) ([], []) outs
                 return $ mkLets additional_bnds (AppE f _cty [] (appe_args ++ starts))
@@ -4316,10 +4347,15 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                     do
                     -- find the output mutable location that points to the start_var of the packed ty
                     let mut_loc = dbgTrace (minChatLvl) "Print in cursorizeLet: " dbgTrace (minChatLvl) (sdoc (M.toList m1')) dbgTrace (minChatLvl) "End in cursorizeLet.\n" L.foldr (\(ml, lst) res -> 
-                                                            foldr (\(vv, vl, erg, _alises) res' ->       
-                                                                    if vv == start_var
-                                                                    then Just (ml, erg)
-                                                                    else res'
+                                                            foldr (\ent res' -> case ent of 
+                                                                          CurrentScope (vv, vl, erg, _alises) ->        
+                                                                                          if vv == start_var
+                                                                                          then Just (ml, erg)
+                                                                                          else res'
+                                                                          FutureScope (vv, vl, erg, _alises) ->        
+                                                                                          if vv == start_var
+                                                                                          then Just (ml, erg)
+                                                                                          else res'
                                                                   ) res lst
                                           ) Nothing (M.toList m1')
                     case mut_loc of 
@@ -4405,15 +4441,15 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                               Loc lrem -> let 
                                                                                                                                                                             lrem_lc = lremLoc lrem
                                                                                                                                                                             lc_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lrem_lc)
-                                                                                                                                                                            mut_loc_lc = findMutableLocationPointingToVar lc_var m1'
+                                                                                                                                                                            (mut_loc_lc, m1updated) = findMutableLocationPointingToVar lc_var m1'
                                                                                                                                                                            in case mut_loc_lc of 
                                                                                                                                                                                       Nothing -> ret
-                                                                                                                                                                                      Just l -> let mbkey = M.lookup l m1'
+                                                                                                                                                                                      Just l -> let mbkey = M.lookup l m1updated
                                                                                                                                                                                                   in case mbkey of 
                                                                                                                                                                                                           Nothing -> ret
                                                                                                                                                                                                           Just lst -> case lst of 
-                                                                                                                                                                                                                (_, _, reg, _):xs -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg FoldrR 1.\n"  reg
-                                                                                                                                                                                                                [] -> error "Expected a key in the env!"
+                                                                                                                                                                                                                CurrentScope (_, _, reg, _):xs -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg FoldrR 1.\n"  reg
+                                                                                                                                                                                                                _ -> error "Expected a key in the env!"
                                                                                                                                                               _ -> ret
                                                                                                                                        ) Nothing locs
                                                                                                                      in case output of 
@@ -4431,13 +4467,13 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                               InputMutable -> let 
                                                                                                                                                                                                                 end = lremReg lrem
                                                                                                                                                                                                                 endName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy end)
-                                                                                                                                                                                                                mut_loc_lc = findMutableLocationPointingToVar endName m1'
+                                                                                                                                                                                                                (mut_loc_lc, m1updated) = findMutableLocationPointingToVar endName m1'
                                                                                                                                                                                                                 loc = toLocVar locarg
                                                                                                                                                                                                                in case mut_loc_lc of 
                                                                                                                                                                                                                           Nothing -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 11.\n" (ret, m1ii, m2ii) 
                                                                                                                                                                                                                           Just l -> let 
-                                                                                                                                                                                                                                      mk = fromJust $ M.lookup l m1'
-                                                                                                                                                                                                                                      m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 12.\n" M.insert loc mk m1'
+                                                                                                                                                                                                                                      mk = fromJust $ M.lookup l m1updated
+                                                                                                                                                                                                                                      m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 12.\n" M.insert loc mk m1updated
                                                                                                                                                                                                                                      in (ret, m1'', m2ii)
 
                                                                                                                                                                                               _ -> (ret, m1ii, m2ii)
@@ -4452,11 +4488,11 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                 EndWitness lrem lv -> let witness_loc = lremLoc lrem
                                                                                                                           witness_reg = lremReg lrem
                                                                                                                           witness_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy witness_loc)
-                                                                                                                          mut_loc = findMutableLocationPointingToVar witness_var m1
+                                                                                                                          (mut_loc, m1updated) = findMutableLocationPointingToVar witness_var m1
                                                                                                                         in case mut_loc of
                                                                                                                                   -- return no bnds, in case we cannot find a mut_loc
                                                                                                                                   Nothing -> -- check if loc is in the same region.
-                                                                                                                                             let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1
+                                                                                                                                             let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1updated
                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 1.\n" (lbndsi, m1i, m2i)
                                                                                                                                   Just l -> let 
                                                                                                                                               locs_var = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var)) dbgTrace (minChatLvl) "End in Print case EndWitness Just case AppE 1.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
@@ -4491,10 +4527,15 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                  then 
                   -- find the output mutable location that points to the start_var of the packed ty
                   let mut_loc = L.foldr (\(ml, lst) res -> 
-                                          foldr (\(vv, vl, erg, _aliases) res' -> 
-                                                                  if vv == start_var
-                                                                  then Just (ml, erg)
-                                                                  else res'
+                                          foldr (\ent res' -> case ent of 
+                                                                  CurrentScope (vv, vl, erg, _aliases) ->  
+                                                                                    if vv == start_var
+                                                                                    then Just (ml, erg)
+                                                                                    else res'
+                                                                  FutureScope (vv, vl, erg, _aliases) ->  
+                                                                                    if vv == start_var
+                                                                                    then Just (ml, erg)
+                                                                                    else res'
                                                 ) res lst 
                                           ) Nothing (M.toList m1')
                     in case mut_loc of
@@ -4533,28 +4574,28 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                 Loc lrem -> let 
                                                                                                                                                                                               lrem_lc = lremLoc lrem
                                                                                                                                                                                               lc_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lrem_lc)
-                                                                                                                                                                                              mut_loc_lc = findMutableLocationPointingToVar lc_var m1'
+                                                                                                                                                                                              (mut_loc_lc, m1updated) = findMutableLocationPointingToVar lc_var m1'
                                                                                                                                                                                             in case mut_loc_lc of 
                                                                                                                                                                                                         Nothing -> ret
-                                                                                                                                                                                                        Just l -> let mbkey = M.lookup l m1'
+                                                                                                                                                                                                        Just l -> let mbkey = M.lookup l m1updated
                                                                                                                                                                                                                     in case mbkey of 
                                                                                                                                                                                                                             Nothing -> ret
                                                                                                                                                                                                                             Just lst -> case lst of 
-                                                                                                                                                                                                                                            (_, _, reg, _):xs -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg FoldrR 2.\n"  reg
-                                                                                                                                                                                                                                            [] -> error "Expected to have values for keys!"
+                                                                                                                                                                                                                                            CurrentScope (_, _, reg, _):xs -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg FoldrR 2.\n"  reg
+                                                                                                                                                                                                                                            _ -> error "Expected to have values for keys!"
                                                                                                                                                                                 _ -> ret
                                                                                                                                                         ) Nothing locs
                                                                                                                                       in case output of
                                                                                                                                               -- dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc, locs)) dbgTrace (minChatLvl) "End printing in EndOfReg 12.\n" (lbndsi, m1i, m2i) --error "Expected to have a mutable location!!"
                                                                                                                                               Nothing -> -- find the region from the Output loc
-                                                                                                                                                        let mut_loc_out = findMutableLocationPointingToVar start_var m1'
+                                                                                                                                                        let (mut_loc_out, m1updated) = findMutableLocationPointingToVar start_var m1'
                                                                                                                                                           in case mut_loc_out of 
                                                                                                                                                                       Nothing -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (loc, mut_loc_out, start_var)) dbgTrace (minChatLvl) "End printing in EndOfReg 21.\n" (lbndsi, m1i, m2i)
-                                                                                                                                                                      Just l -> let mbkey = M.lookup l m1' 
+                                                                                                                                                                      Just l -> let mbkey = M.lookup l m1updated 
                                                                                                                                                                                 in case mbkey of 
                                                                                                                                                                                           Nothing -> (lbndsi, m1i, m2i)
                                                                                                                                                                                           Just lst -> case lst of  
-                                                                                                                                                                                                      (_, _, reg, _):xs -> case reg of 
+                                                                                                                                                                                                      CurrentScope (_, _, reg, _):xs -> case reg of 
                                                                                                                                                                                                                       Nothing -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (loc)) dbgTrace (minChatLvl) "End printing in EndOfReg Just Nothing 211.\n" (lbndsi, m1i, m2i)
                                                                                                                                                                                                                       -- Instead, we need to make the current end region point to the mutable region we are keeping track of 
                                                                                                                                                                                                                       -- dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output)) dbgTrace (minChatLvl) "End printing in EndOfReg 22.\n"
@@ -4565,7 +4606,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                                                                                                                                                     in dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (loc, rr, freeVarToVarEnv')) dbgTrace (minChatLvl) "End printing in EndOfReg Just Nothing Nothing Just 221.\n" (lbndsi, m1i', m2i)
                                                                                                                                                                                                                                                                     Just n -> let m1i' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (loc, rr)) dbgTrace (minChatLvl) "End printing in EndOfReg Just Just Just 221.\n" updateMutableLocPtsToEnv location_var m1i (n, Just location_var, reg, S.empty) True
                                                                                                                                                                                                                                                                                in (lbndsi, m1i', m2i)
-                                                                                                                                                                                                      [] -> error "Expected to have values for keys!"
+                                                                                                                                                                                                      _ -> error "Expected to have values for keys!"
                                                                                                                                               Just reg -> let regName = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (loc)) dbgTrace (minChatLvl) "End printing in EndOfReg 22.\n" getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
                                                                                                                                                           in (lbndsi ++ [(loc_to_variable, [], CursorTy, VarE regName)], m1i, m2i)
                                                                                                                                     else if (m == InputMutable)
@@ -4578,7 +4619,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                                                                     end =  toEndVRegVar reg
                                                                                                                                                                                                                                     endName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy end)
                                                                                                                                                                                                                                     regName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
-                                                                                                                                                                                                                                    mut_loc_lc = findMutableLocationPointingToVar regName m1'
+                                                                                                                                                                                                                                    (mut_loc_lc, m1updated) = findMutableLocationPointingToVar regName m1'
                                                                                                                                                                                                                                     loc_endwit = toLocVar locarg
                                                                                                                                                                                                                                     loc_loc = toLocVar loc
                                                                                                                                                                                                                                     -- loc_loc_name = case loc_loc of 
@@ -4589,7 +4630,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                                                                                            m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 21.\n" updateMutableLocPtsToEnv loc_loc m1ii (endName, Just loc_loc, Just reg, S.fromList []) True
                                                                                                                                                                                                                                                           in (ret, m1'', m2ii)
                                                                                                                                                                                                                                               Just l -> let 
-                                                                                                                                                                                                                                                          mk = fromJust $ M.lookup l m1'
+                                                                                                                                                                                                                                                          mk = fromJust $ M.lookup l m1updated
                                                                                                                                                                                                                                                           m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc, loc_endwit)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 22.\n" M.insert loc_endwit mk m1ii
                                                                                                                                                                                                                                                         in (ret, m1'', m2ii)
 
@@ -4606,10 +4647,10 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                   EndWitness lrem lv -> let witness_loc = lremLoc lrem
                                                                                                                                             witness_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy witness_loc)
                                                                                                                                             witness_reg = lremReg lrem
-                                                                                                                                            mut_loc = findMutableLocationPointingToVar witness_var m1
+                                                                                                                                            (mut_loc, m1updated) = findMutableLocationPointingToVar witness_var m1
                                                                                                                                           in case mut_loc of
                                                                                                                                                             -- return no bnds, in case we cannot find a mut_loc
-                                                                                                                                                      Nothing -> let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1 
+                                                                                                                                                      Nothing -> let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1updated 
                                                                                                                                                                   in case mut_loc_in_same_reg of 
                                                                                                                                                                               Nothing -> (lbndsi, m1i, m2i)
                                                                                                                                                                               Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
@@ -4900,7 +4941,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                                                                     end =  toEndVRegVar reg
                                                                                                                                                                                                                                     endName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy end)
                                                                                                                                                                                                                                     regName = getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
-                                                                                                                                                                                                                                    mut_loc_lc = findMutableLocationPointingToVar regName m1'
+                                                                                                                                                                                                                                    (mut_loc_lc, m1updated) = findMutableLocationPointingToVar regName m1'
                                                                                                                                                                                                                                     loc_endwit = toLocVar locarg
                                                                                                                                                                                                                                     loc_loc = toLocVar loc
                                                                                                                                                                                                                                     -- loc_loc_name = case loc_loc of 
@@ -4911,7 +4952,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                                                                                                                            m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 21.\n" updateMutableLocPtsToEnv loc_loc m1ii (endName, Just loc_loc, Just reg, S.fromList []) False
                                                                                                                                                                                                                                                           in (ret, m1'', m2ii)
                                                                                                                                                                                                                                               Just l -> let
-                                                                                                                                                                                                                                                          mk = fromJust $ M.lookup l m1'
+                                                                                                                                                                                                                                                          mk = fromJust $ M.lookup l m1updated
                                                                                                                                                                                                                                                           m1'' = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (end, endName, loc, loc_endwit)) dbgTrace (minChatLvl) "End printing in EndOfReg InputMutable 22.\n" M.insert loc_endwit mk m1ii
                                                                                                                                                                                                                                                         in (ret, m1'', m2ii)
 
@@ -4928,10 +4969,10 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                   EndWitness lrem lv -> let witness_loc = lremLoc lrem
                                                                                                                                             witness_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy witness_loc)
                                                                                                                                             witness_reg = lremReg lrem
-                                                                                                                                            mut_loc = findMutableLocationPointingToVar witness_var m1
+                                                                                                                                            (mut_loc, m1updated) = findMutableLocationPointingToVar witness_var m1
                                                                                                                                           in case mut_loc of
                                                                                                                                                             -- return no bnds, in case we cannot find a mut_loc
-                                                                                                                                                      Nothing -> let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1
+                                                                                                                                                      Nothing -> let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1updated
                                                                                                                                                                   in case mut_loc_in_same_reg of
                                                                                                                                                                               Nothing -> (lbndsi, m1i, m2i)
                                                                                                                                                                               Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
@@ -5047,11 +5088,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
         Nothing -> error "unpackDataCon: unexpected location variable"
   case ty_of_scrut of
     CursorTy -> do
-      let mut_loc = findMutableLocationPointingToVar scrtCur m1
+      let (mut_loc, m1updated) = findMutableLocationPointingToVar scrtCur m1
       (m1', bump_bnds) <- case mut_loc of
-            Nothing -> dbgTrace (minChatLvl) "Print in unpackDataCon CursorTy: " dbgTrace (minChatLvl) (sdoc (mut_loc, scrtCur)) dbgTrace (minChatLvl) "End print in unpackDataCon CursorTy\n." return (m1, [])
+            Nothing -> dbgTrace (minChatLvl) "Print in unpackDataCon CursorTy: " dbgTrace (minChatLvl) (sdoc (mut_loc, scrtCur)) dbgTrace (minChatLvl) "End print in unpackDataCon CursorTy\n." return (m1updated, [])
             Just l -> do
-                      let m1inner = updateMutableLocPtsToEnv l m1 (field_cur, mut_loc, Nothing, S.empty) False
+                      let m1inner = updateMutableLocPtsToEnv l m1updated (field_cur, mut_loc, Nothing, S.empty) False
                       void <- gensym "void"
                       let lname = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
                       let bmp = [(void, [], ProdTy [], Ext $ BumpCursorMutable lname (LitE 1))]
@@ -5271,11 +5312,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                               loc_var <- lookupVariable loc fenv
                               -- here we need to make sure that any mutable loc pointing to cur 
                               -- is aliased to loc_var now.
-                              let mut_loc = findMutableLocationPointingToVar cur m1
+                              let (mut_loc, m1updated) = findMutableLocationPointingToVar cur m1
                               m1' <- case mut_loc of 
-                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return m1 
+                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return m1updated 
                                             Just l -> do 
-                                                       let m1inner = updateMutableLocPtsToEnv l m1 (loc_var, Just l, Nothing, S.singleton cur) True
+                                                       let m1inner = updateMutableLocPtsToEnv l m1updated (loc_var, Just l, Nothing, S.singleton cur) True
                                                        dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar 2!\n" return m1inner
                               (tenv', binds, m1'', m2') <- scalarBinds True fenv m1' m2 ty v loc_var locarg tenv
                               let binds' = ((loc_var), [], CursorTy, VarE cur) : binds    
@@ -5317,11 +5358,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (toTagV v, [], IntTy, ProjE 2 (VarE tmp)),
                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))
                                 ]
-                          let mut_loc = findMutableLocationPointingToVar cur m1
+                          let (mut_loc, m1updated) = findMutableLocationPointingToVar cur m1
                           (m1', bnds') <- case mut_loc of 
-                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return (m1, []) 
+                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return (m1updated, []) 
                                             Just l -> do 
-                                                       let m1inner = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.empty) False
+                                                       let m1inner = updateMutableLocPtsToEnv l m1updated (v, Just l, Nothing, S.empty) False
                                                        void_var <- gensym "void_"
                                                        let lname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
                                                        let bnds = [(void_var, [], ProdTy [], Ext $ WriteCursorMutable lname (VarE v))]
@@ -5400,11 +5441,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                               let tenv'' = M.insert (loc_var) (MkTy2 CursorTy) tenv'
                               -- Flip canBind to indicate that the subsequent fields
                               -- should be added to the dependency environment.
-                              let mut_loc = findMutableLocationPointingToVar cur m1
+                              let (mut_loc, m1updated) = findMutableLocationPointingToVar cur m1
                               m1' <- case mut_loc of 
-                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return m1 
+                                            Nothing -> dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar!\n" return m1updated 
                                             Just l -> do 
-                                                       let m1inner = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.fromList [cur, loc_var]) True
+                                                       let m1inner = updateMutableLocPtsToEnv l m1updated (v, Just l, Nothing, S.fromList [cur, loc_var]) True
                                                        dbgTrace (minChatLvl) "Print inside unpackRegularDataCon AoS Scalar: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc, cur)) dbgTrace (minChatLvl) "End printing inside unpackRegularDcon AoS Scalar 2!\n" return m1inner
                               (bod, m1'', m2') <- go m1' m2 (AoSWin (toEndV v)) fenv rst_vlocs rst_tys False denv tenv''
                               return (
@@ -5527,7 +5568,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   -- In this case v is the soa variable where all redirections are unpacked.
 
                                   -- Vidush: We need to update the mutable env accordingly here.
-                                  mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1
+                                  (mut_loc_pointing_to_dcur, m1updated) = findMutableLocationPointingToVar dcur m1
                                   (binds, m1d) = case mut_loc_pointing_to_dcur of 
                                                       Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                    (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
@@ -5536,10 +5577,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                    (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
                                                                    (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
                                                                    (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
-                                                                 ], m1)
+                                                                 ], m1updated)
                                                       Just l -> let
                                                                  lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
-                                                                 m1' = updateMutableLocPtsToEnv l m1 (redirection_var_dcon, Just l, Nothing, S.empty) False
+                                                                 m1' = updateMutableLocPtsToEnv l m1updated (redirection_var_dcon, Just l, Nothing, S.empty) False
                                                                  in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                    (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                                                    ((loc_var), [], CursorTy, VarE dcur),
@@ -5564,10 +5605,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                            in case ty_of_field of
                                                 (MkTy2 PackedTy {}) ->
                                                   let (new_binds, m1iout) = case redir_vars of 
-                                                                          [v] -> let var_pts_mutl = findMutableLocationPointingToVar var m1i
+                                                                          [v] -> let (var_pts_mutl, m1iupdated) = findMutableLocationPointingToVar var m1i
                                                                                   in case var_pts_mutl of 
-                                                                                            Nothing -> ([(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))], m1i)
-                                                                                            Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1i (redirection_var_flds_variable, Just ml, Nothing, S.singleton var) True
+                                                                                            Nothing -> ([(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))], m1iupdated)
+                                                                                            Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1iupdated (redirection_var_flds_variable, Just ml, Nothing, S.singleton var) True
                                                                                                            bnd = [(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                                         in (bnd, m1i')
                                                                           rst -> let (bndsi, m1i') = (map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst, m1i')
@@ -5575,10 +5616,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                    in (index + L.length (redir_vars), res ++ new_binds, m1iout, m2i)
                                                 (MkTy2 CursorArrayTy {}) ->
                                                   let (new_binds, m1iout) = case redir_vars of 
-                                                                            [v] -> let var_pts_mutl = findMutableLocationPointingToVar var m1i
+                                                                            [v] -> let (var_pts_mutl, m1iupdated) = findMutableLocationPointingToVar var m1i
                                                                                     in case var_pts_mutl of 
-                                                                                                Nothing -> ([(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))], m1i)
-                                                                                                Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1i (redirection_var_flds_variable, Just ml, Nothing, S.singleton var) True
+                                                                                                Nothing -> ([(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))], m1iupdated)
+                                                                                                Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1iupdated (redirection_var_flds_variable, Just ml, Nothing, S.singleton var) True
                                                                                                                bnd = [(redirection_var_flds_variable, [], CursorTy, Ext (AddCursor var (LitE 0)))]
                                                                                                             in (bnd, m1i')
                                                                             rst -> let (bndsi, m1i') = (map (\v -> (v, [], CursorTy, Ext (IndexCursorArray var (fromJust $ L.elemIndex v rst)))) rst, m1i')
@@ -5586,7 +5627,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                    in (index + L.length (redir_vars), res ++ new_binds, m1iout, m2i)
                                                 _ ->
                                                   let (new_binds, m1out) = case redir_vars of 
-                                                                        [v] -> let mut_loc_pts_var = dbgTrace (minChatLvl) "Print in redirection SoA: " dbgTrace (minChatLvl) (sdoc (var, m1i)) dbgTrace (minChatLvl) "End in redirection SoA.\n" findMutableLocationPointingToVar var m1i
+                                                                        [v] -> let (mut_loc_pts_var, m1iupdated) = dbgTrace (minChatLvl) "Print in redirection SoA: " dbgTrace (minChatLvl) (sdoc (var, m1i)) dbgTrace (minChatLvl) "End in redirection SoA.\n" findMutableLocationPointingToVar var m1i
                                                                                 in case mut_loc_pts_var of 
                                                                                           Nothing -> let bnds = [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
                                                                                                                   (tmpf, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f),
@@ -5596,8 +5637,8 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                                                                   (toTagV redirection_var_flds_variable, [], IntTy, ProjE 2 (VarE tmpf)),
                                                                                                                   (toEndFromTaggedV redirection_var_flds_variable, [], CursorTy, Ext $ AddCursor redirection_var_flds_variable (VarE (toTagV redirection_var_flds_variable)))
                                                                                                                 ]
-                                                                                                       in (bnds, m1i)
-                                                                                          Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1i (redirection_var_flds_variable, Just ml, Nothing, S.empty) False
+                                                                                                       in (bnds, m1iupdated)
+                                                                                          Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1iupdated (redirection_var_flds_variable, Just ml, Nothing, S.empty) False
                                                                                                          isFieldAlive = S.member (dcon', idx) aliveBuffersi
                                                                                                          -- write to the mutable location, we need to write the redirection_var_flds_variable value.
                                                                                                          mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
@@ -5672,7 +5713,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                           if isIndirectionTag dcon || isRedirectionTag dcon
                                             then Ext (ReadTaggedCursor var_dcon_next)
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                        mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1    
+                                        (mut_loc_pointing_to_dcur, m1updated) = findMutableLocationPointingToVar dcur m1    
                                         (binds, m1d) = case mut_loc_pointing_to_dcur of 
                                                               Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                             --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
@@ -5684,10 +5725,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                             -- End of region needs to be calculated differently
                                                                             -- (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v))),
                                                                             -- ((loc_var), [], locs_ty3, VarE v)
-                                                                          ], m1) 
+                                                                          ], m1updated) 
                                                               Just l -> let 
                                                                           lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
-                                                                          m1' = updateMutableLocPtsToEnv l m1 (v, Just l, Nothing, S.empty) False
+                                                                          m1' = updateMutableLocPtsToEnv l m1updated (v, Just l, Nothing, S.empty) False
                                                                          in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                                --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                                                                -- (v, [], locs_ty3, Ext $ InitCursor locs_ty3),
@@ -6065,7 +6106,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                                         -- v is the variable i want to send to the call.
                                         -- In this case v is the soa variable where all redirections are unpacked.
-                                        mut_loc_pointing_to_dcur = findMutableLocationPointingToVar dcur m1
+                                        (mut_loc_pointing_to_dcur, m1updated) = findMutableLocationPointingToVar dcur m1
                                         (binds, m1d) = case mut_loc_pointing_to_dcur of 
                                                                 Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                              (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
@@ -6074,10 +6115,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                              (toEndV redirection_var_dcon, [], CursorTy, ProjE 1 (VarE tmp)),
                                                                              (toTagV redirection_var_dcon, [], IntTy, ProjE 2 (VarE tmp)),
                                                                              (toEndFromTaggedV redirection_var_dcon, [], CursorTy, Ext $ AddCursor redirection_var_dcon (VarE (toTagV redirection_var_dcon)))
-                                                                            ], m1)
+                                                                            ], m1updated)
                                                                 Just l -> let 
                                                                             lName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
-                                                                            m1' = updateMutableLocPtsToEnv l m1 (redirection_var_dcon, Just l, Nothing, S.empty) False
+                                                                            m1' = updateMutableLocPtsToEnv l m1updated (redirection_var_dcon, Just l, Nothing, S.empty) False
                                                                           in ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (LitE 1))),
                                                                              (tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                                                              ((loc_var), [], CursorTy, VarE dcur),
@@ -6145,7 +6186,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                          in (index + L.length (redir_vars), res ++ new_binds, m1iout, m2i)
                                                     _ ->
                                                         let (new_binds, m1out) = case redir_vars of 
-                                                                                [v] -> let mut_loc_pts_var = findMutableLocationPointingToVar var m1i
+                                                                                [v] -> let (mut_loc_pts_var, m1iupdated) = findMutableLocationPointingToVar var m1i
                                                                                         in case mut_loc_pts_var of
                                                                                                  Nothing -> let bnds = [ (vars_next_fields !! index, [], CursorTy, Ext (AddCursor var (LitE 1))),
                                                                                                                          (tmpf index, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor_f index),
@@ -6155,8 +6196,8 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                                                                                                         (toTagV (redirection_var_flds !! index), [], IntTy, ProjE 2 (VarE $ tmpf index)),
                                                                                                                         (toEndFromTaggedV (redirection_var_flds !! index), [], CursorTy, Ext $ AddCursor (redirection_var_flds !! index) (VarE (toTagV (redirection_var_flds !! index))))
                                                                                                                        ]
-                                                                                                              in (bnds, m1i)
-                                                                                                 Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1i ((redirection_var_flds !! index), Just ml, Nothing, S.empty) False
+                                                                                                              in (bnds, m1iupdated)
+                                                                                                 Just ml -> let m1i' = updateMutableLocPtsToEnv ml m1iupdated ((redirection_var_flds !! index), Just ml, Nothing, S.empty) False
                                                                                                                 isFieldAlive = S.member (dcon', idx) aliveBuffersi
                                                                                                                 -- write to the mutable location, we need to write the (redirection_var_flds !! index) value.
                                                                                                                 mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
@@ -6451,11 +6492,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (toTagV v, [], IntTy, ProjE 2 (VarE tmp)),
                                   (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))
                                 ]
-                          let checkMutLoc = findMutableLocationPointingToVar cur m1g 
+                          let (checkMutLoc, m1gupdated) = findMutableLocationPointingToVar cur m1g 
                           (m1g', add_bnds) <- case checkMutLoc of 
-                                          Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Cursor, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Cursor Nothing case.\n" return (m1g, []) 
+                                          Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Cursor, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Cursor Nothing case.\n" return (m1gupdated, []) 
                                           Just ml -> do
-                                                     let m1inner = updateMutableLocPtsToEnv ml m1g (toEndV v, Just ml, Nothing, S.empty) False
+                                                     let m1inner = updateMutableLocPtsToEnv ml m1gupdated (toEndV v, Just ml, Nothing, S.empty) False
                                                      void_var <- gensym "void"
                                                      let mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
                                                      -- Vidush: perhaps better to get the size from the type rather than hardcode the size of 8 here. ? 
@@ -6467,11 +6508,11 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                         -- Int, Sym, or Bool
                         _ | isScalarTy ty -> do
                           locs_var <- lookupVariable loc fenv
-                          let mut_loc = findMutableLocationPointingToVar cur m1g
+                          let (mut_loc, m1gupdated) = findMutableLocationPointingToVar cur m1g
                           m1' <- case mut_loc of
-                                            Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Scalar, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Scalar Nothing case.\n" return m1g
+                                            Nothing -> dbgTrace (minChatLvl) "Print in unpack abs ran Scalar, Nothing case: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpack abs ran Scalar Nothing case.\n" return m1gupdated
                                             Just l -> do
-                                                       let m1inner = updateMutableLocPtsToEnv l m1g (locs_var, Just l, Nothing, S.singleton cur) True
+                                                       let m1inner = updateMutableLocPtsToEnv l m1gupdated (locs_var, Just l, Nothing, S.singleton cur) True
                                                        dbgTrace (minChatLvl) "Print in unpack abs ran Scalar, Just l case: " dbgTrace (minChatLvl) (sdoc (cur, l)) dbgTrace (minChatLvl) "End in unpack abs ran Scalar Just l case.\n" return m1inner
                           (tenv', binds, m1'', m2') <- scalarBinds True fenv m1' m2 ty v locs_var locarg tenv
                           let loc_bind = case M.lookup v indirections_env of
@@ -6558,22 +6599,22 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                 -- We need to access this using a random access node
                                 Just (_var_loc, ind_var) ->
                                   ((locs_var, [], CursorTy, VarE ind_var), ind_var)
-                          let mut_var = findMutableLocationPointingToVar cur m1g
+                          let (mut_var, m1gupdated) = findMutableLocationPointingToVar cur m1g
                           -- Vidush: For now this breaks,
                           -- I think to really fix the code here, the mutable loc env shoud be keyed by 
                           -- var or, (loc,var) to keep the current code functionining.
                           (m1g', addl_bnds, isFirstPacked') <- case mut_var of 
-                                                  Nothing -> dbgTrace (minChatLvl) "Print in unpackWithRelDataCon: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpackWithRelDataCon NOTHING.\n" return (m1g, [], isFirstPacked) 
+                                                  Nothing -> dbgTrace (minChatLvl) "Print in unpackWithRelDataCon: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpackWithRelDataCon NOTHING.\n" return (m1gupdated, [], isFirstPacked) 
                                                   Just ml -> do
                                                              if (isLocAlive (getLocVarFromFreeVarsTy loc) rhs False)
                                                              then do 
-                                                              let m1inner = updateMutableLocPtsToEnv ml m1g ((toEndV v), Just ml, Nothing, S.fromList [v, locs_var, var_used]) True
+                                                              let m1inner = updateMutableLocPtsToEnv ml m1gupdated ((toEndV v), Just ml, Nothing, S.fromList [v, locs_var, var_used]) True
                                                               void <- gensym "void"
                                                               let mlname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
                                                               let bump_bnd = [(void, [], ProdTy [], Ext $ WriteCursorMutable mlname (VarE var_used))]
                                                               dbgTrace (minChatLvl) "Print in unpackWithRelDataCon: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpackWithRelDataCon IF.\n" pure (m1inner, bump_bnd, True)
                                                              else do
-                                                                let m1inner = updateMutableLocPtsToEnv ml m1g ((toEndV v), Just ml, Nothing, S.fromList [v, locs_var, var_used]) True
+                                                                let m1inner = updateMutableLocPtsToEnv ml m1gupdated ((toEndV v), Just ml, Nothing, S.fromList [v, locs_var, var_used]) True
                                                                 dbgTrace (minChatLvl) "Print in unpackWithRelDataCon: " dbgTrace (minChatLvl) (sdoc (cur)) dbgTrace (minChatLvl) "End in unpackWithRelDataCon ELSE.\n" pure (m1inner, [], isFirstPacked)
                                                               
                           bod <- go isFirstPacked' m1g' m2g (AoSWin (toEndV v)) fenv rst_vlocs rst_tys indirections_env denv tenv'
@@ -7055,13 +7096,13 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
               (v, [], ty', ProjE 0 (VarE tmp)),
               (toEndV v, [], locsTy2, ProjE 1 (VarE tmp))
             ]
-      let mut_loc = findMutableLocationPointingToVar loc m1
+      let (mut_loc, m1gupdated) = findMutableLocationPointingToVar loc m1
       (m1', binds') <- case mut_loc of 
-                            Nothing -> dbgTrace (minChatLvl) "Print inside scalar binds: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc)) dbgTrace (minChatLvl) "End printing inside scalar binds!\n" return (m1, []) 
+                            Nothing -> dbgTrace (minChatLvl) "Print inside scalar binds: " dbgTrace (minChatLvl) (sdoc (mut_loc, loc)) dbgTrace (minChatLvl) "End printing inside scalar binds!\n" return (m1gupdated, []) 
                             Just l -> do
                               if varAlive 
                               then do
-                                let m1inner = updateMutableLocPtsToEnv l m1 (toEndV v, Just l, Nothing, S.empty) False
+                                let m1inner = updateMutableLocPtsToEnv l m1gupdated (toEndV v, Just l, Nothing, S.empty) False
                                 void_var <- gensym "void"
                                 let size_of_scalar = sizeOfTy ty
                                 let lvar = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
@@ -7071,7 +7112,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                     -- we are still updating the env, even though the field is dead.
                                     -- This makes the algorithm work fine.
                                     -- otherwise later on, we may get unnecessary bump mutable locations.
-                                    let m1inner = updateMutableLocPtsToEnv l m1 (toEndV v, Just l, Nothing, S.empty) False
+                                    let m1inner = updateMutableLocPtsToEnv l m1gupdated (toEndV v, Just l, Nothing, S.empty) False
                                     return (m1inner, []) 
       return (tenv', binds ++ binds', m1', m2)
 
@@ -7138,19 +7179,19 @@ giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv molden
                   args <- mapM (\(ty', n) -> giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv moldenv ty' (mkProj n e)) (zip tys [0 ..])
                   return $ MkProdE args 
     CursorArrayTy{} -> case e of 
-                          VarE v -> let mutloc = findMutableLocationPointingToVar v mlocptsenv
+                          VarE v -> let (mutloc, mlocptsenvupdated) = findMutableLocationPointingToVar v mlocptsenv
                                      in case mutloc of 
-                                              Nothing -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts Nothing!\n" return e 
+                                              Nothing -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, mlocptsenvupdated)) dbgTrace (minChatLvl) "End in give starts Nothing!\n" return e 
                                               Just ml -> do 
-                                                         let mlVarName = dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, ml, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts Just ml!\n" getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
+                                                         let mlVarName = dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, ml, mlocptsenvupdated)) dbgTrace (minChatLvl) "End in give starts Just ml!\n" getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
                                                          return $ VarE mlVarName
                           _ -> return e  
     _ -> case e of 
-             VarE vv -> let mutl = dbgTrace (minChatLvl) "Print in give starts VarE v case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts VarE v.\n" findMutableLocationPointingToVar vv mlocptsenv
+             VarE vv -> let (mutl, mlocptsenvupdated)  = dbgTrace (minChatLvl) "Print in give starts VarE v case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts VarE v.\n" findMutableLocationPointingToVar vv mlocptsenv
                          in case mutl of 
-                                Nothing -> dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts rest of the case 1!\n" return e 
+                                Nothing -> dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenvupdated)) dbgTrace (minChatLvl) "End in give starts rest of the case 1!\n" return e 
                                 Just ml -> let mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
-                                             in dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv, mlName)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" return $ VarE mlName
+                                             in dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenvupdated, mlName)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" return $ VarE mlName
 
              _ -> dbgTrace (minChatLvl) "Print in give starts _ case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts wildcard v.\n" return e
 
