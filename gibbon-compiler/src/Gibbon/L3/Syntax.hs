@@ -446,9 +446,10 @@ updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key [(v, lc, reg, aliases)] env
-                                                                    Just lst ->  if mayalias
-                                                                                 then M.insert key (lst ++ [(v, lc, reg, aliases)]) env
-                                                                                 else M.insert key ([(v, lc, reg, aliases)]) env 
+                                                                    Just lst@(_x:xs) ->  if mayalias
+                                                                                         then M.insert key ([(v, lc, reg, aliases)] ++ lst) env
+                                                                                         else M.insert key ([(v, lc, reg, aliases)] ++ xs) env
+                                                                    Just [] -> M.insert key ([(v, lc, reg, aliases)]) env
                                                                       
                                                                       
                                                                       
