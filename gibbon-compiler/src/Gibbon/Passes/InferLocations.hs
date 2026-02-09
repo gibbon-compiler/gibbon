@@ -2490,7 +2490,7 @@ freshSoALocHelper ddefs tyvar lst = do
                           [] -> do 
                                  pure []
                           (a, flds):rst -> do
-                                            fieldLocs <- fmap concat $ mapM (\e@(_, ty) -> do 
+                                            fieldLocs <- fmap concat $ mapM (\(e@(_, ty), idx) -> do 
                                                                               case ty of 
                                                                                 PackedTy tyc _ -> do
                                                                                                 if tyvar == tyc 
@@ -2502,20 +2502,20 @@ freshSoALocHelper ddefs tyvar lst = do
                                                                                                   case cursorTy of 
                                                                                                       CursorArrayTy{} -> do 
                                                                                                                           newLoc <- freshSoALoc2 ddefs tyc
-                                                                                                                          let Just idx = L.elemIndex e flds
+                                                                                                                          --let Just idx = L.elemIndex e flds
                                                                                                                           return $ [((a, idx), newLoc)]
                                                                                                       _ -> do 
                                                                                                                   newLoc <- fresh
-                                                                                                                  let Just idx = L.elemIndex e flds
+                                                                                                                  --let Just idx = L.elemIndex e flds
                                                                                                                   return $ [((a, idx), newLoc)]
                                                                                 -- no new buffers for shortcut pointers
                                                                                 CursorTy -> return []
                                                                                 CursorArrayTy{} -> return []
                                                                                 _ -> do
                                                                                      newLoc <- fresh
-                                                                                     let Just idx = L.elemIndex e flds
+                                                                                     --let Just idx = L.elemIndex e flds
                                                                                      return $ [((a, idx), newLoc)]
-                                                             ) flds
+                                                             ) (zip flds [0..L.length(flds)])
                                             rst' <- freshSoALocHelper ddefs tyvar rst
                                             return $ fieldLocs ++ rst'
 

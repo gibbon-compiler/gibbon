@@ -3073,12 +3073,12 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
                                                                                 bump_loc_var <- gensym "void_ij"
                                                                                 let bumpMutLoc = (bump_loc_var, [], ProdTy [], Ext $ BumpCursorMutable (mut_loc_varname) (LitE i))
                                                                                 -- We need to make the mutable loc point to the dereferenced value 
-                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv mut_loc mLocPtsToEnv (lvar_name, Just mut_loc, Nothing, S.empty) True
+                                                                                let mLocPtsToEnv'' = updateMutableLocPtsToEnv mut_loc mLocPtsToEnv (lvar_name, Just mut_loc, Nothing, S.empty) False
                                                                                 -- if there is no mapping of the mutable loc to its old value, we need to update it.
                                                                                 (mLocOldValEnv'', nbmoldenv) <- do 
                                                                                                     if (M.member mut_loc mLocOldValEnv)
                                                                                                     then return (mLocOldValEnv, [])
-                                                                                                    else updateMutableLocOldValueEnv mut_loc mLocOldValEnv (lvar_name, Nothing, Nothing, S.empty) True
+                                                                                                    else updateMutableLocOldValueEnv mut_loc mLocOldValEnv (lvar_name, Nothing, Nothing, S.empty) False
                                                                                 pure (loc_name, toLocVar loc, nbmoldenv, [bumpMutLoc], mLocPtsToEnv'', mLocOldValEnv'')
                                                                             else
                                                                               do
@@ -3234,7 +3234,7 @@ cursorizeLocExp mLocPtsToEnv mLocOldValEnv useMutableCursorsCall freeVarToVarEnv
       mLocPtsToEnv' <- case mut_loc_pointing_to_loc of 
                                     Nothing -> return mLocPtsToEnv
                                     Just mloc -> do 
-                                                  let m1' = updateMutableLocPtsToEnv mloc mLocPtsToEnv (lvar_name, Just mloc, Nothing, S.singleton locs_var) True
+                                                  let m1' = updateMutableLocPtsToEnv mloc mLocPtsToEnv (lvar_name, Just mloc, Nothing, S.singleton locs_var) False
                                                   return m1'
       if isBound locs_var tenv
       then dbgTrace (minChatLvl) "Print in cursorizeLocExp FromEndLE: " dbgTrace (minChatLvl) (sdoc (lvar, lvar_name, loc,locs_var, mLocPtsToEnv')) dbgTrace (minChatLvl) "End printing in cursorizeLocExp FromEndE Right case.\n" pure $ (Right (VarE locs_var, [], [], tenv, senv),  mLocPtsToEnv', mLocOldValEnv)
@@ -4317,7 +4317,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                       let m1'' = updateMutableLocPtsToEnv start_loc m1' (toEndV v, Just start_loc, Nothing, S.empty) False
                                       pure ([ (fresh, [], ty'', rhs'),
                                               (v, [], type_l2, VarE oldvarmut),
-                                              (new_deref, [], type_l2, Ext $ DerefMutCursor (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy start_loc))),
+                                              (new_deref, [], type_l2, Ext $ DerefMutCursor (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy start_loc))),
                                               (toEndV v, [], type_l2, VarE new_deref)
                                             ], m1'', m2')
                           SoA{} -> do 
@@ -4325,7 +4325,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                    pure ([ (fresh, [], ty'', rhs'),
                                            (v, [], type_l2, VarE oldvarmut),
                                            (toEndV v, [], type_l2, Ext $ InitCursor type_l2),
-                                           ("_", [], ProdTy [], Ext $ MemCpy (toEndV v) (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy start_loc)) type_l2)
+                                           ("_", [], ProdTy [], Ext $ MemCpy (toEndV v) (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy start_loc)) type_l2)
                                          ], m1'', m2')
                   else if useMutableCursors
                   then
@@ -4342,7 +4342,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                               Nothing -> pure ([], m1', m2') --error "Expected a mutable location!"
                               Just (l, endreg) -> do
                                         let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
-                                        let varName = (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l))
+                                        let varName = (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l))
                                         new_deref <- gensym "deref"
                                         case start_loc of 
                                               Single{} -> do 
@@ -4352,7 +4352,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                               --(toEndV v, [], projTy 1 ty'', mkProj 1 rhs'')
                                                               (v, [], getCursorizeTyFromLocVar Nothing useMutableCursors start_loc, VarE start_var), 
                                                               -- TODO: make a new name using gensym
-                                                              (new_deref, [], CursorTy, Ext $ DerefMutCursor (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l))),
+                                                              (new_deref, [], CursorTy, Ext $ DerefMutCursor (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l))),
                                                               (toEndV v, [], getCursorizeTyFromLocVar Nothing useMutableCursors start_loc, VarE new_deref) 
                                                               --()
                                                             ], m1'', m2')
@@ -4387,11 +4387,11 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                         Just (oldvar, _oldloc, ereg, _aliases) -> (oldvar, ereg)
                     
                     let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
-                    let varName = (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy start_loc))
+                    let varName = (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy start_loc))
                     new_deref <- gensym "deref"
                     let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
                                                                                             regVarLoc = fromJust endreg
-                                                                                            varNameReg = (getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy regVarLoc))
+                                                                                            varNameReg = (getVarNameFromFreeVar freeVarToVarEnv' (fromRegVarToFreeVarsTy regVarLoc))
                                                                                             varNameTy :: Ty3 = case M.lookup varNameReg tenv of 
                                                                                                                    Nothing -> CursorTy
                                                                                                                    Just ty -> case (unTy2 ty) of 
@@ -4420,7 +4420,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                                               EndOfReg{} -> ret
                                                                                                                                                               Loc lrem -> let 
                                                                                                                                                                             lrem_lc = lremLoc lrem
-                                                                                                                                                                            lc_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lrem_lc)
+                                                                                                                                                                            lc_var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy lrem_lc)
                                                                                                                                                                             mut_loc_lc = findMutableLocationPointingToVar lc_var m1'
                                                                                                                                                                            in case mut_loc_lc of 
                                                                                                                                                                                       Nothing -> ret
@@ -4434,7 +4434,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                                                                                        ) Nothing locs
                                                                                                                      in case output of 
                                                                                                                             Nothing -> dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output, loc, locs)) dbgTrace (minChatLvl) "End printing in EndOfReg 1.\n" (lbndsi, m1i, m2i) --error "Expected to have a mutable location!!"
-                                                                                                                            Just reg -> let regName = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output)) dbgTrace (minChatLvl) "End printing in EndOfReg 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromRegVarToFreeVarsTy reg)
+                                                                                                                            Just reg -> let regName = dbgTrace (minChatLvl) "Print in EndOfReg: " dbgTrace (minChatLvl) (sdoc (output)) dbgTrace (minChatLvl) "End printing in EndOfReg 2.\n" getVarNameFromFreeVar freeVarToVarEnv' (fromRegVarToFreeVarsTy reg)
                                                                                                                                          in (lbndsi ++ [(loc_to_variable, [], CursorTy, VarE regName)], m1i, m2i)
                                                                                                                    else if (m == Input)
                                                                                                                    then 
