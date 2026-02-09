@@ -11,6 +11,7 @@ data Octree
              Int  -- energy
   | EmptyOct
 
+{-# ANN type Octree "Linear" #-}
 
 
 buildOctree :: Int -> Octree
@@ -119,7 +120,7 @@ clearFlags t =
       EmptyOct
 
 gibbon_main =
-            let octTree = buildOctree 20
+            let octTree = buildOctree 8
                 -- _ = printPacked octTree
                 totMass = iterate (sumMass octTree)
                 totEnergy = iterate (sumEnergy octTree)
