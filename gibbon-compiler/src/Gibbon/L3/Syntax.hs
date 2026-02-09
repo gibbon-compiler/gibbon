@@ -34,6 +34,7 @@ module Gibbon.L3.Syntax
   , findMutableLocationInSameRegion
   , findMutableLocationPointingToVar
   , findMutableLocationPointingToEndVar
+  , findAValidRegion
   , fst4
   , snd4
   , thd4
@@ -457,6 +458,18 @@ findAValidRegion lst = case lst of
                             -- Vidush: Maybe its good to assert that all the regions are the same.
                             (_v, _lc, reg, _aliases):xs -> case reg of
                                                               Nothing -> findAValidRegion xs
+                                                              Just{} -> reg
+
+
+findAValidRegion' :: [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)] -> Maybe RegVar -> Maybe RegVar
+findAValidRegion' lst r = case lst of 
+                            [] -> r
+                            -- Vidush: Maybe its good to assert that all the regions are the same.
+                            (_v, _lc, reg, _aliases):xs -> case reg of
+                                                              Nothing -> let found = findAValidRegion xs
+                                                                          in case found of 
+                                                                                    Nothing -> r 
+                                                                                    Just{} -> found  
                                                               Just{} -> reg 
 
 updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
@@ -464,15 +477,16 @@ updateMutableLocPtsToEnv key env (v, lc, reg, aliases) isFuture = case M.lookup 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key [(v, lc, reg, aliases)] env
-                                                                    Just lst@(_x:_xs) ->  if isFuture
-                                                                                          then M.insert key ([(v, lc, reg, aliases)] ++ lst) env
-                                                                                          -- ++ xs
-                                                                                          -- Vidush: This might need to be more principled
-                                                                                          -- We might need to have a flag in the type
-                                                                                          -- saying that the value can be a future value
-                                                                                          -- If it is a future value, then we may need to
-                                                                                          -- set that bit and store it as a future value 
-                                                                                          else M.insert key ([(v, lc, reg, aliases)]) env
+                                                                    Just lst@(_x:_xs) ->  let reg' = findAValidRegion' lst reg
+                                                                                           in if isFuture
+                                                                                              then M.insert key ([(v, lc, reg', aliases)] ++ lst) env
+                                                                                              -- ++ xs
+                                                                                              -- Vidush: This might need to be more principled
+                                                                                              -- We might need to have a flag in the type
+                                                                                              -- saying that the value can be a future value
+                                                                                              -- If it is a future value, then we may need to
+                                                                                              -- set that bit and store it as a future value 
+                                                                                              else M.insert key ([(v, lc, reg', aliases)]) env
                                                                     Just [] -> M.insert key ([(v, lc, reg, aliases)]) env
                                                                       
                                                                       
