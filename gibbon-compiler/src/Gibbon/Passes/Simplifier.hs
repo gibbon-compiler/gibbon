@@ -173,7 +173,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
               in
                 if ((fromLocVarToFreeVarsTy loc) `elem` free_vars)
                 then Ext (LetLocE loc rhs bod')
-                else dbgTrace (minChatLvl) "Print freeVars: " dbgTrace (minChatLvl) (sdoc (rhs, free_vars))  dbgTrace (minChatLvl) "End\n"  bod'
+                else dbgTrace (minChatLvl) "Print freeVars: " dbgTrace (minChatLvl) (sdoc (rhs, free_vars))  dbgTrace (minChatLvl) "End in go2 in simplify loc binds\n"  bod'
             LetAvail vars bod -> Ext (LetAvail vars (go2 bod))
             _ -> Ext ext
         _ -> ex
@@ -182,9 +182,9 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go0 :: M.Map LocExp LocVar -> M.Map LocVar LocVar -> Exp2 -> Exp2
     go0 env1 env2 ex =
       case ex of
-        AppE f cty locs args -> AppE f cty (map (substloc env2) locs) (map (go0 env1 env2) args)
+        AppE f cty locs args -> AppE f cty (map (substloc env2) (map (fixloc env2) locs)) (map (go0 env1 env2) args)
         PrimAppE p args -> PrimAppE p (map (go0 env1 env2) args)
-        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,map (fixloc env2) locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
         IfE a b c -> IfE (go0 env1 env2 a) (go0 env1 env2 b) (go0 env1 env2 c)
         MkProdE args -> MkProdE (map (go0 env1 env2) args)
         ProjE i bod -> ProjE i (go0 env1 env2 bod)
@@ -199,11 +199,27 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
             LetLocE loc rhs bod ->
               let rhs' = case rhs of
-                           AfterConstantLE i loc2 -> AfterConstantLE i (substloc env2 loc2)
-                           AfterVariableLE v loc2 b -> AfterVariableLE v (substloc env2 loc2) b
-                           _ -> rhs
+                           AfterConstantLE i loc2 -> AfterConstantLE i (fixloc env2 loc2)
+                           AfterVariableLE v loc2 b -> AfterVariableLE v (fixloc env2 loc2) b
+                           -- we need to implement the other cases here for SoA locations
+                           StartOfRegionLE{} -> rhs
+                           InRegionLE{} -> rhs
+                           FreeLE -> rhs
+                           FromEndLE loc2 -> FromEndLE (fixloc env2 loc2) 
+                           GenSoALoc dl flocs -> let 
+                                                   flocs' = map (\(k, fl) -> (k, (fixloc env2 fl))) flocs
+                                                   dl' = (substloc env2 dl)
+                                                  in GenSoALoc dl' flocs'
+                           GetDataConLocSoA loc2 -> GetDataConLocSoA (fixloc env2 loc2)
+                           GetFieldLocSoA key loc2 -> GetFieldLocSoA key (fixloc env2 loc2)
+                           AssignLE loc2 -> AssignLE (fixloc env2 loc2)
               in case M.lookup rhs' env1 of
-                Nothing  -> Ext (LetLocE loc rhs' (go0 (M.insert rhs' loc env1) env2 bod))
+                Nothing  -> let loc' = case loc of 
+                                            Single{} -> (substloc env2 loc)
+                                            SoA dl flocs -> let flocs' = map (\(k, fl) -> (k, (substloc env2 fl))) flocs
+                                                                dl' = (substloc env2 (Single dl))
+                                                              in SoA (unwrapLocVar dl') flocs'
+                              in Ext (LetLocE loc' rhs' (go0 (M.insert rhs' loc env1) env2 bod))
                 Just new -> go0 env1 (M.insert loc new env2) bod
             LetAvail vars bod -> Ext (LetAvail vars (go0 env1 env2 bod))
             _ -> Ext ext
@@ -212,6 +228,12 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         substloc env loc = case M.lookup loc env of
                              Nothing  -> loc
                              Just new -> new
+        fixloc env l = case l of 
+                           Single{} -> (substloc env l)
+                           SoA dl flocs -> let 
+                                             dl' = (substloc env (Single dl))
+                                             flocs' = map (\(k, fl) -> (k, (substloc env fl))) flocs
+                                            in SoA (unwrapLocVar dl') flocs'
 
 --------------------------------------------------------------------------------
 

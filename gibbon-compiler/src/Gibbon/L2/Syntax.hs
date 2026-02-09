@@ -810,16 +810,30 @@ allRegVars :: ArrowTy2 ty2 -> [RegVar]
 allRegVars ty = L.nub $ L.concatMap (\ (LRM _ r _) -> [regionToVar r]
                                     ) (locVars ty)
 
+
+substloc' :: M.Map LocVar LocVar -> LocVar -> LocVar
+substloc' env loc = case M.lookup loc env of
+                             Nothing  -> loc
+                             Just new -> new
+
+fixloc :: M.Map LocVar LocVar -> LocVar -> LocVar
+fixloc env l = case l of 
+                   Single{} -> (substloc' env l)
+                   SoA dl flocs -> let 
+                                    dl' = (substloc' env (Single dl))
+                                    flocs' = map (\(k, fl) -> (k, (substloc' env fl))) flocs
+                                   in SoA (unwrapLocVar dl') flocs'
+
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
 substLoc mp ty =
   case ty of
    SymDictTy v te -> SymDictTy v te -- (go te)
    ProdTy    ts -> ProdTy (L.map go ts)
-   PackedTy k l ->
-       case M.lookup l mp of
-             Just v  -> PackedTy k v
-             Nothing -> PackedTy k l
+   PackedTy k l -> let l' = fixloc mp l
+                    in case M.lookup l' mp of
+                                Just v  -> PackedTy k v
+                                Nothing -> PackedTy k l'
    _ -> ty
   where go = substLoc mp
 

@@ -668,9 +668,10 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
        selftimed <- gensym "selftimed"
        times <- gensym "times"
        tmp <- gensym "tmp"
+       empty <- gensym "e" 
        let ident = case bnds of
                      ((v,_):_) -> v
-                     _ -> (toVar "")
+                     _ -> empty
            begn  = "begin_" ++ (fromVar ident)
            end   = "end_" ++ (fromVar ident)
            iters = "iters_"++ (fromVar ident)

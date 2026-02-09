@@ -764,7 +764,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   -- l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
                   l2 <- go "regionsInwards2"    regionsInwards l2
-                  l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
+                  l2 <- go "simplifyLocBinds_1" (simplifyLocBinds True) l2
                   l2 <- goE2 "reorderLetExprs3" reorderLetExprs l2
                   l2 <- go "fixRANs"         fixRANs       l2
                   --l2 <- go   "L2.typecheck"  L2.tcProg     l2
@@ -807,20 +807,20 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
+              l2 <- goE2 "simplifyLocBinds_2" (simplifyLocBinds True) l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- goE2 "L2.flatten" flattenL2 l2
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
+              l2 <- goE2 "simplifyLocBinds_3" (simplifyLocBinds True) l2
               l2 <- goE2 "reorderLetExprs5" reorderLetExprs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
               {- VS: The Argument to simplify loc binds used to be False, why doesn't true work ? -}
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 
+              l2 <- goE2 "simplifyLocBinds_4" (simplifyLocBinds True) l2 
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               -- l2 <- if gibbon1
               --      then pure l2

@@ -406,6 +406,16 @@ findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc ->
                                                                   ) acc lst 
                                                     ) Nothing (M.toList mlocenv)
 
+-- Vidush: Assumption, only the head of the list points to the current value of the mutable location!
+-- findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+-- findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc -> 
+--                                                                 case lst of 
+--                                                                      (vv, _mlv, _rr, aliases):_xs -> if v == vv || S.member v aliases 
+--                                                                                                     then Just k
+--                                                                                                     else acc
+--                                                                      [] -> acc
+--                                                     ) Nothing (M.toList mlocenv)
+
 findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
 findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
                                                               foldr (\(vv, _mlv, _rr, aliases) acc' -> 
@@ -414,6 +424,14 @@ findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
                                                                                                else acc'
                                                                     ) acc lst
                                                     ) Nothing (M.toList mlocenv)
+
+-- findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+-- findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc -> case lst of 
+--                                                                                 (vv, _mlv, _rr, aliases):_xs -> if (v == (toEndV vv)) || S.member v aliases 
+--                                                                                                                 then Just k
+--                                                                                                                 else acc
+--                                                                                 [] -> acc
+--                                                     ) Nothing (M.toList mlocenv)
 
 
 findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
@@ -442,13 +460,19 @@ findAValidRegion lst = case lst of
                                                               Just{} -> reg 
 
 updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
-updateMutableLocPtsToEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+updateMutableLocPtsToEnv key env (v, lc, reg, aliases) isFuture = case M.lookup key env of 
                                                                     -- If the key does not exists we just make an entry for it
                                                                     -- in the env.
                                                                     Nothing -> M.insert key [(v, lc, reg, aliases)] env
-                                                                    Just lst@(_x:xs) ->  if mayalias
-                                                                                         then M.insert key ([(v, lc, reg, aliases)] ++ lst) env
-                                                                                         else M.insert key ([(v, lc, reg, aliases)] ++ xs) env
+                                                                    Just lst@(_x:_xs) ->  if isFuture
+                                                                                          then M.insert key ([(v, lc, reg, aliases)] ++ lst) env
+                                                                                          -- ++ xs
+                                                                                          -- Vidush: This might need to be more principled
+                                                                                          -- We might need to have a flag in the type
+                                                                                          -- saying that the value can be a future value
+                                                                                          -- If it is a future value, then we may need to
+                                                                                          -- set that bit and store it as a future value 
+                                                                                          else M.insert key ([(v, lc, reg, aliases)]) env
                                                                     Just [] -> M.insert key ([(v, lc, reg, aliases)]) env
                                                                       
                                                                       

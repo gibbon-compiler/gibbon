@@ -652,6 +652,9 @@ getVarNameFromFreeVar env fvar = case M.lookup fvar env of
                                                          R l -> case l of 
                                                                     SingleR rl -> rl 
                                                                     _ -> error "Did not find variable name!\n"
+                                                         FL l -> case l of 
+                                                                      Single ll -> ll 
+                                                                      _ -> error "Did not find variable name!\n"
                                                          _ -> error "Did not find variable name!\n"
                                         Just v -> v
 
