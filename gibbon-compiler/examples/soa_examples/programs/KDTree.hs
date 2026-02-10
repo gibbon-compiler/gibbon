@@ -14,13 +14,14 @@ data Octree
             Int   -- objectId
   | OctEmpty
 
+{-# ANN type Octree "Factored" #-}
 
 buildOct :: Int -> Octree
 buildOct d =
   if d == 0
   then OctLeaf d (d+1) (d+2) (d*3) d
   else
-    OctNode d d d d d (d `mod` 2)
+    OctNode d d d d d (mod d 2)
       (buildOct (d-1)) (buildOct (d-1))
       (buildOct (d-1)) (buildOct (d-1))
       (buildOct (d-1)) (buildOct (d-1))
@@ -56,5 +57,14 @@ nearestDist t qx qy qz =
 
     OctEmpty ->
       1000000000
+
+gibbon_main =
+            let octTree = buildOct 9
+                -- _ = printPacked octTree
+                dist = iterate (nearestDist octTree 1 2 3)
+                _  = printsym (quote "NEWLINE")
+                _  = printsym (quote "NEWLINE")
+            in (dist)
+
 
 

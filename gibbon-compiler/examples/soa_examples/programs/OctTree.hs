@@ -11,7 +11,7 @@ data Octree
              Int  -- energy
   | EmptyOct
 
-{-# ANN type Octree "Linear" #-}
+{-# ANN type Octree "Factored" #-}
 
 
 buildOctree :: Int -> Octree
