@@ -16,6 +16,12 @@ reduce lst = case lst of
                                                         in a + sumRst
 
 
-gibbon_main = let lst = mkList 1000000
+gibbon_main = let _ = printsym (quote "Running program recution on List with 10 Integer elements: ")
+                  _ = printsym (quote "NEWLINE")
+                  lst = mkList 1000000
+                  _ = printsym (quote "Running pass reduction: ")
+                  _ = printsym (quote "NEWLINE")
                   sum = iterate (reduce lst)
+                  _ = printsym (quote "End")
+                  _ = printsym (quote "NEWLINE")
               in sum

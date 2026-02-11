@@ -11,7 +11,7 @@ data Octree
              Int  -- energy
   | EmptyOct
 
-{-# ANN type Octree "Factored" #-}
+{-# ANN type Octree "Linear" #-}
 
 
 buildOctree :: Int -> Octree
@@ -120,15 +120,38 @@ clearFlags t =
       EmptyOct
 
 gibbon_main =
-            let octTree = buildOctree 8
-                -- _ = printPacked octTree
+            let _ = printsym (quote "Running program OctTree Physics Simulation: ")
+                _ = printsym (quote "NEWLINE")
+                octTree = buildOctree 8
+                _ = printsym (quote "Running pass sumMass: ")
+                _ = printsym (quote "NEWLINE")
                 totMass = iterate (sumMass octTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass sumEnergy: ")
+                _ = printsym (quote "NEWLINE")
                 totEnergy = iterate (sumEnergy octTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass countActive: ")
+                _ = printsym (quote "NEWLINE")
                 totActive = iterate (countActive octTree 1)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass countParticles: ")
+                _ = printsym (quote "NEWLINE")
                 totParticles = iterate (countParticles octTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass scaleEnergy: ")
+                _ = printsym (quote "NEWLINE")
                 octTree' = iterate (scaleEnergy octTree 10)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass clearFlags: ")
+                _ = printsym (quote "NEWLINE")
                 octTree'' = iterate (clearFlags octTree)
-                _  = printsym (quote "NEWLINE")
+                _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
             in (totMass, totEnergy, totActive, totParticles)
 

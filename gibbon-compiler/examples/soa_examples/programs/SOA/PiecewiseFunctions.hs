@@ -8,7 +8,7 @@ data PW
          PW
          PW
 
-{-# ANN type PW "Linear" #-}
+{-# ANN type PW "Factored" #-}
 
 
 -- Builds a balanced kd-tree of given depth
@@ -110,16 +110,39 @@ diffPW p =
            (diffPW r)
 
 gibbon_main =
-            let pfTree = buildPW 20
-                -- _ = printPacked pfTree
+            let _ = printsym (quote "Running Progam Piecewise Functions: ")
+                _ = printsym (quote "NEWLINE")
+                pfTree = buildPW 20
+                _ = printsym (quote "Running pass sum co-efficients: ")
+                _ = printsym (quote "NEWLINE")
                 totCoeffs = iterate (sumCoeffs pfTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass max degree: ")
+                _ = printsym (quote "NEWLINE")
                 deg = iterate (maxDegree pfTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass sumError: ")
+                _ = printsym (quote "NEWLINE")
                 err = iterate (sumError pfTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass countSplit: ")
+                _ = printsym (quote "NEWLINE")
                 spltCount = iterate (countSplit pfTree 2)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass square: ")
+                _ = printsym (quote "NEWLINE")
                 squarePfTree = iterate (squarePW pfTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass add constant: ")
+                _ = printsym (quote "NEWLINE")
                 addConstPfTree = iterate (addConstPW pfTree 100)
-                _  = printsym (quote "NEWLINE")
-                _  = printsym (quote "NEWLINE")
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
             in (totCoeffs, deg, err, spltCount)
 
 

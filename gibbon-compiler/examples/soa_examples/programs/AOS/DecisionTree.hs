@@ -19,7 +19,7 @@ data DTree
       DTree
       DTree
 
-{-# ANN type DTree "Factored" #-}
+{-# ANN type DTree "Linear" #-}
 
 -- -------------------------------
 -- Tree generator (benchmark input)
@@ -194,25 +194,59 @@ mkFeatureVec n =
 -- -------------------------------
 
 gibbon_main =
+  let _ = printsym (quote "Running program Decision Tree: ") in
+  let _ = printsym (quote "NEWLINE") in
   let tree = buildTree 35 in
-
   -- Structural analyses
+  let _ = printsym (quote "Running pass countNodes: ") in
+  let _ = printsym (quote "NEWLINE") in
   let nodes   = iterate (countNodes tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass countLeaves: ") in
+  let _ = printsym (quote "NEWLINE") in
   let leaves  = iterate (countLeaves tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass treeDepth: ") in
+  let _ = printsym (quote "NEWLINE") in
   let depth   = iterate (treeDepth tree) in
-
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
   -- ML-style reductions
+  let _ = printsym (quote "Running pass sumImpurity: ") in
+  let _ = printsym (quote "NEWLINE") in
   let imp     = iterate (sumImpurity tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass sumSamples: ") in
+  let _ = printsym (quote "NEWLINE") in
   let samples = iterate (sumSamples tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass countFeatureUses: ") in
+  let _ = printsym (quote "NEWLINE") in
   let feat0   = iterate (countFeatureUses 0 tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass countSmallLeaves: ") in
+  let _ = printsym (quote "NEWLINE") in
   let small   = iterate (countSmallLeaves 5 tree) in
-
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
   -- Inference-related reductions
+  let _ = printsym (quote "Running pass inferenceCost: ") in
+  let _ = printsym (quote "NEWLINE") in
   let cost  = iterate (inferenceCost tree) in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass sumPathLengths: ") in
+  let _ = printsym (quote "NEWLINE") in
   let paths = iterate (sumPathLengths 0 tree) in
-
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
   -- Single inference
-  let fv = mkFeatureVec 32 in
+--  let fv = mkFeatureVec 32 in
 --   let pred   = classify tree fv in
 --   let pdepth = classifyDepth tree fv 0 in
 --

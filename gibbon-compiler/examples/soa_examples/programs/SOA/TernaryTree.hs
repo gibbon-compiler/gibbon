@@ -3,6 +3,7 @@ module Tree where
 data Tree = Leaf Int
           | Node Int Tree Tree Tree
   deriving Show
+
 {-# ANN type Tree "Factored" #-}
 
 mkTree :: Int -> Tree
@@ -32,14 +33,17 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = 
-   let tree = id (mkTree 15)
-       tree' = id (add1Tree tree)
-       tree'' = id (add1Tree tree')
-       --val = sumTree tree'
-       --_ = printsym (quote "(sum: ")
-       --_ = printint val 
-       --_ = printsym (quote ", rightmost: ")
-       rmost = (rightmost tree'')
-       --_ = printint rmost
-       --_ = printsym (quote ")\n\n")
-     in sumTree tree'' --printPacked tree'' --rmost --()
+   let _ = printsym (quote "Running program Ternary Heap: ")
+       _ = printsym (quote "NEWLINE")
+       tree = mkTree 15
+       _ = printsym (quote "Running pass add 1 tree: ")
+       _ = printsym (quote "NEWLINE")
+       tree' = add1Tree tree
+       _ = printsym (quote "End")
+       _ = printsym (quote "NEWLINE")
+       _ = printsym (quote "Running pass sum tree: ")
+       _ = printsym (quote "NEWLINE")
+       sum = sumTree tree'
+       _ = printsym (quote "End")
+       _ = printsym (quote "NEWLINE")
+     in sum
