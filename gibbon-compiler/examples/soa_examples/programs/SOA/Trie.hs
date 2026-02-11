@@ -15,7 +15,7 @@ data Trie
 buildTrie :: Int -> Trie
 buildTrie d =
   if d == 0
-  then TLeaf (d*2) (d*1) (d*3) (d*5)
+  then TLeaf d d (d*3) d
   else TNode d (d*5) (d*10) (mod d 2)
        (buildTrie (d-1))
        (buildTrie (d-1))
@@ -69,10 +69,14 @@ countTrieFlags t f =
 scaleFreq :: Trie -> Int -> Trie
 scaleFreq t k =
   case t of
-    TNode c f sc fl l r -> let scale = f * k
-                            in TNode c scale sc fl (scaleFreq l k) (scaleFreq r k)
-    TLeaf t i s m -> TLeaf t i s m
-    TEmpty -> TEmpty
+    TNode c f sc fl l r ->
+      TNode c (f * k) sc fl
+            (scaleFreq l k)
+            (scaleFreq r k)
+    TLeaf t i s m ->
+      TLeaf t i s m
+    TEmpty ->
+      TEmpty
 
 -- Map 2: Clear flags
 clearTrieFlags :: Trie -> Trie
@@ -92,33 +96,33 @@ clearTrieFlags t =
 gibbon_main =
    let _ = printsym (quote "Running progrm Trie: ")
        _ = printsym (quote "NEWLINE")
-       trie = buildTrie 15
-       _ = printsym (quote "Running pass sum frequency: ")
+       trie = buildTrie 17
+       _ = printsym (quote "Running pass sum frequency (fold): ")
        _ = printsym (quote "NEWLINE")
        totFreq = iterate (sumFreq trie)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass sum count words: ")
+       _ = printsym (quote "Running pass sum count words (fold): ")
        _ = printsym (quote "NEWLINE")
        totWords = iterate (countWords trie)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass sum subtrees: ")
+       _ = printsym (quote "Running pass sum subtrees (fold): ")
        _ = printsym (quote "NEWLINE")
        subTreeSize = iterate (sumSubtrees trie)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass count trie flags: ")
+       _ = printsym (quote "Running pass count trie flags (fold): ")
        _ = printsym (quote "NEWLINE")
        totFlaggedNodes = iterate (countTrieFlags trie 2)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass scale frequency: ")
+       _ = printsym (quote "Running pass scale frequency (map): ")
        _ = printsym (quote "NEWLINE")
        trie' = iterate (scaleFreq trie 10)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass clear trie flags: ")
+       _ = printsym (quote "Running pass clear trie flags (map): ")
        _ = printsym (quote "NEWLINE")
        trie'' = iterate (clearTrieFlags trie')
        _ = printsym (quote "End")

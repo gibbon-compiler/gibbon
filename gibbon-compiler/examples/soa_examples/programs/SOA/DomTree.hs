@@ -50,7 +50,7 @@ sumArea d =
       0
 
 max :: Int -> Int -> Int
-max a b = if a < b 
+max a b = if a < b
           then b
           else a
 
@@ -86,18 +86,21 @@ sumTextWidth d =
     Empty ->
       0
 
---computeWidths :: DOM -> DOM
---computeWidths d =
---  case d of
---    Elem tag cls style cost x y _ h l r ->
---      let l' = computeWidths l
---          r' = computeWidths r
---          w  = max (getWidth l') (getWidth r')
---      in Elem tag cls style cost x y w h l' r'
---    Text c f col w h ->
---      Text c f col w h
---    Empty ->
---      Empty
+-- Vidush This kind of function does not work
+-- with the mutable backend and needs to be fixed
+-- A map like function that's not tail recursive.
+-- computeWidths :: DOM -> DOM
+-- computeWidths d =
+--   case d of
+--     Elem tag cls style cost x y _ h l r ->
+--       let l' = computeWidths l
+--           r' = computeWidths r
+--           w  = max (getWidth l') (getWidth r')
+--       in Elem tag cls style cost x y w h l' r'
+--     Text c f col w h ->
+--       Text c f col w h
+--     Empty ->
+--       Empty
 
 getWidth :: DOM -> Int
 getWidth d =
@@ -124,32 +127,32 @@ gibbon_main =
   let _ = printsym (quote "Running program DomTree: ")
       _ = printsym (quote "NEWLINE")
       tree   = buildRenderTree 23
-      _ = printsym (quote "Running pass SumArea: ")
+      _ = printsym (quote "Running pass SumArea (fold): ")
       _ = printsym (quote "NEWLINE")
       area   = iterate (sumArea tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass find max Bottom: ")
+      _ = printsym (quote "Running pass find max Bottom (fold): ")
       _ = printsym (quote "NEWLINE")
       bottom = iterate (maxBottom tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass count styled: ")
+      _ = printsym (quote "Running pass count styled (fold): ")
       _ = printsym (quote "NEWLINE")
       styled = iterate (countPositioned tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass sumTextWidth: ")
+      _ = printsym (quote "Running pass sumTextWidth (fold): ")
       _ = printsym (quote "NEWLINE")
       textW  = iterate (sumTextWidth tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      --_ = printsym (quote "Running pass computeWidths: ")
-      --_ = printsym (quote "NEWLINE")
-      --tree'  = iterate (computeWidths tree)
-      --_ = printsym (quote "End")
-      --_ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass scaleLayout: ")
+--       _ = printsym (quote "Running pass computeWidths: ")
+--       _ = printsym (quote "NEWLINE")
+--       tree'  = iterate (computeWidths tree)
+--       _ = printsym (quote "End")
+--       _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass scaleLayout (map): ")
       _ = printsym (quote "NEWLINE")
       tree' = iterate (scaleLayout tree 2)
       _ = printsym (quote "End")

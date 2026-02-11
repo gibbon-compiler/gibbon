@@ -19,8 +19,8 @@ reduce lst = case lst of
 
 gibbon_main = let _ = printsym (quote "Running program recution on List with 10 Integer elements: ")
                   _ = printsym (quote "NEWLINE")
-                  lst = mkList 1000000
-                  _ = printsym (quote "Running pass reduction: ")
+                  lst = mkList 10000000
+                  _ = printsym (quote "Running pass reduction (fold): ")
                   _ = printsym (quote "NEWLINE")
                   sum = iterate (reduce lst)
                   _ = printsym (quote "End")
