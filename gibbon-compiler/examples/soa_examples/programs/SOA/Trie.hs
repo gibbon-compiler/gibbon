@@ -15,7 +15,7 @@ data Trie
 buildTrie :: Int -> Trie
 buildTrie d =
   if d == 0
-  then TLeaf d d (d*3) d
+  then TLeaf (d*2) (d*1) (d*3) (d*5)
   else TNode d (d*5) (d*10) (mod d 2)
        (buildTrie (d-1))
        (buildTrie (d-1))
@@ -69,12 +69,10 @@ countTrieFlags t f =
 scaleFreq :: Trie -> Int -> Trie
 scaleFreq t k =
   case t of
-    TNode c f sc fl l r ->
-      TNode c (f * k) sc fl (scaleFreq l k) (scaleFreq r k)
-    TLeaf t i s m ->
-      TLeaf t i s m
-    TEmpty ->
-      TEmpty
+    TNode c f sc fl l r -> let scale = f * k
+                            in TNode c scale sc fl (scaleFreq l k) (scaleFreq r k)
+    TLeaf t i s m -> TLeaf t i s m
+    TEmpty -> TEmpty
 
 -- Map 2: Clear flags
 clearTrieFlags :: Trie -> Trie
