@@ -20,7 +20,7 @@ data DOM
 
 buildRenderTree :: Int -> DOM
 buildRenderTree n =
-if n <= 0
+   if n <= 0
    then
    let chars = 20
        font  = 14
@@ -48,6 +48,11 @@ sumArea d =
       w * h
     Empty ->
       0
+
+max :: Int -> Int -> Int
+max a b = if a < b 
+          then b
+          else a
 
 maxBottom :: DOM -> Int
 maxBottom d =
