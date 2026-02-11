@@ -48,6 +48,8 @@ your-project/
 
 - Gibbon compiler installed and available in PATH
 - Python 3.6+ (for Python script)
+- Python packages: matplotlib, numpy (for paper generation feature)
+  - Install with: `pip install matplotlib numpy`
 - Bash shell (for Bash script)
 
 ## Usage
@@ -102,6 +104,94 @@ chmod +x gibbon_benchmark.py
 | `--report` | Output text report file | `benchmark_report.txt` |
 | `--json` | JSON output file | `benchmark_results.json` |
 | `--programs` | Specific programs to benchmark (space-separated) | All programs |
+| `--generate-paper` | Generate LaTeX tables and publication figures | `False` |
+| `--latex-table` | Output LaTeX table file (with --generate-paper) | `performance_table.tex` |
+| `--figures-dir` | Directory for figures (with --generate-paper) | `figures` |
+| `--clean` | Force recompilation even if executables are up-to-date | `False` |
+
+#### Smart Recompilation (NEW!)
+
+The scripts now include smart recompilation (like `make`) that only recompiles when necessary:
+
+**How it works:**
+- Checks if executable exists and is newer than source file
+- Skips compilation if executable is up-to-date
+- Saves significant time during iterative development
+
+**Usage:**
+
+```bash
+# Normal run - only recompiles changed programs
+./gibbon_benchmark.py
+
+# Force recompilation of everything
+./gibbon_benchmark.py --clean
+
+# Clean all compiled files
+./clean.sh
+```
+
+**Example output:**
+```
+Compiler (AOS) is up-to-date, skipping compilation
+Compiler (SOA) is up-to-date, skipping compilation
+Compiling List (AOS)... ✓  (only this one changed!)
+List (SOA) is up-to-date, skipping compilation
+```
+
+**When to use --clean:**
+- Preparing final benchmarks for publication
+- After changing compiler flags
+- When you want to ensure everything is fresh
+
+**For complete details:** See `SMART_RECOMPILATION_GUIDE.txt`
+
+#### Conference Paper Generation
+
+**NEW: Automatically generate publication-quality materials for your paper!**
+
+Generate LaTeX tables and figures for top-tier conferences:
+
+```bash
+./gibbon_benchmark.py --generate-paper
+```
+
+This creates:
+- **performance_table.tex** - Professional LaTeX tables with:
+  - Performance comparison (AoS vs SoA)
+  - Per-pass breakdown
+  - Speedup statistics
+  - Ready to `\input{}` into your paper
+  
+- **figures/** directory with publication-quality figures:
+  - speedup_comparison.pdf - Bar chart of speedups
+  - performance_comparison.pdf - Grouped bar chart
+  - pass_breakdown.pdf - Stacked bars showing time per pass
+  - iteration_distributions.pdf - Box plots of timing variance
+  - speedup_heatmap.pdf - Heatmap of per-pass speedups
+  - PNG versions of all figures
+
+**Using in your LaTeX paper:**
+
+```latex
+% In preamble
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+% In document
+\input{performance_table.tex}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
+  \caption{Performance speedup of SoA vs AoS.}
+  \label{fig:speedup}
+\end{figure}
+```
+
+**For complete paper generation guide, see:** `PAPER_GENERATION_GUIDE.txt`
+
+**Quick reference:** `PAPER_QUICK_REFERENCE.txt`
 
 ### Bash Script
 
@@ -226,13 +316,7 @@ The final output (e.g., `'#(8571429 1428571 1071429 535714 25714287 #t 17142858)
    ```
    Solution: Verify your directory structure matches the expected layout.
 
-3. **Compilation timeout**
-   ```
-   Compiling Compiler.hs (AOS)... ✗ (timeout)
-   ```
-   Solution: The script has a 5-minute compilation timeout. For large programs, this may need to be increased in the script.
-
-4. **Execution timeout**
+3. **Execution timeout**
    ```
    Running Compiler.aos.exe... ✗ (timeout)
    ```

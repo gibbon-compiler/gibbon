@@ -1,11 +1,22 @@
 #!/bin/bash
 # Simple Gibbon Benchmarking Script
-# Usage: ./gibbon_benchmark.sh [programs_dir] [iterations]
+# Usage: ./gibbon_benchmark.sh [programs_dir] [iterations] [--clean]
 
 set -e
 
+# Parse arguments
 PROGRAMS_DIR="${1:-programs}"
 ITERATIONS="${2:-20}"
+FORCE_RECOMPILE=0
+
+# Check for --clean flag
+for arg in "$@"; do
+    if [ "$arg" = "--clean" ]; then
+        FORCE_RECOMPILE=1
+        echo "Force recompilation enabled"
+    fi
+done
+
 OUTPUT_DIR="benchmark_output"
 REPORT_FILE="benchmark_report.txt"
 
@@ -43,12 +54,47 @@ echo "Timestamp: $(date)" >> "$REPORT_FILE"
 echo "Iterations: $ITERATIONS" >> "$REPORT_FILE"
 echo "" >> "$REPORT_FILE"
 
+# Check if recompilation is needed (like make)
+needs_recompilation() {
+    local source_file=$1
+    local exe_file=$2
+    local c_file=$3
+    
+    # Force recompilation if --clean flag is set
+    if [ $FORCE_RECOMPILE -eq 1 ]; then
+        return 0  # Need to recompile
+    fi
+    
+    # If executable doesn't exist, need to compile
+    if [ ! -f "$exe_file" ]; then
+        return 0  # Need to recompile
+    fi
+    
+    # If C file doesn't exist, need to compile
+    if [ ! -f "$c_file" ]; then
+        return 0  # Need to recompile
+    fi
+    
+    # Check if source is newer than executable
+    if [ "$source_file" -nt "$exe_file" ]; then
+        return 0  # Need to recompile
+    fi
+    
+    return 1  # No need to recompile (up-to-date)
+}
+
 compile_program() {
     local source_file=$1
     local variant=$2
     local basename=$(basename "$source_file" .hs)
     local c_file="$OUTPUT_DIR/${basename}.${variant}.c"
     local exe_file="$OUTPUT_DIR/${basename}.${variant}.exe"
+    
+    # Check if recompilation is needed
+    if ! needs_recompilation "$source_file" "$exe_file" "$c_file"; then
+        echo "  ${basename} (${variant^^}) is up-to-date, skipping compilation"
+        return 0
+    fi
     
     echo -n "  Compiling ${basename} (${variant^^})... "
     
@@ -120,6 +166,11 @@ echo "==========================================================================
 echo "Programs directory: $PROGRAMS_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Iterations: $ITERATIONS"
+if [ $FORCE_RECOMPILE -eq 1 ]; then
+    echo "Force recompilation: Yes"
+else
+    echo "Force recompilation: No (smart recompilation)"
+fi
 echo "================================================================================"
 echo ""
 
