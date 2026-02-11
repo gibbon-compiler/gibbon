@@ -1,0 +1,197 @@
+GIBBON COMPILER BENCHMARKING SUITE
+===================================
+
+This package contains complete benchmarking tools for your Gibbon compiler programs.
+
+📦 PACKAGE CONTENTS
+-------------------
+
+1. gibbon_benchmark.py      - Full-featured Python benchmarking script
+2. gibbon_benchmark.sh      - Lightweight Bash alternative
+3. README.md                - Comprehensive documentation
+4. QUICKSTART.sh            - Quick start guide and examples
+5. benchmark.config         - Configuration reference
+
+✨ KEY FEATURES
+--------------
+
+✓ Compiles both AoS and SoA variants automatically
+✓ Runs benchmarks with configurable iterations
+✓ Verifies output correctness between variants
+✓ Extracts detailed performance metrics for each compiler pass
+✓ Generates comprehensive reports (text + JSON)
+✓ Compares performance between AoS and SoA
+✓ Handles errors gracefully with detailed logging
+✓ Supports parallel analysis and custom filtering
+
+🚀 QUICK START
+--------------
+
+1. Set up your directory structure:
+   
+   your-project/
+   ├── programs/
+   │   ├── AoS/
+   │   │   ├── Compiler.hs
+   │   │   ├── List.hs
+   │   │   └── ... (other .hs files)
+   │   └── SoA/
+   │       ├── Compiler.hs
+   │       ├── List.hs
+   │       └── ... (same files as AoS)
+   ├── gibbon_benchmark.py
+   └── gibbon_benchmark.sh
+
+2. Run the benchmark:
+   
+   ./gibbon_benchmark.py
+   
+   or
+   
+   ./gibbon_benchmark.sh
+
+3. Review results:
+   
+   cat benchmark_report.txt
+   cat benchmark_results.json
+
+📊 EXAMPLE OUTPUT
+----------------
+
+The script will show progress like this:
+
+  ==================================================================
+  Benchmarking: Compiler.hs
+  ==================================================================
+  Compiling Compiler (AOS)... ✓ (15.23s)
+  Running Compiler.aos.exe... ✓ (65.58s)
+  Compiling Compiler (SOA)... ✓ (16.01s)
+  Running Compiler.soa.exe... ✓ (61.89s)
+  
+  Output comparison: ✓ MATCH
+
+And generate reports showing:
+
+  - Compilation success/failure for each variant
+  - Execution times for each compiler pass
+  - Output verification (AoS vs SoA)
+  - Performance comparisons with speedup factors
+  - Detailed timing statistics
+
+📈 METRICS EXTRACTED
+-------------------
+
+For each compiler pass:
+  • ITER TIMES - Individual iteration timings
+  • SELFTIMED  - Median execution time
+  • BATCHTIME  - Total time for all iterations
+  • ITERS      - Number of iterations run
+
+The script analyzes these passes:
+  • instCountPass
+  • blockCountPass
+  • memoryOpStatsPass
+  • castInstCountPass
+  • branchStatsPass
+  • latencyModelPass
+  • has cycle
+  • throughputModelPass
+  • targetRetunePass
+  • stripSideEffectsPass
+
+🔍 OUTPUT VERIFICATION
+---------------------
+
+The benchmark extracts final program output like:
+  '#(8571429 1428571 1071429 535714 25714287 #t 17142858)
+
+And verifies that AoS and SoA produce identical results,
+ensuring correctness while comparing performance.
+
+⚙️ CUSTOMIZATION
+----------------
+
+Python script options:
+  --programs-dir    Directory with AoS/SoA subdirectories
+  --output-dir      Where to put compiled files
+  --iterations      Number of iterations (default: 20)
+  --report          Text report filename
+  --json            JSON output filename
+  --programs        Specific programs to benchmark
+
+Bash script usage:
+  ./gibbon_benchmark.sh [programs_dir] [iterations]
+
+📖 DOCUMENTATION
+---------------
+
+For complete documentation, see:
+  • README.md        - Full user guide
+  • QUICKSTART.sh    - Quick examples
+  • benchmark.config - Configuration reference
+
+💡 TIPS
+-------
+
+1. Run on an idle system for consistent results
+2. Use 20+ iterations for stable measurements
+3. Check that outputs match (✓ MATCH) for correctness
+4. Compare median times, not averages
+5. Run multiple times for statistical significance
+
+🐛 TROUBLESHOOTING
+-----------------
+
+If you encounter issues:
+
+1. "gibbon: command not found"
+   → Ensure Gibbon is in your PATH
+
+2. Source files not found
+   → Check directory structure matches expected layout
+
+3. Compilation/execution timeout
+   → Increase timeout values in the scripts
+
+4. Output mismatch
+   → Verify AoS and SoA programs are semantically equivalent
+
+See README.md for detailed troubleshooting.
+
+📝 EXAMPLE WORKFLOW
+------------------
+
+# 1. Initial full benchmark
+./gibbon_benchmark.py --iterations 30
+
+# 2. Check summary
+head -50 benchmark_report.txt
+
+# 3. Benchmark specific programs
+./gibbon_benchmark.py --programs Compiler.hs List.hs --iterations 50
+
+# 4. Analyze JSON results
+python3 -c "
+import json
+with open('benchmark_results.json') as f:
+    data = json.load(f)
+    for r in data['results']:
+        if r['outputs_match']:
+            print(f\"{r['program']}: Match ✓\")
+"
+
+# 5. Review detailed timings
+grep "SELFTIMED" benchmark_output/*.output.txt
+
+✅ GETTING STARTED
+------------------
+
+Run this to see examples:
+  ./QUICKSTART.sh
+
+Then start benchmarking:
+  ./gibbon_benchmark.py
+
+Good luck with your benchmarking! 🚀
+
+For questions or issues, review README.md for comprehensive guidance.

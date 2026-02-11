@@ -117,15 +117,38 @@ clearQueryFlags q =
 
 
 gibbon_main =
-            let queryTree = buildQuery 33
-                -- _ = printPacked queryTree
+            let _ = printsym (quote "Running Data base Query Pass: ")
+                _ = printsym (quote "NEWLINE")
+                queryTree = buildQuery 33
+                _ = printsym (quote "Running pass sumCost: ")
+                _ = printsym (quote "NEWLINE")
                 totCost = iterate (sumCost queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass sumRows: ")
+                _ = printsym (quote "NEWLINE")
                 totRows = iterate (sumRows queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass countJoins: ")
+                _ = printsym (quote "NEWLINE")
                 totJoins = iterate (countJoins queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass sumMemory: ")
+                _ = printsym (quote "NEWLINE")
                 totMem = iterate (sumMemory queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass scaleCosts: ")
+                _ = printsym (quote "NEWLINE")
                 queryTree' = iterate (scaleCosts queryTree 10)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass clearQueryFlags: ")
+                _ = printsym (quote "NEWLINE")
                 queryTree'' = iterate (clearQueryFlags queryTree')
-                _  = printsym (quote "NEWLINE")
+                _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
             in (totCost, totRows, totJoins, totMem)
 

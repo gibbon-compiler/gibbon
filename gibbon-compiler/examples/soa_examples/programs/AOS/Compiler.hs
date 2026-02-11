@@ -12,7 +12,7 @@ data IR
           IR
   | End
 
-{-# ANN type IR "Factored" #-}
+{-# ANN type IR "Linear" #-}
 
 -- Opcode encoding:
 -- 0: ALU      (add, mul, fadd, etc.)
@@ -145,17 +145,59 @@ stripSideEffectsPass ir =
       End
 
 gibbon_main =
-  let ir     = buildIR 10000000
+  let _ = printsym (quote "Running the Compiler IR Program: ")
+      _ = printsym (quote "NEWLINE")
+      ir     = buildIR 10000000
+      _ = printsym (quote "Running pass instCountPass: ")
+      _ = printsym (quote "NEWLINE")
       insts  = iterate (instCountPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass blockCountPass: ")
+      _ = printsym (quote "NEWLINE")
       blocks = iterate (blockCountPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass memoryOpStatsPass: ")
+      _ = printsym (quote "NEWLINE")
       memops = iterate (memoryOpStatsPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass castInstCountPass: ")
+      _ = printsym (quote "NEWLINE")
       castInstrs = iterate (castInstCountPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass branchStatsPass: ")
+      _ = printsym (quote "NEWLINE")
       brs    = iterate (branchStatsPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass latencyModelPass: ")
+      _ = printsym (quote "NEWLINE")
       lat    = iterate (latencyModelPass ir)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass has cycle: ")
+      _ = printsym (quote "NEWLINE")
       hasCycle = iterate (goHasCycle ir 0)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass throughputModelPass: ")
+      _ = printsym (quote "NEWLINE")
       thr    = iterate (throughputModelPass ir)
+      _ = printsym (quote "End: ")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass targetReturnPass: ")
+      _ = printsym (quote "NEWLINE")
       ir'    = iterate (targetRetunePass ir 2)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass stripSideEffectsPass: ")
+      _ = printsym (quote "NEWLINE")
       ir''   = iterate (stripSideEffectsPass ir')
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
       --_      = printPacked ir''
   in (insts, blocks, memops, brs, lat, hasCycle, thr)
 

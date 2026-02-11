@@ -4,6 +4,7 @@ module MonoTree where
 data Tree = Leaf Int
           | Node Tree Tree
   deriving Show
+
 {-# ANN type Tree "Linear" #-}
 
 mkTree :: Int -> Int -> Tree
@@ -18,11 +19,6 @@ add1Tree t =
     Leaf x -> Leaf (x + 1)
     Node x1 x2 -> Node (add1Tree x1) (add1Tree x2)
 
---rightMost :: Tree -> Int
---rightMost t = case t of
---                  Leaf x -> x
---                  Node d x1 x2 -> rightMost x2
-
 sumTree :: Tree -> Int
 sumTree tr =
   case tr of
@@ -33,9 +29,19 @@ id :: Tree -> Tree
 id tree = tree
 
 gibbon_main = let 
-                tree = (mkTree 23 0) 
+                _ = printsym (quote "Running program MonoTree: ")
+                _ = printsym (quote "NEWLINE")
+                tree = (mkTree 23 0)
+                _ = printsym (quote "Running pass add1Tree: ")
+                _ = printsym (quote "NEWLINE")
                 tree' =  iterate (add1Tree tree)
-                val = iterate (sumTree tree') 
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass sumTree: ")
+                _ = printsym (quote "NEWLINE")
+                val = iterate (sumTree tree')
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
                in val
 
 main :: IO ()

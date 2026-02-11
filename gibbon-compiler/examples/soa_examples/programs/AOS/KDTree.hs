@@ -14,7 +14,7 @@ data Octree
             Int   -- objectId
   | OctEmpty
 
-{-# ANN type Octree "Factored" #-}
+{-# ANN type Octree "Linear" #-}
 
 buildOct :: Int -> Octree
 buildOct d =
@@ -59,10 +59,13 @@ nearestDist t qx qy qz =
       1000000000
 
 gibbon_main =
-            let octTree = buildOct 9
-                -- _ = printPacked octTree
+            let _ = printsym (quote "Running program KDTree: ")
+                _ = printsym (quote "NEWLINE")
+                octTree = buildOct 9
+                _ = printsym (quote "Running pass Find nearest Neighbour: ")
+                _ = printsym (quote "NEWLINE")
                 dist = iterate (nearestDist octTree 1 2 3)
-                _  = printsym (quote "NEWLINE")
+                _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
             in (dist)
 
