@@ -1,301 +1,167 @@
-#!/bin/bash
-# Simple Gibbon Benchmarking Script
-# Usage: ./gibbon_benchmark.sh [programs_dir] [iterations] [--clean]
+#!/usr/bin/env bash
+# =============================================================================
+# gibbon_benchmark.sh  –  Bash convenience wrapper for gibbon_benchmark.py
+# =============================================================================
+# Provides shortcut commands so you don't have to remember all the flags.
+#
+# Usage:
+#   ./gibbon_benchmark.sh                       # full run, all programs
+#   ./gibbon_benchmark.sh quick                 # 5 iterations, all programs
+#   ./gibbon_benchmark.sh paper                 # full run + generate paper
+#   ./gibbon_benchmark.sh one DomTree.hs        # single program
+#   ./gibbon_benchmark.sh one DomTree.hs paper  # single program + paper
+#   ./gibbon_benchmark.sh clean                 # remove all outputs
+#   ./gibbon_benchmark.sh clean-run             # clean then full run + paper
+#   ./gibbon_benchmark.sh help                  # show this help
+# =============================================================================
 
-set -e
+set -euo pipefail
 
-# Parse arguments
-PROGRAMS_DIR="${1:-programs}"
-ITERATIONS="${2:-20}"
-FORCE_RECOMPILE=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PY="${SCRIPT_DIR}/gibbon_benchmark.py"
 
-# Check for --clean flag
-for arg in "$@"; do
-    if [ "$arg" = "--clean" ]; then
-        FORCE_RECOMPILE=1
-        echo "Force recompilation enabled"
-    fi
-done
+# Colours
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-OUTPUT_DIR="benchmark_output"
-REPORT_FILE="benchmark_report.txt"
+# Defaults (override via environment)
+ITERS="${ITERS:-20}"
+PROGRAMS_DIR="${PROGRAMS_DIR:-programs}"
+OUTPUT_DIR="${OUTPUT_DIR:-benchmark_output}"
+FIGURES_DIR="${FIGURES_DIR:-figures}"
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+die()   { echo -e "${RED}Error: $*${NC}" >&2; exit 1; }
+info()  { echo -e "${CYAN}▶ $*${NC}"; }
+ok()    { echo -e "${GREEN}✓ $*${NC}"; }
+warn()  { echo -e "${YELLOW}⚠ $*${NC}"; }
 
-# Programs to benchmark
-PROGRAMS=(
-    "Compiler.hs"
-    "DBQuery.hs"
-    "DecisionTree.hs"
-    "DomTree.hs"
-    "KDTree.hs"
-    "LinearListReduction.hs"
-    "List.hs"
-    "MonoTree.hs"
-    "ObjectGraph.hs"
-    "OctTree.hs"
-    "PiecewiseFunctions.hs"
-    "TernaryTree.hs"
-    "Trie.hs"
-)
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Initialize report
-echo "================================================================================" > "$REPORT_FILE"
-echo "GIBBON COMPILER BENCHMARK REPORT" >> "$REPORT_FILE"
-echo "================================================================================" >> "$REPORT_FILE"
-echo "Timestamp: $(date)" >> "$REPORT_FILE"
-echo "Iterations: $ITERATIONS" >> "$REPORT_FILE"
-echo "" >> "$REPORT_FILE"
-
-# Check if recompilation is needed (like make)
-needs_recompilation() {
-    local source_file=$1
-    local exe_file=$2
-    local c_file=$3
-    
-    # Force recompilation if --clean flag is set
-    if [ $FORCE_RECOMPILE -eq 1 ]; then
-        return 0  # Need to recompile
-    fi
-    
-    # If executable doesn't exist, need to compile
-    if [ ! -f "$exe_file" ]; then
-        return 0  # Need to recompile
-    fi
-    
-    # If C file doesn't exist, need to compile
-    if [ ! -f "$c_file" ]; then
-        return 0  # Need to recompile
-    fi
-    
-    # Check if source is newer than executable
-    if [ "$source_file" -nt "$exe_file" ]; then
-        return 0  # Need to recompile
-    fi
-    
-    return 1  # No need to recompile (up-to-date)
+need_python() {
+    command -v python3 &>/dev/null || die "python3 not found"
+    python3 -c "import matplotlib, numpy" 2>/dev/null \
+        || die "Python deps missing – run: pip install matplotlib numpy"
 }
 
-compile_program() {
-    local source_file=$1
-    local variant=$2
-    local basename=$(basename "$source_file" .hs)
-    local c_file="$OUTPUT_DIR/${basename}.${variant}.c"
-    local exe_file="$OUTPUT_DIR/${basename}.${variant}.exe"
-    
-    # Check if recompilation is needed
-    if ! needs_recompilation "$source_file" "$exe_file" "$c_file"; then
-        echo "  ${basename} (${variant^^}) is up-to-date, skipping compilation"
-        return 0
-    fi
-    
-    echo -n "  Compiling ${basename} (${variant^^})... "
-    
-    if gibbon --use-mutable-cursors --packed --to-exe \
-        --cfile "$c_file" --exefile "$exe_file" "$source_file" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC}"
-        return 0
-    else
-        echo -e "${RED}✗${NC}"
-        return 1
-    fi
+need_gibbon() {
+    command -v gibbon &>/dev/null || warn "gibbon not found in PATH – compilation will fail"
 }
 
-run_program() {
-    local exe_file=$1
-    local output_file=$2
-    
-    echo -n "  Running $(basename $exe_file)... "
-    
-    if timeout 600 "$exe_file" --iterate "$ITERATIONS" > "$output_file" 2>&1; then
-        echo -e "${GREEN}✓${NC}"
-        return 0
-    else
-        echo -e "${RED}✗${NC}"
-        return 1
-    fi
-}
-
-extract_output() {
-    local file=$1
-    
-    # Extract program output by filtering out timing lines
-    # This handles various output formats (tuples, numbers, etc.)
-    grep -v -E '^(itertime:|ITER TIMES:|ITERS:|SIZE:|BATCHTIME:|SELFTIMED:|Running pass|Running program|Running the Compiler|End$|^[[:space:]]*$)' "$file" 2>/dev/null | \
-    grep -v -E '^[[:space:]]*$' | \
-    tr '\n' ' ' | \
-    sed 's/[[:space:]]\+/ /g' | \
-    sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo ""
-}
-
-compare_outputs() {
-    local aos_output=$1
-    local soa_output=$2
-    
-    # Normalize whitespace for comparison
-    aos_normalized=$(echo "$aos_output" | tr -s '[:space:]' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    soa_normalized=$(echo "$soa_output" | tr -s '[:space:]' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    
-    if [ -z "$aos_normalized" ] || [ -z "$soa_normalized" ]; then
-        echo "N/A"
-        return 2
-    fi
-    
-    if [ "$aos_normalized" = "$soa_normalized" ]; then
-        echo -e "${GREEN}✓ MATCH${NC}"
-        return 0
-    else
-        echo -e "${RED}✗ MISMATCH${NC}"
-        echo "  AoS output: $aos_normalized" >&2
-        echo "  SoA output: $soa_normalized" >&2
-        return 1
-    fi
-}
-
-# Main benchmarking loop
-echo "================================================================================"
-echo "GIBBON COMPILER BENCHMARK SUITE"
-echo "================================================================================"
-echo "Programs directory: $PROGRAMS_DIR"
-echo "Output directory: $OUTPUT_DIR"
-echo "Iterations: $ITERATIONS"
-if [ $FORCE_RECOMPILE -eq 1 ]; then
-    echo "Force recompilation: Yes"
-else
-    echo "Force recompilation: No (smart recompilation)"
-fi
-echo "================================================================================"
-echo ""
-
-total=0
-successful=0
-matching=0
-
-for program in "${PROGRAMS[@]}"; do
-    echo "================================================================================"
-    echo "Benchmarking: $program"
-    echo "================================================================================"
-    
-    basename=$(basename "$program" .hs)
-    aos_source="$PROGRAMS_DIR/AoS/$program"
-    soa_source="$PROGRAMS_DIR/SoA/$program"
-    
-    aos_success=false
-    soa_success=false
-    
-    # Check if source files exist
-    if [ ! -f "$aos_source" ]; then
-        echo -e "${YELLOW}Warning: $aos_source not found${NC}"
-        continue
-    fi
-    
-    if [ ! -f "$soa_source" ]; then
-        echo -e "${YELLOW}Warning: $soa_source not found${NC}"
-        continue
-    fi
-    
-    ((total++))
-    
-    # Compile AoS
-    if compile_program "$aos_source" "aos"; then
-        aos_exe="$OUTPUT_DIR/${basename}.aos.exe"
-        aos_output_file="$OUTPUT_DIR/${basename}.aos.output.txt"
-        
-        # Run AoS
-        if run_program "$aos_exe" "$aos_output_file"; then
-            aos_success=true
-        fi
-    fi
-    
-    # Compile SoA
-    if compile_program "$soa_source" "soa"; then
-        soa_exe="$OUTPUT_DIR/${basename}.soa.exe"
-        soa_output_file="$OUTPUT_DIR/${basename}.soa.output.txt"
-        
-        # Run SoA
-        if run_program "$soa_exe" "$soa_output_file"; then
-            soa_success=true
-        fi
-    fi
-    
-    # Compare outputs
+print_header() {
     echo ""
-    if $aos_success && $soa_success; then
-        ((successful++))
-        
-        aos_result=$(extract_output "$aos_output_file")
-        soa_result=$(extract_output "$soa_output_file")
-        
-        echo -n "  Output comparison: "
-        if compare_outputs "$aos_result" "$soa_result"; then
-            ((matching++))
-        fi
-        
-        # Add to report
-        echo "" >> "$REPORT_FILE"
-        echo "────────────────────────────────────────────────────────────────────────────────" >> "$REPORT_FILE"
-        echo "Program: $program" >> "$REPORT_FILE"
-        echo "────────────────────────────────────────────────────────────────────────────────" >> "$REPORT_FILE"
-        echo "AoS Output: $aos_result" >> "$REPORT_FILE"
-        echo "SoA Output: $soa_result" >> "$REPORT_FILE"
-        
-        if [ "$aos_result" = "$soa_result" ]; then
-            echo "Match: ✓ PASS" >> "$REPORT_FILE"
-        else
-            echo "Match: ✗ FAIL" >> "$REPORT_FILE"
-            echo "" >> "$REPORT_FILE"
-            echo "*** OUTPUT MISMATCH DETAILS ***" >> "$REPORT_FILE"
-            echo "The outputs differ. Please review the full output files:" >> "$REPORT_FILE"
-            echo "  $aos_output_file" >> "$REPORT_FILE"
-            echo "  $soa_output_file" >> "$REPORT_FILE"
-            echo "*** END MISMATCH DETAILS ***" >> "$REPORT_FILE"
-        fi
-        
-        # Extract and compare performance metrics
-        echo "" >> "$REPORT_FILE"
-        echo "AoS Performance:" >> "$REPORT_FILE"
-        grep "SELFTIMED:" "$aos_output_file" >> "$REPORT_FILE" 2>/dev/null || true
-        
-        echo "" >> "$REPORT_FILE"
-        echo "SoA Performance:" >> "$REPORT_FILE"
-        grep "SELFTIMED:" "$soa_output_file" >> "$REPORT_FILE" 2>/dev/null || true
-    fi
-    
+    echo -e "${BOLD}========================================${NC}"
+    echo -e "${BOLD} Gibbon Benchmark Suite v2.4${NC}"
+    echo -e "${BOLD}========================================${NC}"
+    echo -e "  Programs dir : ${PROGRAMS_DIR}"
+    echo -e "  Output dir   : ${OUTPUT_DIR}"
+    echo -e "  Figures dir  : ${FIGURES_DIR}"
+    echo -e "  Iterations   : ${ITERS}"
     echo ""
-done
+}
 
-# Summary
-echo ""
-echo "================================================================================"
-echo "BENCHMARK COMPLETE"
-echo "================================================================================"
-echo "Total programs benchmarked: $total"
-echo "Successful runs (both AoS and SoA): $successful"
-echo "Matching outputs: $matching"
+run_py() {
+    info "Running: python3 $PY $*"
+    python3 "$PY" "$@"
+}
 
-if [ $matching -lt $successful ]; then
-    echo -e "${YELLOW}"
-    echo "⚠ WARNING: Some programs produced different outputs between AoS and SoA!"
-    echo "   Check $REPORT_FILE for details."
-    echo -e "${NC}"
-fi
+cmd_help() {
+    sed -n '2,15p' "$0" | sed 's/^# //; s/^#//'
+    echo ""
+    echo "Environment variables:"
+    echo "  ITERS=N          Number of benchmark iterations  (default: 20)"
+    echo "  PROGRAMS_DIR=D   Programs root directory         (default: programs)"
+    echo "  OUTPUT_DIR=D     Compiled executables directory  (default: benchmark_output)"
+    echo "  FIGURES_DIR=D    Figures output directory        (default: figures)"
+}
 
-echo ""
-echo "Detailed report saved to: $REPORT_FILE"
-echo "Output files saved to: $OUTPUT_DIR/"
+cmd_full() {
+    # Full run: all programs, default iterations
+    print_header
+    need_python; need_gibbon
+    run_py \
+        --programs-dir "$PROGRAMS_DIR" \
+        --output-dir   "$OUTPUT_DIR" \
+        --iterations   "$ITERS"
+    ok "Benchmark complete.  See benchmark_report.txt"
+}
 
-# Add summary to report
-echo "" >> "$REPORT_FILE"
-echo "================================================================================" >> "$REPORT_FILE"
-echo "SUMMARY" >> "$REPORT_FILE"
-echo "================================================================================" >> "$REPORT_FILE"
-echo "Total programs benchmarked: $total" >> "$REPORT_FILE"
-echo "Successful runs: $successful" >> "$REPORT_FILE"
-echo "Matching outputs: $matching" >> "$REPORT_FILE"
+cmd_quick() {
+    # Quick sanity-check run: 5 iterations
+    print_header
+    need_python; need_gibbon
+    info "Quick run (5 iterations per program) ..."
+    run_py \
+        --programs-dir "$PROGRAMS_DIR" \
+        --output-dir   "$OUTPUT_DIR" \
+        --iterations   5
+    ok "Quick run complete."
+}
+
+cmd_paper() {
+    # Full run + generate all paper materials
+    print_header
+    need_python; need_gibbon
+    run_py \
+        --programs-dir "$PROGRAMS_DIR" \
+        --output-dir   "$OUTPUT_DIR" \
+        --figures-dir  "$FIGURES_DIR" \
+        --iterations   "$ITERS" \
+        --generate-paper
+    echo ""
+    ok "Paper materials generated:"
+    echo "   performance_table.tex"
+    echo "   ${FIGURES_DIR}/speedup_comparison.pdf"
+    echo "   ${FIGURES_DIR}/per_program/  (one figure per program)"
+    echo "   ${FIGURES_DIR}/heatmaps/     (one heatmap per program)"
+    echo "   ${FIGURES_DIR}/pass_breakdown_all.pdf"
+}
+
+cmd_one() {
+    # Benchmark a single program
+    local prog="${1:-}"
+    local extra="${2:-}"
+    [[ -z "$prog" ]] && die "Usage: $0 one <Program.hs> [paper]"
+    print_header
+    need_python; need_gibbon
+    info "Benchmarking: $prog"
+    local paper_flag=""
+    [[ "$extra" == "paper" ]] && paper_flag="--generate-paper"
+    run_py \
+        --programs-dir "$PROGRAMS_DIR" \
+        --output-dir   "$OUTPUT_DIR" \
+        --figures-dir  "$FIGURES_DIR" \
+        --iterations   "$ITERS" \
+        --programs     "$prog" \
+        $paper_flag
+    ok "$prog benchmark complete."
+}
+
+cmd_clean() {
+    info "Cleaning compiled outputs and paper materials ..."
+    bash "${SCRIPT_DIR}/clean.sh" --yes
+}
+
+cmd_clean_run() {
+    # Full clean, then full run with paper
+    cmd_clean
+    cmd_paper
+}
+
+# ── Dispatch ────────────────────────────────────────────────────────────────
+
+COMMAND="${1:-full}"
+shift || true
+
+case "$COMMAND" in
+    help|--help|-h)     cmd_help ;;
+    quick)              cmd_quick ;;
+    paper)              cmd_paper ;;
+    one)                cmd_one "$@" ;;
+    clean)              cmd_clean ;;
+    clean-run|cleanrun) cmd_clean_run ;;
+    full|"")            cmd_full ;;
+    *)
+        warn "Unknown command: $COMMAND"
+        echo ""
+        cmd_help
+        exit 1
+        ;;
+esac

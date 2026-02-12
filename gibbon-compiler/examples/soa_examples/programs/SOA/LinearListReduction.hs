@@ -1,4 +1,6 @@
+-- @BENCH adt_fields=11
 data List = Cons Int Int Int Int Int Int Int Int Int Int List | Nil
+
 
 {-# ANN type List "Factored" #-}
 
@@ -20,7 +22,7 @@ reduce lst = case lst of
 gibbon_main = let _ = printsym (quote "Running program recution on List with 10 Integer elements: ")
                   _ = printsym (quote "NEWLINE")
                   lst = mkList 10000000
-                  _ = printsym (quote "Running pass reduction (fold): ")
+                  _ = printsym (quote "Running pass reduction (fold, uses=2): ")
                   _ = printsym (quote "NEWLINE")
                   sum = iterate (reduce lst)
                   _ = printsym (quote "End")

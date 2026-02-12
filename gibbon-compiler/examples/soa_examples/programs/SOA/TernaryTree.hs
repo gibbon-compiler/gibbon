@@ -1,5 +1,7 @@
 module Tree where
 
+
+-- @BENCH adt_fields=5
 data Tree = Leaf Int
           | Node Int Tree Tree Tree
   deriving Show
@@ -36,14 +38,14 @@ gibbon_main =
    let _ = printsym (quote "Running program Ternary Heap: ")
        _ = printsym (quote "NEWLINE")
        tree = mkTree 18
-       _ = printsym (quote "Running pass add 1 tree (map): ")
+       _ = printsym (quote "Running pass add 1 tree (map, uses=5): ")
        _ = printsym (quote "NEWLINE")
-       tree' = add1Tree tree
+       tree' = iterate(add1Tree tree)
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
-       _ = printsym (quote "Running pass sum tree (fold): ")
+       _ = printsym (quote "Running pass sum tree (fold, uses=5): ")
        _ = printsym (quote "NEWLINE")
-       sum = sumTree tree'
+       sum = iterate(sumTree tree')
        _ = printsym (quote "End")
        _ = printsym (quote "NEWLINE")
      in sum

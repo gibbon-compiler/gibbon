@@ -1,6 +1,7 @@
 -- test monomorphic things
 module MonoTree where
 
+-- @BENCH adt_fields=3
 data Tree = Leaf Int
           | Node Tree Tree
   deriving Show
@@ -32,12 +33,12 @@ gibbon_main = let
                 _ = printsym (quote "Running program MonoTree: ")
                 _ = printsym (quote "NEWLINE")
                 tree = (mkTree 23 0)
-                _ = printsym (quote "Running pass add1Tree (map): ")
+                _ = printsym (quote "Running pass add1Tree (map, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 tree' =  iterate (add1Tree tree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass sumTree (fold): ")
+                _ = printsym (quote "Running pass sumTree (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 val = iterate (sumTree tree')
                 _ = printsym (quote "End")

@@ -1,476 +1,225 @@
-# Gibbon Compiler Benchmarking Suite
+# Gibbon Benchmark Suite v2.4
 
-Comprehensive benchmarking tools for comparing AoS (Array of Structs) vs SoA (Struct of Arrays) implementations compiled with the Gibbon compiler.
+Benchmarks **AoS** (Array of Structs) vs **SoA** (Struct of Arrays) Gibbon
+compiler programs and produces publication-quality figures and LaTeX tables for
+conference papers.
 
-## Overview
+---
 
-This suite provides two benchmarking scripts:
-1. **Python script** (`gibbon_benchmark.py`) - Full-featured with detailed analysis, JSON output, and performance comparisons
-2. **Bash script** (`gibbon_benchmark.sh`) - Lightweight alternative for quick benchmarking
-
-Both scripts:
-- Compile programs in both AoS and SoA variants
-- Run benchmarks with configurable iterations
-- Verify output correctness between variants
-- Extract and compare performance metrics
-- Generate detailed reports
-
-## Directory Structure
-
-Your project should be organized as follows:
-
-```
-your-project/
-├── programs/
-│   ├── AoS/
-│   │   ├── Compiler.hs
-│   │   ├── DBQuery.hs
-│   │   ├── DecisionTree.hs
-│   │   ├── DomTree.hs
-│   │   ├── KDTree.hs
-│   │   ├── LinearListReduction.hs
-│   │   ├── List.hs
-│   │   ├── MonoTree.hs
-│   │   ├── ObjectGraph.hs
-│   │   ├── OctTree.hs
-│   │   ├── PiecewiseFunctions.hs
-│   │   ├── TernaryTree.hs
-│   │   └── Trie.hs
-│   └── SoA/
-│       ├── Compiler.hs
-│       ├── DBQuery.hs
-│       └── ... (same files as AoS)
-├── gibbon_benchmark.py
-└── gibbon_benchmark.sh
-```
-
-## Prerequisites
-
-- Gibbon compiler installed and available in PATH
-- Python 3.6+ (for Python script)
-- Python packages: matplotlib, numpy (for paper generation feature)
-  - Install with: `pip install matplotlib numpy`
-- Bash shell (for Bash script)
-
-## Usage
-
-### Python Script (Recommended)
-
-#### Basic Usage
+## Quick Start
 
 ```bash
-# Make executable (first time only)
-chmod +x gibbon_benchmark.py
+# 1 – install Python deps (once)
+pip install matplotlib numpy
 
-# Run all benchmarks with default settings
-./gibbon_benchmark.py
-
-# Run with custom iterations
-./gibbon_benchmark.py --iterations 50
-
-# Specify custom programs directory
-./gibbon_benchmark.py --programs-dir /path/to/programs
-```
-
-#### Advanced Options
-
-```bash
-# Benchmark specific programs only
-./gibbon_benchmark.py --programs Compiler.hs List.hs Trie.hs
-
-# Custom output locations
-./gibbon_benchmark.py \
-  --output-dir ./build \
-  --report my_report.txt \
-  --json my_results.json
-
-# Full example
-./gibbon_benchmark.py \
-  --programs-dir ./programs \
-  --output-dir ./benchmark_output \
-  --iterations 30 \
-  --report detailed_report.txt \
-  --json results.json \
-  --programs Compiler.hs DBQuery.hs
-```
-
-#### Command-line Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--programs-dir` | Directory containing AoS and SoA subdirectories | `programs` |
-| `--output-dir` | Directory for compiled files and temporary outputs | `benchmark_output` |
-| `--iterations` | Number of iterations for each benchmark | `20` |
-| `--report` | Output text report file | `benchmark_report.txt` |
-| `--json` | JSON output file | `benchmark_results.json` |
-| `--programs` | Specific programs to benchmark (space-separated) | All programs |
-| `--generate-paper` | Generate LaTeX tables and publication figures | `False` |
-| `--latex-table` | Output LaTeX table file (with --generate-paper) | `performance_table.tex` |
-| `--figures-dir` | Directory for figures (with --generate-paper) | `figures` |
-| `--clean` | Force recompilation even if executables are up-to-date | `False` |
-
-#### Smart Recompilation (NEW!)
-
-The scripts now include smart recompilation (like `make`) that only recompiles when necessary:
-
-**How it works:**
-- Checks if executable exists and is newer than source file
-- Skips compilation if executable is up-to-date
-- Saves significant time during iterative development
-
-**Usage:**
-
-```bash
-# Normal run - only recompiles changed programs
-./gibbon_benchmark.py
-
-# Force recompilation of everything
-./gibbon_benchmark.py --clean
-
-# Clean all compiled files
-./clean.sh
-```
-
-**Example output:**
-```
-Compiler (AOS) is up-to-date, skipping compilation
-Compiler (SOA) is up-to-date, skipping compilation
-Compiling List (AOS)... ✓  (only this one changed!)
-List (SOA) is up-to-date, skipping compilation
-```
-
-**When to use --clean:**
-- Preparing final benchmarks for publication
-- After changing compiler flags
-- When you want to ensure everything is fresh
-
-**For complete details:** See `SMART_RECOMPILATION_GUIDE.txt`
-
-#### Conference Paper Generation
-
-**NEW: Automatically generate publication-quality materials for your paper!**
-
-Generate LaTeX tables and figures for top-tier conferences:
-
-```bash
+# 2 – run all programs, generate paper materials
 ./gibbon_benchmark.py --generate-paper
+
+# 3 – single program, lots of iterations
+./gibbon_benchmark.py --programs DomTree.hs --iterations 50 --generate-paper
+
+# 4 – force recompile everything then generate paper
+./gibbon_benchmark.py --clean --generate-paper
 ```
 
-This creates:
-- **performance_table.tex** - Professional LaTeX tables with:
-  - Performance comparison (AoS vs SoA)
-  - Per-pass breakdown
-  - Speedup statistics
-  - Ready to `\input{}` into your paper
-  
-- **figures/** directory with publication-quality figures:
-  - speedup_comparison.pdf - Bar chart of speedups
-  - performance_comparison.pdf - Grouped bar chart
-  - pass_breakdown.pdf - Stacked bars showing time per pass
-  - iteration_distributions.pdf - Box plots of timing variance
-  - speedup_heatmap.pdf - Heatmap of per-pass speedups
-  - PNG versions of all figures
+---
 
-**Using in your LaTeX paper:**
+## Directory Layout
+
+```
+project/
+├── gibbon_benchmark.py      # ← main script (Python ≥ 3.8)
+├── gibbon_benchmark.sh      # ← bash wrapper / convenience shortcuts
+├── clean.sh                 # ← remove compiled outputs & paper materials
+├── README.md
+└── programs/
+    ├── AoS/
+    │   ├── DomTree.hs
+    │   ├── Compiler.hs
+    │   └── ...
+    └── SoA/
+        ├── DomTree.hs
+        ├── Compiler.hs
+        └── ...
+```
+
+After running the benchmark:
+
+```
+project/
+├── benchmark_output/         # compiled .exe and .c files
+├── benchmark_report.txt      # human-readable summary
+├── benchmark_results.json    # machine-readable full results
+├── performance_table.tex     # LaTeX tables (multiple)
+└── figures/
+    ├── speedup_comparison.pdf/png   # fold vs map overall speedup
+    ├── pass_breakdown_all.pdf/png   # stacked bars all programs
+    ├── table_preview.pdf            # rendered table (needs pdflatex)
+    ├── per_program/
+    │   ├── DomTree.pdf/png          # all passes + error bars + geomean
+    │   ├── Compiler.pdf/png
+    │   └── ...
+    └── heatmaps/
+        ├── DomTree_heatmap.pdf/png  # per-pass speedup heatmap
+        └── ...
+```
+
+---
+
+## Fold / Map Classification
+
+The script automatically detects whether each pass is a **fold** or **map**
+by reading the print statements already in your source code.
+
+**Required format** (already in your programs):
+
+```haskell
+_ = printsym (quote "Running pass SumArea (fold): ")
+_ = printsym (quote "Running pass scaleLayout (map): ")
+_ = printsym (quote "Running pass nearestDist (fold like): ")
+```
+
+The keyword inside parentheses can be:
+- `fold`, `fold like`, `fold-like` → classified as **fold**
+- `map`, `map like`, `map-like` → classified as **map**
+
+When you run the script you will see:
+
+```
+======================================================================
+Detecting fold/map classification from source print statements ...
+======================================================================
+  ✓ DomTree.hs: 'SumArea' → fold  (keys e.g. ['SumArea', 'sumarea', 'SumAreaPass'])
+  ✓ DomTree.hs: 'scaleLayout' → map
+  ⚠  OtherProg.hs: no fold/map annotations found
+======================================================================
+```
+
+If a pass cannot be matched it shows `?` in the table — check that your
+print-statement name matches the pass key printed in benchmark output.
+
+---
+
+## Smart Recompilation
+
+The script compares the **modification timestamp** of each `.hs` source file
+against its compiled `.exe`.  If the exe is newer than the source, compilation
+is skipped.
+
+- Recompilation runs **in parallel** (one thread per CPU core).
+- **Execution always runs sequentially** to avoid benchmark interference.
+
+Use `--clean` to force full recompilation regardless of timestamps.
+
+---
+
+## Generated LaTeX Tables
+
+`performance_table.tex` contains:
+
+| Table | Contents |
+|-------|----------|
+| Table 1 – Summary | End-to-end time split into Fold / Map columns, total AoS time, speedup |
+| Tables 2 – N | One table per program: pass name, type (F/M/?), AoS (s), SoA (s), speedup |
+
+Times use **scientific notation** (`3.27e-03`) so nothing rounds to `0.00`.
+
+Bold highlights the faster variant when the difference exceeds 10%.
+
+Each per-program table ends with **Total** and **Geomean** rows.
+
+**Include in your paper:**
 
 ```latex
-% In preamble
-\usepackage{booktabs}
-\usepackage{graphicx}
+\usepackage{booktabs}   % preamble
 
-% In document
 \input{performance_table.tex}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
-  \caption{Performance speedup of SoA vs AoS.}
-  \label{fig:speedup}
-\end{figure}
+% reference as \ref{tab:summary}, \ref{tab:DomTree}, ...
 ```
 
-**For complete paper generation guide, see:** `PAPER_GENERATION_GUIDE.txt`
+---
 
-**Quick reference:** `PAPER_QUICK_REFERENCE.txt`
+## Generated Figures
 
-### Bash Script
+### `speedup_comparison.pdf`
+Horizontal bar chart with two bars per program:
+- **Blue** — speedup across fold passes
+- **Orange** — speedup across map passes
 
-#### Basic Usage
+Dashed reference line at 1.0×.
 
-```bash
-# Make executable (first time only)
-chmod +x gibbon_benchmark.sh
+### `per_program/<Program>.pdf`  ← main result figure
+One figure per program showing **every pass** side-by-side:
+- **Error bars** = standard deviation across iterations
+- **Geomean bar** at the right (dark blue AoS / purple SoA), value labelled
+- Width scales automatically with number of passes
 
-# Run with default settings (programs dir: ./programs, iterations: 20)
-./gibbon_benchmark.sh
+### `heatmaps/<Program>_heatmap.pdf`
+Single-row heatmap for that program showing only the passes it actually
+has (no 1× noise from absent passes).  Red = SoA slower, green = SoA faster.
 
-# Custom programs directory
-./gibbon_benchmark.sh /path/to/programs
+### `pass_breakdown_all.pdf`
+All programs stacked.  Each pass uses a distinct **colour + hatch pattern**
+for accessibility.  Horizontal legend below the plots.
 
-# Custom programs directory and iterations
-./gibbon_benchmark.sh /path/to/programs 50
-```
+---
 
-## Output Files
-
-### Python Script Outputs
-
-1. **Text Report** (`benchmark_report.txt`):
-   - Summary table with compile/run status
-   - Detailed results for each program
-   - Output verification results
-   - Performance comparisons between AoS and SoA
-   - Pass-by-pass timing analysis
-
-2. **JSON Results** (`benchmark_results.json`):
-   - Machine-readable format for further analysis
-   - Complete timing data for all passes
-   - Structured error messages
-   - Can be imported for custom analysis
-
-3. **Compiled Files** (in `benchmark_output/`):
-   - `*.aos.c` / `*.soa.c` - Generated C files
-   - `*.aos.exe` / `*.soa.exe` - Compiled executables
-
-### Bash Script Outputs
-
-1. **Text Report** (`benchmark_report.txt`):
-   - Summary of results
-   - Output comparisons
-   - Performance metrics (SELFTIMED values)
-
-2. **Output Files** (in `benchmark_output/`):
-   - `*.aos.output.txt` / `*.soa.output.txt` - Full program outputs
-   - Compiled executables and C files
-
-## Understanding the Output
-
-### Sample Report Section
+## Command-Line Reference
 
 ```
-────────────────────────────────────────────────────────────────────────────────
-Program: Compiler.hs
-────────────────────────────────────────────────────────────────────────────────
+./gibbon_benchmark.py [options]
 
-AoS (Array of Structs):
-  Compile time: 15.23s
-  Compile status: Success
-  Runtime: 65.58s
-  Run status: Success
-  Output: '#(8571429 1428571 1071429 535714 25714287 #t 17142858)
-  Passes analyzed: 10
-    instCountPass: 0.003269s
-    blockCountPass: 0.003091s
-    memoryOpStatsPass: 0.006116s
-    ...
-
-SoA (Struct of Arrays):
-  Compile time: 16.01s
-  Compile status: Success
-  Runtime: 61.89s
-  Run status: Success
-  Output: '#(8571429 1428571 1071429 535714 25714287 #t 17142858)
-  Passes analyzed: 10
-    instCountPass: 0.003269s
-    blockCountPass: 0.003091s
-    memoryOpStatsPass: 0.006116s
-    ...
-
-Output Match: ✓ PASS
-
-Performance Comparison:
-  instCountPass:
-    AoS: 0.003269s
-    SoA: 0.003091s
-    SoA is 1.06x faster
-  ...
+  --programs-dir DIR    Root of AoS/SoA source tree  (default: programs/)
+  --output-dir   DIR    Where to put compiled exes    (default: benchmark_output/)
+  --iterations   N      Timed iterations per exe      (default: 20)
+  --programs     FILES  Restrict to listed .hs files
+  --clean               Force recompile (ignore timestamps)
+  --generate-paper      Write LaTeX tables + all figures after benchmarking
+  --latex-table  FILE   LaTeX output path  (default: performance_table.tex)
+  --figures-dir  DIR    Figure output dir  (default: figures/)
+  --report       FILE   Text report path   (default: benchmark_report.txt)
+  --json         FILE   JSON results path  (default: benchmark_results.json)
 ```
 
-### Key Metrics
+---
 
-- **SELFTIMED**: Median execution time for a pass across all iterations
-- **BATCHTIME**: Total time for all iterations of a pass
-- **ITER TIMES**: Sorted array of individual iteration times
+## Requirements
 
-### Output Verification
+| Requirement | Notes |
+|-------------|-------|
+| Python ≥ 3.8 | `matplotlib`, `numpy` via pip |
+| `gibbon` | Must be on `$PATH` |
+| `pdflatex` | Optional – only for PDF table preview |
 
-The final output (e.g., `'#(8571429 1428571 1071429 535714 25714287 #t 17142858)`) represents the program's result. The script verifies that AoS and SoA produce identical outputs, ensuring correctness.
+---
 
-## Troubleshooting
+## Changelog
 
-### Common Issues
+### v2.4
+- Automatic fold/map detection from print statements (no manual annotation)
+- Debug output shows exactly what was detected and stored
+- Parallel compilation via `ThreadPoolExecutor` (as many threads as CPU cores)
+- Per-program figures: **all passes** in one plot, error bars, geomean bar
+- Per-program heatmaps (only own passes — no 1× noise)
+- `--generate-paper` **always** regenerates tables and figures on every run
+- Scientific notation for small execution times
+- GC/allocator metadata filtered from output comparison
+- Removed confusing all-programs heatmap and grid figure
 
-1. **Gibbon not found**
-   ```
-   Error: gibbon: command not found
-   ```
-   Solution: Ensure Gibbon is installed and in your PATH:
-   ```bash
-   which gibbon
-   export PATH=$PATH:/path/to/gibbon/bin
-   ```
+### v2.3
+- Per-program LaTeX tables with speedup column
+- Fold/map summary table
+- Scientific notation formatting
 
-2. **Source files not found**
-   ```
-   Warning: programs/AoS/Compiler.hs not found
-   ```
-   Solution: Verify your directory structure matches the expected layout.
+### v2.2
+- GC metadata filtering, comprehensive heatmaps, PDF table preview
 
-3. **Execution timeout**
-   ```
-   Running Compiler.aos.exe... ✗ (timeout)
-   ```
-   Solution: The script has a 10-minute execution timeout. Reduce iterations or increase timeout in the script.
+### v2.1
+- Smart recompilation with timestamp checking, `--clean` flag, `clean.sh`
 
-### Debugging
+### v2.0
+- Full Python rewrite with matplotlib figures and LaTeX output
 
-For the Python script, add verbose output by modifying the script to enable debug logging:
-
-```python
-# Add at the top of main()
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-For the Bash script, enable debug mode:
-
-```bash
-bash -x gibbon_benchmark.sh
-```
-
-## Analyzing Results
-
-### Python JSON Output
-
-The JSON file can be imported for custom analysis:
-
-```python
-import json
-
-with open('benchmark_results.json', 'r') as f:
-    data = json.load(f)
-
-for result in data['results']:
-    program = result['program']
-    if result['outputs_match']:
-        aos_time = sum(result['aos']['passes']['instCountPass']['iter_times'])
-        soa_time = sum(result['soa']['passes']['instCountPass']['iter_times'])
-        speedup = aos_time / soa_time
-        print(f"{program}: SoA is {speedup:.2f}x faster")
-```
-
-### Performance Trends
-
-To analyze which variant performs better overall:
-
-1. Look at the performance comparison sections in the report
-2. Calculate average speedup across all passes
-3. Identify which passes benefit most from SoA
-
-### Output Mismatches
-
-If outputs don't match:
-
-1. Check the detailed report for the specific output values
-2. Examine the raw output files in `benchmark_output/`
-3. Run individual programs manually to debug
-4. Verify the programs are semantically equivalent
-
-## Customization
-
-### Adding New Programs
-
-Simply add the `.hs` file to both `programs/AoS/` and `programs/SoA/` directories. The scripts will automatically detect and benchmark them.
-
-### Modifying Compilation Flags
-
-Edit the compilation command in the scripts:
-
-**Python script** (around line 93):
-```python
-cmd = [
-    "gibbon",
-    "--use-mutable-cursors",
-    "--packed",
-    "--to-exe",
-    # Add your custom flags here
-    "--cfile", str(c_file),
-    "--exefile", str(exe_file),
-    str(source_file)
-]
-```
-
-**Bash script** (around line 48):
-```bash
-gibbon --use-mutable-cursors --packed --to-exe \
-    --cfile "$c_file" --exefile "$exe_file" \
-    # Add your custom flags here
-    "$source_file"
-```
-
-### Adjusting Timeouts
-
-**Python script**:
-- Compilation timeout: Line 105 (`timeout=300`)
-- Execution timeout: Line 145 (`timeout=600`)
-
-**Bash script**:
-- Execution timeout: Line 58 (`timeout 600`)
-
-## Performance Tips
-
-1. **Warm-up runs**: The first iteration is often slower. Consider discarding it or increasing iterations.
-
-2. **System load**: Run benchmarks on an idle system for consistent results.
-
-3. **Multiple runs**: Run the benchmark suite multiple times and average results for statistical significance.
-
-4. **Iteration count**: More iterations provide more stable median values but increase runtime. 20 is a good default.
-
-## Contributing
-
-To extend the benchmarking suite:
-
-1. Add new metrics to the parsing functions
-2. Implement additional comparison logic
-3. Add visualization capabilities (e.g., matplotlib integration)
-4. Create automated regression testing
-
-## Example Workflow
-
-```bash
-# 1. Set up your programs
-cd /path/to/your/project
-mkdir -p programs/{AoS,SoA}
-# ... copy your .hs files ...
-
-# 2. Run initial benchmark
-./gibbon_benchmark.py --iterations 30
-
-# 3. Review results
-cat benchmark_report.txt
-# or
-less benchmark_report.txt
-
-# 4. Analyze specific programs
-./gibbon_benchmark.py --programs Compiler.hs List.hs --iterations 50
-
-# 5. Export for further analysis
-python3 -c "
-import json
-with open('benchmark_results.json') as f:
-    data = json.load(f)
-    # Your custom analysis here
-"
-```
-
-## License
-
-This benchmarking suite is provided as-is for use with the Gibbon compiler.
-
-## Support
-
-For issues with:
-- **Gibbon compiler**: Check the Gibbon documentation
-- **These scripts**: Review this README and troubleshooting section
-- **Benchmark interpretation**: Consult the understanding output section
+### v1.0
+- Initial bash-only benchmarking script
