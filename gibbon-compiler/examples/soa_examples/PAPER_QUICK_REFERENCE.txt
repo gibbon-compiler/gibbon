@@ -1,0 +1,190 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  PAPER GENERATION - QUICK REFERENCE                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ BASIC USAGE                                                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Run benchmarks and generate paper materials:
+  
+    ./gibbon_benchmark.py --generate-paper
+
+  This creates:
+    • performance_table.tex   → LaTeX tables for your paper
+    • figures/*.pdf           → Publication-quality figures
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ GENERATED FILES                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Tables:
+    performance_table.tex        Complete LaTeX tables
+  
+  Figures (PDF + PNG):
+    speedup_comparison           Bar chart of speedups
+    performance_comparison       AoS vs SoA grouped bars
+    pass_breakdown              Per-pass time breakdown
+    iteration_distributions     Box plots of variance
+    speedup_heatmap             Pass-by-pass speedup matrix
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ LATEX INTEGRATION                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Add to preamble:
+     \usepackage{booktabs}
+     \usepackage{graphicx}
+
+  2. Include table:
+     \input{performance_table.tex}
+
+  3. Include figure:
+     \begin{figure}[t]
+       \centering
+       \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
+       \caption{Performance comparison of AoS vs SoA.}
+       \label{fig:speedup}
+     \end{figure}
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CUSTOM OPTIONS                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Custom output locations:
+    ./gibbon_benchmark.py --generate-paper \
+      --latex-table my_table.tex \
+      --figures-dir my_figures
+
+  High-quality run for publication:
+    ./gibbon_benchmark.py --generate-paper \
+      --iterations 100 \
+      --report detailed_report.txt
+
+  Benchmark specific programs:
+    ./gibbon_benchmark.py --generate-paper \
+      --programs Compiler.hs List.hs Trie.hs
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ WHAT EACH FIGURE SHOWS                                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  speedup_comparison.pdf
+    → Horizontal bars showing AoS/SoA speedup ratio
+    → Best for: Overall performance summary
+
+  performance_comparison.pdf
+    → Side-by-side bars of absolute times
+    → Best for: Showing which is faster
+
+  pass_breakdown.pdf
+    → Stacked bars of time per compiler pass
+    → Best for: Understanding where time is spent
+
+  iteration_distributions.pdf
+    → Box plots showing timing variance
+    → Best for: Discussing performance consistency
+
+  speedup_heatmap.pdf
+    → Color-coded matrix of per-pass speedups
+    → Best for: Detailed pass-by-pass analysis
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TABLE CONTENTS                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Table 1: Performance Comparison
+    • Program names
+    • AoS and SoA execution times (ms)
+    • Speedup ratios (with highlighting)
+    • Correctness verification
+    • Arithmetic and geometric mean speedups
+
+  Table 2: Per-Pass Breakdown
+    • Timing for each compiler pass
+    • Side-by-side AoS vs SoA
+    • Bold for faster variant
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FIGURE SPECIFICATIONS                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Format:        PDF (vector) + PNG (raster)
+  Resolution:    300 DPI
+  Fonts:         Serif, 10pt
+  Colors:        Colorblind-friendly
+  Size:          Optimized for column/page width
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TYPICAL PAPER WORKFLOW                                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  1. Run benchmarks with paper generation:
+     ./gibbon_benchmark.py --iterations 50 --generate-paper
+
+  2. Review generated materials:
+     • Check tables: cat performance_table.tex
+     • View figures: open figures/*.pdf
+
+  3. Copy to paper directory:
+     cp performance_table.tex ~/my-paper/
+     cp -r figures ~/my-paper/
+
+  4. Include in paper:
+     • \input{performance_table.tex}
+     • \includegraphics{figures/speedup_comparison.pdf}
+
+  5. Compile and review:
+     pdflatex my-paper.tex
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ EXAMPLE PAPER TEXT                                                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Table~\ref{tab:performance} shows the performance comparison
+  between AoS and SoA implementations. SoA achieves an average
+  speedup of 1.25× (geometric mean: 1.18×) over AoS.
+
+  As shown in Figure~\ref{fig:speedup}, eight out of thirteen
+  programs exhibit speedups exceeding 1.1×.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CUSTOMIZATION                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Edit these functions in gibbon_benchmark.py:
+
+  generate_latex_table()          → Modify table format
+  generate_speedup_chart()        → Adjust speedup figure
+  generate_performance_comparison() → Change performance chart
+
+  Example: Change which passes to show in breakdown:
+    important_passes = ['instCountPass', 'memoryOpStatsPass', ...]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  LaTeX can't find figures?
+    → Add: \graphicspath{{./figures/}}
+
+  Table doesn't compile?
+    → Add: \usepackage{booktabs}
+
+  Figures too large/small?
+    → Adjust: \includegraphics[width=0.8\columnwidth]{...}
+
+  Need different statistics?
+    → Edit generate_latex_table() function
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ SEE ALSO                                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Full details:  PAPER_GENERATION_GUIDE.txt
+  General usage: README.md
+  Quick start:   GETTING_STARTED.txt
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  For detailed instructions, see PAPER_GENERATION_GUIDE.txt                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
