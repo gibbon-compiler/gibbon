@@ -1,0 +1,300 @@
+SMART RECOMPILATION GUIDE
+=========================
+
+The benchmark scripts now include smart recompilation (like `make`), which
+saves time by only recompiling when necessary.
+
+HOW IT WORKS
+------------
+
+The scripts check if recompilation is needed by comparing:
+
+1. Does the executable exist?
+   → If NO, compile
+
+2. Does the C file exist?
+   → If NO, compile
+
+3. Is the source file newer than the executable?
+   → If YES, compile
+
+4. Otherwise:
+   → Skip compilation (executable is up-to-date)
+
+This is exactly how `make` works with source files and targets.
+
+BENEFITS
+--------
+
+✓ Faster iteration when testing
+✓ Only recompile what changed
+✓ Save compilation time on large programs
+✓ Automatic dependency tracking
+
+USAGE EXAMPLES
+--------------
+
+### Normal Run (Smart Recompilation)
+
+First run - compiles everything:
+  ./gibbon_benchmark.py
+
+Second run - skips unchanged programs:
+  ./gibbon_benchmark.py
+  
+  Output:
+    Compiler (AOS) is up-to-date, skipping compilation
+    Compiler (SOA) is up-to-date, skipping compilation
+    List (AOS) is up-to-date, skipping compilation
+    ...
+
+### After Modifying a Source File
+
+If you edit programs/AoS/List.hs:
+
+  ./gibbon_benchmark.py
+  
+  Output:
+    Compiler (AOS) is up-to-date, skipping compilation
+    Compiler (SOA) is up-to-date, skipping compilation
+    Compiling List (AOS)... ✓           # Only this one recompiles!
+    List (SOA) is up-to-date, skipping compilation
+    ...
+
+### Force Recompilation (--clean)
+
+To force recompilation of everything:
+
+Python script:
+  ./gibbon_benchmark.py --clean
+
+Bash script:
+  ./gibbon_benchmark.sh programs 20 --clean
+
+This recompiles all programs regardless of timestamps.
+
+### Clean All Outputs
+
+Remove all compiled files:
+  ./clean.sh
+
+Or manually:
+  rm -rf benchmark_output/*.exe benchmark_output/*.c
+
+COMMAND-LINE OPTIONS
+-------------------
+
+Python Script:
+  --clean              Force recompilation of all programs
+
+Bash Script:
+  --clean              Force recompilation (as third argument)
+  
+  Examples:
+    ./gibbon_benchmark.sh                      # Smart recompilation
+    ./gibbon_benchmark.sh programs 20          # Smart recompilation
+    ./gibbon_benchmark.sh programs 20 --clean  # Force recompile
+
+WHEN TO USE --clean
+-------------------
+
+Use --clean when:
+  ✓ You want to ensure everything is recompiled fresh
+  ✓ You changed compiler flags (modified the script)
+  ✓ You suspect stale build artifacts
+  ✓ You want to benchmark compilation time
+  ✓ Preparing final benchmarks for paper
+
+Don't use --clean when:
+  ✓ Iterating on source code (smart recompilation is faster)
+  ✓ Only some programs changed
+  ✓ Just running benchmarks without code changes
+
+TYPICAL WORKFLOWS
+-----------------
+
+### Development Workflow
+
+1. Make changes to one or two source files
+2. Run: ./gibbon_benchmark.py
+3. Only changed programs recompile
+4. Review results
+5. Repeat
+
+### Final Benchmarking
+
+1. Clean everything: ./clean.sh
+2. Run: ./gibbon_benchmark.py --clean --iterations 100 --generate-paper
+3. Everything compiles fresh
+4. All programs benchmarked thoroughly
+5. Paper materials generated
+
+### Quick Testing
+
+1. Modify one program
+2. Run: ./gibbon_benchmark.py --programs MyProgram.hs
+3. Only MyProgram recompiles
+4. Quick results
+
+TROUBLESHOOTING
+---------------
+
+### Issue: Program not recompiling after changes
+
+Symptoms:
+  - Modified source file
+  - Script says "up-to-date"
+  - Old behavior still present
+
+Causes:
+  - File modification time issue
+  - Executable touched after source
+  
+Solution:
+  ./gibbon_benchmark.py --clean --programs YourProgram.hs
+
+Or:
+  rm benchmark_output/YourProgram.*.exe
+  ./gibbon_benchmark.py --programs YourProgram.hs
+
+### Issue: Want to benchmark without recompiling
+
+If executables are already compiled and you just want to
+re-run the benchmarks:
+
+  ./gibbon_benchmark.py
+  
+The smart recompilation will skip compilation if nothing changed.
+Benchmarks will still run!
+
+### Issue: Different iteration counts
+
+Changing --iterations does NOT trigger recompilation
+(as it shouldn't). The executables are the same, you're
+just running them more times.
+
+TECHNICAL DETAILS
+-----------------
+
+Timestamp Comparison:
+  The scripts use file modification times (mtime) to determine
+  if source is newer than executable.
+  
+  Python: source_file.stat().st_mtime > exe_file.stat().st_mtime
+  Bash:   [ "$source_file" -nt "$exe_file" ]
+
+Checked Files:
+  - Source: programs/AoS/Program.hs
+  - Executable: benchmark_output/Program.aos.exe
+  - C file: benchmark_output/Program.aos.c
+  
+  All three must exist and have correct timestamps.
+
+What Triggers Recompilation:
+  1. Missing executable
+  2. Missing C file
+  3. Source newer than executable
+  4. --clean flag set
+
+What DOESN'T Trigger Recompilation:
+  - Different --iterations
+  - Different --report filename
+  - Already up-to-date files
+
+COMBINING WITH OTHER FLAGS
+--------------------------
+
+Smart recompilation works with all other flags:
+
+  ./gibbon_benchmark.py --clean --generate-paper --iterations 100
+  
+  # Recompiles everything + generates paper materials
+
+  ./gibbon_benchmark.py --programs List.hs Trie.hs
+  
+  # Smart recompilation for just these two programs
+
+  ./gibbon_benchmark.py --clean --programs Compiler.hs
+  
+  # Force recompile just Compiler.hs
+
+PERFORMANCE IMPACT
+------------------
+
+Time saved depends on:
+  - Number of programs unchanged
+  - Compilation time per program
+  - Your typical workflow
+
+Example scenario:
+  - 13 programs total
+  - Average compilation time: 20 seconds per program
+  - You modify 1 program
+  
+Without smart recompilation:
+  13 programs × 20 seconds = 260 seconds (4.3 minutes)
+
+With smart recompilation:
+  1 program × 20 seconds = 20 seconds
+  
+Time saved: 240 seconds (4 minutes)!
+
+COMPARISON WITH MAKE
+--------------------
+
+Smart recompilation works like make:
+
+Makefile equivalent:
+  Program.aos.exe: Program.hs
+      gibbon --to-exe Program.hs
+  
+Our implementation:
+  if source_newer_than_exe:
+      compile()
+  else:
+      skip()
+
+But without needing a Makefile!
+
+CLEAN SCRIPT
+------------
+
+The clean.sh script is provided for convenience:
+
+  ./clean.sh
+
+This:
+  1. Shows what will be deleted
+  2. Asks for confirmation
+  3. Removes all .exe, .c, and .output.txt files
+  4. Leaves source files untouched
+
+After running clean.sh, the next benchmark run will
+recompile everything.
+
+BEST PRACTICES
+--------------
+
+1. Use smart recompilation (default) for development
+2. Use --clean for final paper benchmarks
+3. Run clean.sh when switching branches
+4. Don't manually touch executable files
+5. Let the scripts manage compilation
+
+SUMMARY
+-------
+
+Smart recompilation:
+  ✓ Saves time by skipping unnecessary compilation
+  ✓ Works automatically (no configuration needed)
+  ✓ Can be overridden with --clean when needed
+  ✓ Uses file timestamps like make
+  ✓ Integrated into both Python and Bash scripts
+
+Commands:
+  Normal:           ./gibbon_benchmark.py
+  Force recompile:  ./gibbon_benchmark.py --clean
+  Clean outputs:    ./clean.sh
+
+The smart recompilation feature makes iterative development
+much faster while still allowing full recompilation when needed!

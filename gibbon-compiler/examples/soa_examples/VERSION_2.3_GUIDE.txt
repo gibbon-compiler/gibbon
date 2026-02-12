@@ -1,0 +1,211 @@
+VERSION 2.3 - TABLE AND FIGURE IMPROVEMENTS
+===========================================
+
+This document describes the improvements made to address your feedback.
+
+KEY CHANGES SUMMARY
+==================
+
+Tables:
+-------
+✓ Table 1: End-to-end times classified by fold vs map
+✓ Tables 2+: Per-program detailed tables showing all passes
+✓ Scientific notation for small times (readable formatting)
+✓ Speedup column added to per-pass tables
+✓ Fold/Map classification support (reads from source files)
+
+Figures:
+--------
+✓ speedup_comparison.pdf: Now separated by fold vs map
+✓ Heatmaps: Per-program instead of all together (avoid 1x noise)
+✓ pass_breakdown_all.pdf: Horizontal legend + patterns
+✓ Removed messy program_pass_speedup_grid.pdf
+✓ All figures use patterns + colors for accessibility
+
+FOLD/MAP CLASSIFICATION
+=======================
+
+To enable fold/map classification, add comments to your source files:
+
+Example in Compiler.hs:
+-----------------------
+```haskell
+-- PASS_TYPE instCountPass: fold
+-- PASS_TYPE blockCountPass: map
+-- PASS_TYPE memoryOpStatsPass: fold
+```
+
+The script will automatically read these annotations and classify passes.
+
+Format: -- PASS_TYPE <passName>: <fold|map>
+
+TABLE OUTPUT EXAMPLE
+===================
+
+Table 1 - End-to-End (Fold vs Map Classification):
+--------------------------------------------------
+Program | Fold AoS | Fold SoA | Map AoS | Map SoA | Total | Speedup
+Compiler| 1.23e-02 | 1.15e-02 | 3.45e-03| 3.21e-03| 1.57e-02| 1.07x
+List    | 2.34e-03 | 2.10e-03 | 1.12e-03| 1.05e-03| 3.46e-03| 1.10x
+
+Table 2 - Compiler.hs Details:
+-------------------------------
+Pass            | Type | AoS      | SoA      | Speedup
+instCountPass   | F    | 3.27e-03 | 3.09e-03 | 1.06x
+blockCountPass  | M    | 2.11e-03 | 1.98e-03 | 1.07x
+memoryOpStats   | F    | 6.12e-03 | 5.82e-03 | 1.05x
+Total           |      | 1.57e-02 | 1.47e-02 | 1.07x
+
+FIGURE IMPROVEMENTS
+==================
+
+1. speedup_comparison.pdf (Fold/Map Separated)
+   --------------------------------------------
+   - Two bars per program: one for fold, one for map
+   - Shows which type of passes benefit more from SoA
+   - Clear separation with different colors
+
+2. heatmaps/ directory (Per-Program)
+   -----------------------------------
+   Instead of one big confusing heatmap, you get:
+   - heatmaps/Compiler_heatmap.pdf
+   - heatmaps/List_heatmap.pdf
+   - heatmaps/Trie_heatmap.pdf
+   - ... (one per program)
+   
+   Each shows only the passes that program has (no 1x noise!)
+
+3. pass_breakdown_all.pdf (Improved)
+   -----------------------------------
+   - Horizontal legend (saves vertical space)
+   - Patterns + colors (accessible, distinguishable)
+   - Patterns: /, \, |, -, +, x, o, O, ., *
+   - Up to 15 passes in legend (most important)
+
+4. Removed: program_pass_speedup_grid.pdf
+   ----------------------------------------
+   This messy figure has been removed.
+   Use per-program heatmaps instead - much clearer!
+
+SCIENTIFIC NOTATION FORMATTING
+==============================
+
+Times are now formatted intelligently:
+
+< 0.01 ms (< 1e-5 s): Scientific notation (e.g., 3.27e-06)
+0.01 - 1 ms:           3 decimal places (e.g., 0.327)
+> 1 ms:                2 decimal places (e.g., 12.34)
+
+This ensures you always see significant digits!
+
+Example LaTeX output:
+3.27e-03  (instead of 0.00 which was unreadable)
+
+HOW TO USE
+==========
+
+1. Add fold/map annotations to your source files:
+   -- PASS_TYPE instCountPass: fold
+   -- PASS_TYPE blockCountPass: map
+
+2. Run the benchmark:
+   ./gibbon_benchmark.py --generate-paper
+
+3. You get:
+   - performance_table.tex with multiple tables
+   - Improved figures in figures/ directory
+   - Per-program heatmaps in figures/heatmaps/
+
+4. Include in your paper:
+   \input{performance_table.tex}  % All tables
+   \includegraphics{figures/speedup_comparison.pdf}
+   \includegraphics{figures/heatmaps/Compiler_heatmap.pdf}
+   \includegraphics{figures/pass_breakdown_all.pdf}
+
+NEW FILE STRUCTURE
+==================
+
+./
+├── performance_table.tex (now contains multiple tables!)
+├── figures/
+│   ├── speedup_comparison.pdf (fold/map separated)
+│   ├── pass_breakdown_all.pdf (improved with patterns)
+│   ├── heatmaps/ (NEW!)
+│   │   ├── Compiler_heatmap.pdf
+│   │   ├── List_heatmap.pdf
+│   │   └── ... (one per program)
+│   ├── per_program/
+│   │   ├── Compiler_all_passes.pdf
+│   │   └── ...
+│   └── per_pass/
+│       ├── instCountPass_speedup.pdf
+│       └── ...
+
+BENEFITS
+========
+
+✓ Tables are now readable (scientific notation)
+✓ Detailed per-program analysis
+✓ Clear fold vs map classification
+✓ Heatmaps make sense (per-program, no noise)
+✓ Legend doesn't obscure data (horizontal)
+✓ Patterns make figures accessible (colorblind-friendly)
+✓ Removed confusing visualizations
+✓ Speedup clearly shown in all tables
+
+LATEX USAGE
+===========
+
+The generated tables work like this:
+
+\begin{document}
+
+% Table 1 - End to end with fold/map
+% (Automatically labeled as tab:endtoend)
+
+% Table 2 - Compiler.hs details  
+% (Automatically labeled as tab:Compiler)
+
+% Table 3 - List.hs details
+% (Automatically labeled as tab:List)
+
+% ... one table per program
+
+\end{document}
+
+Reference in text:
+------------------
+Table~\ref{tab:endtoend} shows the end-to-end performance
+classified by pass type.
+
+As shown in Table~\ref{tab:Compiler}, the Compiler program's
+fold passes achieve 1.06× speedup.
+
+PATTERN LEGEND
+==============
+
+The pass_breakdown figures use these patterns:
+Pass 1: No pattern (solid)
+Pass 2: / (forward slash)
+Pass 3: \ (backslash)
+Pass 4: | (vertical lines)
+Pass 5: - (horizontal lines)
+Pass 6: + (crosses)
+Pass 7: x (x pattern)
+Pass 8: o (small dots)
+Pass 9: O (large dots)
+Pass 10: . (fine dots)
+Pass 11: * (stars)
+
+This combined with colors makes each pass clearly distinguishable!
+
+NEXT STEPS
+==========
+
+1. Add PASS_TYPE annotations to your .hs files
+2. Run: ./gibbon_benchmark.py --clean --generate-paper
+3. Review the generated tables and figures
+4. Include in your paper
+5. Enjoy readable, professional visualizations!
+
+The updated script is in gibbon_benchmark.py (version 2.3).

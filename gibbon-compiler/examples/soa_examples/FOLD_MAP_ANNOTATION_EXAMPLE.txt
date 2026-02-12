@@ -1,0 +1,51 @@
+Example: How to Annotate Your Source Files for Fold/Map Classification
+========================================================================
+
+Add comments in your Haskell source files to specify pass types.
+
+Format: -- PASS_TYPE <passName>: <fold|map>
+
+Example Compiler.hs:
+====================
+
+-- PASS_TYPE instCountPass: fold
+-- PASS_TYPE blockCountPass: map
+-- PASS_TYPE memoryOpStatsPass: fold
+-- PASS_TYPE castInstCountPass: map
+-- PASS_TYPE branchStatsPass: fold
+-- PASS_TYPE latencyModelPass: map
+-- PASS_TYPE throughputModelPass: map
+-- PASS_TYPE targetRetunePass: fold
+-- PASS_TYPE stripSideEffectsPass: fold
+
+module Compiler where
+
+-- Your program code here
+...
+
+
+Example List.hs:
+================
+
+-- PASS_TYPE reduction: fold
+-- PASS_TYPE map: map
+
+module List where
+
+-- Your program code here
+...
+
+
+Notes:
+------
+1. Place annotations anywhere in the file (typically at the top)
+2. One annotation per line
+3. Pass name must match exactly what appears in benchmark output
+4. Type must be either "fold" or "map"
+5. Whitespace doesn't matter
+6. If a pass isn't annotated, it will show as "?" in tables
+
+The script automatically reads these annotations and uses them for:
+- Table 1: Classifying end-to-end times by fold vs map
+- Per-program tables: Showing F/M/? in the Type column
+- speedup_comparison.pdf: Separating fold vs map bars
