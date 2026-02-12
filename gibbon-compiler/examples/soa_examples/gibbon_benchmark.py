@@ -749,134 +749,147 @@ def generate_per_program_tables(f, all_results, fold_map_class):
         f.write("\\end{tabular}\n")
         f.write("\\end{table}\n\n\n")
 
-    """Generate LaTeX table for conference paper"""
+
+def generate_fold_map_summary_table(f, all_results, fold_map_class):
+    """Generate summary table showing end-to-end times classified by fold vs map"""
     
-    with open(output_file, 'w') as f:
-        # Main performance comparison table
-        f.write("% Performance Comparison Table - AoS vs SoA\n")
-        f.write("% Include in your LaTeX document with: \\input{" + output_file.name + "}\n\n")
+    f.write("\\begin{table}[t]\n")
+    f.write("\\centering\n")
+    f.write("\\caption{End-to-end performance comparison classified by pass types. ")
+    f.write("Times shown are total execution time in seconds (scientific notation). ")
+    f.write("Speedup $>1.0$ indicates SoA is faster.}\n")
+    f.write("\\label{tab:endtoend}\n")
+    f.write("\\small\n")
+    f.write("\\begin{tabular}{l r r r r r r}\n")
+    f.write("\\toprule\n")
+    f.write("\\textbf{Program} & \\multicolumn{2}{c}{\\textbf{Fold Passes}} & \\multicolumn{2}{c}{\\textbf{Map Passes}} & \\multicolumn{2}{c}{\\textbf{Total}} \\\\\n")
+    f.write("\\cmidrule(lr){2-3} \\cmidrule(lr){4-5} \\cmidrule(lr){6-7}\n")
+    f.write(" & \\textbf{AoS} & \\textbf{SoA} & \\textbf{AoS} & \\textbf{SoA} & \\textbf{Time} & \\textbf{Speedup} \\\\\n")
+    f.write("\\midrule\n")
+    
+    for aos_result, soa_result in all_results:
+        if not aos_result or not soa_result:
+            continue
+        if not aos_result.run_success or not soa_result.run_success:
+            continue
         
-        f.write("\\begin{table}[t]\n")
-        f.write("\\centering\n")
-        f.write("\\caption{Performance comparison of AoS vs SoA implementations. ")
-        f.write("Times shown are median execution times in milliseconds. ")
-        f.write("Speedup values greater than 1.0 indicate SoA is faster.}\n")
-        f.write("\\label{tab:performance}\n")
-        f.write("\\begin{tabular}{l r r r c}\n")
-        f.write("\\toprule\n")
-        f.write("\\textbf{Program} & \\textbf{AoS (ms)} & \\textbf{SoA (ms)} & \\textbf{Speedup} & \\textbf{Match} \\\\\n")
-        f.write("\\midrule\n")
+        program = aos_result.program.replace('.hs', '').replace('_', '\\_')
+        prog_class = fold_map_class.get(aos_result.program, {})
         
-        speedups = []
-        for aos_result, soa_result in all_results:
-            if not aos_result or not soa_result:
-                continue
-            if not aos_result.run_success or not soa_result.run_success:
-                continue
+        # Separate fold and map passes
+        aos_fold_time = 0
+        aos_map_time = 0
+        soa_fold_time = 0
+        soa_map_time = 0
+        
+        for pass_name, pass_data in aos_result.passes.items():
+            pass_type = prog_class.get(pass_name, 'unknown')
+            time = pass_data.get('median_time', 0)
             
-            program = aos_result.program.replace('.hs', '').replace('_', '\\_')
+            if pass_type == 'fold':
+                aos_fold_time += time
+            elif pass_type == 'map':
+                aos_map_time += time
+        
+        for pass_name, pass_data in soa_result.passes.items():
+            pass_type = prog_class.get(pass_name, 'unknown')
+            time = pass_data.get('median_time', 0)
             
-            # Calculate total runtime (sum of all passes)
-            aos_time = sum(p.get('median_time', 0) for p in aos_result.passes.values()) * 1000
-            soa_time = sum(p.get('median_time', 0) for p in soa_result.passes.values()) * 1000
-            
-            if soa_time > 0:
-                speedup = aos_time / soa_time
-                speedups.append(speedup)
-            else:
-                speedup = 0
-            
-            match = compare_outputs(aos_result, soa_result)
-            match_symbol = "$\\checkmark$" if match else "$\\times$"
-            
-            # Highlight best performer
-            if speedup > 1.05:  # SoA is significantly faster
-                f.write(f"{program} & {aos_time:.2f} & \\textbf{{{soa_time:.2f}}} & {speedup:.2f}$\\times$ & {match_symbol} \\\\\n")
-            elif speedup < 0.95:  # AoS is significantly faster
-                f.write(f"{program} & \\textbf{{{aos_time:.2f}}} & {soa_time:.2f} & {speedup:.2f}$\\times$ & {match_symbol} \\\\\n")
-            else:
-                f.write(f"{program} & {aos_time:.2f} & {soa_time:.2f} & {speedup:.2f}$\\times$ & {match_symbol} \\\\\n")
+            if pass_type == 'fold':
+                soa_fold_time += time
+            elif pass_type == 'map':
+                soa_map_time += time
         
-        f.write("\\midrule\n")
-        if speedups:
-            avg_speedup = statistics.mean(speedups)
-            geomean_speedup = statistics.geometric_mean(speedups)
-            f.write(f"\\textbf{{Arithmetic Mean}} & & & {avg_speedup:.2f}$\\times$ & \\\\\n")
-            f.write(f"\\textbf{{Geometric Mean}} & & & {geomean_speedup:.2f}$\\times$ & \\\\\n")
+        # Total times
+        aos_total = sum(p.get('median_time', 0) for p in aos_result.passes.values())
+        soa_total = sum(p.get('median_time', 0) for p in soa_result.passes.values())
         
-        f.write("\\bottomrule\n")
-        f.write("\\end{tabular}\n")
-        f.write("\\end{table}\n\n")
+        speedup = aos_total / soa_total if soa_total > 0 else 0
         
-        # Per-pass breakdown table
-        f.write("\n% Per-Pass Performance Breakdown\n")
-        f.write("\\begin{table}[t]\n")
-        f.write("\\centering\n")
-        f.write("\\caption{Per-pass performance breakdown showing median execution times (ms) for selected compiler passes.}\n")
-        f.write("\\label{tab:passes}\n")
-        f.write("\\small\n")
+        # Format times
+        aos_fold_str = format_time_scientific(aos_fold_time) if aos_fold_time > 0 else '--'
+        soa_fold_str = format_time_scientific(soa_fold_time) if soa_fold_time > 0 else '--'
+        aos_map_str = format_time_scientific(aos_map_time) if aos_map_time > 0 else '--'
+        soa_map_str = format_time_scientific(soa_map_time) if soa_map_time > 0 else '--'
+        total_str = format_time_scientific(aos_total)
         
-        # Collect all unique passes
-        all_passes = set()
-        for aos_result, soa_result in all_results:
-            if aos_result and aos_result.run_success:
-                all_passes.update(aos_result.passes.keys())
-        
-        # Select most important passes (or top N by time)
-        important_passes = ['instCountPass', 'blockCountPass', 'memoryOpStatsPass', 
-                           'latencyModelPass', 'throughputModelPass']
-        passes_to_show = [p for p in important_passes if p in all_passes]
-        
-        if passes_to_show:
-            num_cols = len(passes_to_show) + 1
-            col_spec = "l" + "r" * len(passes_to_show)
-            f.write(f"\\begin{{tabular}}{{{col_spec}}}\n")
-            f.write("\\toprule\n")
-            f.write("\\textbf{Program}")
-            for pass_name in passes_to_show:
-                display_name = pass_name.replace('Pass', '').replace('_', '\\_')
-                f.write(f" & \\textbf{{{display_name}}}")
-            f.write(" \\\\\n")
-            f.write("\\midrule\n")
-            
-            for aos_result, soa_result in all_results:
-                if not aos_result or not soa_result:
-                    continue
-                if not aos_result.run_success or not soa_result.run_success:
-                    continue
-                
-                program = aos_result.program.replace('.hs', '').replace('_', '\\_')
-                f.write(f"{program} (AoS)")
-                
-                for pass_name in passes_to_show:
-                    time_ms = aos_result.passes.get(pass_name, {}).get('median_time', 0) * 1000
-                    f.write(f" & {time_ms:.2f}")
-                f.write(" \\\\\n")
-                
-                f.write(f"\\hspace{{0.5em}} (SoA)")
-                for pass_name in passes_to_show:
-                    time_ms = soa_result.passes.get(pass_name, {}).get('median_time', 0) * 1000
-                    aos_time = aos_result.passes.get(pass_name, {}).get('median_time', 0) * 1000
-                    
-                    # Bold if SoA is faster
-                    if time_ms > 0 and aos_time > 0 and time_ms < aos_time * 0.95:
-                        f.write(f" & \\textbf{{{time_ms:.2f}}}")
-                    else:
-                        f.write(f" & {time_ms:.2f}")
-                f.write(" \\\\\n")
-                f.write("\\midrule\n")
-            
-            f.write("\\bottomrule\n")
-            f.write("\\end{tabular}\n")
-        
-        f.write("\\end{table}\n")
+        # Highlight best total time
+        if speedup > 1.05:
+            f.write(f"{program} & {aos_fold_str} & {soa_fold_str} & {aos_map_str} & {soa_map_str} & \\textbf{{{total_str}}} & {speedup:.2f}$\\times$ \\\\\n")
+        else:
+            f.write(f"{program} & {aos_fold_str} & {soa_fold_str} & {aos_map_str} & {soa_map_str} & {total_str} & {speedup:.2f}$\\times$ \\\\\n")
+    
+    f.write("\\bottomrule\n")
+    f.write("\\end{tabular}\n")
+    f.write("\\end{table}\n\n")
 
 
 def generate_figures(all_results: List[Tuple[BenchmarkResult, BenchmarkResult]], 
-                     output_dir: Path):
+                     output_dir: Path, programs_dir: Path = None):
     """Generate publication-quality figures"""
     
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Read fold/map classification
+    fold_map_class = {}
+    if programs_dir:
+        fold_map_class = read_fold_map_classification(programs_dir)
+    
+    # Set publication-quality defaults
+    plt.rcParams.update({
+        'font.size': 9,
+        'font.family': 'serif',
+        'figure.figsize': (7, 4),
+        'figure.dpi': 300,
+        'savefig.dpi': 300,
+        'savefig.bbox': 'tight',
+        'axes.labelsize': 9,
+        'axes.titlesize': 10,
+        'xtick.labelsize': 8,
+        'ytick.labelsize': 8,
+        'legend.fontsize': 8,
+        'lines.linewidth': 1.5,
+        'axes.grid': True,
+        'grid.alpha': 0.3
+    })
+    
+    # Filter successful results
+    successful_results = [
+        (aos, soa) for aos, soa in all_results
+        if aos and soa and aos.run_success and soa.run_success
+    ]
+    
+    if not successful_results:
+        print("No successful results to plot")
+        return
+    
+    # Figure 1: Overall speedup comparison separated by fold/map
+    generate_fold_map_speedup_chart(successful_results, fold_map_class, output_dir / "speedup_comparison.pdf")
+    generate_fold_map_speedup_chart(successful_results, fold_map_class, output_dir / "speedup_comparison.png")
+    
+    # Figure 2: Per-program heatmaps (one per program)
+    generate_per_program_heatmaps(successful_results, output_dir)
+    
+    # Figure 3: Complete pass breakdown with horizontal legend and patterns
+    generate_complete_pass_breakdown_improved(successful_results, output_dir / "pass_breakdown_all.pdf")
+    generate_complete_pass_breakdown_improved(successful_results, output_dir / "pass_breakdown_all.png")
+    
+    # Figure 4: Individual program figures (separate file for each program with all passes)
+    generate_per_program_figures(successful_results, output_dir)
+    
+    # Figure 5: Per-pass speedup comparison (all programs for each pass)
+    generate_per_pass_speedup_figures(successful_results, output_dir)
+    
+    print(f"\n{'='*70}")
+    print("Generated publication figures:")
+    print(f"{'='*70}")
+    print(f"  • {output_dir / 'speedup_comparison.pdf'} (fold/map separated)")
+    print(f"  • {output_dir / 'pass_breakdown_all.pdf'} (improved)")
+    print(f"  • Per-program heatmaps in {output_dir}/heatmaps/")
+    print(f"  • Individual program figures in {output_dir}/per_program/")
+    print(f"  • Per-pass speedup figures in {output_dir}/per_pass/")
+    print(f"(PNG versions also generated)")
+
     
     # Set publication-quality defaults
     plt.rcParams.update({
@@ -939,6 +952,207 @@ def generate_figures(all_results: List[Tuple[BenchmarkResult, BenchmarkResult]],
     print(f"  • Per-pass speedup figures in {output_dir}/per_pass/")
     print(f"(PNG versions also generated)")
 
+
+
+def generate_fold_map_speedup_chart(results: List[Tuple[BenchmarkResult, BenchmarkResult]],
+                                    fold_map_class: Dict, output_file: Path):
+    """Generate speedup chart separated by fold vs map passes"""
+    fold_data = []
+    map_data = []
+    programs = []
+    
+    for aos_result, soa_result in results:
+        program = aos_result.program.replace('.hs', '')
+        programs.append(program)
+        prog_class = fold_map_class.get(aos_result.program, {})
+        
+        # Calculate fold and map times separately
+        aos_fold = sum(p.get('median_time', 0) for name, p in aos_result.passes.items()
+                      if prog_class.get(name) == 'fold')
+        soa_fold = sum(p.get('median_time', 0) for name, p in soa_result.passes.items()
+                      if prog_class.get(name) == 'fold')
+        
+        aos_map = sum(p.get('median_time', 0) for name, p in aos_result.passes.items()
+                     if prog_class.get(name) == 'map')
+        soa_map = sum(p.get('median_time', 0) for name, p in soa_result.passes.items()
+                     if prog_class.get(name) == 'map')
+        
+        fold_speedup = aos_fold / soa_fold if soa_fold > 0 else 1.0
+        map_speedup = aos_map / soa_map if soa_map > 0 else 1.0
+        
+        fold_data.append(fold_speedup)
+        map_data.append(map_speedup)
+    
+    y_pos = np.arange(len(programs))
+    height = 0.35
+    
+    fig, ax = plt.subplots(figsize=(10, max(6, len(programs) * 0.4)))
+    
+    # Bars for fold and map
+    bars1 = ax.barh(y_pos - height/2, fold_data, height, label='Fold passes',
+                   color='#3498db', alpha=0.8, edgecolor='black', linewidth=0.5)
+    bars2 = ax.barh(y_pos + height/2, map_data, height, label='Map passes',
+                   color='#e67e22', alpha=0.8, edgecolor='black', linewidth=0.5)
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(programs, fontsize=8)
+    ax.set_xlabel('Speedup (AoS time / SoA time)', fontsize=10)
+    ax.set_title('End-to-End Speedup: Fold vs Map Passes\n(>1.0 means SoA is faster)', fontsize=11)
+    ax.axvline(x=1.0, color='black', linestyle='--', linewidth=1, alpha=0.7)
+    ax.legend(loc='best', fontsize=9)
+    ax.grid(True, alpha=0.3, axis='x')
+    
+    plt.tight_layout()
+    plt.savefig(output_file)
+    plt.close()
+
+
+def generate_per_program_heatmaps(results: List[Tuple[BenchmarkResult, BenchmarkResult]], 
+                                   output_dir: Path):
+    """Generate individual heatmap for each program showing its passes"""
+    heatmap_dir = output_dir / "heatmaps"
+    heatmap_dir.mkdir(parents=True, exist_ok=True)
+    
+    for aos_result, soa_result in results:
+        program = aos_result.program.replace('.hs', '')
+        
+        # Get all passes for this specific program
+        program_passes = sorted(set(list(aos_result.passes.keys()) + list(soa_result.passes.keys())))
+        
+        if not program_passes:
+            continue
+        
+        # Build speedup array for this program only
+        speedups = []
+        pass_labels = []
+        
+        for pass_name in program_passes:
+            aos_time = aos_result.passes.get(pass_name, {}).get('median_time', 0)
+            soa_time = soa_result.passes.get(pass_name, {}).get('median_time', 0)
+            
+            if aos_time > 0 and soa_time > 0:
+                speedup = aos_time / soa_time
+                speedups.append(speedup)
+                pass_labels.append(pass_name.replace('Pass', '').replace('_', ' '))
+        
+        if not speedups:
+            continue
+        
+        # Create heatmap for this program
+        speedup_array = np.array([speedups])  # Single row
+        
+        fig, ax = plt.subplots(figsize=(max(10, len(speedups) * 0.8), 3))
+        
+        im = ax.imshow(speedup_array, cmap='RdYlGn', aspect='auto',
+                      vmin=0.5, vmax=1.5, interpolation='nearest')
+        
+        ax.set_xticks(np.arange(len(pass_labels)))
+        ax.set_xticklabels(pass_labels, rotation=45, ha='right', fontsize=8)
+        ax.set_yticks([0])
+        ax.set_yticklabels([program])
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax, orientation='horizontal', pad=0.15)
+        cbar.set_label('Speedup (AoS/SoA)', fontsize=9)
+        
+        # Add text annotations
+        for i, (label, speedup) in enumerate(zip(pass_labels, speedups)):
+            ax.text(i, 0, f'{speedup:.2f}',
+                   ha='center', va='center', color='black', fontsize=8, fontweight='bold')
+        
+        ax.set_title(f'{program}: Per-Pass Speedup\n(Green = SoA faster)', fontsize=10)
+        
+        plt.tight_layout()
+        plt.savefig(heatmap_dir / f"{program}_heatmap.pdf")
+        plt.savefig(heatmap_dir / f"{program}_heatmap.png")
+        plt.close()
+
+
+def generate_complete_pass_breakdown_improved(results: List[Tuple[BenchmarkResult, BenchmarkResult]], 
+                                              output_file: Path):
+    """Generate complete pass breakdown with horizontal legend and patterns"""
+    programs = []
+    
+    # Collect ALL unique passes
+    all_passes = set()
+    for aos_result, soa_result in results:
+        all_passes.update(aos_result.passes.keys())
+    
+    passes_to_show = sorted(list(all_passes))
+    
+    # Collect data for ALL passes
+    aos_data = {pass_name: [] for pass_name in passes_to_show}
+    soa_data = {pass_name: [] for pass_name in passes_to_show}
+    
+    for aos_result, soa_result in results:
+        program = aos_result.program.replace('.hs', '')
+        programs.append(program)
+        
+        for pass_name in passes_to_show:
+            aos_time = aos_result.passes.get(pass_name, {}).get('median_time', 0) * 1000
+            soa_time = soa_result.passes.get(pass_name, {}).get('median_time', 0) * 1000
+            
+            aos_data[pass_name].append(aos_time)
+            soa_data[pass_name].append(soa_time)
+    
+    # Create subplots for AoS and SoA
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, max(8, len(programs) * 0.5)))
+    
+    x = np.arange(len(programs))
+    width = 0.6
+    
+    # Colors and patterns for different passes
+    colors = plt.cm.tab20(np.linspace(0, 1, len(passes_to_show)))
+    patterns = ['', '/', '\\', '|', '-', '+', 'x', 'o', 'O', '.', '*']
+    
+    # AoS stacked bars
+    bottom = np.zeros(len(programs))
+    handles = []
+    labels = []
+    for i, pass_name in enumerate(passes_to_show):
+        pass_label = pass_name.replace('Pass', '').replace('_', ' ')
+        pattern = patterns[i % len(patterns)]
+        
+        bars = ax1.barh(x, aos_data[pass_name], width,
+                       left=bottom, color=colors[i], edgecolor='black', linewidth=0.3,
+                       hatch=pattern, label=pass_label)
+        bottom += np.array(aos_data[pass_name])
+        
+        if i < 15:  # Only add to legend if not too many
+            handles.append(bars)
+            labels.append(pass_label)
+    
+    ax1.set_yticks(x)
+    ax1.set_yticklabels(programs, fontsize=8)
+    ax1.set_xlabel('Execution Time (ms)', fontsize=10)
+    ax1.set_title('AoS: Complete Pass Breakdown', fontsize=11)
+    ax1.grid(True, alpha=0.3, axis='x')
+    
+    # SoA stacked bars
+    bottom = np.zeros(len(programs))
+    for i, pass_name in enumerate(passes_to_show):
+        pattern = patterns[i % len(patterns)]
+        ax2.barh(x, soa_data[pass_name], width,
+                left=bottom, color=colors[i], edgecolor='black', linewidth=0.3,
+                hatch=pattern)
+        bottom += np.array(soa_data[pass_name])
+    
+    ax2.set_yticks(x)
+    ax2.set_yticklabels(programs, fontsize=8)
+    ax2.set_xlabel('Execution Time (ms)', fontsize=10)
+    ax2.set_title('SoA: Complete Pass Breakdown', fontsize=11)
+    ax2.grid(True, alpha=0.3, axis='x')
+    
+    # Add horizontal legend below the plots
+    if handles:
+        fig.legend(handles, labels, loc='lower center', ncol=min(5, len(labels)),
+                  bbox_to_anchor=(0.5, -0.05), fontsize=7, frameon=True)
+    
+    plt.suptitle('Complete Compiler Pass Breakdown: All Passes for All Programs', 
+                fontsize=12, y=0.98)
+    plt.tight_layout(rect=[0, 0.05, 1, 0.96])
+    plt.savefig(output_file, bbox_inches='tight')
+    plt.close()
 
 
 def generate_speedup_chart(results: List[Tuple[BenchmarkResult, BenchmarkResult]], 
