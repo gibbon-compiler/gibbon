@@ -8,6 +8,7 @@ import Gibbon.Vector
 -- Decision Tree Benchmark (DTree)
 -- ===============================
 
+-- @BENCH adt_fields=7
 data DTree
   = Leaf
       Int        -- class label
@@ -18,6 +19,8 @@ data DTree
       Int        -- impurity (e.g. Gini * 1000)
       DTree
       DTree
+
+
 
 {-# ANN type DTree "Factored" #-}
 
@@ -198,49 +201,49 @@ gibbon_main =
   let _ = printsym (quote "NEWLINE") in
   let tree = buildTree 35 in
   -- Structural analyses
-  let _ = printsym (quote "Running pass countNodes (fold): ") in
+  let _ = printsym (quote "Running pass countNodes (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in
   let nodes   = iterate (countNodes tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass countLeaves (fold): ") in
+  let _ = printsym (quote "Running pass countLeaves (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in
   let leaves  = iterate (countLeaves tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass treeDepth (fold): ") in
+  let _ = printsym (quote "Running pass treeDepth (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in
   let depth   = iterate (treeDepth tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
   -- ML-style reductions
-  let _ = printsym (quote "Running pass sumImpurity (fold): ") in
+  let _ = printsym (quote "Running pass sumImpurity (fold, uses=3): ") in
   let _ = printsym (quote "NEWLINE") in
   let imp     = iterate (sumImpurity tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass sumSamples (fold): ") in
+  let _ = printsym (quote "Running pass sumSamples (fold, uses=3): ") in
   let _ = printsym (quote "NEWLINE") in
   let samples = iterate (sumSamples tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass countFeatureUses (fold): ") in
+  let _ = printsym (quote "Running pass countFeatureUses (fold, uses=3): ") in
   let _ = printsym (quote "NEWLINE") in
   let feat0   = iterate (countFeatureUses 0 tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass countSmallLeaves (fold): ") in
+  let _ = printsym (quote "Running pass countSmallLeaves (fold, uses=3): ") in
   let _ = printsym (quote "NEWLINE") in
   let small   = iterate (countSmallLeaves 5 tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
   -- Inference-related reductions
-  let _ = printsym (quote "Running pass inferenceCost (fold): ") in
+  let _ = printsym (quote "Running pass inferenceCost (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in
   let cost  = iterate (inferenceCost tree) in
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
-  let _ = printsym (quote "Running pass sumPathLengths (fold): ") in
+  let _ = printsym (quote "Running pass sumPathLengths (fold, uses=3): ") in
   let _ = printsym (quote "NEWLINE") in
   let paths = iterate (sumPathLengths 0 tree) in
   let _ = printsym (quote "End") in

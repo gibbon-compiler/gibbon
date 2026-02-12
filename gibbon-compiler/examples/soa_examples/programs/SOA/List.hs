@@ -1,4 +1,5 @@
-data List = Cons Int List | Nil 
+-- @BENCH adt_fields=2
+data List = Cons Int List | Nil
 
 {-# ANN type List "Factored" #-}
 
@@ -32,12 +33,12 @@ gibbon_main = let
 				  _ = printsym (quote "Running program List: ")
 				  _ = printsym (quote "NEWLINE")
 				  lst = mkList 100000000
-				  _ = printsym (quote "Running pass add1 List (map): ")
+				  _ = printsym (quote "Running pass add1 List (map, uses=2): ")
 				  _ = printsym (quote "NEWLINE")
 				  lst' = iterate (add1 lst)
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
-				  _ = printsym (quote "Running pass sumList (fold): ")
+				  _ = printsym (quote "Running pass sumList (fold, uses=2): ")
 				  _ = printsym (quote "NEWLINE")
 				  sum = iterate (sumList lst')
 				  _ = printsym (quote "End")

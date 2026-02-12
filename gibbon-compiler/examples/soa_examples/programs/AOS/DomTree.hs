@@ -1,3 +1,4 @@
+-- @BENCH adt_fields=15
 data DOM
   = Elem Int   -- tag id
          Int   -- class id
@@ -127,22 +128,22 @@ gibbon_main =
   let _ = printsym (quote "Running program DomTree: ")
       _ = printsym (quote "NEWLINE")
       tree   = buildRenderTree 23
-      _ = printsym (quote "Running pass SumArea (fold): ")
+      _ = printsym (quote "Running pass SumArea (fold, uses=6): ")
       _ = printsym (quote "NEWLINE")
       area   = iterate (sumArea tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass find max Bottom (fold): ")
+      _ = printsym (quote "Running pass find max Bottom (fold, uses=5): ")
       _ = printsym (quote "NEWLINE")
       bottom = iterate (maxBottom tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass count styled (fold): ")
+      _ = printsym (quote "Running pass count styled (fold, uses=3): ")
       _ = printsym (quote "NEWLINE")
       styled = iterate (countPositioned tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass sumTextWidth (fold): ")
+      _ = printsym (quote "Running pass sumTextWidth (fold, uses=3): ")
       _ = printsym (quote "NEWLINE")
       textW  = iterate (sumTextWidth tree)
       _ = printsym (quote "End")
@@ -152,7 +153,7 @@ gibbon_main =
 --       tree'  = iterate (computeWidths tree)
 --       _ = printsym (quote "End")
 --       _ = printsym (quote "NEWLINE")
-      _ = printsym (quote "Running pass scaleLayout (map): ")
+      _ = printsym (quote "Running pass scaleLayout (map, uses=15): ")
       _ = printsym (quote "NEWLINE")
       tree' = iterate (scaleLayout tree 2)
       _ = printsym (quote "End")

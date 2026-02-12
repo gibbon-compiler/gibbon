@@ -1,3 +1,4 @@
+-- @BENCH adt_fields=19
 data Octree
   = OctNode Int   -- centerX
             Int   -- centerY
@@ -62,7 +63,7 @@ gibbon_main =
             let _ = printsym (quote "Running program KDTree: ")
                 _ = printsym (quote "NEWLINE")
                 octTree = buildOct 9
-                _ = printsym (quote "Running pass Find nearest Neighbour (fold like): ")
+                _ = printsym (quote "Running pass Find nearest Neighbour (fold like, uses=11): ")
                 _ = printsym (quote "NEWLINE")
                 dist = iterate (nearestDist octTree 1 2 3)
                 _  = printsym (quote "End")
