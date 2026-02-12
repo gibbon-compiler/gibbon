@@ -15,7 +15,7 @@ data Trie
 buildTrie :: Int -> Trie
 buildTrie d =
   if d == 0
-  then TLeaf d d (d*3) d
+  then TLeaf (d+1) (d+2) (d*3) (d+3)
   else TNode d (d*5) (d*10) (mod d 2)
        (buildTrie (d-1))
        (buildTrie (d-1))

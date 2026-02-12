@@ -533,8 +533,8 @@ def save_json_results(all_results: List[Tuple[BenchmarkResult, BenchmarkResult]]
 
 def read_fold_map_classification(programs_dir: Path) -> Dict[str, Dict[str, str]]:
     """
-    Read fold/map classification from source files.
-    Looks for comments like: -- PASS_TYPE: fold or -- PASS_TYPE: map
+    Read fold/map classification from print statements in source files.
+    Looks for patterns like: printsym (quote "Running pass PassName (fold): ")
     
     Returns dict: {program: {pass_name: 'fold' or 'map'}}
     """
@@ -554,17 +554,45 @@ def read_fold_map_classification(programs_dir: Path) -> Dict[str, Dict[str, str]
                 with open(source_file, 'r') as f:
                     content = f.read()
                     
-                    # Look for pass type annotations
-                    # Format: -- PASS_TYPE passName: fold
-                    for line in content.split('\n'):
-                        if 'PASS_TYPE' in line:
-                            # Parse: -- PASS_TYPE instCountPass: fold
-                            match = re.search(r'PASS_TYPE\s+(\w+):\s*(fold|map)', line)
-                            if match:
-                                pass_name, pass_type = match.groups()
-                                classification[program][pass_name] = pass_type.lower()
-            except Exception:
-                pass  # Skip files that can't be read
+                    # Look for print statements that indicate pass type
+                    # Pattern: printsym (quote "Running pass PassName (fold): ")
+                    # or: printsym (quote "Running pass PassName (map): ")
+                    # or: printsym (quote "Running pass PassName (fold like): ")
+                    
+                    # Regex to match: Running pass <name> (<type>):
+                    pattern = r'printsym\s*\(\s*quote\s*"Running pass\s+([^(]+?)\s*\(([^)]+)\)\s*:'
+                    
+                    for match in re.finditer(pattern, content):
+                        pass_name_raw = match.group(1).strip()
+                        pass_type_raw = match.group(2).strip().lower()
+                        
+                        # Normalize pass type
+                        if 'fold' in pass_type_raw:
+                            pass_type = 'fold'
+                        elif 'map' in pass_type_raw:
+                            pass_type = 'map'
+                        else:
+                            pass_type = 'unknown'
+                        
+                        # Convert pass name to match benchmark output
+                        # "SumArea" stays as "SumArea"
+                        # "find max Bottom" might need cleaning
+                        # We'll try to match against actual pass names in results
+                        
+                        # Store both the raw name and cleaned versions
+                        pass_name_clean = pass_name_raw.replace(' ', '')
+                        
+                        classification[program][pass_name_clean] = pass_type
+                        classification[program][pass_name_raw] = pass_type
+                        
+                        # Also store common variations
+                        pass_name_lower = pass_name_clean.lower()
+                        classification[program][pass_name_lower] = pass_type
+                        
+            except Exception as e:
+                # Skip files that can't be read
+                print(f"  Note: Could not parse {source_file}: {e}")
+                pass
     
     return classification
 
@@ -634,19 +662,46 @@ def generate_fold_map_summary_table(f, all_results, fold_map_class):
         soa_map_time = 0
         
         for pass_name, pass_data in aos_result.passes.items():
-            pass_type = prog_class.get(pass_name, 'unknown')
+            # Try multiple variations to find pass type
+            pass_type = 'unknown'
+            if pass_name in prog_class:
+                pass_type = prog_class[pass_name]
+            else:
+                # Try without "Pass" suffix
+                pass_name_no_suffix = pass_name.replace('Pass', '')
+                if pass_name_no_suffix in prog_class:
+                    pass_type = prog_class[pass_name_no_suffix]
+                else:
+                    # Try lowercase variations
+                    for variant in [pass_name.lower(), pass_name_no_suffix.lower()]:
+                        if variant in prog_class:
+                            pass_type = prog_class[variant]
+                            break
+            
             time = pass_data.get('median_time', 0)
             
             if pass_type == 'fold':
                 aos_fold_time += time
             elif pass_type == 'map':
                 aos_map_time += time
-            else:
-                # Unknown classification - add to total but not categorized
-                pass
         
         for pass_name, pass_data in soa_result.passes.items():
-            pass_type = prog_class.get(pass_name, 'unknown')
+            # Try multiple variations to find pass type
+            pass_type = 'unknown'
+            if pass_name in prog_class:
+                pass_type = prog_class[pass_name]
+            else:
+                # Try without "Pass" suffix
+                pass_name_no_suffix = pass_name.replace('Pass', '')
+                if pass_name_no_suffix in prog_class:
+                    pass_type = prog_class[pass_name_no_suffix]
+                else:
+                    # Try lowercase variations
+                    for variant in [pass_name.lower(), pass_name_no_suffix.lower()]:
+                        if variant in prog_class:
+                            pass_type = prog_class[variant]
+                            break
+            
             time = pass_data.get('median_time', 0)
             
             if pass_type == 'fold':
@@ -716,8 +771,28 @@ def generate_per_program_tables(f, all_results, fold_map_class):
             if aos_time == 0 and soa_time == 0:
                 continue
             
-            # Get pass type
-            pass_type = prog_class.get(pass_name, 'unknown')
+            # Get pass type - try multiple variations
+            pass_type = 'unknown'
+            
+            # Try direct lookup
+            if pass_name in prog_class:
+                pass_type = prog_class[pass_name]
+            else:
+                # Try without "Pass" suffix
+                pass_name_no_suffix = pass_name.replace('Pass', '')
+                if pass_name_no_suffix in prog_class:
+                    pass_type = prog_class[pass_name_no_suffix]
+                else:
+                    # Try lowercase
+                    pass_name_lower = pass_name.lower()
+                    if pass_name_lower in prog_class:
+                        pass_type = prog_class[pass_name_lower]
+                    else:
+                        # Try lowercase without Pass
+                        pass_name_lower_no_suffix = pass_name_no_suffix.lower()
+                        if pass_name_lower_no_suffix in prog_class:
+                            pass_type = prog_class[pass_name_lower_no_suffix]
+            
             type_str = 'F' if pass_type == 'fold' else ('M' if pass_type == 'map' else '?')
             
             # Calculate speedup
@@ -966,16 +1041,28 @@ def generate_fold_map_speedup_chart(results: List[Tuple[BenchmarkResult, Benchma
         programs.append(program)
         prog_class = fold_map_class.get(aos_result.program, {})
         
+        # Helper function to get pass type with multiple lookups
+        def get_pass_type(pass_name, class_dict):
+            if pass_name in class_dict:
+                return class_dict[pass_name]
+            pass_name_no_suffix = pass_name.replace('Pass', '')
+            if pass_name_no_suffix in class_dict:
+                return class_dict[pass_name_no_suffix]
+            for variant in [pass_name.lower(), pass_name_no_suffix.lower()]:
+                if variant in class_dict:
+                    return class_dict[variant]
+            return 'unknown'
+        
         # Calculate fold and map times separately
         aos_fold = sum(p.get('median_time', 0) for name, p in aos_result.passes.items()
-                      if prog_class.get(name) == 'fold')
+                      if get_pass_type(name, prog_class) == 'fold')
         soa_fold = sum(p.get('median_time', 0) for name, p in soa_result.passes.items()
-                      if prog_class.get(name) == 'fold')
+                      if get_pass_type(name, prog_class) == 'fold')
         
         aos_map = sum(p.get('median_time', 0) for name, p in aos_result.passes.items()
-                     if prog_class.get(name) == 'map')
+                     if get_pass_type(name, prog_class) == 'map')
         soa_map = sum(p.get('median_time', 0) for name, p in soa_result.passes.items()
-                     if prog_class.get(name) == 'map')
+                     if get_pass_type(name, prog_class) == 'map')
         
         fold_speedup = aos_fold / soa_fold if soa_fold > 0 else 1.0
         map_speedup = aos_map / soa_map if soa_map > 0 else 1.0
