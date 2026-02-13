@@ -1,28 +1,46 @@
 #!/usr/bin/env python3
 """
-Gibbon Compiler Benchmark Suite v3.0
+Gibbon Compiler Benchmark Suite v3.1
 =====================================
 Benchmarks AoS vs SoA gibbon programs and produces publication-quality
 LaTeX tables and matplotlib figures.
 
 Field-usage analysis:
   Gibbon's SoA mode is hypothesised to win on passes that access fewer
-  fields of the ADT (i.e. more "dead" fields are skipped).
-  Two source annotations drive this analysis:
+  fields of the ADT (more "dead" fields skipped, fewer cache streams).
+  Two source annotations drive the analysis:
 
     (a) ADT field count — one comment per source file, near the type def:
           -- @BENCH adt_fields=5
 
     (b) Per-pass field usage — extend the existing printsym line:
           _ = printsym (quote "Running pass SumArea (fold, uses=2): ")
-          _ = printsym (quote "Running pass scaleLayout (map, uses=5): ")
 
   From these the script computes:
     dead_fields = adt_fields - uses
     dead_ratio  = dead_fields / adt_fields   (0 = all used, 1 = none used)
 
-  A scatter-plot of dead_ratio vs speedup is produced to visualise the
-  correlation between "deadness" and SoA benefit.
+Buffer analysis (automatic — no extra annotation needed):
+  The script parses each Haskell source file to find the main ADT definition
+  and counts memory buffers under each memory layout:
+
+    AoS: always 1 buffer (all data packed together).
+
+    SoA: 1 buffer for constructor tags
+         + 1 buffer per field slot across ALL constructors
+       e.g.  data Tree = Node Int Tree Tree | Leaf Int
+             → tags:1  Node.Int:1  Node.Tree:1  Node.Tree:1  Leaf.Int:1
+             → soa_total_buffers = 5
+
+  Per-pass buffer access:
+    aos_buffers_used = 1
+    soa_buffers_used = 1 (tags) + uses     (if uses= is annotated)
+    soa_buf_ratio    = soa_buffers_used / soa_total_buffers
+
+  The buffer scatter plot shows whether low soa_buf_ratio predicts speedup.
+
+  Optional annotation to name the target ADT explicitly (overrides heuristic):
+    -- @BENCH adt_type=MyTypeName
 
 Fold/map detection (dual strategy):
   PRIMARY:  exe output line "Running pass Foo (fold, uses=2):"
@@ -71,6 +89,8 @@ class BenchmarkResult:
         self.compile_success          = False
         self.run_success              = False
         self.error_message: Optional[str] = None
+        self.adt_fields: Optional[int]    = None
+        self.adt_info:   Optional[Dict]   = None   # from parse_adt_buffers
 
 # ---------------------------------------------------------------------------
 # Source-file annotation scanner
@@ -94,6 +114,186 @@ def _name_variants(name: str) -> List[str]:
     return [v for v in variants if v]
 
 
+# ---------------------------------------------------------------------------
+# ADT buffer analysis
+# ---------------------------------------------------------------------------
+
+def _split_alts(text: str) -> List[str]:
+    """
+    Split a Haskell constructor body by '|' at parenthesis depth 0.
+    Handles:  'C1 Int Bool | C2 (Maybe Int) Tree | C3'
+    """
+    parts: List[str] = []
+    depth   = 0
+    current: List[str] = []
+    for ch in text:
+        if ch == '(':
+            depth += 1
+            current.append(ch)
+        elif ch == ')':
+            depth -= 1
+            current.append(ch)
+        elif ch == '|' and depth == 0:
+            parts.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append(''.join(current).strip())
+    return [p for p in parts if p]
+
+
+def _tokenize_fields(text: str) -> List[str]:
+    """
+    Extract field type tokens from a constructor definition, respecting
+    parenthesised groups.
+      'Node Int (Maybe Float) Tree'  →  ['Node', 'Int', '(Maybe Float)', 'Tree']
+    """
+    tokens: List[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i].isspace():
+            i += 1
+        elif text[i] == '(':
+            depth = 1; j = i + 1
+            while j < n and depth > 0:
+                if   text[j] == '(': depth += 1
+                elif text[j] == ')': depth -= 1
+                j += 1
+            tokens.append(text[i:j])
+            i = j
+        else:
+            j = i
+            while j < n and not text[j].isspace() and text[j] != '(':
+                j += 1
+            tokens.append(text[i:j])
+            i = j
+    return tokens
+
+
+def parse_adt_buffers(content: str) -> Optional[Dict]:
+    """
+    Parse all Haskell data declarations in *content* and compute buffer layout.
+
+    SoA buffer counting rules:
+      • 1 buffer for all constructor tags (always present)
+      • 1 buffer per field slot in every constructor (recursive or not)
+        →  soa_total_buffers = 1 + Σ(field_count over all constructors)
+
+    AoS is always 1 buffer.
+
+    The target ADT is selected by:
+      1. The optional source annotation:  -- @BENCH adt_type=TypeName
+      2. Otherwise the data type with the most total field slots.
+
+    Returns:
+      {
+        "type_name": str,
+        "aos_buffers": 1,
+        "soa_total_buffers": int,
+        "constructors": [
+          {
+            "name": str,
+            "field_count": int,
+            "field_types": [str, ...],
+            "recursive_count": int,   # how many fields are the ADT itself
+          }
+        ]
+      }
+    or None if no data declarations found.
+    """
+    # Optional explicit type-name hint
+    hint_m = re.search(
+        r'--\s*@BENCH\s+adt_type\s*=\s*([A-Za-z][A-Za-z0-9_\']*)',
+        content,
+    )
+    type_hint = hint_m.group(1) if hint_m else None
+
+    # Strip line comments so we don't confuse the parser
+    no_comments = re.sub(r'--[^\n]*', ' ', content)
+    # Also strip block strings / pragmas that could fool us
+    no_comments = re.sub(r'\{-.*?-\}', ' ', no_comments, flags=re.DOTALL)
+
+    # Find all data declaration start positions
+    data_re = re.compile(r'\bdata\s+([A-Z][A-Za-z0-9_\']*)\b')
+    starts  = list(data_re.finditer(no_comments))
+    if not starts:
+        return None
+
+    # Top-level keyword OR lowercase-at-col-0 function def boundaries
+    # Stops at: data/type/newtype/class/instance/module/import/where
+    #           OR  lowercase identifier at column 0 (= a function def/sig)
+    boundary_re = re.compile(
+        r'\n(?:data|type|newtype|class|instance|module|import|where\b'
+        r'|[a-z][A-Za-z0-9_\']*\s*(?:::|=|\s*[A-Za-z0-9_\(\[]))'
+    )
+
+    parsed_adts: List[Dict] = []
+    for i, m in enumerate(starts):
+        type_name = m.group(1)
+
+        # Extract the body up to the next top-level declaration
+        search_from = m.start()
+        bnd = boundary_re.search(no_comments, search_from + 1)
+        body = no_comments[m.end(): bnd.start() if bnd else len(no_comments)]
+
+        # Skip past optional type variables to the '='
+        eq_m = re.search(r'=', body)
+        if not eq_m:
+            continue
+        alts_text = body[eq_m.end():]
+
+        # Strip any trailing 'deriving (...)' clause
+        deriving_m = re.search(r'\bderiving\b', alts_text, re.IGNORECASE)
+        if deriving_m:
+            alts_text = alts_text[:deriving_m.start()]
+
+        # Split into individual constructor alternatives
+        alts = _split_alts(alts_text)
+        ctor_list: List[Dict] = []
+        for alt in alts:
+            tokens = _tokenize_fields(alt)
+            if not tokens:
+                continue
+            ctor_name = tokens[0]
+            if not ctor_name[0].isupper():
+                continue   # malformed, skip
+            # Tokens after constructor name are field types
+            fields = tokens[1:]
+            # Identify recursive fields — anything containing the type name
+            recursive = [t for t in fields if type_name in t]
+            ctor_list.append({
+                "name":           ctor_name,
+                "field_count":    len(fields),
+                "field_types":    fields,
+                "recursive_count": len(recursive),
+            })
+
+        if not ctor_list:
+            continue
+
+        total_fields = sum(c["field_count"] for c in ctor_list)
+        parsed_adts.append({
+            "type_name":           type_name,
+            "constructors":        ctor_list,
+            "total_field_slots":   total_fields,
+            "aos_buffers":         1,
+            "soa_total_buffers":   1 + total_fields,
+        })
+
+    if not parsed_adts:
+        return None
+
+    # Select target ADT
+    if type_hint:
+        match = [a for a in parsed_adts if a["type_name"] == type_hint]
+        if match:
+            return match[0]
+
+    # Heuristic: pick the type with the most field slots (likely the main ADT)
+    return max(parsed_adts, key=lambda a: a["total_field_slots"])
+
+
 def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
     """
     Scan AoS/*.hs and SoA/*.hs for:
@@ -113,6 +313,7 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
 
     # Match:  -- @BENCH adt_fields=N
     adt_re   = re.compile(r'--\s*@BENCH\s+adt_fields\s*=\s*(\d+)', re.IGNORECASE)
+    # adt_info is populated once (from AOS source) by parse_adt_buffers()
 
     # Match:  printsym (quote "Running pass Name (fold[, uses=N]): ")
     # Group 1 = name, Group 2 = type keyword, Group 3 = uses value (optional)
@@ -135,6 +336,7 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
             if prog not in result:
                 result[prog] = {
                     "adt_fields": None,
+                    "adt_info":   None,   # from parse_adt_buffers
                     "pass_types": {},
                     "pass_uses":  {},
                 }
@@ -144,12 +346,24 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
                 print(f"  ✗ {src.name}: {e}")
                 continue
 
-            # ADT fields
+            # ADT fields annotation
             m = adt_re.search(content)
             if m and result[prog]["adt_fields"] is None:
                 result[prog]["adt_fields"] = int(m.group(1))
                 if vdir == "AOS":
                     print(f"  ✓ {prog}: adt_fields={m.group(1)}")
+
+            # Parse ADT structure for buffer counting (once, from AOS)
+            if vdir == "AOS" and result[prog]["adt_info"] is None:
+                adt_info = parse_adt_buffers(content)
+                if adt_info:
+                    result[prog]["adt_info"] = adt_info
+                    print(f"  ✓ {prog}: ADT '{adt_info['type_name']}' "
+                          f"→ AoS=1 buf, SoA={adt_info['soa_total_buffers']} bufs "
+                          f"({adt_info['total_field_slots']} field slots, "
+                          f"{len(adt_info['constructors'])} constructor(s))")
+                else:
+                    print(f"  ⚠  {prog}: could not parse ADT definition for buffer count")
 
             # Per-pass annotations
             found = 0
@@ -176,10 +390,12 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
 
     # Summary
     with_adt   = sum(1 for v in result.values() if v["adt_fields"] is not None)
+    with_buffers = sum(1 for v in result.values() if v["adt_info"] is not None)
     with_passes = sum(1 for v in result.values() if v["pass_types"])
     with_uses  = sum(1 for v in result.values()
                      if any(u is not None for u in v["pass_uses"].values()))
     print(f"\n  {with_adt} programs have adt_fields annotation")
+    print(f"  {with_buffers} programs have parseable ADT definitions (buffer counts)")
     print(f"  {with_passes} programs have pass type annotations")
     print(f"  {with_uses} programs have uses= field-usage annotations")
     print(f"{'='*70}\n")
@@ -282,23 +498,53 @@ def apply_source_classification(result: BenchmarkResult,
                                  src_data: Dict) -> None:
     """
     For each pass, fill in any missing pass_type and uses from source scan.
-    Also attach adt_fields to the result object.
+    Also attach adt_fields and adt_info to the result object.
+    Computes derived fields: dead_ratio, aos_buffers_used, soa_buffers_used.
     """
     adt = src_data.get("adt_fields")
     result.adt_fields = adt
+    result.adt_info   = src_data.get("adt_info")   # full buffer layout
+
+    soa_total_bufs = (result.adt_info["soa_total_buffers"]
+                      if result.adt_info else None)
 
     for pname, pdata in result.passes.items():
         if pdata.get("pass_type", "unknown") == "unknown":
             pdata["pass_type"] = lookup_pass_type(pname, src_data)
         if pdata.get("uses") is None:
             pdata["uses"] = lookup_pass_uses(pname, src_data)
-        # Compute derived fields
-        if adt is not None and pdata.get("uses") is not None:
-            pdata["dead_fields"] = adt - pdata["uses"]
+
+        uses = pdata.get("uses")
+
+        # Dead-field metrics
+        if adt is not None and uses is not None:
+            pdata["dead_fields"] = adt - uses
             pdata["dead_ratio"]  = pdata["dead_fields"] / adt
         else:
             pdata["dead_fields"] = None
             pdata["dead_ratio"]  = None
+
+        # Buffer usage metrics
+        #   AoS: always 1 buffer (all data packed contiguously)
+        #   SoA: 1 (tags buffer) + 1 per field accessed
+        #   Note: if uses counts ALL fields (incl. recursive traversal) it
+        #         may equal total; if it only counts non-recursive scalars,
+        #         recursive buffers are still accessed but not counted.
+        #         We cap at soa_total_buffers to avoid impossible values.
+        pdata["aos_buffers_used"] = 1
+        if uses is not None:
+            raw_soa_bufs = 1 + uses
+            pdata["soa_buffers_used"] = (min(raw_soa_bufs, soa_total_bufs)
+                                          if soa_total_bufs else raw_soa_bufs)
+        else:
+            pdata["soa_buffers_used"] = None
+
+        # Buffer access ratio for SoA: how many buffers does this pass touch
+        # relative to the total SoA buffers?  Lower = fewer cache streams.
+        if pdata["soa_buffers_used"] is not None and soa_total_bufs:
+            pdata["soa_buf_ratio"] = pdata["soa_buffers_used"] / soa_total_bufs
+        else:
+            pdata["soa_buf_ratio"] = None
 
 # ---------------------------------------------------------------------------
 # GC / allocator noise filter
@@ -432,7 +678,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
 
     compile_results = compile_parallel(tasks)
     results: Dict[str, BenchmarkResult] = {}
-    src_data = source_cls_all.get(prog, {"adt_fields": None,
+    src_data = source_cls_all.get(prog, {"adt_fields": None, "adt_info": None,
                                           "pass_types": {}, "pass_uses": {}})
 
     for var in ("aos", "soa"):
@@ -488,8 +734,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             unk   = len(aos.passes) - len(classified)
             adt_s = (f", adt_fields={aos.adt_fields}"
                      if aos.adt_fields is not None else "")
+            buf_s = ""
+            if aos.adt_info:
+                buf_s = (f", AoS=1 buf, SoA={aos.adt_info['soa_total_buffers']} bufs")
             print(f"  Passes: {folds} fold, {maps} map, {unk} unknown"
-                  f"{adt_s}, {len(with_uses)} have uses= annotation")
+                  f"{adt_s}{buf_s}, {len(with_uses)} have uses= annotation")
     return aos, soa
 
 # ---------------------------------------------------------------------------
@@ -525,27 +774,28 @@ def _spd_cell(spd: float, bold_threshold: float = 1.1) -> str:
 def _table_summary(f, all_results):
     """
     Table 1: one row per program.
-    Program | ADT fields | Fold AoS | Fold SoA | Fold Speedup | Map AoS | Map SoA | Map Speedup
+    Program | ADT fields | SoA bufs | Fold AoS | Fold SoA | Fold Speedup | Map AoS | Map SoA | Map Speedup
     """
     f.write("% -- Table 1: Summary by pass type --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
         "\\caption{End-to-end execution time (s, median per iteration) "
         "and speedup split by pass type. "
-        "ADT = total fields in the data type. "
+        "ADT fields = total non-recursive fields; "
+        "SoA bufs = total SoA buffers ($1 + $ field slots across all constructors). "
         "Speedup ${>}1{\\times}$ means SoA is faster; "
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
     f.write("\\label{tab:summary}\n\\small\n")
-    f.write("\\begin{tabular}{l c r r r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{l c c r r r r r r}\n\\toprule\n")
     f.write(
-        "\\textbf{Program} & \\textbf{ADT}"
+        "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
         " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
         " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
     )
-    f.write("\\cmidrule(lr){3-5}\\cmidrule(lr){6-8}\n")
+    f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\n")
     f.write(
-        " & fields"
+        " & fields & bufs"
         " & AoS (s) & SoA (s) & Speedup"
         " & AoS (s) & SoA (s) & Speedup \\\\\n"
     )
@@ -557,6 +807,8 @@ def _table_summary(f, all_results):
         prog     = aos.program.replace(".hs", "").replace("_", "\\_")
         adt      = getattr(aos, "adt_fields", None)
         adt_str  = str(adt) if adt is not None else "--"
+        adt_info = getattr(aos, "adt_info", None)
+        bufs_str = str(adt_info["soa_total_buffers"]) if adt_info else "--"
 
         af = sum(p["median_time"] for p in aos.passes.values()
                  if p["pass_type"] == "fold")
@@ -571,7 +823,7 @@ def _table_summary(f, all_results):
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
 
         f.write(
-            f"{prog} & {adt_str}"
+            f"{prog} & {adt_str} & {bufs_str}"
             f" & {fmt(af) if af > 0 else '--'}"
             f" & {fmt(sf) if sf > 0 else '--'}"
             f" & {fspd_s}"
@@ -586,7 +838,7 @@ def _table_summary(f, all_results):
 def _table_per_program(f, all_results):
     """
     One table per program.
-    Pass | T | Uses/ADT | Dead% | AoS (s) | SoA (s) | Speedup
+    Pass | T | Uses/ADT | Dead% | Buf AoS | Buf SoA | AoS (s) | SoA (s) | Speedup
     """
     for aos, soa in all_results:
         if not (aos and soa and aos.run_success and soa.run_success):
@@ -596,11 +848,19 @@ def _table_per_program(f, all_results):
         prog     = prog_hs.replace(".hs", "")
         pdisplay = prog.replace("_", "\\_")
         adt      = getattr(aos, "adt_fields", None)
+        adt_info = getattr(aos, "adt_info", None)
+        soa_total_bufs = adt_info["soa_total_buffers"] if adt_info else None
         passes   = sorted(set(list(aos.passes) + list(soa.passes)))
         if not passes:
             continue
 
-        adt_note = f", ADT has {adt} fields" if adt is not None else ""
+        type_name = adt_info["type_name"] if adt_info else None
+        adt_note  = ""
+        if adt is not None:
+            adt_note += f", ADT has {adt} fields"
+        if soa_total_bufs is not None:
+            adt_note += f", SoA uses {soa_total_bufs} buffers"
+
         f.write(f"% -- Table: {prog} --\n")
         f.write("\\begin{table}[t]\n\\centering\n")
         f.write(
@@ -608,19 +868,31 @@ def _table_per_program(f, all_results):
             f"{adt_note}. "
             "Times are median per iteration (s). "
             "T: F=fold, M=map. "
-            "Uses: fields accessed / total ADT fields. "
-            "Dead\\%: fraction of unused fields. "
+            "Uses: fields accessed / total. "
+            "Dead\\%: fraction unused. "
+            "Buf: memory buffers accessed (AoS always 1; SoA = $1 + $ uses). "
             "Speedup ${>}1{\\times}$ means SoA is faster.}}\n"
         )
         f.write(f"\\label{{tab:{prog}}}\n\\small\n")
 
-        # Decide whether to show Uses and Dead% columns
+        # Decide which optional columns to show
         has_uses = any(
             aos.passes.get(p, {}).get("uses") is not None or
             soa.passes.get(p, {}).get("uses") is not None
             for p in passes
         )
-        if has_uses and adt is not None:
+        has_bufs = (soa_total_bufs is not None) and has_uses
+
+        if has_bufs and adt is not None:
+            # Full table: Pass T Uses Dead% BufAoS BufSoA/Total AoS SoA Speedup
+            f.write("\\begin{tabular}{l c c r c r r r}\n\\toprule\n")
+            f.write(
+                "\\textbf{Pass} & \\textbf{T}"
+                " & \\textbf{Uses} & \\textbf{Dead\\%}"
+                " & \\textbf{Bufs (AoS/SoA)}"
+                " & \\textbf{AoS (s)} & \\textbf{SoA (s)} & \\textbf{Speedup} \\\\\n"
+            )
+        elif has_uses and adt is not None:
             f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
             f.write(
                 "\\textbf{Pass} & \\textbf{T}"
@@ -660,11 +932,23 @@ def _table_per_program(f, all_results):
 
             spd_s = _spd_cell(spd) if spd > 0 else "--"
 
-            if has_uses and adt is not None:
-                uses = ad.get("uses") or sd.get("uses")
-                dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
+            uses   = ad.get("uses") or sd.get("uses")
+            dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
+            a_bufs = ad.get("aos_buffers_used", 1)
+            s_bufs = ad.get("soa_buffers_used") or sd.get("soa_buffers_used")
+
+            if has_bufs and adt is not None:
                 uses_s  = f"{uses}/{adt}" if uses is not None else "--"
                 dead_s  = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
+                bufs_s  = (f"{a_bufs}/{s_bufs}/{soa_total_bufs}"
+                           if s_bufs is not None
+                           else f"{a_bufs}/--/{soa_total_bufs}")
+                f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
+                        f" & {bufs_s}"
+                        f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+            elif has_uses and adt is not None:
+                uses_s = f"{uses}/{adt}" if uses is not None else "--"
+                dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                 f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                         f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
             else:
@@ -674,18 +958,22 @@ def _table_per_program(f, all_results):
             if spd > 0:
                 speedups.append(spd)
 
+        # Totals row
         at_tot = sum(p["median_time"] for p in aos.passes.values())
         st_tot = sum(p["median_time"] for p in soa.passes.values())
         sp_tot = at_tot / st_tot if st_tot > 0 else 0.0
+        extra_cols = ""
+        if has_bufs and adt is not None:
+            extra_cols = "& & & "   # Uses, Dead%, Bufs
+        elif has_uses and adt is not None:
+            extra_cols = "& & "     # Uses, Dead%
         f.write("\\midrule\n")
-        f.write(f"\\textbf{{Total}} & "
-                + ("& & " if has_uses and adt is not None else "")
-                + f"& {fmt(at_tot)} & {fmt(st_tot)} & {_spd_cell(sp_tot)} \\\\\n")
+        f.write(f"\\textbf{{Total}} & {extra_cols}"
+                f"& {fmt(at_tot)} & {fmt(st_tot)} & {_spd_cell(sp_tot)} \\\\\n")
         if speedups:
             gm = statistics.geometric_mean(speedups)
-            f.write("\\textbf{Geomean} & "
-                    + ("& & " if has_uses and adt is not None else "")
-                    + f"& & & {_spd_cell(gm)} \\\\\n")
+            f.write(f"\\textbf{{Geomean}} & {extra_cols}"
+                    f"& & & {_spd_cell(gm)} \\\\\n")
 
         f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
@@ -721,14 +1009,20 @@ def compile_latex_preview(tex_file: Path, out_dir: Path):
 # Text + JSON reports
 # ---------------------------------------------------------------------------
 def write_text_report(all_results: List[Tuple], out_file: Path):
-    lines = ["=" * 72, "GIBBON BENCHMARK REPORT v3.0",
+    lines = ["=" * 72, "GIBBON BENCHMARK REPORT v3.1",
              "=" * 72, f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}", ""]
     for aos, soa in all_results:
         if not aos or not soa:
             continue
-        adt   = getattr(aos, "adt_fields", None)
+        adt      = getattr(aos, "adt_fields", None)
+        adt_info = getattr(aos, "adt_info", None)
+        buf_hdr  = ""
+        if adt_info:
+            buf_hdr = (f"  [AoS=1 buf, SoA={adt_info['soa_total_buffers']} bufs"
+                       f" | {adt_info['type_name']}]")
         lines.append(f"\nProgram: {aos.program}"
-                     + (f"  [ADT fields: {adt}]" if adt else ""))
+                     + (f"  [ADT fields: {adt}]" if adt else "")
+                     + buf_hdr)
         lines.append("-" * 40)
         for tag, res in (("AOS", aos), ("SOA", soa)):
             if not res.run_success:
@@ -740,9 +1034,16 @@ def write_text_report(all_results: List[Tuple], out_file: Path):
                 t    = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
                 uses = pd.get("uses")
                 dr   = pd.get("dead_ratio")
+                a_b  = pd.get("aos_buffers_used", 1)
+                s_b  = pd.get("soa_buffers_used")
                 ann  = ""
                 if uses is not None and adt:
-                    ann = f"  uses={uses}/{adt}  dead={dr*100:.0f}%"
+                    ann += f"  uses={uses}/{adt}  dead={dr*100:.0f}%"
+                if tag == "AOS":
+                    ann += f"  bufs={a_b}"
+                elif s_b is not None:
+                    soa_tot = adt_info["soa_total_buffers"] if adt_info else "?"
+                    ann += f"  bufs={s_b}/{soa_tot}"
                 lines.append(f"    [{t}] {pname}: {pd['median_time']:.4f}s"
                               f" ±{pd['stdev']:.4f}{ann}")
         if aos.run_success and soa.run_success:
@@ -760,11 +1061,15 @@ def write_json_results(all_results: List[Tuple], out_file: Path):
         if not aos or not soa:
             continue
         def ser(r: BenchmarkResult) -> Dict:
+            adt_info = getattr(r, "adt_info", None)
             return {
-                "compile_success": r.compile_success,
-                "run_success":     r.run_success,
-                "error":           r.error_message,
-                "adt_fields":      getattr(r, "adt_fields", None),
+                "compile_success":  r.compile_success,
+                "run_success":      r.run_success,
+                "error":            r.error_message,
+                "adt_fields":       getattr(r, "adt_fields", None),
+                "adt_type":         adt_info["type_name"] if adt_info else None,
+                "aos_buffers":      1,
+                "soa_total_buffers": adt_info["soa_total_buffers"] if adt_info else None,
                 "passes": {k: {kk: vv for kk, vv in v.items()
                                if kk != "iter_times"}
                            for k, v in r.passes.items()},
@@ -987,42 +1292,148 @@ def _fig_dead_vs_speedup(good: List, out: Path):
     print(f"  dead_vs_speedup.*  ({total} data points)")
 
 
-# ── Figure D: per-program heatmap ────────────────────────────────────────────
+# ── Figure D: SoA buffer access ratio vs speedup scatter ─────────────────────
+def _fig_buffers_vs_speedup(good: List, out: Path):
+    """
+    Scatter plot: x = SoA buffer access ratio (soa_buffers_used / soa_total_buffers),
+                  y = speedup (AoS / SoA).
+
+    Hypothesis: passes that touch a SMALLER fraction of SoA buffers should
+    benefit more from SoA (fewer cache-line streams to load).
+
+    AoS always touches 1 buffer (fraction = 1.0 / 1.0 = 1.0).
+    Points are labelled prog / pass, coloured fold/map.
+    """
+    fold_x, fold_y, fold_labels = [], [], []
+    map_x,  map_y,  map_labels  = [], [], []
+    unk_x,  unk_y,  unk_labels  = [], [], []
+
+    for aos, soa in good:
+        prog = aos.program.replace(".hs", "")
+        adt_info = getattr(aos, "adt_info", None)
+        if adt_info is None:
+            continue
+        soa_total = adt_info["soa_total_buffers"]
+
+        for pname, ad in aos.passes.items():
+            sd   = soa.passes.get(pname, {})
+            at   = ad.get("median_time", 0.0)
+            st   = sd.get("median_time", 0.0)
+            if at == 0.0 or st == 0.0:
+                continue
+            s_bufs = ad.get("soa_buffers_used")
+            if s_bufs is None:
+                continue
+            ratio = s_bufs / soa_total    # 0 < ratio <= 1
+            spd   = at / st
+            label = f"{prog}\n{pname}"
+            ptype = ad.get("pass_type", "unknown")
+            if ptype == "fold":
+                fold_x.append(ratio); fold_y.append(spd); fold_labels.append(label)
+            elif ptype == "map":
+                map_x.append(ratio);  map_y.append(spd);  map_labels.append(label)
+            else:
+                unk_x.append(ratio);  unk_y.append(spd);  unk_labels.append(label)
+
+    total = len(fold_x) + len(map_x) + len(unk_x)
+    if total == 0:
+        print("  Skipping buffer scatter: no uses= annotations / ADT info found")
+        return
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    for xs, ys, labels, col, marker, name in (
+        (fold_x, fold_y, fold_labels, "#3498db", "o", "Fold"),
+        (map_x,  map_y,  map_labels,  "#e67e22", "s", "Map"),
+        (unk_x,  unk_y,  unk_labels,  "#95a5a6", "^", "Unknown"),
+    ):
+        if xs:
+            ax.scatter(xs, ys, c=col, marker=marker, s=70, alpha=0.85,
+                       edgecolors="black", linewidths=0.4, label=name, zorder=3)
+            for x, y, lbl in zip(xs, ys, labels):
+                ax.annotate(lbl, (x, y),
+                            textcoords="offset points", xytext=(5, 4),
+                            fontsize=5.5, color="#333333")
+
+    ax.axhline(1.0, color="black", linestyle="--", linewidth=1,
+               alpha=0.6, label="Break-even (1×)")
+
+    # Trend line
+    all_x = fold_x + map_x + unk_x
+    all_y = fold_y + map_y + unk_y
+    if len(all_x) >= 3:
+        z  = np.polyfit(all_x, all_y, 1)
+        px = np.linspace(min(all_x), max(all_x), 100)
+        ax.plot(px, np.polyval(z, px), "k--", linewidth=1.2, alpha=0.4,
+                label=f"Trend  (slope={z[0]:+.2f})")
+
+    ax.set_xlabel(
+        "SoA buffer access ratio  (buffers touched / total SoA buffers)\n"
+        "= (1 + uses) / soa\\_total\\_buffers\n"
+        "Lower = fewer cache streams → expected SoA advantage"
+    )
+    ax.set_ylabel("Speedup  (AoS time / SoA time)\n>1 means SoA is faster")
+    ax.set_title("Does lower SoA buffer-access ratio predict SoA speedup?")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    _save(fig, out)
+    print(f"  buffers_vs_speedup.*  ({total} data points)")
+
+
+# ── Figure E: per-program heatmap ────────────────────────────────────────────
 def _fig_heatmaps(good: List, out_dir: Path):
     dest = out_dir / "heatmaps"
     dest.mkdir(parents=True, exist_ok=True)
 
     for aos, soa in good:
-        prog   = aos.program.replace(".hs", "")
-        passes = sorted(set(list(aos.passes) + list(soa.passes)))
-        spds, labs, types = [], [], []
+        prog     = aos.program.replace(".hs", "")
+        adt_info = getattr(aos, "adt_info", None)
+        soa_tot  = adt_info["soa_total_buffers"] if adt_info else None
+        passes   = sorted(set(list(aos.passes) + list(soa.passes)))
+        spds, labs, types, buf_labels = [], [], [], []
+
         for pname in passes:
             at = aos.passes.get(pname, {}).get("median_time", 0.0)
             st = soa.passes.get(pname, {}).get("median_time", 0.0)
             if at > 0 and st > 0:
                 spds.append(at / st)
-                labs.append(pname.replace("_", " "))
                 pt = (aos.passes.get(pname) or soa.passes.get(pname) or {}).get("pass_type", "unknown")
                 types.append({"fold": "F", "map": "M"}.get(pt, "?"))
+                s_bufs = (aos.passes.get(pname) or {}).get("soa_buffers_used")
+                if s_bufs is not None and soa_tot is not None:
+                    buf_labels.append(f"1/{s_bufs}/{soa_tot}")
+                else:
+                    buf_labels.append("")
+                labs.append(pname.replace("_", " "))
 
         if not spds:
             continue
 
         arr = np.array([spds])
-        fig, ax = plt.subplots(figsize=(max(8, len(spds) * 1.0), 3.2))
+        fig, ax = plt.subplots(figsize=(max(8, len(spds) * 1.2), 3.5))
         im = ax.imshow(arr, cmap="RdYlGn", aspect="auto",
                        vmin=0.7, vmax=1.3, interpolation="nearest")
         ax.set_xticks(np.arange(len(labs)))
-        ax.set_xticklabels(
-            [f"{l}\n[{t}]" for l, t in zip(labs, types)],
-            rotation=45, ha="right", fontsize=8)
+
+        # Label: pass name, type, and AoS bufs / SoA bufs / total bufs
+        tick_labels = []
+        for l, t, b in zip(labs, types, buf_labels):
+            lbl = f"{l}\n[{t}]"
+            if b:
+                lbl += f"\nbufs:{b}"
+            tick_labels.append(lbl)
+
+        ax.set_xticklabels(tick_labels, rotation=45, ha="right", fontsize=7)
         ax.set_yticks([0]); ax.set_yticklabels([prog])
-        plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.45,
+        plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.55,
                      label="Speedup (AoS/SoA)  —  green = SoA faster")
         for i, (s, t) in enumerate(zip(spds, types)):
             ax.text(i, 0, f"{s:.2f}\n[{t}]",
                     ha="center", va="center", fontsize=7, fontweight="bold")
-        ax.set_title(f"{prog}: per-pass speedup heatmap  (F=fold M=map ?=unknown)")
+        bufs_hdr = (f"  |  AoS=1 buf, SoA={soa_tot} bufs total"
+                    if soa_tot else "")
+        ax.set_title(f"{prog}: per-pass speedup heatmap  "
+                     f"(F=fold M=map ?=unknown{bufs_hdr})")
         fig.tight_layout()
         _save(fig, dest / f"{prog}_heatmap")
 
@@ -1088,6 +1499,7 @@ def generate_all_figures(all_results: List[Tuple], out_dir: Path):
     _fig_speedup_fold_map(good, out_dir / "speedup_comparison")
     _fig_per_program(good, out_dir)
     _fig_dead_vs_speedup(good, out_dir / "dead_vs_speedup")
+    _fig_buffers_vs_speedup(good, out_dir / "buffers_vs_speedup")
     _fig_heatmaps(good, out_dir)
     _fig_breakdown(good, out_dir / "pass_breakdown_all")
     print(f"\n  All figures written to {out_dir}/")
@@ -1112,7 +1524,7 @@ def main():
     programs_to_run = args.programs or DEFAULT_PROGRAMS
 
     print("\n" + "=" * 72)
-    print("GIBBON BENCHMARK SUITE v3.0")
+    print("GIBBON BENCHMARK SUITE v3.1")
     print("=" * 72)
     print(f"  Programs dir : {args.programs_dir}")
     print(f"  Output dir   : {args.output_dir}")
