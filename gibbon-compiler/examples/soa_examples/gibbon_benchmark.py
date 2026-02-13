@@ -26,11 +26,16 @@ Buffer analysis (automatic — no extra annotation needed):
 
     AoS: always 1 buffer (all data packed together).
 
-    SoA: 1 buffer for constructor tags
-         + 1 buffer per field slot across ALL constructors
+    SoA: 1 buffer for constructor tags (recursive children stored here too)
+         + 1 buffer per NON-recursive field slot across all constructors
        e.g.  data Tree = Node Int Tree Tree | Leaf Int
-             → tags:1  Node.Int:1  Node.Tree:1  Node.Tree:1  Leaf.Int:1
-             → soa_total_buffers = 5
+             → tags:1  Node.Int:1  Leaf.Int:1
+             → soa_total_buffers = 3
+             (Tree recursive fields go in the tags buffer, no extra buffer)
+
+       e.g.  data IR = Instr Int*7 IR | BlockEnd IR | End
+             → tags:1  Instr.Int×7:7
+             → soa_total_buffers = 8
 
   Per-pass buffer access:
     aos_buffers_used = 1
@@ -54,7 +59,7 @@ Usage:
   ./gibbon_benchmark.py --iterations 50 --generate-paper
 """
 
-import os, re, sys, json, time, shutil, argparse, statistics, subprocess
+import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -176,9 +181,20 @@ def parse_adt_buffers(content: str) -> Optional[Dict]:
     Parse all Haskell data declarations in *content* and compute buffer layout.
 
     SoA buffer counting rules:
-      • 1 buffer for all constructor tags (always present)
-      • 1 buffer per field slot in every constructor (recursive or not)
-        →  soa_total_buffers = 1 + Σ(field_count over all constructors)
+      • 1 buffer for all constructor tags AND all recursive (self-referential)
+        fields — recursive children are stored inline in the tag buffer,
+        they do NOT get a separate buffer.
+      • 1 buffer per NON-recursive field slot across ALL constructors
+
+      Examples:
+        data Tree = Node Int Tree Tree | Leaf Int
+          → 1(tags) + 1(Node.Int) + 1(Leaf.Int) = 3 SoA buffers
+
+        data IR = Instr Int Int Int Int Int Int Int IR
+                | BlockEnd IR
+                | End
+          → 1(tags) + 7(Instr Ints) = 8 SoA buffers
+            (IR recursive fields go into the tags buffer)
 
     AoS is always 1 buffer.
 
@@ -259,26 +275,40 @@ def parse_adt_buffers(content: str) -> Optional[Dict]:
             if not ctor_name[0].isupper():
                 continue   # malformed, skip
             # Tokens after constructor name are field types
-            fields = tokens[1:]
-            # Identify recursive fields — anything containing the type name
-            recursive = [t for t in fields if type_name in t]
+            fields    = tokens[1:]
+            # Recursive fields = same type as the ADT being defined.
+            # They are stored inline in the constructor-tag buffer and do NOT
+            # get their own SoA buffer.
+            recursive    = [t for t in fields if type_name in t]
+            nonrecursive = [t for t in fields if type_name not in t]
             ctor_list.append({
-                "name":           ctor_name,
-                "field_count":    len(fields),
-                "field_types":    fields,
-                "recursive_count": len(recursive),
+                "name":              ctor_name,
+                "field_count":       len(fields),
+                "field_types":       fields,
+                "recursive_count":   len(recursive),
+                "nonrec_count":      len(nonrecursive),
+                "nonrec_types":      nonrecursive,
             })
 
         if not ctor_list:
             continue
 
-        total_fields = sum(c["field_count"] for c in ctor_list)
+        total_fields     = sum(c["field_count"]   for c in ctor_list)
+        nonrec_fields    = sum(c["nonrec_count"]  for c in ctor_list)
+        # SoA layout:
+        #   1 buffer  — constructor tags  (recursive child pointers stored here)
+        #   1 buffer  — per non-recursive field slot across ALL constructors
+        # e.g. IR = Instr Int*7 IR | BlockEnd IR | End
+        #      → 1(tags) + 7(Instr's Ints) = 8  ✓
+        # e.g. Tree = Node Int Tree Tree | Leaf Int
+        #      → 1(tags) + 1(Node.Int) + 1(Leaf.Int) = 3  ✓
         parsed_adts.append({
             "type_name":           type_name,
             "constructors":        ctor_list,
-            "total_field_slots":   total_fields,
+            "total_field_slots":   total_fields,   # used for heuristic only
+            "nonrec_field_slots":  nonrec_fields,  # drives soa_total_buffers
             "aos_buffers":         1,
-            "soa_total_buffers":   1 + total_fields,
+            "soa_total_buffers":   1 + nonrec_fields,
         })
 
     if not parsed_adts:
@@ -360,7 +390,8 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
                     result[prog]["adt_info"] = adt_info
                     print(f"  ✓ {prog}: ADT '{adt_info['type_name']}' "
                           f"→ AoS=1 buf, SoA={adt_info['soa_total_buffers']} bufs "
-                          f"({adt_info['total_field_slots']} field slots, "
+                          f"({adt_info['nonrec_field_slots']} non-recursive field slots, "
+                          f"{adt_info['total_field_slots'] - adt_info['nonrec_field_slots']} recursive, "
                           f"{len(adt_info['constructors'])} constructor(s))")
                 else:
                     print(f"  ⚠  {prog}: could not parse ADT definition for buffer count")
@@ -579,10 +610,24 @@ def outputs_match(a: BenchmarkResult, b: BenchmarkResult) -> bool:
 # ---------------------------------------------------------------------------
 # Smart recompilation check
 # ---------------------------------------------------------------------------
-def needs_recompilation(source: Path, exe: Path, c_file: Path) -> bool:
-    if not exe.exists() or not c_file.exists():
-        return True
-    return source.stat().st_mtime > exe.stat().st_mtime
+def needs_recompilation(source: Path, exe: Path, c_file: Path
+                        ) -> Tuple[bool, str]:
+    """
+    Returns (needs_recompile: bool, reason: str).
+    reason is printed so the user knows why we skipped or recompiled.
+    """
+    if not exe.exists():
+        return True, "exe missing"
+    if not c_file.exists():
+        return True, "c file missing"
+    src_t = source.stat().st_mtime
+    exe_t = exe.stat().st_mtime
+    if src_t > exe_t:
+        src_dt  = datetime.datetime.fromtimestamp(src_t).strftime("%Y-%m-%d %H:%M:%S")
+        exe_dt  = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
+        return True, f"source ({src_dt}) newer than exe ({exe_dt})"
+    exe_dt = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
+    return False, f"exe up-to-date (compiled {exe_dt})"
 
 # ---------------------------------------------------------------------------
 # Compile one variant  (called from thread pool)
@@ -594,9 +639,15 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     exe    = out_dir / f"{stem}.{variant}.exe"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if not force and not needs_recompilation(source, exe, c_file):
-        print(f"  [{variant.upper()}] {stem}: up-to-date, skipping")
+    recompile, reason = needs_recompilation(source, exe, c_file)
+    if not force and not recompile:
+        print(f"  [{variant.upper()}] {stem}: skipping  ({reason})")
+        print(f"           exe: {exe}")
+        print(f"           src: {source}")
         return True, 0.0, None
+
+    if force:
+        reason = "forced recompile"
 
     cmd = [
         "gibbon", "--use-mutable-cursors", "--packed", "--to-exe",
@@ -604,19 +655,20 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         "--exefile", str(exe),
         str(source),
     ]
-    print(f"  [{variant.upper()}] {stem}: compiling ...", end=" ", flush=True)
+    print(f"  [{variant.upper()}] {stem}: compiling  ({reason})")
+    print(f"           src: {source}  →  {exe}")
     t0 = time.time()
     try:
         r = subprocess.run(cmd, capture_output=True, text=True)
         elapsed = time.time() - t0
         if r.returncode == 0:
-            print(f"ok ({elapsed:.1f}s)")
+            print(f"           ok ({elapsed:.1f}s)")
             return True, elapsed, None
-        print(f"FAILED ({elapsed:.1f}s)")
+        print(f"           FAILED ({elapsed:.1f}s)")
         return False, elapsed, r.stderr.strip()
     except FileNotFoundError:
         elapsed = time.time() - t0
-        print("FAILED (gibbon not in PATH)")
+        print("           FAILED (gibbon not in PATH)")
         return False, elapsed, "gibbon not found"
 
 # ---------------------------------------------------------------------------
@@ -646,16 +698,28 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 # ---------------------------------------------------------------------------
 # Run one executable  (always single-threaded)
 # ---------------------------------------------------------------------------
-def run_exe(exe: Path, iterations: int) -> Tuple[bool, float, Optional[str]]:
+def run_exe(exe: Path, iterations: int,
+            dump_dir: Optional[Path] = None) -> Tuple[bool, float, Optional[str]]:
     if not exe.exists():
         return False, 0.0, None
+    exe_mtime = datetime.datetime.fromtimestamp(exe.stat().st_mtime).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    print(f"           running: {exe}")
+    print(f"           exe mtime: {exe_mtime}  |  GIBBON_ITERS={iterations}")
     env = {**os.environ, "GIBBON_ITERS": str(iterations)}
     t0  = time.time()
     try:
         r = subprocess.run([str(exe)], capture_output=True, text=True, env=env)
         elapsed = time.time() - t0
-        return (r.returncode == 0, elapsed,
-                r.stdout if r.returncode == 0 else r.stderr)
+        if r.returncode == 0:
+            # Dump raw stdout so the user can inspect it
+            if dump_dir is not None:
+                dump_dir.mkdir(parents=True, exist_ok=True)
+                dump_file = dump_dir / f"{exe.stem}.stdout.txt"
+                dump_file.write_text(r.stdout)
+            return True, elapsed, r.stdout
+        return False, elapsed, r.stderr
     except Exception as e:
         return False, time.time() - t0, str(e)
 
@@ -664,7 +728,8 @@ def run_exe(exe: Path, iterations: int) -> Tuple[bool, float, Optional[str]]:
 # ---------------------------------------------------------------------------
 def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       iterations: int, force: bool,
-                      source_cls_all: Dict
+                      source_cls_all: Dict,
+                      dump_raw: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
     print(f"\n{'='*70}\nBenchmarking: {prog}\n{'='*70}")
 
@@ -680,6 +745,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     results: Dict[str, BenchmarkResult] = {}
     src_data = source_cls_all.get(prog, {"adt_fields": None, "adt_info": None,
                                           "pass_types": {}, "pass_uses": {}})
+
+    dump_dir = (out_dir / "raw_output") if dump_raw else None
 
     for var in ("aos", "soa"):
         res = BenchmarkResult(prog, var)
@@ -704,19 +771,33 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         stem = prog.replace(".hs", "")
         exe  = out_dir / f"{stem}.{var}.exe"
 
-        print(f"  [{var.upper()}] running ...", end=" ", flush=True)
-        ok2, rt, stdout = run_exe(exe, iterations)
+        print(f"  [{var.upper()}] running ...")
+        ok2, rt, stdout = run_exe(exe, iterations, dump_dir)
         if not ok2:
-            print("FAILED")
+            print(f"           FAILED (exit non-zero)")
             res.run_success   = False
             res.error_message = "execution failed"
         else:
-            print(f"done ({rt:.1f}s)")
             res.run_success = True
             if stdout:
                 res.output  = clean_output(stdout)
                 res.passes  = parse_passes(stdout)
                 apply_source_classification(res, src_data)
+
+                # ── Print per-pass timing digest ──────────────────────────
+                total_t = sum(p["median_time"] for p in res.passes.values())
+                print(f"           wall={rt:.2f}s  passes={len(res.passes)}"
+                      f"  total_itertime={total_t:.4f}s")
+                for pname, pd in res.passes.items():
+                    its = pd.get("iter_times", [])
+                    med = pd["median_time"]
+                    mn  = pd["min_time"]
+                    mx  = pd["max_time"]
+                    sd  = pd["stdev"]
+                    t   = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
+                    print(f"           [{t}] {pname}: "
+                          f"median={med:.4f}s  min={mn:.4f}s  max={mx:.4f}s"
+                          f"  std={sd:.4f}s  n={len(its)}")
 
         results[var] = res
 
@@ -781,8 +862,9 @@ def _table_summary(f, all_results):
     f.write(
         "\\caption{End-to-end execution time (s, median per iteration) "
         "and speedup split by pass type. "
-        "ADT fields = total non-recursive fields; "
-        "SoA bufs = total SoA buffers ($1 + $ field slots across all constructors). "
+        "ADT fields = non-recursive fields annotated with {\\tt @BENCH adt\\_fields}; "
+        "SoA bufs = $1 + $ non-recursive field slots across all constructors "
+        "(recursive children are stored in the tag buffer). "
         "Speedup ${>}1{\\times}$ means SoA is faster; "
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
@@ -870,7 +952,8 @@ def _table_per_program(f, all_results):
             "T: F=fold, M=map. "
             "Uses: fields accessed / total. "
             "Dead\\%: fraction unused. "
-            "Buf: memory buffers accessed (AoS always 1; SoA = $1 + $ uses). "
+            "Buf: memory buffers accessed (AoS always 1; SoA = $1 + $ non-recursive uses; "
+            "recursive children share the tag buffer). "
             "Speedup ${>}1{\\times}$ means SoA is faster.}}\n"
         )
         f.write(f"\\label{{tab:{prog}}}\n\\small\n")
@@ -1070,6 +1153,7 @@ def write_json_results(all_results: List[Tuple], out_file: Path):
                 "adt_type":         adt_info["type_name"] if adt_info else None,
                 "aos_buffers":      1,
                 "soa_total_buffers": adt_info["soa_total_buffers"] if adt_info else None,
+                "nonrec_field_slots": adt_info["nonrec_field_slots"] if adt_info else None,
                 "passes": {k: {kk: vv for kk, vv in v.items()
                                if kk != "iter_times"}
                            for k, v in r.passes.items()},
@@ -1369,8 +1453,9 @@ def _fig_buffers_vs_speedup(good: List, out: Path):
 
     ax.set_xlabel(
         "SoA buffer access ratio  (buffers touched / total SoA buffers)\n"
-        "= (1 + uses) / soa\\_total\\_buffers\n"
-        "Lower = fewer cache streams → expected SoA advantage"
+        "= (1 + non\\_recursive\\_uses) / soa\\_total\\_buffers\n"
+        "Lower = fewer cache streams → expected SoA advantage\n"
+        "(note: recursive traversals always touch the tags buffer, counted in the 1)"
     )
     ax.set_ylabel("Speedup  (AoS time / SoA time)\n>1 means SoA is faster")
     ax.set_title("Does lower SoA buffer-access ratio predict SoA speedup?")
@@ -1508,17 +1593,39 @@ def generate_all_figures(all_results: List[Tuple], out_dir: Path):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Gibbon Benchmark Suite v3.0")
+    ap = argparse.ArgumentParser(
+        description="Gibbon Benchmark Suite v3.1",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+          Diagnosing timing discrepancies vs manual runs:
+            1. Run with --dump-raw to save every exe's full stdout to
+               benchmark_output/raw_output/*.stdout.txt  then grep for itertime.
+            2. Run with --iterations 1 to match a cold single-run manual test.
+               (The default of 20 iterations can inflate itertime values because
+                repeated large allocations build GC pressure.)
+            3. Run with --clean to force recompilation and rule out stale exes.
+               The compile step now prints the exe path and its mtime so you can
+               verify it is the binary you expect.
+        """),
+    )
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
-    ap.add_argument("--iterations",     type=int,  default=20)
+    ap.add_argument("--iterations",     type=int,  default=20,
+                    help="GIBBON_ITERS passed to each exe. "
+                         "Use --iterations 1 to match a cold manual single-run. "
+                         "(default: 20)")
     ap.add_argument("--programs",       nargs="+")
-    ap.add_argument("--clean",          action="store_true")
+    ap.add_argument("--clean",          action="store_true",
+                    help="Force recompile every program regardless of mtime")
     ap.add_argument("--generate-paper", action="store_true")
     ap.add_argument("--latex-table",    type=Path, default=Path("performance_table.tex"))
     ap.add_argument("--figures-dir",    type=Path, default=Path("figures"))
     ap.add_argument("--report",         type=Path, default=Path("benchmark_report.txt"))
     ap.add_argument("--json",           type=Path, default=Path("benchmark_results.json"))
+    ap.add_argument("--dump-raw",       action="store_true",
+                    help="Save full exe stdout to benchmark_output/raw_output/. "
+                         "Each file is <stem>.<variant>.stdout.txt and contains "
+                         "all itertime: lines for manual inspection.")
     args = ap.parse_args()
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
@@ -1528,10 +1635,12 @@ def main():
     print("=" * 72)
     print(f"  Programs dir : {args.programs_dir}")
     print(f"  Output dir   : {args.output_dir}")
-    print(f"  Iterations   : {args.iterations}")
+    print(f"  Iterations   : {args.iterations}  "
+          f"(GIBBON_ITERS; use --iterations 1 to match cold manual runs)")
     print(f"  Programs     : {len(programs_to_run)}")
-    print(f"  Force recomp : {'YES' if args.clean else 'no (smart)'}")
+    print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
+    print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
     print("=" * 72)
 
@@ -1543,6 +1652,7 @@ def main():
         aos, soa = benchmark_program(
             prog, args.programs_dir, args.output_dir,
             args.iterations, args.clean, source_cls_all,
+            dump_raw=args.dump_raw,
         )
         all_results.append((aos, soa))
 
