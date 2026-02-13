@@ -52,11 +52,13 @@ Fold/map detection (dual strategy):
   FALLBACK: source-file printsym scan (also captures uses= and adt_fields)
 
 Usage:
-  ./gibbon_benchmark.py                          run all programs
-  ./gibbon_benchmark.py --programs DomTree.hs    run one program
-  ./gibbon_benchmark.py --clean                  force recompile
-  ./gibbon_benchmark.py --generate-paper         LaTeX + figures
+  ./gibbon_benchmark.py                              run all programs
+  ./gibbon_benchmark.py --programs DomTree.hs        run one program
+  ./gibbon_benchmark.py --clean                      force recompile
+  ./gibbon_benchmark.py --generate-paper             LaTeX + figures
   ./gibbon_benchmark.py --iterations 50 --generate-paper
+  ./gibbon_benchmark.py --iterations 1               match cold manual run
+  ./gibbon_benchmark.py --dump-raw                   save raw exe output
 """
 
 import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime
@@ -453,75 +455,110 @@ def parse_passes(raw: str) -> Dict:
     """
     Parse gibbon stdout.
 
-    Handles lines like:
+    Pass header line examples:
       Running pass SumArea (fold, uses=2):    → type=fold, uses=2
-      Running pass SumArea (fold):            → type=fold, uses=None (fill from source)
+      Running pass SumArea (fold):            → type=fold, uses=None
       Running pass SumArea:                   → type=unknown, uses=None
 
-    Returns {pass_name: stats_dict} where stats_dict includes:
-      median_time, iter_times, stdev, mean_time, min_time, max_time,
-      pass_type ("fold"|"map"|"unknown"),
-      uses (int|None)
-    """
-    passes: Dict        = {}
-    current: Optional[str] = None
-    cur_type            = "unknown"
-    cur_uses: Optional[int] = None
-    times: List[float]  = []
+    Timing is read from the ITER TIMES line that Gibbon emits after each pass:
+      ITER TIMES: [0.052013, 0.052099, ...]
 
-    # Group 1=name, Group 2=type keyword (opt), Group 3=uses value (opt)
+    Individual itertime: lines are ignored (they are the raw loop output that
+    Gibbon also collects into ITER TIMES; using the sorted list directly is
+    cleaner and avoids any partial-iteration noise).
+
+    Returns {pass_name: stats_dict}.
+    """
+    passes: Dict            = {}
+    current: Optional[str]  = None
+    cur_type                = "unknown"
+    cur_uses: Optional[int] = None
+    cur_times: List[float]  = []
+
+    # Match:  Running pass Name (fold[, uses=N]):
     pass_re = re.compile(
         r'Running\s+pass\s+([^(:\n]+?)\s*'
         r'(?:\(\s*([^,)]+?)\s*(?:,\s*uses\s*=\s*(\d+))?\s*\))?\s*:',
         re.IGNORECASE,
     )
-    iter_re = re.compile(r'itertime:\s*([\d.eE+\-]+)')
+    # Match:  ITER TIMES: [0.052013, 0.052099, ...]
+    iter_times_re = re.compile(
+        r'ITER\s+TIMES\s*:\s*\[([^\]]+)\]',
+        re.IGNORECASE,
+    )
+
+    def _commit():
+        if current is not None and cur_times:
+            passes[current] = _stats(cur_times, cur_type, cur_uses)
 
     for line in raw.splitlines():
         s = line.strip()
+
+        # ── New pass header ──────────────────────────────────────────────────
         m = pass_re.match(s)
         if m:
-            if current is not None and times:
-                passes[current] = _stats(times, cur_type, cur_uses)
+            _commit()
             current  = m.group(1).strip()
             hint     = (m.group(2) or "").strip().lower()
             uses_str = m.group(3)
-            cur_type = ("fold"    if "fold" in hint
-                        else ("map" if "map"  in hint else "unknown"))
-            cur_uses = int(uses_str) if uses_str else None
-            times    = []
+            cur_type = ("fold" if "fold" in hint
+                        else ("map" if "map" in hint else "unknown"))
+            cur_uses  = int(uses_str) if uses_str else None
+            cur_times = []
             continue
 
-        m2 = iter_re.match(s)
+        # ── ITER TIMES list (authoritative timing source) ────────────────────
+        m2 = iter_times_re.search(s)
         if m2 and current is not None:
-            try:
-                times.append(float(m2.group(1)))
-            except ValueError:
-                pass
+            raw_nums = m2.group(1)
+            parsed = []
+            for tok in raw_nums.split(','):
+                tok = tok.strip()
+                if tok:
+                    try:
+                        parsed.append(float(tok))
+                    except ValueError:
+                        pass
+            if parsed:
+                cur_times = parsed   # replace any partial itertime accumulation
             continue
 
-        if s == "End" and current is not None and times:
-            passes[current] = _stats(times, cur_type, cur_uses)
-            current  = None
-            times    = []
+        # ── End marker ───────────────────────────────────────────────────────
+        if s == "End":
+            _commit()
+            current   = None
+            cur_times = []
 
-    if current is not None and times:
-        passes[current] = _stats(times, cur_type, cur_uses)
-
+    _commit()   # in case output ended without a final "End"
     return passes
 
 
 def _stats(times: List[float], pass_type: str = "unknown",
            uses: Optional[int] = None) -> Dict:
+    """
+    Compute summary statistics from the ITER TIMES list.
+
+    stderr = standard error of the mean = stdev / sqrt(n)
+    This is what's shown as ± in the tables.
+    """
+    n      = len(times)
+    med    = statistics.median(times)
+    mean   = statistics.mean(times)
+    mn     = min(times)
+    mx     = max(times)
+    sd     = statistics.stdev(times) if n > 1 else 0.0
+    stderr = sd / (n ** 0.5) if n > 1 else 0.0
     return {
         "iter_times":  times,
-        "median_time": statistics.median(times),
-        "mean_time":   statistics.mean(times),
-        "min_time":    min(times),
-        "max_time":    max(times),
-        "stdev":       statistics.stdev(times) if len(times) > 1 else 0.0,
+        "median_time": med,
+        "mean_time":   mean,
+        "min_time":    mn,
+        "max_time":    mx,
+        "stdev":       sd,
+        "stderr":      stderr,   # ± shown in tables
+        "n":           n,
         "pass_type":   pass_type,
-        "uses":        uses,   # fields used (None if not annotated)
+        "uses":        uses,
     }
 
 
@@ -706,14 +743,14 @@ def run_exe(exe: Path, iterations: int,
         "%Y-%m-%d %H:%M:%S"
     )
     print(f"           running: {exe}")
-    print(f"           exe mtime: {exe_mtime}  |  GIBBON_ITERS={iterations}")
-    env = {**os.environ, "GIBBON_ITERS": str(iterations)}
+    print(f"           exe mtime: {exe_mtime}  |  --iterate {iterations}")
+    # Gibbon exes accept --iterate N on the command line, NOT via GIBBON_ITERS
+    cmd = [str(exe), "--iterate", str(iterations)]
     t0  = time.time()
     try:
-        r = subprocess.run([str(exe)], capture_output=True, text=True, env=env)
+        r = subprocess.run(cmd, capture_output=True, text=True)
         elapsed = time.time() - t0
         if r.returncode == 0:
-            # Dump raw stdout so the user can inspect it
             if dump_dir is not None:
                 dump_dir.mkdir(parents=True, exist_ok=True)
                 dump_file = dump_dir / f"{exe.stem}.stdout.txt"
@@ -791,13 +828,14 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                 for pname, pd in res.passes.items():
                     its = pd.get("iter_times", [])
                     med = pd["median_time"]
+                    se  = pd.get("stderr", 0.0)
                     mn  = pd["min_time"]
                     mx  = pd["max_time"]
-                    sd  = pd["stdev"]
+                    n   = pd.get("n", len(its))
                     t   = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
                     print(f"           [{t}] {pname}: "
-                          f"median={med:.4f}s  min={mn:.4f}s  max={mx:.4f}s"
-                          f"  std={sd:.4f}s  n={len(its)}")
+                          f"median={med:.4f} ±{se:.5f}s  "
+                          f"min={mn:.4f}s  max={mx:.4f}s  n={n}")
 
         results[var] = res
 
@@ -834,6 +872,21 @@ def fmt(seconds: float) -> str:
     if a >= 1.0:    return f"{seconds:.3f}"
     if a >= 0.001:  return f"{seconds:.4f}"
     return f"{seconds:.2e}"
+
+
+def fmt_pm(median: float, stderr: float) -> str:
+    """Format as 'median ± stderr' using consistent decimal places."""
+    if stderr == 0.0:
+        return fmt(median)
+    # Use one extra decimal place of precision for stderr vs median
+    a = abs(median)
+    if a >= 10.0:   dp = 2
+    elif a >= 1.0:  dp = 3
+    elif a >= 0.001: dp = 4
+    else:           dp = 2
+    # stderr shown with one more sig fig
+    err_dp = min(dp + 1, 6)
+    return f"{median:.{dp}f}$\\pm${stderr:.{err_dp}f}"
 
 # ---------------------------------------------------------------------------
 # LaTeX tables
@@ -948,7 +1001,8 @@ def _table_per_program(f, all_results):
         f.write(
             f"\\caption{{Per-pass performance for \\texttt{{{pdisplay}}}"
             f"{adt_note}. "
-            "Times are median per iteration (s). "
+            "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
+            "across --iterate runs. "
             "T: F=fold, M=map. "
             "Uses: fields accessed / total. "
             "Dead\\%: fraction unused. "
@@ -973,20 +1027,20 @@ def _table_per_program(f, all_results):
                 "\\textbf{Pass} & \\textbf{T}"
                 " & \\textbf{Uses} & \\textbf{Dead\\%}"
                 " & \\textbf{Bufs (AoS/SoA)}"
-                " & \\textbf{AoS (s)} & \\textbf{SoA (s)} & \\textbf{Speedup} \\\\\n"
+                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
             )
         elif has_uses and adt is not None:
             f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
             f.write(
                 "\\textbf{Pass} & \\textbf{T}"
                 " & \\textbf{Uses} & \\textbf{Dead\\%}"
-                " & \\textbf{AoS (s)} & \\textbf{SoA (s)} & \\textbf{Speedup} \\\\\n"
+                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
             )
         else:
             f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
             f.write(
                 "\\textbf{Pass} & \\textbf{T}"
-                " & \\textbf{AoS (s)} & \\textbf{SoA (s)} & \\textbf{Speedup} \\\\\n"
+                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
             )
         f.write("\\midrule\n")
 
@@ -1002,10 +1056,15 @@ def _table_per_program(f, all_results):
             ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
             tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
             spd   = at_s / st_s if st_s > 0 else 0.0
-            at_f  = fmt(at_s) if at_s > 0 else "--"
-            st_f  = fmt(st_s) if st_s > 0 else "--"
             pdisp = pname.replace("_", "\\_")
 
+            # median ± stderr cells
+            a_err = ad.get("stderr", 0.0)
+            s_err = sd.get("stderr", 0.0)
+            at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
+            st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
+
+            # Bold the faster side's cell
             if spd > 1.1:
                 at_f_r, st_f_r = at_f, f"\\textbf{{{st_f}}}"
             elif 0 < spd < 0.9:
@@ -1114,12 +1173,15 @@ def write_text_report(all_results: List[Tuple], out_file: Path):
             total = sum(p["median_time"] for p in res.passes.values())
             lines.append(f"  {tag}: {total:.4f}s total")
             for pname, pd in res.passes.items():
-                t    = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
-                uses = pd.get("uses")
-                dr   = pd.get("dead_ratio")
-                a_b  = pd.get("aos_buffers_used", 1)
-                s_b  = pd.get("soa_buffers_used")
-                ann  = ""
+                t     = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
+                uses  = pd.get("uses")
+                dr    = pd.get("dead_ratio")
+                n_it  = pd.get("n", len(pd.get("iter_times", [])))
+                med   = pd["median_time"]
+                se    = pd.get("stderr", 0.0)
+                a_b   = pd.get("aos_buffers_used", 1)
+                s_b   = pd.get("soa_buffers_used")
+                ann   = ""
                 if uses is not None and adt:
                     ann += f"  uses={uses}/{adt}  dead={dr*100:.0f}%"
                 if tag == "AOS":
@@ -1127,8 +1189,7 @@ def write_text_report(all_results: List[Tuple], out_file: Path):
                 elif s_b is not None:
                     soa_tot = adt_info["soa_total_buffers"] if adt_info else "?"
                     ann += f"  bufs={s_b}/{soa_tot}"
-                lines.append(f"    [{t}] {pname}: {pd['median_time']:.4f}s"
-                              f" ±{pd['stdev']:.4f}{ann}")
+                lines.append(f"    [{t}] {pname}: {med:.4f} ±{se:.5f}s  (n={n_it}){ann}")
         if aos.run_success and soa.run_success:
             at = sum(p["median_time"] for p in aos.passes.values())
             st = sum(p["median_time"] for p in soa.passes.values())
@@ -1599,20 +1660,18 @@ def main():
         epilog=textwrap.dedent("""\
           Diagnosing timing discrepancies vs manual runs:
             1. Run with --dump-raw to save every exe's full stdout to
-               benchmark_output/raw_output/*.stdout.txt  then grep for itertime.
+               benchmark_output/raw_output/*.stdout.txt  then inspect ITER TIMES lines.
             2. Run with --iterations 1 to match a cold single-run manual test.
-               (The default of 20 iterations can inflate itertime values because
-                repeated large allocations build GC pressure.)
+               (More iterations can inflate median due to GC/cache warm-up effects.)
             3. Run with --clean to force recompilation and rule out stale exes.
-               The compile step now prints the exe path and its mtime so you can
-               verify it is the binary you expect.
+               Every run prints the exact exe path and its mtime for verification.
         """),
     )
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
     ap.add_argument("--iterations",     type=int,  default=20,
-                    help="GIBBON_ITERS passed to each exe. "
-                         "Use --iterations 1 to match a cold manual single-run. "
+                    help="Number of timed iterations passed as --iterate N to each exe. "
+                         "Use --iterations 1 to match a cold single-run manual test. "
                          "(default: 20)")
     ap.add_argument("--programs",       nargs="+")
     ap.add_argument("--clean",          action="store_true",
@@ -1625,7 +1684,7 @@ def main():
     ap.add_argument("--dump-raw",       action="store_true",
                     help="Save full exe stdout to benchmark_output/raw_output/. "
                          "Each file is <stem>.<variant>.stdout.txt and contains "
-                         "all itertime: lines for manual inspection.")
+                         "the ITER TIMES list for every pass for manual inspection.")
     args = ap.parse_args()
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
@@ -1636,7 +1695,7 @@ def main():
     print(f"  Programs dir : {args.programs_dir}")
     print(f"  Output dir   : {args.output_dir}")
     print(f"  Iterations   : {args.iterations}  "
-          f"(GIBBON_ITERS; use --iterations 1 to match cold manual runs)")
+          f"(passed as --iterate N; use --iterations 1 to match cold manual runs)")
     print(f"  Programs     : {len(programs_to_run)}")
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
