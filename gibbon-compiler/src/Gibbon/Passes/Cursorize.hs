@@ -169,6 +169,38 @@ if the functions "traverses" it's input (more details in the paer).
 -- For both locs and regions
 type DepEnv = M.Map FreeVarsTy [(Var, [()], Ty3, Exp3)]
 
+noDeadFieldElimMarkerKey :: FreeVarsTy
+noDeadFieldElimMarkerKey = fromVarToFreeVarsTy "__cursorize_internal_no_dead_fields__"
+
+markNoDeadFieldElim :: DepEnv -> DepEnv
+markNoDeadFieldElim denv = M.insert noDeadFieldElimMarkerKey [] denv
+
+isNoDeadFieldElim :: DepEnv -> Bool
+isNoDeadFieldElim denv = M.member noDeadFieldElimMarkerKey denv
+
+usesTraverseCall :: Exp2 -> Bool
+usesTraverseCall = go
+  where
+    go ex = case ex of
+      AppE f _ _ args -> L.isPrefixOf "_traverse_" (fromVar f) || any go args
+      PrimAppE _ args -> any go args
+      LetE (_, _, _, rhs) bod -> go rhs || go bod
+      IfE a b c -> go a || go b || go c
+      MkProdE ls -> any go ls
+      ProjE _ e -> go e
+      CaseE e brs -> go e || any (\(_, _, rhs) -> go rhs) brs
+      DataConE _ _ args -> any go args
+      TimeIt e _ _ -> go e
+      SpawnE _ _ args -> any go args
+      WithArenaE _ e -> go e
+      Ext ext -> case ext of
+        LetRegionE _ _ _ _ bod -> go bod
+        LetParRegionE _ _ _ bod -> go bod
+        LetLocE _ _ bod -> go bod
+        IndirectionE _ _ _ _ e -> go e
+        _ -> False
+      _ -> False
+
 -- | Things we cannot define until we see a join point. There's a Ty2 to so that
 -- we can extend the environment.
 type SyncEnv = M.Map Var [(Var, [()], Ty3, Ty2, Exp3)]
@@ -468,14 +500,16 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
 
   {- Get the regions out before hand, these can be eliminated later on -}
 
+  let noDeadFieldElim = L.isPrefixOf "_traverse_" (fromVar funName)
+  let denv0 = if noDeadFieldElim then markNoDeadFieldElim M.empty else M.empty
   bod <-
     if hasPacked (unTy2 out_ty)
       then
         do 
-          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
+          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
           return $ fromDi funBody'
       else do 
-        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs M.empty initTyEnv M.empty funBody
+        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
         return funBody'
 
   let bod' = inCurBinds bod
@@ -960,7 +994,17 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
       --                                                        let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
       --                                                        let dcon_let_bind = mkLets dcon_let
       --                                                        return (dcon_var, dcon_let_bind)
-      let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
+      let all_buffers_alive =
+            S.fromList
+              [ (dcon, idx)
+              | (dcon, var_locs, _) <- brs,
+                idx <- [0 .. length var_locs - 1]
+              ]
+      let alive_buffers =
+            if isNoDeadFieldElim denv
+              then all_buffers_alive
+              else
+                foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
                                                                                                    then
                                                                                                       let id = fromJust $ L.elemIndex e var_locs
                                                                                                           acc' = S.insert (dcon, id) acc
@@ -1726,7 +1770,17 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
       --                                                        let dcon_let = [(dcon_var, [], CursorTy, Ext $ IndexCursorArray v 0)]
       --                                                        let dcon_let_bind = mkLets dcon_let
       --                                                        return (dcon_var, dcon_let_bind)
-      let alive_buffers = foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
+      let all_buffers_alive =
+            S.fromList
+              [ (dcon, idx)
+              | (dcon, var_locs, _) <- brs,
+                idx <- [0 .. length var_locs - 1]
+              ]
+      let alive_buffers =
+            if isNoDeadFieldElim denv
+              then all_buffers_alive
+              else
+                foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
                                                                                                    then
                                                                                                       let id = fromJust $ L.elemIndex e var_locs
                                                                                                           acc' = S.insert (dcon, id) acc
@@ -2446,7 +2500,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                   -- if loc is dead we may just want to remove it completey from the code
                   -- onDi (mkLets (bnds' ++ bnds_after ++ bnds))
                   -- || (not $ isLocAlive loc bod False)
-                  if (M.member loc m1 || (not $ isLocAlive loc bod False))
+                  if (M.member loc m1 || ((not $ isNoDeadFieldElim denv) && (not $ isLocAlive loc bod False)))
                   then do 
                        --let (vptsloc, _, _, _) = fromJust $ M.lookup loc m1
                        --let freeVarToVarEnv_update_loc = M.insert (fromLocVarToFreeVarsTy loc) vptsloc (M.delete (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') 
@@ -5507,7 +5561,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                    in case ty of
                         -- Int, Float, Sym, or Bool
                         _ | isScalarTy ty -> do
-                          let isVarAlive = isVariableReadOrWrittenTo v fenv rhs False
+                          let isVarAlive = isNoDeadFieldElim denv || usesTraverseCall rhs || isVariableReadOrWrittenTo v fenv rhs False
                           loc_var <- lookupVariable loc fenv
                           -- This won't work 
                           -- VS: We need to take union of all branches 
