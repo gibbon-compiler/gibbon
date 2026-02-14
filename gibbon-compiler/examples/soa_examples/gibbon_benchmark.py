@@ -38,11 +38,13 @@ Buffer analysis (automatic — no extra annotation needed):
              → soa_total_buffers = 8
 
   Per-pass buffer access:
-    aos_buffers_used = 1
-    soa_buffers_used = 1 (tags) + uses     (if uses= is annotated)
-    soa_buf_ratio    = soa_buffers_used / soa_total_buffers
+    dead_fields = adt_fields - uses         (adt_fields and uses both include recursive)
+    dead_ratio  = dead_fields / adt_fields
 
-  The buffer scatter plot shows whether low soa_buf_ratio predicts speedup.
+    soa_total_buffers is known from the ADT definition (1 + non-recursive slots)
+    and shown in the summary table.  Per-pass SoA buffer usage is NOT computed:
+    uses= counts total fields (recursive + non-recursive) and the recursive/
+    non-recursive split within a pass is not available without further annotation.
 
   Optional annotation to name the target ADT explicitly (overrides heuristic):
     -- @BENCH adt_type=MyTypeName
@@ -566,15 +568,28 @@ def apply_source_classification(result: BenchmarkResult,
                                  src_data: Dict) -> None:
     """
     For each pass, fill in any missing pass_type and uses from source scan.
-    Also attach adt_fields and adt_info to the result object.
-    Computes derived fields: dead_ratio, aos_buffers_used, soa_buffers_used.
-    """
-    adt = src_data.get("adt_fields")
-    result.adt_fields = adt
-    result.adt_info   = src_data.get("adt_info")   # full buffer layout
+    Attaches adt_fields and adt_info to the result object.
+    Computes derived fields: dead_ratio.
 
-    soa_total_bufs = (result.adt_info["soa_total_buffers"]
-                      if result.adt_info else None)
+    Semantics:
+      adt_fields  = TOTAL fields in the ADT including recursive ones.
+                    This is what @BENCH adt_fields=N counts.
+      uses        = TOTAL fields the pass accesses (recursive + non-recursive).
+                    This is what uses=N in printsym counts.
+      dead_ratio  = (adt_fields - uses) / adt_fields
+                    Consistent: both counts include recursive fields.
+
+    NOTE: per-pass SoA buffer usage cannot be computed here because uses= counts
+    total fields accessed (recursive + non-recursive) and we would need the
+    non-recursive-only count to know how many distinct SoA buffers are touched.
+    soa_total_buffers is still valid at the ADT level (computed from the
+    parsed non-recursive field slots) and shown in the summary table.
+    """
+    adt = src_data.get("adt_fields")          # total incl. recursive
+    result.adt_fields  = adt
+    result.adt_info    = src_data.get("adt_info")
+    result.nonrec_fields = (result.adt_info["nonrec_field_slots"]
+                            if result.adt_info else None)
 
     for pname, pdata in result.passes.items():
         if pdata.get("pass_type", "unknown") == "unknown":
@@ -584,35 +599,14 @@ def apply_source_classification(result: BenchmarkResult,
 
         uses = pdata.get("uses")
 
-        # Dead-field metrics
+        # Dead-field metrics: denominator is adt_fields (total, incl. recursive)
+        # because uses= also counts total fields accessed (incl. recursive).
         if adt is not None and uses is not None:
             pdata["dead_fields"] = adt - uses
-            pdata["dead_ratio"]  = pdata["dead_fields"] / adt
+            pdata["dead_ratio"]  = pdata["dead_fields"] / adt if adt > 0 else 0.0
         else:
             pdata["dead_fields"] = None
             pdata["dead_ratio"]  = None
-
-        # Buffer usage metrics
-        #   AoS: always 1 buffer (all data packed contiguously)
-        #   SoA: 1 (tags buffer) + 1 per field accessed
-        #   Note: if uses counts ALL fields (incl. recursive traversal) it
-        #         may equal total; if it only counts non-recursive scalars,
-        #         recursive buffers are still accessed but not counted.
-        #         We cap at soa_total_buffers to avoid impossible values.
-        pdata["aos_buffers_used"] = 1
-        if uses is not None:
-            raw_soa_bufs = 1 + uses
-            pdata["soa_buffers_used"] = (min(raw_soa_bufs, soa_total_bufs)
-                                          if soa_total_bufs else raw_soa_bufs)
-        else:
-            pdata["soa_buffers_used"] = None
-
-        # Buffer access ratio for SoA: how many buffers does this pass touch
-        # relative to the total SoA buffers?  Lower = fewer cache streams.
-        if pdata["soa_buffers_used"] is not None and soa_total_bufs:
-            pdata["soa_buf_ratio"] = pdata["soa_buffers_used"] / soa_total_bufs
-        else:
-            pdata["soa_buf_ratio"] = None
 
 # ---------------------------------------------------------------------------
 # GC / allocator noise filter
@@ -647,22 +641,68 @@ def outputs_match(a: BenchmarkResult, b: BenchmarkResult) -> bool:
 # ---------------------------------------------------------------------------
 # Smart recompilation check
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Compiler mtime cache (checked once per script run)
+# ---------------------------------------------------------------------------
+_GIBBON_COMPILER_CACHE: Optional[Tuple[Path, float]] = None  # (path, mtime)
+
+def get_gibbon_compiler_info() -> Optional[Tuple[Path, float]]:
+    """
+    Returns (compiler_path, mtime) for the gibbon executable.
+    Cached globally so we only look it up once per run.
+    Returns None if gibbon is not in PATH.
+    """
+    global _GIBBON_COMPILER_CACHE
+    if _GIBBON_COMPILER_CACHE is not None:
+        return _GIBBON_COMPILER_CACHE
+    
+    gibbon_path = shutil.which("gibbon")
+    if gibbon_path is None:
+        return None
+    
+    p = Path(gibbon_path).resolve()
+    if not p.exists():
+        return None
+    
+    mtime = p.stat().st_mtime
+    _GIBBON_COMPILER_CACHE = (p, mtime)
+    return _GIBBON_COMPILER_CACHE
+
+
 def needs_recompilation(source: Path, exe: Path, c_file: Path
                         ) -> Tuple[bool, str]:
     """
     Returns (needs_recompile: bool, reason: str).
     reason is printed so the user knows why we skipped or recompiled.
+    
+    Checks:
+      1. exe or c_file missing → recompile
+      2. source newer than exe → recompile
+      3. gibbon compiler newer than exe → recompile (common sense: if the
+         compiler was updated, old exes are stale)
     """
     if not exe.exists():
         return True, "exe missing"
     if not c_file.exists():
         return True, "c file missing"
-    src_t = source.stat().st_mtime
+    
     exe_t = exe.stat().st_mtime
+    src_t = source.stat().st_mtime
+    
     if src_t > exe_t:
         src_dt  = datetime.datetime.fromtimestamp(src_t).strftime("%Y-%m-%d %H:%M:%S")
         exe_dt  = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
         return True, f"source ({src_dt}) newer than exe ({exe_dt})"
+    
+    # Check if the compiler itself is newer than the exe
+    compiler_info = get_gibbon_compiler_info()
+    if compiler_info is not None:
+        compiler_path, compiler_t = compiler_info
+        if compiler_t > exe_t:
+            comp_dt = datetime.datetime.fromtimestamp(compiler_t).strftime("%Y-%m-%d %H:%M:%S")
+            exe_dt  = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
+            return True, f"compiler ({compiler_path}, {comp_dt}) newer than exe ({exe_dt})"
+    
     exe_dt = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
     return False, f"exe up-to-date (compiled {exe_dt})"
 
@@ -1004,32 +1044,23 @@ def _table_per_program(f, all_results):
             "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
             "across --iterate runs. "
             "T: F=fold, M=map. "
-            "Uses: fields accessed / total. "
-            "Dead\\%: fraction unused. "
-            "Buf: memory buffers accessed (AoS always 1; SoA = $1 + $ non-recursive uses; "
-            "recursive children share the tag buffer). "
+            "Uses: fields accessed / total (recursive + non-recursive). "
+            "Dead\\%: fraction of fields not accessed by this pass. "
             "Speedup ${>}1{\\times}$ means SoA is faster.}}\n"
         )
         f.write(f"\\label{{tab:{prog}}}\n\\small\n")
 
-        # Decide which optional columns to show
+        # Decide which optional columns to show.
+        # Per-pass SoA buffer usage is NOT shown: uses= counts total fields
+        # (recursive + non-recursive) but SoA buffers only exist for
+        # non-recursive fields, so we can't derive per-pass buffer counts.
         has_uses = any(
             aos.passes.get(p, {}).get("uses") is not None or
             soa.passes.get(p, {}).get("uses") is not None
             for p in passes
         )
-        has_bufs = (soa_total_bufs is not None) and has_uses
 
-        if has_bufs and adt is not None:
-            # Full table: Pass T Uses Dead% BufAoS BufSoA/Total AoS SoA Speedup
-            f.write("\\begin{tabular}{l c c r c r r r}\n\\toprule\n")
-            f.write(
-                "\\textbf{Pass} & \\textbf{T}"
-                " & \\textbf{Uses} & \\textbf{Dead\\%}"
-                " & \\textbf{Bufs (AoS/SoA)}"
-                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
-            )
-        elif has_uses and adt is not None:
+        if has_uses and adt is not None:
             f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
             f.write(
                 "\\textbf{Pass} & \\textbf{T}"
@@ -1076,19 +1107,8 @@ def _table_per_program(f, all_results):
 
             uses   = ad.get("uses") or sd.get("uses")
             dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
-            a_bufs = ad.get("aos_buffers_used", 1)
-            s_bufs = ad.get("soa_buffers_used") or sd.get("soa_buffers_used")
 
-            if has_bufs and adt is not None:
-                uses_s  = f"{uses}/{adt}" if uses is not None else "--"
-                dead_s  = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
-                bufs_s  = (f"{a_bufs}/{s_bufs}/{soa_total_bufs}"
-                           if s_bufs is not None
-                           else f"{a_bufs}/--/{soa_total_bufs}")
-                f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
-                        f" & {bufs_s}"
-                        f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
-            elif has_uses and adt is not None:
+            if has_uses and adt is not None:
                 uses_s = f"{uses}/{adt}" if uses is not None else "--"
                 dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                 f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
@@ -1104,11 +1124,7 @@ def _table_per_program(f, all_results):
         at_tot = sum(p["median_time"] for p in aos.passes.values())
         st_tot = sum(p["median_time"] for p in soa.passes.values())
         sp_tot = at_tot / st_tot if st_tot > 0 else 0.0
-        extra_cols = ""
-        if has_bufs and adt is not None:
-            extra_cols = "& & & "   # Uses, Dead%, Bufs
-        elif has_uses and adt is not None:
-            extra_cols = "& & "     # Uses, Dead%
+        extra_cols = "& & " if (has_uses and adt is not None) else ""
         f.write("\\midrule\n")
         f.write(f"\\textbf{{Total}} & {extra_cols}"
                 f"& {fmt(at_tot)} & {fmt(st_tot)} & {_spd_cell(sp_tot)} \\\\\n")
@@ -1179,16 +1195,9 @@ def write_text_report(all_results: List[Tuple], out_file: Path):
                 n_it  = pd.get("n", len(pd.get("iter_times", [])))
                 med   = pd["median_time"]
                 se    = pd.get("stderr", 0.0)
-                a_b   = pd.get("aos_buffers_used", 1)
-                s_b   = pd.get("soa_buffers_used")
                 ann   = ""
                 if uses is not None and adt:
                     ann += f"  uses={uses}/{adt}  dead={dr*100:.0f}%"
-                if tag == "AOS":
-                    ann += f"  bufs={a_b}"
-                elif s_b is not None:
-                    soa_tot = adt_info["soa_total_buffers"] if adt_info else "?"
-                    ann += f"  bufs={s_b}/{soa_tot}"
                 lines.append(f"    [{t}] {pname}: {med:.4f} ±{se:.5f}s  (n={n_it}){ann}")
         if aos.run_success and soa.run_success:
             at = sum(p["median_time"] for p in aos.passes.values())
@@ -1437,95 +1446,6 @@ def _fig_dead_vs_speedup(good: List, out: Path):
     print(f"  dead_vs_speedup.*  ({total} data points)")
 
 
-# ── Figure D: SoA buffer access ratio vs speedup scatter ─────────────────────
-def _fig_buffers_vs_speedup(good: List, out: Path):
-    """
-    Scatter plot: x = SoA buffer access ratio (soa_buffers_used / soa_total_buffers),
-                  y = speedup (AoS / SoA).
-
-    Hypothesis: passes that touch a SMALLER fraction of SoA buffers should
-    benefit more from SoA (fewer cache-line streams to load).
-
-    AoS always touches 1 buffer (fraction = 1.0 / 1.0 = 1.0).
-    Points are labelled prog / pass, coloured fold/map.
-    """
-    fold_x, fold_y, fold_labels = [], [], []
-    map_x,  map_y,  map_labels  = [], [], []
-    unk_x,  unk_y,  unk_labels  = [], [], []
-
-    for aos, soa in good:
-        prog = aos.program.replace(".hs", "")
-        adt_info = getattr(aos, "adt_info", None)
-        if adt_info is None:
-            continue
-        soa_total = adt_info["soa_total_buffers"]
-
-        for pname, ad in aos.passes.items():
-            sd   = soa.passes.get(pname, {})
-            at   = ad.get("median_time", 0.0)
-            st   = sd.get("median_time", 0.0)
-            if at == 0.0 or st == 0.0:
-                continue
-            s_bufs = ad.get("soa_buffers_used")
-            if s_bufs is None:
-                continue
-            ratio = s_bufs / soa_total    # 0 < ratio <= 1
-            spd   = at / st
-            label = f"{prog}\n{pname}"
-            ptype = ad.get("pass_type", "unknown")
-            if ptype == "fold":
-                fold_x.append(ratio); fold_y.append(spd); fold_labels.append(label)
-            elif ptype == "map":
-                map_x.append(ratio);  map_y.append(spd);  map_labels.append(label)
-            else:
-                unk_x.append(ratio);  unk_y.append(spd);  unk_labels.append(label)
-
-    total = len(fold_x) + len(map_x) + len(unk_x)
-    if total == 0:
-        print("  Skipping buffer scatter: no uses= annotations / ADT info found")
-        return
-
-    fig, ax = plt.subplots(figsize=(9, 6))
-
-    for xs, ys, labels, col, marker, name in (
-        (fold_x, fold_y, fold_labels, "#3498db", "o", "Fold"),
-        (map_x,  map_y,  map_labels,  "#e67e22", "s", "Map"),
-        (unk_x,  unk_y,  unk_labels,  "#95a5a6", "^", "Unknown"),
-    ):
-        if xs:
-            ax.scatter(xs, ys, c=col, marker=marker, s=70, alpha=0.85,
-                       edgecolors="black", linewidths=0.4, label=name, zorder=3)
-            for x, y, lbl in zip(xs, ys, labels):
-                ax.annotate(lbl, (x, y),
-                            textcoords="offset points", xytext=(5, 4),
-                            fontsize=5.5, color="#333333")
-
-    ax.axhline(1.0, color="black", linestyle="--", linewidth=1,
-               alpha=0.6, label="Break-even (1×)")
-
-    # Trend line
-    all_x = fold_x + map_x + unk_x
-    all_y = fold_y + map_y + unk_y
-    if len(all_x) >= 3:
-        z  = np.polyfit(all_x, all_y, 1)
-        px = np.linspace(min(all_x), max(all_x), 100)
-        ax.plot(px, np.polyval(z, px), "k--", linewidth=1.2, alpha=0.4,
-                label=f"Trend  (slope={z[0]:+.2f})")
-
-    ax.set_xlabel(
-        "SoA buffer access ratio  (buffers touched / total SoA buffers)\n"
-        "= (1 + non\\_recursive\\_uses) / soa\\_total\\_buffers\n"
-        "Lower = fewer cache streams → expected SoA advantage\n"
-        "(note: recursive traversals always touch the tags buffer, counted in the 1)"
-    )
-    ax.set_ylabel("Speedup  (AoS time / SoA time)\n>1 means SoA is faster")
-    ax.set_title("Does lower SoA buffer-access ratio predict SoA speedup?")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    _save(fig, out)
-    print(f"  buffers_vs_speedup.*  ({total} data points)")
-
-
 # ── Figure E: per-program heatmap ────────────────────────────────────────────
 def _fig_heatmaps(good: List, out_dir: Path):
     dest = out_dir / "heatmaps"
@@ -1536,7 +1456,7 @@ def _fig_heatmaps(good: List, out_dir: Path):
         adt_info = getattr(aos, "adt_info", None)
         soa_tot  = adt_info["soa_total_buffers"] if adt_info else None
         passes   = sorted(set(list(aos.passes) + list(soa.passes)))
-        spds, labs, types, buf_labels = [], [], [], []
+        spds, labs, types = [], [], []
 
         for pname in passes:
             at = aos.passes.get(pname, {}).get("median_time", 0.0)
@@ -1545,11 +1465,6 @@ def _fig_heatmaps(good: List, out_dir: Path):
                 spds.append(at / st)
                 pt = (aos.passes.get(pname) or soa.passes.get(pname) or {}).get("pass_type", "unknown")
                 types.append({"fold": "F", "map": "M"}.get(pt, "?"))
-                s_bufs = (aos.passes.get(pname) or {}).get("soa_buffers_used")
-                if s_bufs is not None and soa_tot is not None:
-                    buf_labels.append(f"1/{s_bufs}/{soa_tot}")
-                else:
-                    buf_labels.append("")
                 labs.append(pname.replace("_", " "))
 
         if not spds:
@@ -1561,14 +1476,7 @@ def _fig_heatmaps(good: List, out_dir: Path):
                        vmin=0.7, vmax=1.3, interpolation="nearest")
         ax.set_xticks(np.arange(len(labs)))
 
-        # Label: pass name, type, and AoS bufs / SoA bufs / total bufs
-        tick_labels = []
-        for l, t, b in zip(labs, types, buf_labels):
-            lbl = f"{l}\n[{t}]"
-            if b:
-                lbl += f"\nbufs:{b}"
-            tick_labels.append(lbl)
-
+        tick_labels = [f"{l}\n[{t}]" for l, t in zip(labs, types)]
         ax.set_xticklabels(tick_labels, rotation=45, ha="right", fontsize=7)
         ax.set_yticks([0]); ax.set_yticklabels([prog])
         plt.colorbar(im, ax=ax, orientation="horizontal", pad=0.55,
@@ -1576,8 +1484,7 @@ def _fig_heatmaps(good: List, out_dir: Path):
         for i, (s, t) in enumerate(zip(spds, types)):
             ax.text(i, 0, f"{s:.2f}\n[{t}]",
                     ha="center", va="center", fontsize=7, fontweight="bold")
-        bufs_hdr = (f"  |  AoS=1 buf, SoA={soa_tot} bufs total"
-                    if soa_tot else "")
+        bufs_hdr = (f"  |  SoA={soa_tot} buffers total" if soa_tot else "")
         ax.set_title(f"{prog}: per-pass speedup heatmap  "
                      f"(F=fold M=map ?=unknown{bufs_hdr})")
         fig.tight_layout()
@@ -1645,7 +1552,6 @@ def generate_all_figures(all_results: List[Tuple], out_dir: Path):
     _fig_speedup_fold_map(good, out_dir / "speedup_comparison")
     _fig_per_program(good, out_dir)
     _fig_dead_vs_speedup(good, out_dir / "dead_vs_speedup")
-    _fig_buffers_vs_speedup(good, out_dir / "buffers_vs_speedup")
     _fig_heatmaps(good, out_dir)
     _fig_breakdown(good, out_dir / "pass_breakdown_all")
     print(f"\n  All figures written to {out_dir}/")
@@ -1701,6 +1607,16 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
+    
+    # Show which gibbon compiler will be used and its mtime
+    compiler_info = get_gibbon_compiler_info()
+    if compiler_info:
+        compiler_path, compiler_t = compiler_info
+        compiler_dt = datetime.datetime.fromtimestamp(compiler_t).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"  Compiler     : {compiler_path}")
+        print(f"  Compiler mtime: {compiler_dt}  (exes older than this will be rebuilt)")
+    else:
+        print(f"  Compiler     : gibbon NOT FOUND in PATH")
     print("=" * 72)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
