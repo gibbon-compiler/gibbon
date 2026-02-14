@@ -128,6 +128,7 @@ gibbon_main =
   let _ = printsym (quote "Running program DomTree: ")
       _ = printsym (quote "NEWLINE")
       tree   = buildRenderTree 23
+      tree_smaller = buildRenderTree 20
       _ = printsym (quote "Running pass SumArea (fold, uses=6): ")
       _ = printsym (quote "NEWLINE")
       area   = iterate (sumArea tree)
@@ -150,7 +151,7 @@ gibbon_main =
       _ = printsym (quote "NEWLINE")
       _ = printsym (quote "Running pass computeWidths (map, uses=14): ")
       _ = printsym (quote "NEWLINE")
-      tree'  = iterate (computeWidths tree)
+      tree'  = iterate (computeWidths tree_smaller)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
       _ = printsym (quote "Running pass scaleLayout (map, uses=15): ")

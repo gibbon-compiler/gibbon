@@ -710,7 +710,8 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
 # Compile one variant  (called from thread pool)
 # ---------------------------------------------------------------------------
 def compile_one(source: Path, variant: str, out_dir: Path,
-                force: bool) -> Tuple[bool, float, Optional[str]]:
+                force: bool, use_mutable_cursors: bool = True
+                ) -> Tuple[bool, float, Optional[str]]:
     stem   = source.stem
     c_file = out_dir / f"{stem}.{variant}.c"
     exe    = out_dir / f"{stem}.{variant}.exe"
@@ -726,13 +727,18 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     if force:
         reason = "forced recompile"
 
-    cmd = [
-        "gibbon", "--use-mutable-cursors", "--packed", "--to-exe",
+    cmd = ["gibbon"]
+    if use_mutable_cursors:
+        cmd.append("--use-mutable-cursors")
+    cmd.extend([
+        "--packed", "--to-exe",
         "--cfile",   str(c_file),
         "--exefile", str(exe),
         str(source),
-    ]
-    print(f"  [{variant.upper()}] {stem}: compiling  ({reason})")
+    ])
+    
+    flags_str = "mut-cursors" if use_mutable_cursors else "imm-cursors"
+    print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
     try:
@@ -761,8 +767,8 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
     results: Dict = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         fmap = {
-            pool.submit(compile_one, src, var, od, force): (prog, var)
-            for prog, var, src, od, force in tasks
+            pool.submit(compile_one, src, var, od, force, use_mut): (prog, var)
+            for prog, var, src, od, force, use_mut in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -776,9 +782,13 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 # Run one executable  (always single-threaded)
 # ---------------------------------------------------------------------------
 def run_exe(exe: Path, iterations: int,
-            dump_dir: Optional[Path] = None) -> Tuple[bool, float, Optional[str]]:
+            dump_dir: Optional[Path] = None) -> Tuple[bool, float, Optional[str], int]:
+    """
+    Run executable and return (success, elapsed_time, stdout_or_stderr, returncode).
+    returncode is used to detect OOM (e.g., 137 = killed by OOM, 139 = segfault).
+    """
     if not exe.exists():
-        return False, 0.0, None
+        return False, 0.0, None, -1
     exe_mtime = datetime.datetime.fromtimestamp(exe.stat().st_mtime).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
@@ -795,10 +805,11 @@ def run_exe(exe: Path, iterations: int,
                 dump_dir.mkdir(parents=True, exist_ok=True)
                 dump_file = dump_dir / f"{exe.stem}.stdout.txt"
                 dump_file.write_text(r.stdout)
-            return True, elapsed, r.stdout
-        return False, elapsed, r.stderr
+            return True, elapsed, r.stdout, 0
+        # Failed - return stderr and the actual exit code for OOM detection
+        return False, elapsed, r.stderr, r.returncode
     except Exception as e:
-        return False, time.time() - t0, str(e)
+        return False, time.time() - t0, str(e), -1
 
 # ---------------------------------------------------------------------------
 # Benchmark one program
@@ -807,14 +818,36 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       iterations: int, force: bool,
                       source_cls_all: Dict,
                       dump_raw: bool = False,
+                      benchmark_immutable: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
+    """
+    Benchmark one program. Returns (aos_result, soa_result) for backwards compatibility.
+    If benchmark_immutable=True, also compiles/runs immutable cursor variants but only
+    returns the mutable cursor results. Use benchmark_program_all_variants() to get all 4.
+    """
     print(f"\n{'='*70}\nBenchmarking: {prog}\n{'='*70}")
 
+    # Determine which variants to compile
+    if benchmark_immutable:
+        variants = [
+            ("aos", True),       # AOS with mutable cursors
+            ("aos_imm", False),  # AOS without mutable cursors
+            ("soa", True),       # SoA with mutable cursors
+            ("soa_imm", False),  # SoA without mutable cursors
+        ]
+    else:
+        variants = [
+            ("aos", True),
+            ("soa", True),
+        ]
+
     tasks = []
-    for var in ("aos", "soa"):
-        src = programs_dir / var.upper() / prog
+    for var, use_mut in variants:
+        # Source is always in AOS/ or SOA/ directory, not aos_imm/soa_imm
+        src_dir = "AOS" if var.startswith("aos") else "SOA"
+        src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force))
+            tasks.append((prog, var, src, out_dir, force, use_mut))
         else:
             print(f"  Warning: {src} not found")
 
@@ -825,7 +858,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
 
     dump_dir = (out_dir / "raw_output") if dump_raw else None
 
-    for var in ("aos", "soa"):
+    for var, use_mut in variants:
         res = BenchmarkResult(prog, var)
         res.adt_fields = src_data.get("adt_fields")
         key = (prog, var)
@@ -849,16 +882,37 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         exe  = out_dir / f"{stem}.{var}.exe"
 
         print(f"  [{var.upper()}] running ...")
-        ok2, rt, stdout = run_exe(exe, iterations, dump_dir)
+        ok2, rt, stdout_or_stderr, returncode = run_exe(exe, iterations, dump_dir)
         if not ok2:
-            print(f"           FAILED (exit non-zero)")
-            res.run_success   = False
-            res.error_message = "execution failed"
+            # Detect OOM from both exit code and stderr content
+            # Common OOM exit codes: 137 (killed by OOM), 139 (segfault), -11 (SIGSEGV)
+            oom_exit_codes = {137, 139, -11, 134}  # 134 = SIGABRT from stack overflow
+            stderr_text = (stdout_or_stderr or "").lower()
+            
+            is_oom = (returncode in oom_exit_codes) or any(keyword in stderr_text for keyword in [
+                "stack overflow", "out of memory", "cannot allocate",
+                "segmentation fault", "stack space overflow",
+                "memory exhausted", "bad_alloc", "killed"
+            ])
+            
+            # Debug output - show what we got
+            print(f"           exit code: {returncode}")
+            if stdout_or_stderr:
+                stderr_preview = stdout_or_stderr[:200].replace('\n', ' ')
+                print(f"           stderr: {stderr_preview}...")
+            
+            if is_oom:
+                print(f"           FAILED (out of memory)")
+                res.error_message = "out of memory"
+            else:
+                print(f"           FAILED (exit non-zero)")
+                res.error_message = "execution failed"
+            res.run_success = False
         else:
             res.run_success = True
-            if stdout:
-                res.output  = clean_output(stdout)
-                res.passes  = parse_passes(stdout)
+            if stdout_or_stderr:
+                res.output  = clean_output(stdout_or_stderr)
+                res.passes  = parse_passes(stdout_or_stderr)
                 apply_source_classification(res, src_data)
 
                 # ── Print per-pass timing digest ──────────────────────────
@@ -879,10 +933,23 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
 
         results[var] = res
 
+    # For backwards compatibility, return (aos, soa) with mutable cursors
+    # Also store all results globally if benchmarking immutable variants
     aos, soa = results.get("aos"), results.get("soa")
+    
+    # Global storage for extended results (used by new comparison table)
+    if benchmark_immutable and hasattr(benchmark_program, '_all_variants_results'):
+        benchmark_program._all_variants_results.append({
+            'program': prog,
+            'aos': results.get("aos"),
+            'aos_imm': results.get("aos_imm"),
+            'soa': results.get("soa"),
+            'soa_imm': results.get("soa_imm"),
+        })
+    
     if aos and soa and aos.run_success and soa.run_success:
         m = outputs_match(aos, soa)
-        print(f"\n  Output check: {'✓ MATCH' if m else '✗ MISMATCH'}")
+        print(f"\n  Output check (mutable cursors): {'✓ MATCH' if m else '✗ MISMATCH'}")
         if aos.passes:
             classified = [(p, d) for p, d in aos.passes.items()
                           if d["pass_type"] != "unknown"]
@@ -931,13 +998,121 @@ def fmt_pm(median: float, stderr: float) -> str:
 # ---------------------------------------------------------------------------
 # LaTeX tables
 # ---------------------------------------------------------------------------
-def write_latex_tables(all_results: List[Tuple], out_file: Path):
+def _table_cursor_comparison(f, all_variants_results):
+    """
+    Generates Table 2: Cursor mode comparison showing all 4 variants:
+    AOS-mut, AOS-imm, SoA-mut, SoA-imm for each program.
+    """
+    f.write("\n\n")
+    f.write("% ============================================================================\n")
+    f.write("% Table 2: Mutable vs Immutable Cursor Comparison\n")
+    f.write("% ============================================================================\n\n")
+    f.write("\\begin{table}[htbp]\n\\centering\n")
+    f.write("\\caption{Mutable vs immutable cursor comparison. "
+            "Times are median per iteration (s). "
+            "Speedups shown are AoS-mut/SoA-mut, AoS-imm/AoS-mut, and AoS-imm/SoA-mut. "
+            "${>}1{\\times}$ means the denominator is faster. "
+            "\\textbf{Bold} marks the fastest time across all four variants.}\n")
+    f.write("\\label{tab:cursor_comparison}\n\\small\n")
+    f.write("\\begin{tabular}{l r r r r r r r}\n\\toprule\n")
+    f.write(
+        "\\textbf{Program}"
+        " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
+        " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
+        " & \\textbf{AoS-mut/SoA-mut}"
+        " & \\textbf{AoS-imm/AoS-mut}"
+        " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+    )
+    f.write("\\midrule\n")
+
+    for entry in all_variants_results:
+        prog = entry['program'].replace(".hs", "").replace("_", "\\_")
+        aos_mut = entry.get('aos')
+        aos_imm = entry.get('aos_imm')
+        soa_mut = entry.get('soa')
+        soa_imm = entry.get('soa_imm')
+
+        # Calculate total times (sum of all passes)
+        # Calculate total times (sum of all passes)
+        def get_total_or_oom(res):
+            """Returns (time, is_oom) tuple."""
+            if res is None:
+                return None, False
+            if res.run_success:
+                return sum(p["median_time"] for p in res.passes.values()), False
+            # Failed - check if it was OOM
+            is_oom = (res.error_message == "out of memory")
+            return None, is_oom
+
+        aost_mut, aost_mut_oom = get_total_or_oom(aos_mut)
+        aost_imm, aost_imm_oom = get_total_or_oom(aos_imm)
+        soat_mut, soat_mut_oom = get_total_or_oom(soa_mut)
+        soat_imm, soat_imm_oom = get_total_or_oom(soa_imm)
+
+        # Format times and bold the overall fastest across all four variants.
+        def fmt_cell(t, is_oom):
+            """Format a single time cell, showing OOM if applicable."""
+            if is_oom:
+                return "\\textit{OOM}"
+            if t is None:
+                return "--"
+            return fmt(t)
+
+        cells = {
+            "aos_mut": [fmt_cell(aost_mut, aost_mut_oom), aost_mut, aost_mut_oom],
+            "aos_imm": [fmt_cell(aost_imm, aost_imm_oom), aost_imm, aost_imm_oom],
+            "soa_mut": [fmt_cell(soat_mut, soat_mut_oom), soat_mut, soat_mut_oom],
+            "soa_imm": [fmt_cell(soat_imm, soat_imm_oom), soat_imm, soat_imm_oom],
+        }
+        valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
+        if valid_times:
+            min_t = min(valid_times)
+            for k, v in cells.items():
+                if v[1] is not None and not v[2] and v[1] == min_t:
+                    v[0] = f"\\textbf{{{v[0]}}}"
+
+        aos_mut_f = cells["aos_mut"][0]
+        aos_imm_f = cells["aos_imm"][0]
+        soa_mut_f = cells["soa_mut"][0]
+        soa_imm_f = cells["soa_imm"][0]
+
+        # Calculate speedups
+        def speedup(a, s):
+            if a is not None and s is not None and s > 0:
+                return a / s
+            return None
+
+        spd_mut = speedup(aost_mut, soat_mut)
+        spd_aos_imm_over_aos_mut = speedup(aost_imm, aost_mut)
+        spd_imm = speedup(aost_imm, soat_mut)
+
+        spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
+        spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
+        spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
+
+        f.write(f"{prog}"
+                f" & {aos_mut_f} & {aos_imm_f}"
+                f" & {soa_mut_f} & {soa_imm_f}"
+                f" & {spd_mut_s}"
+                f" & {spd_aos_imm_over_aos_mut_s}"
+                f" & {spd_imm_s} \\\\\n")
+
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+
+
+def write_latex_tables(all_results: List[Tuple], out_file: Path,
+                       all_variants_results: Optional[List[Dict]] = None):
     with open(out_file, "w") as f:
-        f.write("% Gibbon Benchmark Suite v3.0 – auto-generated\n")
+        f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
         f.write("% Requires: \\usepackage{booktabs} in preamble\n\n")
         _table_summary(f, all_results)
-        _table_per_program(f, all_results)
+        if all_variants_results:
+            _table_cursor_comparison(f, all_variants_results)
+        _table_per_program(f, all_results, all_variants_results)
     print(f"  ✓ LaTeX tables → {out_file}")
+    if all_variants_results:
+        print(f"    (includes Table 2: cursor mode comparison with {len(all_variants_results)} programs)")
+        print(f"    (per-program tables show 4 variants: mut + imm cursors)")
 
 
 def _spd_cell(spd: float, bold_threshold: float = 1.1) -> str:
@@ -1010,18 +1185,42 @@ def _table_summary(f, all_results):
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
 
-def _table_per_program(f, all_results):
+def _table_per_program(f, all_results, all_variants_results=None):
     """
-    One table per program.
-    Pass | T | Uses/ADT | Dead% | Buf AoS | Buf SoA | AoS (s) | SoA (s) | Speedup
+    One table per program showing per-pass performance.
+    
+    If all_variants_results is None (default):
+        Shows 2 variants: AoS-mut, SoA-mut
+    If all_variants_results is provided:
+        Shows 4 variants: AoS-mut, AoS-imm, SoA-mut, SoA-imm
     """
+    # Build a mapping from program name to variant results
+    variants_map = {}
+    if all_variants_results:
+        for entry in all_variants_results:
+            variants_map[entry['program']] = entry
+    
     for aos, soa in all_results:
-        if not (aos and soa and aos.run_success and soa.run_success):
+        if not (aos and soa):
             continue
 
         prog_hs  = aos.program
         prog     = prog_hs.replace(".hs", "")
         pdisplay = prog.replace("_", "\\_")
+        
+        # Get all 4 variants if available
+        aos_imm = None
+        soa_imm = None
+        if prog_hs in variants_map:
+            aos_imm = variants_map[prog_hs].get('aos_imm')
+            soa_imm = variants_map[prog_hs].get('soa_imm')
+        
+        show_4_variants = (aos_imm is not None or soa_imm is not None)
+        
+        # Skip if mutable cursors didn't run successfully
+        if not (aos.run_success and soa.run_success):
+            continue
+        
         adt      = getattr(aos, "adt_fields", None)
         adt_info = getattr(aos, "adt_info", None)
         soa_total_bufs = adt_info["soa_total_buffers"] if adt_info else None
@@ -1038,104 +1237,265 @@ def _table_per_program(f, all_results):
 
         f.write(f"% -- Table: {prog} --\n")
         f.write("\\begin{table}[t]\n\\centering\n")
+        
+        cursor_note = " (mutable + immutable cursors)" if show_4_variants else ""
         f.write(
             f"\\caption{{Per-pass performance for \\texttt{{{pdisplay}}}"
-            f"{adt_note}. "
+            f"{adt_note}{cursor_note}. "
             "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
             "across --iterate runs. "
             "T: F=fold, M=map. "
             "Uses: fields accessed / total (recursive + non-recursive). "
             "Dead\\%: fraction of fields not accessed by this pass. "
-            "Speedup ${>}1{\\times}$ means SoA is faster.}}\n"
+            "Speedup ${>}1{\\times}$ means SoA is faster. "
+            "OOM = out of memory.}}\n"
         )
         f.write(f"\\label{{tab:{prog}}}\n\\small\n")
 
-        # Decide which optional columns to show.
-        # Per-pass SoA buffer usage is NOT shown: uses= counts total fields
-        # (recursive + non-recursive) but SoA buffers only exist for
-        # non-recursive fields, so we can't derive per-pass buffer counts.
+        # Decide which optional columns to show
         has_uses = any(
             aos.passes.get(p, {}).get("uses") is not None or
             soa.passes.get(p, {}).get("uses") is not None
             for p in passes
         )
 
-        if has_uses and adt is not None:
-            f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
-            f.write(
-                "\\textbf{Pass} & \\textbf{T}"
-                " & \\textbf{Uses} & \\textbf{Dead\\%}"
-                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
-            )
+        # Table header depends on whether we show 2 or 4 variants
+        if show_4_variants:
+            if has_uses and adt is not None:
+                f.write("\\begin{tabular}{l c c r r r r r r r r}\n\\toprule\n")
+                f.write(
+                    "\\textbf{Pass} & \\textbf{T}"
+                    " & \\textbf{Uses} & \\textbf{Dead\\%}"
+                    " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
+                    " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
+                    " & \\textbf{AoS-mut/SoA-mut}"
+                    " & \\textbf{AoS-imm/AoS-mut}"
+                    " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+                )
+            else:
+                f.write("\\begin{tabular}{l c r r r r r r r}\n\\toprule\n")
+                f.write(
+                    "\\textbf{Pass} & \\textbf{T}"
+                    " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
+                    " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
+                    " & \\textbf{AoS-mut/SoA-mut}"
+                    " & \\textbf{AoS-imm/AoS-mut}"
+                    " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+                )
         else:
-            f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
-            f.write(
-                "\\textbf{Pass} & \\textbf{T}"
-                " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
-            )
+            # Original 2-variant table
+            if has_uses and adt is not None:
+                f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
+                f.write(
+                    "\\textbf{Pass} & \\textbf{T}"
+                    " & \\textbf{Uses} & \\textbf{Dead\\%}"
+                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
+                )
+            else:
+                f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
+                f.write(
+                    "\\textbf{Pass} & \\textbf{T}"
+                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
+                )
         f.write("\\midrule\n")
 
-        speedups = []
+        speedups_mut = []
+        speedups_aos_imm_over_aos_mut = []
+        speedups_imm = []
+        
         for pname in passes:
             ad   = aos.passes.get(pname, {})
             sd   = soa.passes.get(pname, {})
-            at_s = ad.get("median_time", 0.0)
-            st_s = sd.get("median_time", 0.0)
-            if at_s == 0.0 and st_s == 0.0:
-                continue
-
+            
             ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
             tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
-            spd   = at_s / st_s if st_s > 0 else 0.0
             pdisp = pname.replace("_", "\\_")
-
-            # median ± stderr cells
-            a_err = ad.get("stderr", 0.0)
-            s_err = sd.get("stderr", 0.0)
-            at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
-            st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
-
-            # Bold the faster side's cell
-            if spd > 1.1:
-                at_f_r, st_f_r = at_f, f"\\textbf{{{st_f}}}"
-            elif 0 < spd < 0.9:
-                at_f_r, st_f_r = f"\\textbf{{{at_f}}}", st_f
-            else:
-                at_f_r, st_f_r = at_f, st_f
-
-            spd_s = _spd_cell(spd) if spd > 0 else "--"
 
             uses   = ad.get("uses") or sd.get("uses")
             dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
 
-            if has_uses and adt is not None:
-                uses_s = f"{uses}/{adt}" if uses is not None else "--"
-                dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
-                f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
-                        f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
-            else:
-                f.write(f"{pdisp} & {tchar}"
-                        f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+            if show_4_variants:
+                # Get data for all 4 variants
+                def get_time_info(res, pname):
+                    """Get (display, median_time, is_oom) for a pass."""
+                    if res is None:
+                        return "--", None, False
+                    if not res.run_success:
+                        if res.error_message == "out of memory":
+                            return "\\textit{OOM}", None, True
+                        return "--", None, False
+                    pd = res.passes.get(pname, {})
+                    med = pd.get("median_time", 0.0)
+                    err = pd.get("stderr", 0.0)
+                    if med == 0.0:
+                        return "--", None, False
+                    return fmt_pm(med, err), med, False
+                
+                aost_mut, aost_mut_v, aost_mut_oom = get_time_info(aos, pname)
+                aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
+                soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
+                soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
 
-            if spd > 0:
-                speedups.append(spd)
+                # Bold only the fastest available time across all 4 variants.
+                cells = {
+                    "aos_mut": [aost_mut, aost_mut_v, aost_mut_oom],
+                    "aos_imm": [aost_imm, aost_imm_v, aost_imm_oom],
+                    "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
+                    "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
+                }
+                valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
+                if valid_times:
+                    min_t = min(valid_times)
+                    for _, v in cells.items():
+                        if v[1] is not None and not v[2] and v[1] == min_t:
+                            v[0] = f"\\textbf{{{v[0]}}}"
+
+                aost_mut = cells["aos_mut"][0]
+                aost_imm = cells["aos_imm"][0]
+                soat_mut = cells["soa_mut"][0]
+                soat_imm = cells["soa_imm"][0]
+                
+                # Calculate speedups
+                def calc_spd(a_res, s_res, pname):
+                    if a_res and s_res and a_res.run_success and s_res.run_success:
+                        at = a_res.passes.get(pname, {}).get("median_time", 0.0)
+                        st = s_res.passes.get(pname, {}).get("median_time", 0.0)
+                        if at > 0 and st > 0:
+                            return at / st
+                    return None
+                
+                spd_mut = calc_spd(aos, soa, pname)
+                spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
+                spd_imm = calc_spd(aos_imm, soa, pname)
+                
+                spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
+                spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
+                spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
+                
+                if spd_mut:
+                    speedups_mut.append(spd_mut)
+                if spd_aos_imm_over_aos_mut:
+                    speedups_aos_imm_over_aos_mut.append(spd_aos_imm_over_aos_mut)
+                if spd_imm:
+                    speedups_imm.append(spd_imm)
+                
+                # Write row
+                if has_uses and adt is not None:
+                    uses_s = f"{uses}/{adt}" if uses is not None else "--"
+                    dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
+                    f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
+                            f" & {aost_mut} & {aost_imm}"
+                            f" & {soat_mut} & {soat_imm}"
+                            f" & {spd_mut_s}"
+                            f" & {spd_aos_imm_over_aos_mut_s}"
+                            f" & {spd_imm_s} \\\\\n")
+                else:
+                    f.write(f"{pdisp} & {tchar}"
+                            f" & {aost_mut} & {aost_imm}"
+                            f" & {soat_mut} & {soat_imm}"
+                            f" & {spd_mut_s}"
+                            f" & {spd_aos_imm_over_aos_mut_s}"
+                            f" & {spd_imm_s} \\\\\n")
+            
+            else:
+                # Original 2-variant logic
+                at_s = ad.get("median_time", 0.0)
+                st_s = sd.get("median_time", 0.0)
+                if at_s == 0.0 and st_s == 0.0:
+                    continue
+
+                spd   = at_s / st_s if st_s > 0 else 0.0
+
+                # median ± stderr cells
+                a_err = ad.get("stderr", 0.0)
+                s_err = sd.get("stderr", 0.0)
+                at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
+                st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
+
+                # Bold the faster side's cell
+                if spd > 1.1:
+                    at_f_r, st_f_r = at_f, f"\\textbf{{{st_f}}}"
+                elif 0 < spd < 0.9:
+                    at_f_r, st_f_r = f"\\textbf{{{at_f}}}", st_f
+                else:
+                    at_f_r, st_f_r = at_f, st_f
+
+                spd_s = _spd_cell(spd) if spd > 0 else "--"
+
+                if has_uses and adt is not None:
+                    uses_s = f"{uses}/{adt}" if uses is not None else "--"
+                    dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
+                    f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
+                            f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+                else:
+                    f.write(f"{pdisp} & {tchar}"
+                            f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+
+                if spd > 0:
+                    speedups_mut.append(spd)
 
         # Totals row
-        at_tot = sum(p["median_time"] for p in aos.passes.values())
-        st_tot = sum(p["median_time"] for p in soa.passes.values())
-        sp_tot = at_tot / st_tot if st_tot > 0 else 0.0
-        extra_cols = "& & " if (has_uses and adt is not None) else ""
-        f.write("\\midrule\n")
-        f.write(f"\\textbf{{Total}} & {extra_cols}"
-                f"& {fmt(at_tot)} & {fmt(st_tot)} & {_spd_cell(sp_tot)} \\\\\n")
-        if speedups:
-            gm = statistics.geometric_mean(speedups)
-            f.write(f"\\textbf{{Geomean}} & {extra_cols}"
-                    f"& & & {_spd_cell(gm)} \\\\\n")
+        def get_total(res):
+            if res and res.run_success:
+                return sum(p["median_time"] for p in res.passes.values())
+            return None
+        
+        aost_mut_tot = get_total(aos)
+        aost_imm_tot = get_total(aos_imm) if aos_imm else None
+        soat_mut_tot = get_total(soa)
+        soat_imm_tot = get_total(soa_imm) if soa_imm else None
+        
+        def fmt_total(t):
+            return fmt(t) if t is not None else "--"
+        
+        sp_mut_tot = aost_mut_tot / soat_mut_tot if (aost_mut_tot and soat_mut_tot) else None
+        sp_aos_imm_over_aos_mut_tot = aost_imm_tot / aost_mut_tot if (aost_imm_tot and aost_mut_tot) else None
+        sp_imm_tot = aost_imm_tot / soat_mut_tot if (aost_imm_tot and soat_mut_tot) else None
+        
+        if show_4_variants:
+            total_cells = {
+                "aos_mut": [fmt_total(aost_mut_tot), aost_mut_tot],
+                "aos_imm": [fmt_total(aost_imm_tot), aost_imm_tot],
+                "soa_mut": [fmt_total(soat_mut_tot), soat_mut_tot],
+                "soa_imm": [fmt_total(soat_imm_tot), soat_imm_tot],
+            }
+            total_valid = [v[1] for v in total_cells.values() if v[1] is not None]
+            if total_valid:
+                min_tot = min(total_valid)
+                for _, v in total_cells.items():
+                    if v[1] is not None and v[1] == min_tot:
+                        v[0] = f"\\textbf{{{v[0]}}}"
+
+            extra_cols = "& & " if (has_uses and adt is not None) else ""
+            f.write("\\midrule\n")
+            f.write(f"\\textbf{{Total}} & {extra_cols}"
+                    f"& {total_cells['aos_mut'][0]} & {total_cells['aos_imm'][0]}"
+                    f" & {total_cells['soa_mut'][0]} & {total_cells['soa_imm'][0]}"
+                    f" & {_spd_cell(sp_mut_tot) if sp_mut_tot else '--'}"
+                    f" & {_spd_cell(sp_aos_imm_over_aos_mut_tot) if sp_aos_imm_over_aos_mut_tot else '--'}"
+                    f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'} \\\\\n")
+            if speedups_mut:
+                gm_mut = statistics.geometric_mean(speedups_mut)
+                gm_aos_imm_over_aos_mut = (
+                    statistics.geometric_mean(speedups_aos_imm_over_aos_mut)
+                    if speedups_aos_imm_over_aos_mut else None
+                )
+                gm_imm = statistics.geometric_mean(speedups_imm) if speedups_imm else None
+                f.write(f"\\textbf{{Geomean}} & {extra_cols}"
+                        f"& & & & & {_spd_cell(gm_mut)}"
+                        f" & {_spd_cell(gm_aos_imm_over_aos_mut) if gm_aos_imm_over_aos_mut else '--'}"
+                        f" & {_spd_cell(gm_imm) if gm_imm else '--'} \\\\\n")
+        else:
+            extra_cols = "& & " if (has_uses and adt is not None) else ""
+            f.write("\\midrule\n")
+            f.write(f"\\textbf{{Total}} & {extra_cols}"
+                    f"& {fmt(aost_mut_tot)} & {fmt(soat_mut_tot)} & {_spd_cell(sp_mut_tot)} \\\\\n")
+            if speedups_mut:
+                gm = statistics.geometric_mean(speedups_mut)
+                f.write(f"\\textbf{{Geomean}} & {extra_cols}"
+                        f"& & & {_spd_cell(gm)} \\\\\n")
 
         f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
-
-
 def compile_latex_preview(tex_file: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     wrapper = (
@@ -1591,6 +1951,10 @@ def main():
                     help="Save full exe stdout to benchmark_output/raw_output/. "
                          "Each file is <stem>.<variant>.stdout.txt and contains "
                          "the ITER TIMES list for every pass for manual inspection.")
+    ap.add_argument("--benchmark-immutable", "--benchmark-imm", action="store_true",
+                    help="Also compile and benchmark immutable cursor variants "
+                         "(aos_imm, soa_imm) in addition to mutable cursor variants. "
+                         "Generates Table 2 showing 4-way comparison.")
     args = ap.parse_args()
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
@@ -1606,6 +1970,7 @@ def main():
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
+    print(f"  Immutable    : {'YES  (4 variants: aos, aos_imm, soa, soa_imm)' if args.benchmark_immutable else 'no  (2 variants: aos, soa)'}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
     
     # Show which gibbon compiler will be used and its mtime
@@ -1622,12 +1987,17 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_cls_all = build_source_classification(args.programs_dir)
 
+    # Initialize global storage for extended results (used by cursor comparison table)
+    if args.benchmark_immutable:
+        benchmark_program._all_variants_results = []
+
     all_results: List[Tuple] = []
     for prog in programs_to_run:
         aos, soa = benchmark_program(
             prog, args.programs_dir, args.output_dir,
             args.iterations, args.clean, source_cls_all,
             dump_raw=args.dump_raw,
+            benchmark_immutable=args.benchmark_immutable,
         )
         all_results.append((aos, soa))
 
@@ -1647,7 +2017,10 @@ def main():
         print(f"\n{'='*72}")
         print("Generating conference paper materials ...")
         print(f"{'='*72}")
-        write_latex_tables(all_results, args.latex_table)
+        # Get extended results if they were collected
+        extended_results = (getattr(benchmark_program, '_all_variants_results', None)
+                           if args.benchmark_immutable else None)
+        write_latex_tables(all_results, args.latex_table, extended_results)
         compile_latex_preview(args.latex_table, args.figures_dir)
         generate_all_figures(all_results, args.figures_dir)
         print(f"\n  LaTeX  : {args.latex_table}")
