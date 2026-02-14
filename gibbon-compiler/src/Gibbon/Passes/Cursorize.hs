@@ -300,9 +300,11 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                             TailRec -> True
                             Rec -> True 
                             _ -> False
+  let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
+  let hasPackedOutput = hasPacked (unTy2 (arrOut funTy))
   -- Vidush: This is true if we mush optimize the function for tail recursion.
   -- && isFunTailRec
-  let useMutableCursors = userRequestedMutableCursors && isFunRec
+  let useMutableCursors = userRequestedMutableCursors && isFunRec && (hasPackedInput || hasPackedOutput)
   let inLocs = inLocVars funTy
       inLocA = inLocArgs funTy
       outLocs = outLocVars funTy
@@ -3764,6 +3766,9 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                       TailRec -> True
                                       Rec -> True 
                                       _ -> False
+      let calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
+      let calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
+      let useMutForCall = useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
       args' <-
         mapM
           ( \(t, a) -> case a of 
@@ -3774,41 +3779,54 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                         let mut_loc = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" fromDi <$> return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" fromDi <$> return a'
                                     else do 
                                         let mut_loc = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" return a'
 
                                         
                           _ -> if hasPacked (unTy2 t)
                                     then 
                                       do 
-                                        (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                        (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                         fromDi <$> return a'
                                     else do 
-                                        (a', _, _, _) <- cursorizeExp m1 m2 (useMutableCursorsCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                        (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                         return a'
           )
           (zip in_tys args)
-      starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutableCursorsCall insideTimeIt isFunctionRec m1 m2 ty arg) (zip (map unTy2 argTys) args')
+      starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec m1 m2 ty arg) (zip (map unTy2 argTys) args')
+      let coerceMutToCursorIfNeeded argexp =
+            if useMutForCall
+            then pure argexp
+            else case argexp of
+                     VarE varname -> case M.lookup varname tenv of
+                                       Just ty -> case (unTy2 ty) of
+                                                    MutCursorTy -> do
+                                                      deref <- gensym "deref"
+                                                      pure $ mkLets [(deref, [], CursorTy, Ext $ DerefMutCursor varname)] (VarE deref)
+                                                    _ -> pure argexp
+                                       _ -> pure argexp
+                     _ -> pure argexp
+      starts' <- mapM coerceMutToCursorIfNeeded starts
       -- let loc_var = toLocVar loc
       -- let loc_to_variable = case (M.lookup (fromLocVarToFreeVarsTy loc_var) freeVarToVarEnv) of
       --                          Just v -> v
       --                          Nothing -> error "cursorizeAppE: unexpected location variable"
       bod <- case locs of
-            [] -> return $ AppE f _cty [] starts
+            [] -> return $ AppE f _cty [] starts'
             _ -> do
                 -- outs is where the output locations are stored. 
                 -- Vidush: We need to run through output locations
@@ -3836,7 +3854,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
 
                                                                  
                                                       Just Input -> do
-                                                                    case useMutableCursorsCall of 
+                                                                    case useMutForCall of 
                                                                              True -> do  
                                                                                       let varName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
                                                                                           mut_l_pointing_to_cur = dbgTrace (minChatLvl) "Print in AppE Just Input: " dbgTrace (minChatLvl) (sdoc (varName, loc)) dbgTrace (minChatLvl) "End print in AppE Just Input arg.\n" findMutableLocationPointingToVar varName m1
@@ -3876,7 +3894,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                                                                                         Nothing -> return $ (bnds, args ++ [VarE loc_name]) 
                                                                                                         Just ty -> case (unTy2 ty) of 
                                                                                                                         CursorTy -> do
-                                                                                                                                     if isMutModality' (getModality loc)
+                                                                                                                                     if useMutForCall && isMutModality' (getModality loc)
                                                                                                                                      then do
                                                                                                                                       address <- gensym "address"
                                                                                                                                       let address_bnd = [(address, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_name))]
@@ -3894,7 +3912,8 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                                           True -> let (rvar,_,_,_):xs = fromJust $ M.lookup mutl' m1 
                                                                     in dbgTrace (minChatLvl) "Print in true case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc, rvar)) dbgTrace (minChatLvl) "End in true case out." return $ (bnds, args ++ [VarE rvar])
                     ) ([], []) outs
-                return $ mkLets additional_bnds (AppE f _cty [] (appe_args ++ starts))
+                appe_args' <- mapM coerceMutToCursorIfNeeded appe_args
+                return $ mkLets additional_bnds (AppE f _cty [] (appe_args' ++ starts'))
       asserts <-
         foldrM
           ( \loc acc ->
@@ -3915,7 +3934,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
           )
           bod
           locs
-      dflags <- dbgTrace (minChatLvl) "Print Starts: " dbgTrace (minChatLvl) (sdoc (starts, args')) dbgTrace (minChatLvl) "End in print starts!\n" getDynFlags
+      dflags <- dbgTrace (minChatLvl) "Print Starts: " dbgTrace (minChatLvl) (sdoc (starts', args')) dbgTrace (minChatLvl) "End in print starts!\n" getDynFlags
       if gopt Opt_RtsDebug dflags
         then do
           asserts' <- foldrM (\exprs body -> pure $ exprs body) asserts newInsts
@@ -4799,14 +4818,34 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
   -}
 
   | otherwise = do
+      let rhsCallInfo =
+            case rhs of
+              AppE fn _ _ _ ->
+                case M.lookup fn fundefs of
+                  Nothing -> error $ "cursorizeLet: unknown function in AppE: " ++ sdoc fn
+                  Just g ->
+                    let fnTy = funTy g
+                        fmeta = funMeta g
+                        isFunctionRec = case funRec fmeta of
+                                          TailRec -> True
+                                          Rec -> True
+                                          _ -> False
+                        calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
+                        calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
+                        useMutForCall = useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
+                        numRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
+                        numOutCursors = numRegs + length (locRets fnTy)
+                     in (useMutForCall, numOutCursors, calleeHasPackedOutput)
+              _ -> (useMutableCursorsCall, 0, False)
+      let (useMutableForRhs, rhsNumOutCursors, rhsHasPackedOutput) = rhsCallInfo
       let cursor_ty_locs =
             map
               ( \loc ->
                   let free_var = fromLocArgToFreeVarsTy loc
                       cursorType = case free_var of
-                        R r -> getCursorizeTyFromRegVar'' Nothing useMutableCursorsCall r
+                        R r -> getCursorizeTyFromRegVar'' Nothing useMutableForRhs r
                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
-                        FL l -> getCursorizeTyFromLocVar'' Nothing useMutableCursorsCall l
+                        FL l -> getCursorizeTyFromLocVar'' Nothing useMutableForRhs l
                    in cursorType
               )
               locs
@@ -4815,24 +4854,34 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
               ( \loc ->
                   let free_var = fromLocArgToFreeVarsTy loc
                       cursorType :: Ty3 = case free_var of
-                        R r -> getCursorizeTyFromRegVar'' Nothing useMutableCursorsCall r
+                        R r -> getCursorizeTyFromRegVar'' Nothing useMutableForRhs r
                         V _ -> error "cursorizeLet: did not expect a variable in locations in a LetE."
-                        FL l -> getCursorizeTyFromLocVar'' Nothing useMutableCursorsCall l
+                        FL l -> getCursorizeTyFromLocVar'' Nothing useMutableForRhs l
                    in cursorType
               )
               locs
       (rhs', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
+      let scalarCallProjIx =
+            case rhs of
+              AppE {} ->
+                if (not useMutableForRhs) && (not rhsHasPackedOutput) && (rhsNumOutCursors > 0)
+                  then Just rhsNumOutCursors
+                  else Nothing
+              _ -> Nothing
       case locs of
         [] -> do 
+          let rhs_for_bind = case scalarCallProjIx of
+                               Just ix -> ProjE ix rhs'
+                               Nothing -> rhs'
           (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeIt m1' m2' (M.union freeVarToVarEnv' freeVarToVarEnv) (M.insert v (MkTy2 ty) tenv) bod
-          return (LetE (v, [], curDict $ stripTyLocs ty, rhs') bod', freeVarToVarEnv'', m1'', m2'')
+          return (LetE (v, [], curDict $ stripTyLocs ty, rhs_for_bind) bod', freeVarToVarEnv'', m1'', m2'')
         _ -> do
           fresh <- gensym "tup_scalar"
           let rhs'' = VarE fresh
               -- Vidush: TODO rename useMutableCursorsCall to something like useMutableCursors... 
-              ty' = if useMutableCursorsCall 
-                    then cursorizeTy freeVarToVarEnv' m1' m2' useMutableCursorsCall Nothing ty
-                    else ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1 m2 useMutableCursorsCall Nothing ty])
+              ty' = if useMutableForRhs
+                    then cursorizeTy freeVarToVarEnv' m1' m2' useMutableForRhs Nothing ty
+                    else ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1 m2 useMutableForRhs Nothing ty])
               -- We cannot resuse ty' here because TyEnv Ty2 and expresssions are
               -- tagged with different
               ty'' = stripTyLocs ty'
@@ -4849,7 +4898,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                            in (loc_to_variable, MkTy2 cursorType)
                       )
                       locs
-          (bnds, m1b, m2b) <- if useMutableCursorsCall
+          (bnds, m1b, m2b) <- if useMutableForRhs
                               then do
                                    let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
                                                                                                            location_var = toLocVar loc

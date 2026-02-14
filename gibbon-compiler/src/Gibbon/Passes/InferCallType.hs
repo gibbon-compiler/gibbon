@@ -40,10 +40,12 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                              Rec -> True
                              TailRec -> True
                              _ -> False
+    let returnsPacked = hasPacked (unTy2 (arrOut funTy))
+    let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
     -- Vidush: 
     -- We only want to use mutable cursors for recursive functions for now.
     -- I don't think it worth it to make cursors mutable for non recursive functions at the moment.
-    let useMutableCursors = (gopt Opt_UseMutableCursors dflags) && isInputFunRec
+    let useMutableCursors = (gopt Opt_UseMutableCursors dflags) && isInputFunRec && (returnsPacked || hasPackedInput)
     let _optimize_tail_calls = gopt Opt_TailCallOptimize dflags
     let (funBody', _env, _tailTy) = if useMutableCursors 
                                     then inferCallTypeExp useMutableCursors funName M.empty funBody
@@ -80,7 +82,7 @@ inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
                                                                                                                  else (lvs ++ [LRM l r InputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                             -- Vidush for output types, we only make them mutable if the function is tail recursive.
                                                                                             -- If not we don't make the OutputMutable.
-                                                                                            (Single{}, Output) -> if funRec' == TailRec 
+                                                                                            (Single{}, Output) -> if funRec' == TailRec || (funRec' == Rec && returnsPacked)
                                                                                                                   then (lvs ++ [LRM l r OutputMutable], lcs ++ [fromLocVarToFreeVarsTy l, fromRegVarToFreeVarsTy (regionToVar r), fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)])
                                                                                                                   else (lvs ++ [LRM l r Output], lcs) 
                                                                                             (SoA{}, Input) -> if funRec' == TailRec  
@@ -156,8 +158,10 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                                         Nothing -> error "Expected function definition for function!"
                                         Just _f@FunDef{funTy, funMeta} -> do
                                              let fnrecTy = funRec funMeta
+                                             let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
+                                             let hasPackedOutput = hasPacked (unTy2 (arrOut funTy))
                                             -- We only want to do this for Recursive functions.
-                                             if fnrecTy == TailRec || fnrecTy == Rec
+                                             if (fnrecTy == TailRec || fnrecTy == Rec) && (hasPackedInput || hasPackedOutput)
                                              -- we need to find change locs to be output mutable
                                              then 
                                                 do

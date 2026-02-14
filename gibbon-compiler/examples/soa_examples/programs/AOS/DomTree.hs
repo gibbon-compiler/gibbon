@@ -90,18 +90,18 @@ sumTextWidth d =
 -- Vidush This kind of function does not work
 -- with the mutable backend and needs to be fixed
 -- A map like function that's not tail recursive.
--- computeWidths :: DOM -> DOM
--- computeWidths d =
---   case d of
---     Elem tag cls style cost x y _ h l r ->
---       let l' = computeWidths l
---           r' = computeWidths r
---           w  = max (getWidth l') (getWidth r')
---       in Elem tag cls style cost x y w h l' r'
---     Text c f col w h ->
---       Text c f col w h
---     Empty ->
---       Empty
+computeWidths :: DOM -> DOM
+computeWidths d =
+  case d of
+    Elem tag cls style cost x y _ h l r ->
+      let l' = computeWidths l
+          r' = computeWidths r
+          w  = max (getWidth l') (getWidth r')
+      in Elem tag cls style cost x y w h l' r'
+    Text c f col w h ->
+      Text c f col w h
+    Empty ->
+      Empty
 
 getWidth :: DOM -> Int
 getWidth d =
@@ -148,14 +148,14 @@ gibbon_main =
       textW  = iterate (sumTextWidth tree)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
---       _ = printsym (quote "Running pass computeWidths: ")
---       _ = printsym (quote "NEWLINE")
---       tree'  = iterate (computeWidths tree)
---       _ = printsym (quote "End")
---       _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass computeWidths (map, uses=14): ")
+      _ = printsym (quote "NEWLINE")
+      tree'  = iterate (computeWidths tree)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
       _ = printsym (quote "Running pass scaleLayout (map, uses=15): ")
       _ = printsym (quote "NEWLINE")
-      tree' = iterate (scaleLayout tree 2)
+      tree'' = iterate (scaleLayout tree' 2)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
       --_      = printPacked tree''
