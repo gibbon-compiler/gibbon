@@ -78,9 +78,10 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Default program list
 # ---------------------------------------------------------------------------
+# "DecisionTree.hs", "KDTree.hs",
 DEFAULT_PROGRAMS = [
-    "Compiler.hs", "DBQuery.hs", "DecisionTree.hs", "DomTree.hs",
-    "KDTree.hs", "LinearListReduction.hs", "List.hs", "MonoTree.hs",
+    "Compiler.hs", "DBQuery.hs", "DomTree.hs",
+    "LinearListReduction.hs", "List.hs", "MonoTree.hs",
     "ObjectGraph.hs", "OctTree.hs", "PiecewiseFunctions.hs",
     "TernaryTree.hs", "Trie.hs",
 ]
@@ -732,6 +733,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         cmd.append("--use-mutable-cursors")
     cmd.extend([
         "--packed", "--to-exe",
+        "--no-ran",
         "--cfile",   str(c_file),
         "--exefile", str(exe),
         str(source),

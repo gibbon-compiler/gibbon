@@ -250,10 +250,20 @@ gibbon_main =
   let _ = printsym (quote "NEWLINE") in
   -- Single inference
   let fv = mkFeatureVec 32 in
+  let _ = printsym (quote "Running pass classify tree (fold, uses=5): ") in
+  let _ = printsym (quote "NEWLINE") in
   let pred   = classify tree fv in
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass classify Depth (fold, uses=4): ") in
+  let _ = printsym (quote "NEWLINE") in
   let pdepth = classifyDepth tree fv 0 in
-
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
+  let _ = printsym (quote "Running pass classify Batch (fold, uses=5): ") in
+  let _ = printsym (quote "NEWLINE") in
   -- Batched inference
   let batch = classifyBatch tree 32 100 in
-
+  let _ = printsym (quote "End") in
+  let _ = printsym (quote "NEWLINE") in
   (nodes, leaves, depth, imp, samples, feat0, small, cost, paths, pred, pdepth, batch)
