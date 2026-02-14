@@ -2305,15 +2305,12 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
           let numRanNodes = if (("^" `L.isSuffixOf` dcon') && (not ("^" `L.isSuffixOf` dcon)) ) then ((numRANsDataCon (M.map (fmap unTy2) ddfs) dcon)) else 0
           let locs_tys =
                 map
-                  ( \e@(rnd, (MkTy2 ty)) ->
-                      let idx = case (L.elemIndex e exp_f_tys) of
-                            Just idx -> idx
-                            Nothing -> error "cursorizeExp: DataConE: field not found!"
-                          key = (dcon', idx + numRanNodes)
+                  ( \(idx, e) ->
+                      let key = (dcon', idx + numRanNodes)
                           loc = L.lookup key field_locs
                        in (key, loc, e)
                   )
-                  exp_f_tys
+                  (zip [0 ..] exp_f_tys)
           let additional_bnds =
                 if present
                   then []
