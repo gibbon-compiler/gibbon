@@ -137,11 +137,52 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
 
           when dump_op $
             dbgTrace 2 ("Adding traversals: " ++ sdoc context) (return ())
-          -- Generate traversals: assuming that InferLocs has already generated
-          -- the traversal functions, we only use it here.
-          trav_binds <- genTravBinds (L.map (\(p_var, _p_loc) -> (VarE p_var, lookupVEnv p_var env21)) ls)
-          (dcon,vlocs,) <$> mkLets trav_binds <$>
-            addTraversalsExp ddefs fundefs env21 renv1 context rhs
+          let mkTravBindsFrom ls' =
+                genTravBinds (L.map (\(p_var, _p_loc) -> (VarE p_var, lookupVEnv p_var env21)) ls')
+
+              pushTravIntoIf env e =
+                case e of
+                  LetE (v, l, ty, rhs_let) bod -> do
+                    mb <- pushTravIntoIf (extendVEnv v ty env) bod
+                    case mb of
+                      Nothing -> pure Nothing
+                      Just bod' -> pure $ Just $ LetE (v, l, ty, rhs_let) bod'
+
+                  IfE a b c -> do
+                    mb <- pushTravIntoIf env b
+                    mc <- pushTravIntoIf env c
+                    let b' = case mb of
+                               Nothing -> b
+                               Just bb -> bb
+                        c' = case mc of
+                               Nothing -> c
+                               Just cc -> cc
+
+                    cond_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, a) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    then_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, b) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    else_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, c) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    let hasAny = not (L.null cond_trav_binds && L.null then_trav_binds && L.null else_trav_binds)
+                    if hasAny
+                      then pure $ Just $ mkLets cond_trav_binds $
+                                        IfE a (mkLets then_trav_binds b') (mkLets else_trav_binds c')
+                      else pure Nothing
+
+                  _ -> pure Nothing
+          rhs1 <- addTraversalsExp ddefs fundefs env21 renv1 context rhs
+          pushed <- pushTravIntoIf env21 rhs1
+          rhs' <- case pushed of
+                    Just rhs2 -> pure rhs2
+                    Nothing -> do
+                      -- Fallback: keep old behavior when there is no suitable `if` to sink into.
+                      trav_binds <- mkTravBindsFrom ls
+                      pure $ mkLets trav_binds rhs1
+          pure (dcon, vlocs, rhs')
 
 
 -- | Collect all non-static items that need to be traversed (uses InferEffects).

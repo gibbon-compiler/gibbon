@@ -3766,6 +3766,9 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
       let calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
       let calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
       let useMutForCall = useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
+      let nonSelfCall = case _cty of
+                              TailCall -> False
+                              _ -> True
       args' <-
         mapM
           ( \(t, a) -> case a of 
@@ -3804,7 +3807,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                         return a'
           )
           (zip in_tys args)
-      starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec m1 m2 ty arg) (zip (map unTy2 argTys) args')
+      starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec nonSelfCall m1 m2 ty arg) (zip (map unTy2 argTys) args')
       let coerceMutToCursorIfNeeded argexp =
             if useMutForCall
             then pure argexp
@@ -3932,13 +3935,22 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
           bod
           locs
       dflags <- dbgTrace (minChatLvl) "Print Starts: " dbgTrace (minChatLvl) (sdoc (starts', args')) dbgTrace (minChatLvl) "End in print starts!\n" getDynFlags
+      let m1_after_call = if useMutForCall && nonSelfCall
+                          then
+                            let mutated_locs = Mb.mapMaybe
+                                                 (\a -> case a of
+                                                          VarE v -> findMutableLocationPointingToVar v m1
+                                                          _ -> Nothing)
+                                                 args
+                            in L.foldr M.delete m1 mutated_locs
+                          else m1
       if gopt Opt_RtsDebug dflags
         then do
           asserts' <- foldrM (\exprs body -> pure $ exprs body) asserts newInsts
-          pure (asserts', freeVarToVarEnv', m1, m2)
+          pure (asserts', freeVarToVarEnv', m1_after_call, m2)
         else do
           bod' <- dbgTrace (minChatLvl) "Print newInts in cursorizeApp: " dbgTrace (minChatLvl) (sdoc (foldr (\i b -> i b) (VarE "") newInsts, args, args', argTys)) dbgTrace (minChatLvl) "End printing newInts in cursorizeAppE.\n" foldrM (\exprs body -> pure $ exprs body) bod newInsts
-          pure (bod', freeVarToVarEnv', m1, m2)
+          pure (bod', freeVarToVarEnv', m1_after_call, m2)
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
 {-
@@ -7135,82 +7147,151 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                     return (m1inner, []) 
       return (tenv', binds ++ binds', m1', m2)
 
-giveStarts :: TyEnv Var Ty2 -> M.Map FreeVarsTy Var -> Bool -> Bool -> Bool -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> OldTy2 -> Exp3 -> PassM Exp3
-giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv moldenv ty e = do
+giveStarts :: TyEnv Var Ty2 -> M.Map FreeVarsTy Var -> Bool -> Bool -> Bool -> Bool -> MutableLocPtsToEnv -> MutableLocOldValueEnv -> OldTy2 -> Exp3 -> PassM Exp3
+giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec nonSelfCall mlocptsenv moldenv ty e = do
+  let findOldValueVarByAlias var =
+        L.foldr
+          (\(_k, (oldv, _lc, _reg, aliases)) acc ->
+              if var == oldv || S.member var aliases
+              then Just oldv
+              else acc)
+          Nothing
+          (M.toList moldenv)
   case ty of
     PackedTy _ loc -> do
                       if useMutableCursorsCall
                       then case M.lookup loc moldenv of 
-                                        Nothing -> case e of 
-                                                       MkProdE ls -> do 
-                                                                     case ls of 
-                                                                            (VarE return_var):rst -> do 
-                                                                                                case M.lookup return_var tenv of 
-                                                                                                      Nothing -> return $ mkProj 0 e
-                                                                                                      Just ty -> case (unTy2 ty) of 
-                                                                                                                          MutCursorTy -> return $ mkProj 0 e
-                                                                                                                          CursorTy -> do
-                                                                                                                                      take_address <- gensym "address"
-                                                                                                                                      let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (mkProj 0 e)) 
-                                                                                                                                      return $ mkLets [additional_bnd] (VarE take_address)
-                                                                                                                          -- Vidush: Kind of bad, since this does not ascertain the kind of the cursor
-                                                                                                                          PackedTy _ l -> do
-                                                                                                                                          case l of 
-                                                                                                                                              Single{} -> do 
-                                                                                                                                                          take_address <- gensym "address"
-                                                                                                                                                          let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (mkProj 0 e)) 
-                                                                                                                                                          return $ mkLets [additional_bnd] (VarE take_address)
-                                                                                                                                              SoA{} -> case isInsideTimeIt of 
-                                                                                                                                                              False -> return $ mkProj 0 e
-                                                                                                                                                              True -> do
-                                                                                                                                                                      copy_var <- gensym "copy_start_timeit"
-                                                                                                                                                                      let variable_holding_start_vals = return_var
-                                                                                                                                                                          ty_of_loc = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
-                                                                                                                                                                          make_copy_binds = [ (copy_var, [], ty_of_loc, Ext $ InitCursor ty_of_loc), ("_", [], ProdTy [], Ext $ MemCpy copy_var return_var ty_of_loc)]
-                                                                                                                                                                      return $ mkLets make_copy_binds $ VarE copy_var
-                                                                                                                          _ -> return $ mkProj 0 e
-                                                                            _ -> return $ mkProj 0 e                                                                     
-                                                       _ -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, e)) dbgTrace (minChatLvl) "End in give starts Packed Nothing!\n" return $ mkProj 0 e --error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
-                                        Just (oldv, oldl, _, _) -> let locName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy loc)
-                                                                       locTy = M.lookup locName tenv 
-                                                                     in case frec of
-                                                                              True -> do 
-                                                                                       case loc of
-                                                                                          Single{} -> do
-                                                                                                      take_address <- gensym "address"
-                                                                                                      let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE oldv))
-                                                                                                      dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec Single!\n" return $ mkLets [additional_bnd] (VarE take_address)
-                                                                                          SoA{} -> case isInsideTimeIt of 
-                                                                                                          -- False -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec but SoA!\n" return $ VarE oldv
-                                                                                                          -- True
-                                                                                                          -- Vidush: we always copy the address of the start
-                                                                                                          -- Since the cursors are mutable, their address may be updated. 
-                                                                                                          _ -> do
-                                                                                                                   copy_var <- gensym "copy_address"
-                                                                                                                   let variable_holding_start_vals = oldv
-                                                                                                                       ty_of_loc = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
-                                                                                                                       make_copy_binds = [ (copy_var, [], ty_of_loc, Ext $ InitCursor ty_of_loc), ("_", [], ProdTy [], Ext $ MemCpy copy_var oldv ty_of_loc)]
-                                                                                                                   dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec but SoA!\n" return $ mkLets make_copy_binds $ VarE copy_var
-                                                                              _ -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts!\n" return $ VarE oldv                                        
+                                        Nothing -> case e of
+                                                       VarE vv -> case findOldValueVarByAlias vv of
+                                                                    Just oldv -> case loc of
+                                                                                  Single{} -> if nonSelfCall
+                                                                                              then do
+                                                                                                   copy_var <- gensym "copy_start"
+                                                                                                   take_address <- gensym "copy_address"
+                                                                                                   let copy_bnds = [ (copy_var, [], CursorTy, VarE oldv)
+                                                                                                                   , (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE copy_var))
+                                                                                                                   ]
+                                                                                                   return $ mkLets copy_bnds (VarE take_address)
+                                                                                              else do
+                                                                                                   take_address <- gensym "address"
+                                                                                                   let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE oldv))
+                                                                                                   return $ mkLets [additional_bnd] (VarE take_address)
+                                                                                  SoA{} -> if nonSelfCall
+                                                                                           then do
+                                                                                                copy_var <- gensym "copy_start"
+                                                                                                void_var <- gensym "void"
+                                                                                                let copy_ty = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
+                                                                                                let copy_bnds = [ (copy_var, [], copy_ty, Ext $ InitCursor copy_ty)
+                                                                                                                , (void_var, [], ProdTy [], Ext $ MemCpy copy_var oldv copy_ty)
+                                                                                                                ]
+                                                                                                return $ mkLets copy_bnds (VarE copy_var)
+                                                                                           else return $ VarE oldv
+                                                                    Nothing -> return $ VarE vv
+                                                       _ -> case e of 
+                                                              MkProdE ls -> do 
+                                                                            case ls of 
+                                                                                   (VarE return_var):rst -> do 
+                                                                                                       case M.lookup return_var tenv of 
+                                                                                                             Nothing -> return $ mkProj 0 e
+                                                                                                             Just ty -> case (unTy2 ty) of 
+                                                                                                                           MutCursorTy -> return $ mkProj 0 e
+                                                                                                                           CursorTy -> do
+                                                                                                                                       take_address <- gensym "address"
+                                                                                                                                       let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (mkProj 0 e)) 
+                                                                                                                                       return $ mkLets [additional_bnd] (VarE take_address)
+                                                                                                                           -- Vidush: Kind of bad, since this does not ascertain the kind of the cursor
+                                                                                                                           PackedTy _ l -> do
+                                                                                                                                           case l of 
+                                                                                                                                               Single{} -> do 
+                                                                                                                                                           take_address <- gensym "address"
+                                                                                                                                                           let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (mkProj 0 e)) 
+                                                                                                                                                           return $ mkLets [additional_bnd] (VarE take_address)
+                                                                                                                                               SoA{} -> case isInsideTimeIt of 
+                                                                                                                                                               False -> return $ mkProj 0 e
+                                                                                                                                                               True -> do
+                                                                                                                                                                       copy_var <- gensym "copy_start_timeit"
+                                                                                                                                                                       let variable_holding_start_vals = return_var
+                                                                                                                                                                           ty_of_loc = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
+                                                                                                                                                                           make_copy_binds = [ (copy_var, [], ty_of_loc, Ext $ InitCursor ty_of_loc), ("_", [], ProdTy [], Ext $ MemCpy copy_var return_var ty_of_loc)]
+                                                                                                                                                                       return $ mkLets make_copy_binds $ VarE copy_var
+                                                                                                                           _ -> return $ mkProj 0 e
+                                                                                   _ -> return $ mkProj 0 e                                                                     
+                                                              _ -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, e)) dbgTrace (minChatLvl) "End in give starts Packed Nothing!\n" return $ mkProj 0 e --error $ "Expected to have loc in env!!" ++ show (loc, moldenv)
+                                        Just (oldv, _oldl, _, _) ->
+                                          let locName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy loc)
+                                              locTy = M.lookup locName tenv
+                                          in case frec of
+                                               True ->
+                                                 case loc of
+                                                   Single{} ->
+                                                     if nonSelfCall
+                                                     then do
+                                                       copy_var <- gensym "copy_start"
+                                                       take_address <- gensym "copy_address"
+                                                       let copy_bnds =
+                                                             [ (copy_var, [], CursorTy, VarE oldv)
+                                                             , (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE copy_var))
+                                                             ]
+                                                       dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts non-tail Single copy!\n" return $ mkLets copy_bnds (VarE take_address)
+                                                     else do
+                                                       take_address <- gensym "address"
+                                                       let additional_bnd = (take_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE oldv))
+                                                       dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec Single!\n" return $ mkLets [additional_bnd] (VarE take_address)
+                                                   SoA{} -> do
+                                                     copy_var <- gensym "copy_address"
+                                                     let ty_of_loc = getCursorizeTyFromLocVar Nothing useMutableCursorsCall loc
+                                                         make_copy_binds =
+                                                           [ (copy_var, [], ty_of_loc, Ext $ InitCursor ty_of_loc)
+                                                           , ("_", [], ProdTy [], Ext $ MemCpy copy_var oldv ty_of_loc)
+                                                           ]
+                                                     dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts tail rec but SoA!\n" return $ mkLets make_copy_binds $ VarE copy_var
+                                               _ ->
+                                                 dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (loc, oldv, locName, locTy)) dbgTrace (minChatLvl) "End in give starts!\n" return $ VarE oldv
                       else return $ mkProj 0 e
     -- NOTE : mkProj . MkProdE == id
     ProdTy tys -> do
-                  args <- mapM (\(ty', n) -> giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec mlocptsenv moldenv ty' (mkProj n e)) (zip tys [0 ..])
+                  args <- mapM (\(ty', n) -> giveStarts tenv fenv useMutableCursorsCall isInsideTimeIt frec nonSelfCall mlocptsenv moldenv ty' (mkProj n e)) (zip tys [0 ..])
                   return $ MkProdE args 
-    CursorArrayTy{} -> case e of 
+    CursorArrayTy sz -> case e of 
                           VarE v -> let mutloc = findMutableLocationPointingToVar v mlocptsenv
                                      in case mutloc of 
-                                              Nothing -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts Nothing!\n" return e 
+                                              Nothing -> case findOldValueVarByAlias v of
+                                                              Nothing -> dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts Nothing!\n" return e
+                                                              Just oldv -> dbgTrace (minChatLvl) "Print in give starts old value: " dbgTrace (minChatLvl) (sdoc (v, oldv)) dbgTrace (minChatLvl) "End in give starts old value!\n" return $ VarE oldv
                                               Just ml -> do 
                                                          let mlVarName = dbgTrace (minChatLvl) "Print in give starts: " dbgTrace (minChatLvl) (sdoc (v, ml, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts Just ml!\n" getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
-                                                         return $ VarE mlVarName
+                                                         if nonSelfCall && useMutableCursorsCall
+                                                         then do
+                                                              copy_var <- gensym "copy_start"
+                                                              void_var <- gensym "void"
+                                                              let copy_ty = CursorArrayTy sz
+                                                              let copy_binds = [(copy_var, [], copy_ty, Ext $ InitCursor copy_ty),
+                                                                                (void_var, [], ProdTy [], Ext $ MemCpy copy_var mlVarName copy_ty)]
+                                                              return $ mkLets copy_binds (VarE copy_var)
+                                                         else return $ VarE mlVarName
                           _ -> return e  
     _ -> case e of 
              VarE vv -> let mutl = dbgTrace (minChatLvl) "Print in give starts VarE v case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts VarE v.\n" findMutableLocationPointingToVar vv mlocptsenv
                          in case mutl of 
-                                Nothing -> dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts rest of the case 1!\n" return e 
+                                Nothing -> case findOldValueVarByAlias vv of
+                                             Nothing -> dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv)) dbgTrace (minChatLvl) "End in give starts rest of the case 1!\n" return e
+                                             Just oldv -> dbgTrace (minChatLvl) "Print in give starts old value: " dbgTrace (minChatLvl) (sdoc (vv, oldv)) dbgTrace (minChatLvl) "End in give starts old value case 2!\n" return $ VarE oldv
                                 Just ml -> let mlName = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy ml)
-                                             in dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv, mlName)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" return $ VarE mlName
+                                             in do
+                                                  dbgTrace (minChatLvl) "Print in give starts rest of the case: " dbgTrace (minChatLvl) (sdoc (e, mlocptsenv, mlName)) dbgTrace (minChatLvl) "End in give starts rest of the case 2!\n" (return ())
+                                                  case M.lookup mlName tenv of
+                                                    Just (MkTy2 MutCursorTy) ->
+                                                      if nonSelfCall && useMutableCursorsCall
+                                                      then do
+                                                        deref_copy <- gensym "deref_copy"
+                                                        copy_address <- gensym "copy_address"
+                                                        let copy_bnds =
+                                                              [ (deref_copy, [], CursorTy, Ext $ DerefMutCursor mlName)
+                                                              , (copy_address, [], MutCursorTy, Ext $ AddrOfCursor (VarE deref_copy))
+                                                              ]
+                                                        return $ mkLets copy_bnds (VarE copy_address)
+                                                      else return $ VarE mlName
+                                                    _ -> return $ VarE mlName
 
              _ -> dbgTrace (minChatLvl) "Print in give starts _ case: " dbgTrace (minChatLvl) (sdoc (e)) dbgTrace (minChatLvl) "End in give starts wildcard v.\n" return e
 

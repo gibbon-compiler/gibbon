@@ -153,44 +153,44 @@ mkFeatureVec n =
   generate n (\i -> mod (i * 7 + n) 100)
 
 -- Vidush: TODO: We need to fix these classify output
--- -- -------------------------------
--- -- Classification (inference)
--- -- -------------------------------
---
--- classify :: DTree -> FeatureVec -> Int
--- classify t fv =
---   case t of
---     Leaf label _ ->
---       label
---     Node feature threshold _ left right ->
---       let val = nth fv feature in
---       if val <= threshold
---       then classify left fv
---       else classify right fv
---
--- classifyDepth :: DTree -> FeatureVec -> Int -> Int
--- classifyDepth t fv depth =
---   case t of
---     Leaf _ _ ->
---       depth
---     Node feature threshold _ left right ->
---       let val = nth fv feature in
---       if val <= threshold
---       then classifyDepth left fv (depth + 1)
---       else classifyDepth right fv (depth + 1)
---
--- -- -------------------------------
--- -- Batched inference
--- -- -------------------------------
---
--- classifyBatch :: DTree -> Int -> Int -> Int
--- classifyBatch t fvSize i =
---   if i <= 0
---   then 0
---   else
---     let fv = generate fvSize (\j -> mod (j * 3 + i) 100) in
---     let label = classify t fv in
---     label + classifyBatch t fvSize (i - 1)
+-- -------------------------------
+-- Classification (inference)
+-- -------------------------------
+
+classify :: DTree -> FeatureVec -> Int
+classify t fv =
+  case t of
+    Leaf label _ ->
+      label
+    Node feature threshold _ left right ->
+      let val = nth fv feature in
+      if val <= threshold
+      then classify left fv
+      else classify right fv
+
+classifyDepth :: DTree -> FeatureVec -> Int -> Int
+classifyDepth t fv depth =
+  case t of
+    Leaf _ _ ->
+      depth
+    Node feature threshold _ left right ->
+      let val = nth fv feature in
+      if val <= threshold
+      then classifyDepth left fv (depth + 1)
+      else classifyDepth right fv (depth + 1)
+
+-- -------------------------------
+-- Batched inference
+-- -------------------------------
+
+classifyBatch :: DTree -> Int -> Int -> Int
+classifyBatch t fvSize i =
+  if i <= 0
+  then 0
+  else
+    let fv = generate fvSize (\j -> mod (j * 3 + i) 100) in
+    let label = classify t fv in
+    label + classifyBatch t fvSize (i - 1)
 
 -- -------------------------------
 -- Benchmark entry point
@@ -249,11 +249,11 @@ gibbon_main =
   let _ = printsym (quote "End") in
   let _ = printsym (quote "NEWLINE") in
   -- Single inference
---  let fv = mkFeatureVec 32 in
---   let pred   = classify tree fv in
---   let pdepth = classifyDepth tree fv 0 in
---
---   -- Batched inference
---   let batch = classifyBatch tree 32 100 in
+  let fv = mkFeatureVec 32 in
+  let pred   = classify tree fv in
+  let pdepth = classifyDepth tree fv 0 in
 
-  (nodes, leaves, depth, imp, samples, feat0, small, cost, paths)
+  -- Batched inference
+  let batch = classifyBatch tree 32 100 in
+
+  (nodes, leaves, depth, imp, samples, feat0, small, cost, paths, pred, pdepth, batch)
