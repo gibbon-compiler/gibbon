@@ -26,6 +26,11 @@ sumList lst = case lst of
 		   Cons i rst -> let sumRst = sumList rst 
                                   in i + sumRst
 
+sumListAcc :: List -> Int -> Int
+sumListAcc lst acc = case lst of
+						  Nil -> acc
+						  Cons i rst -> sumListAcc rst (acc + i)
+
 id :: List -> List 
 id lst = lst
 
@@ -43,7 +48,12 @@ gibbon_main = let
 				  sum = iterate (sumList lst')
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
-				in sumList lst'
+				  _ = printsym (quote "Running pass sumListAcc (fold, uses=2): ")
+				  _ = printsym (quote "NEWLINE")
+				  sum' = iterate (sumListAcc lst' 0)
+				  _ = printsym (quote "End")
+				  _ = printsym (quote "NEWLINE")
+				in (sum, sum')
 
 
 

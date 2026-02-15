@@ -638,6 +638,70 @@ def outputs_match(a: BenchmarkResult, b: BenchmarkResult) -> bool:
     return bool(a.output and b.output
                 and a.output.strip() == b.output.strip())
 
+
+def outputs_match_all(results: List[Optional[BenchmarkResult]]) -> bool:
+    """
+    Return True iff all provided results:
+      1) exist
+      2) ran successfully
+      3) have non-empty cleaned output
+      4) have identical cleaned output text
+    """
+    rs = [r for r in results if r is not None]
+    if not rs:
+        return False
+    if any(not r.run_success for r in rs):
+        return False
+    outs: List[str] = []
+    for r in rs:
+        if not r.output:
+            return False
+        outs.append(r.output.strip())
+    return len(set(outs)) == 1
+
+
+def analyze_outputs_by_variant(named_results: Dict[str, Optional[BenchmarkResult]]) -> Dict:
+    """
+    Analyze outputs across variants while excluding runtime failures from matching.
+    Returns:
+      {
+        "comparable_count": int,   # successful variants with non-empty output
+        "is_match": Optional[bool],# None if <2 comparable variants
+        "groups": List[Tuple[List[str], str]],  # (variants, output_text)
+        "failed": List[Tuple[str, str]],        # (variant, error_message)
+      }
+    """
+    comparable: List[Tuple[str, str]] = []
+    failed: List[Tuple[str, str]] = []
+    for vname, res in named_results.items():
+        if res is None:
+            continue
+        if not res.run_success:
+            failed.append((vname, res.error_message or "execution failed"))
+            continue
+        if res.output:
+            comparable.append((vname, res.output.strip()))
+
+    out_map: Dict[str, List[str]] = {}
+    for vname, out in comparable:
+        out_map.setdefault(out, []).append(vname)
+
+    groups = [(sorted(vs), out) for out, vs in out_map.items()]
+    groups.sort(key=lambda x: ",".join(x[0]))
+
+    comparable_count = len(comparable)
+    if comparable_count < 2:
+        is_match = None
+    else:
+        is_match = (len(out_map) == 1)
+
+    return {
+        "comparable_count": comparable_count,
+        "is_match": is_match,
+        "groups": groups,
+        "failed": sorted(failed, key=lambda x: x[0]),
+    }
+
 # ---------------------------------------------------------------------------
 # Smart recompilation check
 # ---------------------------------------------------------------------------
@@ -948,9 +1012,29 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             'soa_imm': results.get("soa_imm"),
         })
     
-    if aos and soa and aos.run_success and soa.run_success:
+    if benchmark_immutable:
+        aos_imm = results.get("aos_imm")
+        soa_imm = results.get("soa_imm")
+        analysis = analyze_outputs_by_variant({
+            "aos": aos,
+            "aos_imm": aos_imm,
+            "soa": soa,
+            "soa_imm": soa_imm,
+        })
+        if analysis["is_match"] is True:
+            print("\n  Output check (successful cursor variants): ✓ MATCH")
+        elif analysis["is_match"] is False:
+            print("\n  Output check (successful cursor variants): ✗ MISMATCH")
+        else:
+            print("\n  Output check (successful cursor variants): N/A (fewer than 2 successful variants with output)")
+        if analysis["failed"]:
+            failed_s = ", ".join(f"{v} ({err})" for v, err in analysis["failed"])
+            print(f"  Runtime failures excluded from output matching: {failed_s}")
+    elif aos and soa and aos.run_success and soa.run_success:
         m = outputs_match(aos, soa)
         print(f"\n  Output check (mutable cursors): {'✓ MATCH' if m else '✗ MISMATCH'}")
+
+    if aos and soa and aos.run_success and soa.run_success:
         if aos.passes:
             classified = [(p, d) for p, d in aos.passes.items()
                           if d["pass_type"] != "unknown"]
@@ -1011,18 +1095,20 @@ def _table_cursor_comparison(f, all_variants_results):
     f.write("\\begin{table}[htbp]\n\\centering\n")
     f.write("\\caption{Mutable vs immutable cursor comparison. "
             "Times are median per iteration (s). "
-            "Speedups shown are AoS-mut/SoA-mut, AoS-imm/AoS-mut, and AoS-imm/SoA-mut. "
+            "Speedups shown are AoS-mut/SoA-mut, AoS-imm/AoS-mut, "
+            "AoS-imm/SoA-mut, and AoS-imm/SoA-imm. "
             "${>}1{\\times}$ means the denominator is faster. "
             "\\textbf{Bold} marks the fastest time across all four variants.}\n")
     f.write("\\label{tab:cursor_comparison}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{l r r r r r r r r}\n\\toprule\n")
     f.write(
         "\\textbf{Program}"
         " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
         " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-        " & \\textbf{AoS-mut/SoA-mut}"
-        " & \\textbf{AoS-imm/AoS-mut}"
-        " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+        " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
+        " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
+        " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
+        " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
     )
     f.write("\\midrule\n")
 
@@ -1086,17 +1172,20 @@ def _table_cursor_comparison(f, all_variants_results):
         spd_mut = speedup(aost_mut, soat_mut)
         spd_aos_imm_over_aos_mut = speedup(aost_imm, aost_mut)
         spd_imm = speedup(aost_imm, soat_mut)
+        spd_imm_layout = speedup(aost_imm, soat_imm)
 
         spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
         spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
         spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
+        spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
 
         f.write(f"{prog}"
                 f" & {aos_mut_f} & {aos_imm_f}"
                 f" & {soa_mut_f} & {soa_imm_f}"
                 f" & {spd_mut_s}"
                 f" & {spd_aos_imm_over_aos_mut_s}"
-                f" & {spd_imm_s} \\\\\n")
+                f" & {spd_imm_s}"
+                f" & {spd_imm_layout_s} \\\\\n")
 
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
@@ -1263,25 +1352,27 @@ def _table_per_program(f, all_results, all_variants_results=None):
         # Table header depends on whether we show 2 or 4 variants
         if show_4_variants:
             if has_uses and adt is not None:
-                f.write("\\begin{tabular}{l c c r r r r r r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
                     " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
                     " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-                    " & \\textbf{AoS-mut/SoA-mut}"
-                    " & \\textbf{AoS-imm/AoS-mut}"
-                    " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+                    " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
                 )
             else:
-                f.write("\\begin{tabular}{l c r r r r r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c r r r r r r r r}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
                     " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-                    " & \\textbf{AoS-mut/SoA-mut}"
-                    " & \\textbf{AoS-imm/AoS-mut}"
-                    " & \\textbf{AoS-imm/SoA-mut} \\\\\n"
+                    " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
                 )
         else:
             # Original 2-variant table
@@ -1303,6 +1394,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
         speedups_mut = []
         speedups_aos_imm_over_aos_mut = []
         speedups_imm = []
+        speedups_imm_layout = []
         
         for pname in passes:
             ad   = aos.passes.get(pname, {})
@@ -1368,10 +1460,12 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 spd_mut = calc_spd(aos, soa, pname)
                 spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
                 spd_imm = calc_spd(aos_imm, soa, pname)
+                spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
                 
                 spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
                 spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
                 spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
+                spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
                 
                 if spd_mut:
                     speedups_mut.append(spd_mut)
@@ -1379,6 +1473,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     speedups_aos_imm_over_aos_mut.append(spd_aos_imm_over_aos_mut)
                 if spd_imm:
                     speedups_imm.append(spd_imm)
+                if spd_imm_layout:
+                    speedups_imm_layout.append(spd_imm_layout)
                 
                 # Write row
                 if has_uses and adt is not None:
@@ -1389,14 +1485,16 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             f" & {soat_mut} & {soat_imm}"
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
-                            f" & {spd_imm_s} \\\\\n")
+                            f" & {spd_imm_s}"
+                            f" & {spd_imm_layout_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
                             f" & {aost_mut} & {aost_imm}"
                             f" & {soat_mut} & {soat_imm}"
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
-                            f" & {spd_imm_s} \\\\\n")
+                            f" & {spd_imm_s}"
+                            f" & {spd_imm_layout_s} \\\\\n")
             
             else:
                 # Original 2-variant logic
@@ -1452,6 +1550,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
         sp_mut_tot = aost_mut_tot / soat_mut_tot if (aost_mut_tot and soat_mut_tot) else None
         sp_aos_imm_over_aos_mut_tot = aost_imm_tot / aost_mut_tot if (aost_imm_tot and aost_mut_tot) else None
         sp_imm_tot = aost_imm_tot / soat_mut_tot if (aost_imm_tot and soat_mut_tot) else None
+        sp_imm_layout_tot = aost_imm_tot / soat_imm_tot if (aost_imm_tot and soat_imm_tot) else None
         
         if show_4_variants:
             total_cells = {
@@ -1474,7 +1573,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     f" & {total_cells['soa_mut'][0]} & {total_cells['soa_imm'][0]}"
                     f" & {_spd_cell(sp_mut_tot) if sp_mut_tot else '--'}"
                     f" & {_spd_cell(sp_aos_imm_over_aos_mut_tot) if sp_aos_imm_over_aos_mut_tot else '--'}"
-                    f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'} \\\\\n")
+                    f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'}"
+                    f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'} \\\\\n")
             if speedups_mut:
                 gm_mut = statistics.geometric_mean(speedups_mut)
                 gm_aos_imm_over_aos_mut = (
@@ -1482,10 +1582,15 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     if speedups_aos_imm_over_aos_mut else None
                 )
                 gm_imm = statistics.geometric_mean(speedups_imm) if speedups_imm else None
+                gm_imm_layout = (
+                    statistics.geometric_mean(speedups_imm_layout)
+                    if speedups_imm_layout else None
+                )
                 f.write(f"\\textbf{{Geomean}} & {extra_cols}"
                         f"& & & & & {_spd_cell(gm_mut)}"
                         f" & {_spd_cell(gm_aos_imm_over_aos_mut) if gm_aos_imm_over_aos_mut else '--'}"
-                        f" & {_spd_cell(gm_imm) if gm_imm else '--'} \\\\\n")
+                        f" & {_spd_cell(gm_imm) if gm_imm else '--'}"
+                        f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'} \\\\\n")
         else:
             extra_cols = "& & " if (has_uses and adt is not None) else ""
             f.write("\\midrule\n")
@@ -1527,7 +1632,15 @@ def compile_latex_preview(tex_file: Path, out_dir: Path):
 # ---------------------------------------------------------------------------
 # Text + JSON reports
 # ---------------------------------------------------------------------------
-def write_text_report(all_results: List[Tuple], out_file: Path):
+def write_text_report(all_results: List[Tuple], out_file: Path,
+                      all_variants_results: Optional[List[Dict]] = None):
+    variants_map: Dict[str, Dict] = {}
+    if all_variants_results:
+        for entry in all_variants_results:
+            variants_map[entry["program"]] = entry
+
+    mismatch_details: List[Tuple[str, Dict]] = []
+
     lines = ["=" * 72, "GIBBON BENCHMARK REPORT v3.1",
              "=" * 72, f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}", ""]
     for aos, soa in all_results:
@@ -1564,12 +1677,63 @@ def write_text_report(all_results: List[Tuple], out_file: Path):
             at = sum(p["median_time"] for p in aos.passes.values())
             st = sum(p["median_time"] for p in soa.passes.values())
             lines.append(f"  Speedup: {at/st:.3f}×" if st > 0 else "  Speedup: N/A")
-            lines.append(f"  Output match: {'YES' if outputs_match(aos, soa) else 'NO'}")
+
+        ventry = variants_map.get(aos.program)
+        if ventry is not None:
+            analysis = analyze_outputs_by_variant({
+                "aos": ventry.get("aos"),
+                "aos_imm": ventry.get("aos_imm"),
+                "soa": ventry.get("soa"),
+                "soa_imm": ventry.get("soa_imm"),
+            })
+            status = analysis["is_match"]
+            if status is None:
+                lines.append("  Output match (successful variants): N/A (fewer than 2 successful variants with output)")
+            else:
+                lines.append(f"  Output match (successful variants): {'YES' if status else 'NO'}")
+            if analysis["failed"]:
+                failed_s = ", ".join(f"{v} ({err})" for v, err in analysis["failed"])
+                lines.append(f"  Runtime failures excluded from output matching: {failed_s}")
+            if status is False:
+                mismatch_details.append((aos.program, analysis))
+        else:
+            analysis = analyze_outputs_by_variant({"aos": aos, "soa": soa})
+            status = analysis["is_match"]
+            if status is None:
+                lines.append("  Output match: N/A (fewer than 2 successful variants with output)")
+            else:
+                lines.append(f"  Output match: {'YES' if status else 'NO'}")
+            if analysis["failed"]:
+                failed_s = ", ".join(f"{v} ({err})" for v, err in analysis["failed"])
+                lines.append(f"  Runtime failures excluded from output matching: {failed_s}")
+            if status is False:
+                mismatch_details.append((aos.program, analysis))
+
+    if mismatch_details:
+        lines.append("")
+        lines.append("=" * 72)
+        lines.append("OFFENDING PROGRAMS (OUTPUT MISMATCH AMONG SUCCESSFUL VARIANTS)")
+        lines.append("=" * 72)
+        for prog, analysis in mismatch_details:
+            lines.append(f"\nProgram: {prog}")
+            for variants, out in analysis["groups"]:
+                lines.append(f"  Variants: {', '.join(variants)}")
+                lines.append("  Output:")
+                out_lines = out.splitlines() if out else ["<empty>"]
+                for ln in out_lines:
+                    lines.append(f"    {ln}")
+
     out_file.write_text("\n".join(lines))
     print(f"  ✓ Text report → {out_file}")
 
 
-def write_json_results(all_results: List[Tuple], out_file: Path):
+def write_json_results(all_results: List[Tuple], out_file: Path,
+                       all_variants_results: Optional[List[Dict]] = None):
+    variants_map: Dict[str, Dict] = {}
+    if all_variants_results:
+        for entry in all_variants_results:
+            variants_map[entry["program"]] = entry
+
     data = []
     for aos, soa in all_results:
         if not aos or not soa:
@@ -1589,8 +1753,26 @@ def write_json_results(all_results: List[Tuple], out_file: Path):
                                if kk != "iter_times"}
                            for k, v in r.passes.items()},
             }
-        data.append({"program": aos.program, "aos": ser(aos), "soa": ser(soa),
-                     "output_match": outputs_match(aos, soa)})
+        rec = {
+            "program": aos.program,
+            "aos": ser(aos),
+            "soa": ser(soa),
+            "output_match": outputs_match(aos, soa),  # backwards-compatible: mutable AoS vs SoA
+            "output_match_mutable": outputs_match(aos, soa),
+        }
+        ventry = variants_map.get(aos.program)
+        if ventry is not None:
+            aos_imm = ventry.get("aos_imm")
+            soa_imm = ventry.get("soa_imm")
+            rec["aos_imm"] = ser(aos_imm) if aos_imm else None
+            rec["soa_imm"] = ser(soa_imm) if soa_imm else None
+            rec["output_match_all_variants"] = outputs_match_all([
+                ventry.get("aos"),
+                aos_imm,
+                ventry.get("soa"),
+                soa_imm,
+            ])
+        data.append(rec)
     out_file.write_text(json.dumps(data, indent=2))
     print(f"  ✓ JSON → {out_file}")
 
@@ -2002,25 +2184,47 @@ def main():
         )
         all_results.append((aos, soa))
 
-    ok    = sum(1 for a, s in all_results if a and s and a.run_success and s.run_success)
-    match = sum(1 for a, s in all_results
-                if a and s and a.run_success and s.run_success and outputs_match(a, s))
+    extended_results = (getattr(benchmark_program, '_all_variants_results', None)
+                        if args.benchmark_immutable else None)
+
+    if args.benchmark_immutable and extended_results is not None:
+        ok = sum(
+            1 for e in extended_results
+            if all(
+                r is not None and r.run_success
+                for r in [e.get("aos"), e.get("aos_imm"), e.get("soa"), e.get("soa_imm")]
+            )
+        )
+        match = sum(
+            1 for e in extended_results
+            if analyze_outputs_by_variant({
+                "aos": e.get("aos"),
+                "aos_imm": e.get("aos_imm"),
+                "soa": e.get("soa"),
+                "soa_imm": e.get("soa_imm"),
+            })["is_match"] is True
+        )
+    else:
+        ok    = sum(1 for a, s in all_results if a and s and a.run_success and s.run_success)
+        match = sum(1 for a, s in all_results
+                    if a and s and a.run_success and s.run_success and outputs_match(a, s))
 
     print(f"\n\n{'='*72}")
-    print(f"DONE  –  {ok}/{len(all_results)} succeeded  |  {match}/{ok} output matches")
+    if args.benchmark_immutable:
+        print(f"DONE  –  {ok}/{len(all_results)} succeeded (all 4 variants)  |  {match}/{ok} output matches (successful variants)")
+    else:
+        print(f"DONE  –  {ok}/{len(all_results)} succeeded  |  {match}/{ok} output matches")
     print(f"{'='*72}")
 
     print("\nWriting reports ...")
-    write_text_report(all_results, args.report)
-    write_json_results(all_results, args.json)
+    write_text_report(all_results, args.report, extended_results)
+    write_json_results(all_results, args.json, extended_results)
 
     if args.generate_paper:
         print(f"\n{'='*72}")
         print("Generating conference paper materials ...")
         print(f"{'='*72}")
         # Get extended results if they were collected
-        extended_results = (getattr(benchmark_program, '_all_variants_results', None)
-                           if args.benchmark_immutable else None)
         write_latex_tables(all_results, args.latex_table, extended_results)
         compile_latex_preview(args.latex_table, args.figures_dir)
         generate_all_figures(all_results, args.figures_dir)
