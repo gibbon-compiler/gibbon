@@ -26,6 +26,15 @@ sumTree tr =
     Leaf n    -> n
     Node l r -> (sumTree l) + (sumTree r)
 
+sumTreeAcc :: Tree -> Int -> Int
+sumTreeAcc t acc =
+  case t of
+    Leaf n ->
+      acc + n
+    Node l r ->
+      let acc1 = sumTreeAcc l acc
+      in sumTreeAcc r acc1
+
 id :: Tree -> Tree 
 id tree = tree
 
@@ -43,7 +52,12 @@ gibbon_main = let
                 val = iterate (sumTree tree')
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-               in val
+                _ = printsym (quote "Running pass sumTree TailRec (fold, uses=3): ")
+                _ = printsym (quote "NEWLINE")
+                val' = iterate (sumTreeAcc tree' 0)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+              in (val, val')
 
 main :: IO ()
 main = print gibbon_main
