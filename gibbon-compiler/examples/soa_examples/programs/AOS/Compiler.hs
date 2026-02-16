@@ -26,19 +26,44 @@ data IR
 -- 6: Phi      (phi)
 -- 7: Cast     (bitcast, zext, fptosi, ...)
 
-buildIR :: Int -> IR
-buildIR n =
-   if n <= 0
-   then End
-   else if mod n 7 == 0
-   then BlockEnd (buildIR (n - 1))
-   else
-    let
-       op   = mod n 8
-       flags = mod (n*3) 16
-       lat  = 1 + mod n 5
-       thr  = 1 + mod n 3
-      in Instr op flags (n-1) (n-2) n lat thr (buildIR (n - 1))
+-- buildIR :: Int -> IR
+-- buildIR n =
+--    if n <= 0
+--    then End
+--    else if mod n 7 == 0
+--    then BlockEnd (buildIR (n - 1))
+--    else
+--     let
+--        op   = mod n 8
+--        flags = mod (n*3) 16
+--        lat  = 1 + mod n 5
+--        thr  = 1 + mod n 3
+--       in Instr op flags (n-1) (n-2) n lat thr (buildIR (n - 1))
+
+-- Build "LLVM-valid-ish" IR:
+-- After every BlockEnd, emit a small fixed number of PHIs at the start of the next block.
+buildIR_validPhi_go :: Int -> Int -> IR
+buildIR_validPhi_go n pendingPhi =
+  if n <= 0
+  then End
+
+  else if pendingPhi > 0
+  then
+    -- Emit PHIs at block start without consuming n
+    Instr 6 0 0 0 0 1 1 (buildIR_validPhi_go n (pendingPhi - 1))
+
+  else if mod n 7 == 0
+  then
+    -- New block boundary; queue PHIs for next block
+    BlockEnd (buildIR_validPhi_go (n - 1) 2)
+
+  else
+    let op0   = mod n 8 in
+    let op    = if op0 == 6 then 0 else op0 in   -- avoid PHI in block body
+    let flags = mod (n * 3) 16 in
+    let lat   = 1 + mod n 5 in
+    let thr   = 1 + mod n 3 in
+    Instr op flags (n-1) (n-2) n lat thr (buildIR_validPhi_go (n - 1) 0)
 
 instCountPass :: IR -> Int
 instCountPass ir =
@@ -146,10 +171,42 @@ stripSideEffectsPass ir =
     End ->
       End
 
+-- Verifier pass with side effects only.
+-- Side effect: prints a short marker if it sees an invalid condition.
+-- Realistic: LLVM verifier reports diagnostics; here we emit tiny markers.
+verifyPhiPlacement_IO :: IR -> Int -> ()
+verifyPhiPlacement_IO ir seenNonPhi =
+  case ir of
+    End ->
+      ()
+
+    BlockEnd rest ->
+      -- new block: we are back in the "PHI prefix"
+      verifyPhiPlacement_IO rest 0
+
+    Instr op fl s1 s2 dst lat thr rest ->
+      let _ = if op == 6
+              then
+                if seenNonPhi == 1
+                then printsym (quote "BADPHI ")
+                else ()
+              else ()
+          seenNonPhi' = if op == 6
+                            then seenNonPhi
+                            else 1
+      in verifyPhiPlacement_IO rest seenNonPhi'
+
+
 gibbon_main =
   let _ = printsym (quote "Running the Compiler IR Program: ")
       _ = printsym (quote "NEWLINE")
-      ir     = buildIR 10000000
+      ir     = buildIR_validPhi_go 10000000 0
+      -- we can verify IR here
+      _ = printsym (quote "Running pass verifyIR (fold, uses=9): ")
+      _ = printsym (quote "NEWLINE")
+      _  = iterate (verifyPhiPlacement_IO ir 0)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
       _ = printsym (quote "Running pass instCountPass (fold, uses=2): ")
       _ = printsym (quote "NEWLINE")
       insts  = iterate (instCountPass ir)
@@ -202,5 +259,3 @@ gibbon_main =
       _ = printsym (quote "NEWLINE")
       --_      = printPacked ir''
   in (insts, blocks, memops, brs, lat, hasCycle, thr)
-
-
