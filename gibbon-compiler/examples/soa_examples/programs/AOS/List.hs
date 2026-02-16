@@ -28,8 +28,13 @@ sumList lst = case lst of
 
 sumListAcc :: List -> Int -> Int
 sumListAcc lst acc = case lst of
-						  Nil -> acc
-						  Cons i rst -> sumListAcc rst (acc + i)
+			   Nil -> acc
+			   Cons i rst -> sumListAcc rst (acc + i)
+
+length :: List -> Int 
+length lst = case lst of
+		   Nil -> 0
+                   Cons i rst -> 1 + (length rst)
 
 id :: List -> List 
 id lst = lst
@@ -43,6 +48,11 @@ gibbon_main = let
 				  lst' = iterate (add1 lst)
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
+				  _ = printsym (quote "Running pass length List (map, uses=1): ")
+                                  _ = printsym (quote "NEWLINE")
+                                  len = iterate (length lst)
+                                  _ = printsym (quote "End")
+                                  _ = printsym (quote "NEWLINE")
 				  _ = printsym (quote "Running pass sumList (fold, uses=2): ")
 				  _ = printsym (quote "NEWLINE")
 				  sum = iterate (sumList lst')
@@ -53,7 +63,7 @@ gibbon_main = let
 				  sum' = iterate (sumListAcc lst' 0)
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
-			  in (sum, sum')
+			  in (sum, sum', len)
 
 
 

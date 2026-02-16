@@ -935,13 +935,17 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                   (b', e2, m1'', m2'') <- go insideTimeIt m1' m2' freeVarToVarEnv b
                   (c', e3, m1''', m2''') <- go insideTimeIt m1'' m2'' freeVarToVarEnv c
                   return (IfE a' b' c', M.unions [freeVarToVarEnv, e1, e2, e3], m1''', m2''')
-    MkProdE ls -> do 
-      res <- mapM (go insideTimeIt m1 m2 freeVarToVarEnv) ls
-      let ls' = map fst4 res
-      let envs = map snd4 res
-      let m1s = map thd4 res 
-      let m2s = map fth4 res      
-      return $ (MkProdE ls', M.unions envs, M.unions m1s, M.unions m2s)
+    MkProdE ls -> do
+      case ls of 
+          [] -> do
+                return $ (MkProdE [], freeVarToVarEnv, m1, m2)
+          _ -> do
+                res <- mapM (go insideTimeIt m1 m2 freeVarToVarEnv) ls
+                let ls' = map fst4 res
+                let envs = map snd4 res
+                let m1s = map thd4 res 
+                let m2s = map fth4 res      
+                return $ (MkProdE ls', M.unions envs, M.unions m1s, M.unions m2s)
     ProjE i e -> do 
                   (e', env, m1', m2') <- go insideTimeIt m1 m2 freeVarToVarEnv e
                   return (ProjE i e', env, m1', m2')
@@ -1648,7 +1652,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
       let m1s' = map thd4 res
       let m2s' = map fth4 res
       let rhs' = MkProdE es
-      return (Di rhs', M.unions envs, M.unions m1s', M.unions m2s')
+      return (Di rhs', M.unions envs, M.unions (m1s' ++ [m1]), M.unions (m2s' ++ [m2]))
 
     -- Not sure if we need to replicate all the checks from Cursorize1
     ProjE i e -> do 
@@ -5140,9 +5144,9 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                         )
                                         (zip locs [0 ..])
                                       ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) rhs'')]
-                                      , m1, m2)
-          (bod', freeVarToVarEnv'', m1', m2') <- go insideTimeIt m1b m2b (M.union freeVarToVarEnv' freeVarToVarEnv) tenv' bod
-          return (mkLets bnds bod', freeVarToVarEnv'', m1', m2')
+                                      , m1', m2')
+          (bod', freeVarToVarEnv'', m1b', m2b') <- go insideTimeIt m1b m2b (M.union freeVarToVarEnv' freeVarToVarEnv) tenv' bod
+          return (mkLets bnds bod', freeVarToVarEnv'', m1b', m2b')
   where
     go intime m1g m2g fenv t x =
       if isPackedContext
