@@ -3861,7 +3861,30 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                         return a'
           )
           (zip in_tys args)
-      starts <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec nonSelfCall m1 m2 ty arg) (zip (map unTy2 argTys) args')
+      starts0 <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec nonSelfCall m1 m2 ty arg) (zip (map unTy2 argTys) args')
+      -- When mutable-cursor calling convention is enabled, packed arguments
+      -- should be passed as mutable cursor locations. In some recursive shapes
+      -- we can still end up with a plain Cursor variable here; coerce it.
+      starts <- mapM
+                  (\(paramTy, argexp) ->
+                    if useMutForCall && hasPacked paramTy
+                    then case argexp of
+                           VarE varname ->
+                             case M.lookup varname tenv of
+                               Just ty ->
+                                 case unTy2 ty of
+                                   CursorTy -> do
+                                     addr <- gensym "address"
+                                     pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                                   PackedTy {} -> do
+                                     addr <- gensym "address"
+                                     pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                                   _ -> pure argexp
+                               _ -> pure argexp
+                           _ -> pure argexp
+                    else pure argexp
+                  )
+                  (zip (map unTy2 in_tys) starts0)
       let coerceMutToCursorIfNeeded argexp =
             if useMutForCall
             then pure argexp
