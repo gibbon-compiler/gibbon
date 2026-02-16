@@ -3866,26 +3866,32 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
           )
           (zip in_tys args)
       starts0 <- mapM (\(ty, arg) -> giveStarts tenv freeVarToVarEnv useMutForCall insideTimeIt isFunctionRec nonSelfCall m1 m2 ty arg) (zip (map unTy2 argTys) args')
-      -- When mutable-cursor calling convention is enabled, packed arguments
-      -- should be passed as mutable cursor locations. In some recursive shapes
-      -- we can still end up with a plain Cursor variable here; coerce it.
+      let coerceCursorToMutIfNeeded argexp =
+            if useMutForCall
+            then case argexp of
+                   VarE varname ->
+                     case M.lookup varname tenv of
+                       Just ty ->
+                         case unTy2 ty of
+                           CursorTy -> do
+                             addr <- gensym "address"
+                             pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                           PackedTy {} -> do
+                             addr <- gensym "address"
+                             pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                           _ -> pure argexp
+                       _ ->
+                         if L.isPrefixOf "address_" (fromVar varname)
+                         then pure argexp
+                         else do
+                           addr <- gensym "address"
+                           pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                   _ -> pure argexp
+            else pure argexp
       starts <- mapM
                   (\(paramTy, argexp) ->
-                    if useMutForCall && hasPacked paramTy
-                    then case argexp of
-                           VarE varname ->
-                             case M.lookup varname tenv of
-                               Just ty ->
-                                 case unTy2 ty of
-                                   CursorTy -> do
-                                     addr <- gensym "address"
-                                     pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
-                                   PackedTy {} -> do
-                                     addr <- gensym "address"
-                                     pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
-                                   _ -> pure argexp
-                               _ -> pure argexp
-                           _ -> pure argexp
+                    if hasPacked paramTy
+                    then coerceCursorToMutIfNeeded argexp
                     else pure argexp
                   )
                   (zip (map unTy2 in_tys) starts0)
@@ -3925,10 +3931,20 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                   Nothing -> do 
                                              case (getModality loc) of 
                                                       Nothing -> do
-                                                                 let lName = (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))
+                                                                 let lName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
                                                                  let mut_l = findMutableLocationPointingToVar lName m1
                                                                  case mut_l of 
-                                                                      Nothing -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
+                                                                      Nothing ->
+                                                                        if useMutForCall
+                                                                        then case M.lookup lName tenv of
+                                                                               Just ty -> case unTy2 ty of
+                                                                                            CursorTy -> do
+                                                                                              address <- gensym "address"
+                                                                                              let address_bnd = [(address, [], MutCursorTy, Ext $ AddrOfCursor (VarE lName))]
+                                                                                              return $ (bnds ++ address_bnd, args ++ [VarE address])
+                                                                                            _ -> return $ (bnds, args ++ [VarE lName])
+                                                                               Nothing -> return $ (bnds, args ++ [VarE lName])
+                                                                        else return $ (bnds, args ++ [VarE lName])
                                                                       Just ml -> do 
                                                                                   let mlName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy ml)
                                                                                   return $ (bnds, args ++ [VarE mlName])
@@ -3993,7 +4009,8 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                                           True -> let (rvar,_,_,_):xs = fromJust $ M.lookup mutl' m1 
                                                                     in dbgTrace (minChatLvl) "Print in true case outs: " dbgTrace (minChatLvl) (sdoc (mutl', loc, rvar)) dbgTrace (minChatLvl) "End in true case out." return $ (bnds, args ++ [VarE rvar])
                     ) ([], []) outs
-                appe_args' <- mapM coerceMutToCursorIfNeeded appe_args
+                appe_args'' <- mapM coerceCursorToMutIfNeeded appe_args
+                appe_args' <- mapM coerceMutToCursorIfNeeded appe_args''
                 return $ mkLets additional_bnds (AppE f _cty [] (appe_args' ++ starts'))
       asserts <-
         foldrM
@@ -5366,13 +5383,13 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
             )
   where
     tys1 = lookupDataCon ddfs dcon
-    processRhs m1pr m2pr denv env =
+    processRhs m1pr m2pr fenvpr denv env =
       if isPacked
         then do 
-          (rhs', _, m1' , m2') <- cursorizePackedExp m1pr m2pr useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv env senv rhs
+          (rhs', _, m1' , m2') <- cursorizePackedExp m1pr m2pr useMutableCursorsCall insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
           pure (fromDi rhs', m1', m2')
         else do 
-          (rhs', _, m1', m2') <- cursorizeExp m1pr m2pr useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv env senv rhs
+          (rhs', _, m1', m2') <- cursorizeExp m1pr m2pr useMutableCursorsCall insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
           pure (rhs', m1', m2') 
 
     lookupVariable :: FreeVarsTy -> M.Map FreeVarsTy Var -> PassM Var
@@ -5408,7 +5425,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
           case curw of
             AoSWin cur -> do
               case (vlocs, tys) of
-                ([], []) -> processRhs m1 m2 denv tenv
+                ([], []) -> processRhs m1 m2 fenv denv tenv
                 ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
                   let loc = fromLocArgToFreeVarsTy locarg
                    in case ty of
@@ -5581,7 +5598,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
             {- VS: TODO: handle other cases. Right now, it is only scalar and packed -}
             SoAWin dcur _field_cur -> do
               case (vlocs, tys) of
-                ([], []) -> processRhs m1 m2 denv tenv
+                ([], []) -> processRhs m1 m2 fenv denv tenv
                 ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
                   let loc = fromLocArgToFreeVarsTy locarg
                       reg = toRegVar locarg
@@ -6555,7 +6572,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
             AoSWin cur -> do
               case (vlocs, tys) of
                 ([], []) -> do 
-                             (exp, _, _) <- processRhs m1g m2g denv tenv
+                             (exp, _, _) <- processRhs m1g m2g fenv denv tenv
                              return exp
                 ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
                   let loc = fromLocArgToFreeVarsTy locarg
@@ -6738,7 +6755,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
             SoAWin dcur_end _field_cur -> do
               case (vlocs, tys) of
                 ([], []) -> do 
-                             (exp, _, _) <- processRhs m1 m2 denv tenv
+                             (exp, _, _) <- processRhs m1 m2 fenv denv tenv
                              return exp
                 ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
                   let loc = fromLocArgToFreeVarsTy locarg
@@ -6830,7 +6847,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                         -- Int, Sym, or Bool
                         _ | isScalarTy ty -> do
                           locs_var <- lookupVariable loc fenv
-                          (tenv', binds, m1', m2') <- scalarBinds True fenv m1 m2 ty v locs_var locarg tenv
+                          (tenv', binds, m1', m2') <- scalarBinds True fenv m1g m2g ty v locs_var locarg tenv
                           let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
                           let field_cur' = map (\(k@(d, idx), var) -> if (d, idx) == (dcon, field_idx) then (k, (toEndV v)) else (k, var)) _field_cur
                           let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
@@ -6843,7 +6860,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                                   (locs_var, [], CursorTy, VarE ind_var)
                               binds' = loc_bind : binds
                               tenv'' = dbgTrace (minChatLvl) "Print in scalar ty: " dbgTrace (minChatLvl) (sdoc (loc_bind)) dbgTrace (minChatLvl) "End in scalar ty SoA unpackDcon!\n." M.insert locs_var (MkTy2 CursorTy) tenv'
-                          bod <- go isFirstPacked m1g m2g (SoAWin dcur_end field_cur') fenv rst_vlocs rst_tys indirections_env denv tenv''
+                          bod <- go isFirstPacked m1' m2' (SoAWin dcur_end field_cur') fenv rst_vlocs rst_tys indirections_env denv tenv''
                           return $ mkLets binds' bod
 
                         -- _ | isScalarTy ty -> do
@@ -7131,7 +7148,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
         go cur vlocs tys indirections_env denv tenv = do
           case (vlocs, tys) of
             ([], []) -> do 
-                         (rhs, _, _) <- processRhs m1 m2 denv tenv
+                         (rhs, _, _) <- processRhs m1 m2 freeVarToVarEnv denv tenv
                          return rhs
             ((v, locarg) : rst_vlocs, (MkTy2 ty) : rst_tys) ->
               let loc = toLocVar locarg

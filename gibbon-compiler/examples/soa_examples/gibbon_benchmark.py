@@ -796,7 +796,6 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         cmd.append("--use-mutable-cursors")
     cmd.extend([
         "--packed", "--to-exe",
-        "--no-ran",
         "--cfile",   str(c_file),
         "--exefile", str(exe),
         str(source),
