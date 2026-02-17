@@ -58,7 +58,7 @@ gibbon_main = let
 				  sum = iterate (sumList lst')
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
-				  _ = printsym (quote "Running pass sumListAcc (fold, uses=2): ")
+				  _ = printsym (quote "Running pass sumList tail recursive (fold, uses=2): ")
 				  _ = printsym (quote "NEWLINE")
 				  sum' = iterate (sumListAcc lst' 0)
 				  _ = printsym (quote "End")
