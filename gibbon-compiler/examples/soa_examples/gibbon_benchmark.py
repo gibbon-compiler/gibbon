@@ -100,6 +100,10 @@ class BenchmarkResult:
         self.error_message: Optional[str] = None
         self.adt_fields: Optional[int]    = None
         self.adt_info:   Optional[Dict]   = None   # from parse_adt_buffers
+        self.papi_file: Optional[str]     = None
+        self.papi_counters: List[str]     = []
+        self.papi_regions_total: int      = 0
+        self.papi_regions_used: int       = 0
 
 # ---------------------------------------------------------------------------
 # Source-file annotation scanner
@@ -564,6 +568,262 @@ def _stats(times: List[float], pass_type: str = "unknown",
     }
 
 
+_PAPI_AVAIL_COUNTERS_CACHE: Optional[List[str]] = None
+_PAPI_SELECTED_EVENTS: List[str] = []
+
+
+def _to_int_maybe(val) -> Optional[int]:
+    try:
+        return int(str(val))
+    except Exception:
+        return None
+
+
+def _counter_stats(values: List[float]) -> Dict:
+    n = len(values)
+    med = statistics.median(values)
+    mean = statistics.mean(values)
+    mn = min(values)
+    mx = max(values)
+    sd = statistics.stdev(values) if n > 1 else 0.0
+    stderr = sd / (n ** 0.5) if n > 1 else 0.0
+    return {
+        "median": med,
+        "mean": mean,
+        "min": mn,
+        "max": mx,
+        "stdev": sd,
+        "stderr": stderr,
+        "n": n,
+    }
+
+
+def _discover_papi_avail_counters() -> List[str]:
+    """
+    Best-effort fallback when JSON event_definitions is absent.
+    Returns names like PAPI_TOT_CYC parsed from `papi_avail`.
+    """
+    global _PAPI_AVAIL_COUNTERS_CACHE
+    if _PAPI_AVAIL_COUNTERS_CACHE is not None:
+        return _PAPI_AVAIL_COUNTERS_CACHE
+    try:
+        r = subprocess.run(["papi_avail"], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            _PAPI_AVAIL_COUNTERS_CACHE = []
+            return _PAPI_AVAIL_COUNTERS_CACHE
+        found = sorted(set(re.findall(r"\bPAPI_[A-Z0-9_]+\b", r.stdout)))
+        _PAPI_AVAIL_COUNTERS_CACHE = found
+        return _PAPI_AVAIL_COUNTERS_CACHE
+    except Exception:
+        _PAPI_AVAIL_COUNTERS_CACHE = []
+        return _PAPI_AVAIL_COUNTERS_CACHE
+
+
+def select_preferred_papi_events() -> List[str]:
+    """
+    Pick the counters we care about, using papi_avail when possible:
+      - total cycles
+      - L1/L2/L3 cache misses
+    """
+    avail = set(_discover_papi_avail_counters())
+
+    # If papi_avail failed, still provide sensible defaults.
+    use_avail = len(avail) > 0
+
+    def pick(cands: List[str]) -> Optional[str]:
+        if use_avail:
+            for c in cands:
+                if c in avail:
+                    return c
+            return None
+        return cands[0] if cands else None
+
+    selected: List[str] = []
+    for grp in [
+        ["PAPI_TOT_CYC"],
+        ["PAPI_L1_TCM", "PAPI_L1_DCM", "PAPI_L1_ICM"],
+        ["PAPI_L2_TCM", "PAPI_L2_DCM", "PAPI_L2_ICM"],
+        ["PAPI_L3_TCM", "PAPI_L3_DCM", "PAPI_L3_ICM"],
+    ]:
+        ev = pick(grp)
+        if ev and ev not in selected:
+            selected.append(ev)
+    return selected
+
+
+def _papi_json_files(search_root: Path) -> List[Path]:
+    files: List[Path] = []
+    files.extend(search_root.glob("papi_hl_output/rank_*.json"))
+    files.extend(search_root.glob("papi_hl_output-*/rank_*.json"))
+    return files
+
+
+def _snapshot_papi_json_files(search_root: Path) -> Dict[str, float]:
+    snap: Dict[str, float] = {}
+    for fp in _papi_json_files(search_root):
+        try:
+            snap[str(fp.resolve())] = fp.stat().st_mtime
+        except OSError:
+            pass
+    return snap
+
+
+def _pick_latest_papi_json(search_root: Path, before: Dict[str, float],
+                           started_at: float) -> Optional[Path]:
+    changed: List[Tuple[float, Path]] = []
+    for fp in _papi_json_files(search_root):
+        try:
+            mtime = fp.stat().st_mtime
+        except OSError:
+            continue
+        key = str(fp.resolve())
+        prev = before.get(key)
+        if prev is None or mtime > prev + 1e-9:
+            changed.append((mtime, fp))
+
+    # Fallback: newest file updated around this run window.
+    if not changed:
+        for fp in _papi_json_files(search_root):
+            try:
+                mtime = fp.stat().st_mtime
+            except OSError:
+                continue
+            if mtime >= started_at - 2.0:
+                changed.append((mtime, fp))
+
+    if not changed:
+        return None
+    changed.sort(key=lambda x: x[0])
+    return changed[-1][1]
+
+
+def _load_papi_regions(papi_json: Path) -> Tuple[List[str], List[Dict]]:
+    """
+    Parse PAPI high-level output JSON.
+    Returns (counter_names, regions_sorted_chronologically).
+    """
+    with open(papi_json, "r", encoding="utf-8") as f:
+        blob = json.load(f)
+
+    # Prefer counters that are explicitly reported by PAPI.
+    counters = sorted([
+        c for c in (blob.get("event_definitions") or {}).keys()
+        if str(c).startswith("PAPI_")
+    ])
+
+    regions: List[Dict] = []
+    threads = blob.get("threads") or {}
+    if isinstance(threads, dict):
+        for tid, tdata in threads.items():
+            if not isinstance(tdata, dict):
+                continue
+            regs = tdata.get("regions") or {}
+            if not isinstance(regs, dict):
+                continue
+            for rid, rdata in regs.items():
+                if not isinstance(rdata, dict):
+                    continue
+                rec = dict(rdata)
+                rec["_thread_id"] = tid
+                rec["_region_id"] = rid
+                regions.append(rec)
+
+    # If event_definitions isn't populated, infer counters from region payloads.
+    if not counters:
+        inferred = set()
+        for reg in regions:
+            for k in reg.keys():
+                if isinstance(k, str) and k.startswith("PAPI_"):
+                    inferred.add(k)
+        counters = sorted(inferred)
+
+    # Final fallback: probe system PAPI event names.
+    if not counters:
+        avail = set(_discover_papi_avail_counters())
+        inferred = set()
+        for reg in regions:
+            for k in reg.keys():
+                if isinstance(k, str) and k in avail:
+                    inferred.add(k)
+        counters = sorted(inferred)
+
+    # Respect selected events when the runner has explicitly set PAPI_EVENTS.
+    if _PAPI_SELECTED_EVENTS:
+        selected = set(_PAPI_SELECTED_EVENTS)
+        counters = [c for c in _PAPI_SELECTED_EVENTS if c in selected and c in counters]
+
+    def _region_key(reg: Dict) -> Tuple[int, int, int]:
+        tid = _to_int_maybe(reg.get("_thread_id"))
+        name_num = _to_int_maybe(reg.get("name"))
+        rid = _to_int_maybe(reg.get("_region_id"))
+        return (
+            tid if tid is not None else 0,
+            name_num if name_num is not None else (rid if rid is not None else 10**18),
+            rid if rid is not None else 10**18,
+        )
+
+    regions.sort(key=_region_key)
+    return counters, regions
+
+
+def attach_papi_to_passes(result: BenchmarkResult, iterations: int,
+                          search_root: Path, before_snapshot: Dict[str, float],
+                          run_started_at: float) -> None:
+    """
+    Attach PAPI counter summaries to each pass in chronological chunks:
+      first `iterations` regions -> pass 1,
+      next `iterations` regions -> pass 2, ...
+    """
+    papi_json = _pick_latest_papi_json(search_root, before_snapshot, run_started_at)
+    if papi_json is None:
+        return
+
+    try:
+        counters, regions = _load_papi_regions(papi_json)
+    except Exception as e:
+        print(f"           PAPI parse warning: {papi_json} ({e})")
+        return
+
+    result.papi_file = str(papi_json)
+    result.papi_counters = counters
+    result.papi_regions_total = len(regions)
+
+    if not counters or not regions or not result.passes:
+        return
+
+    samples_per_pass = max(1, iterations)
+    pass_names = list(result.passes.keys())  # preserve source/runtime order
+    expected_regions = len(pass_names) * samples_per_pass
+    used_regions = min(len(regions), expected_regions)
+    result.papi_regions_used = used_regions
+
+    for i, pname in enumerate(pass_names):
+        start = i * samples_per_pass
+        end = start + samples_per_pass
+        chunk = regions[start:end]
+        if not chunk:
+            break
+        pdata = result.passes.get(pname, {})
+        pdata["papi_sample_count"] = len(chunk)
+        pdata["papi_counters"] = {}
+        for counter in counters:
+            vals: List[float] = []
+            for reg in chunk:
+                raw = reg.get(counter)
+                if raw is None:
+                    continue
+                try:
+                    vals.append(float(raw))
+                except (TypeError, ValueError):
+                    continue
+            if vals:
+                pdata["papi_counters"][counter] = _counter_stats(vals)
+
+    if len(regions) < expected_regions:
+        print(f"           PAPI warning: expected {expected_regions} region entries "
+              f"({len(pass_names)} passes x {samples_per_pass}) but found {len(regions)}")
+
+
 def apply_source_classification(result: BenchmarkResult,
                                  src_data: Dict) -> None:
     """
@@ -734,6 +994,8 @@ def get_gibbon_compiler_info() -> Optional[Tuple[Path, float]]:
 
 
 def needs_recompilation(source: Path, exe: Path, c_file: Path
+                        , expected_cmd_sig: Optional[str] = None
+                        , buildinfo_file: Optional[Path] = None
                         ) -> Tuple[bool, str]:
     """
     Returns (needs_recompile: bool, reason: str).
@@ -744,6 +1006,7 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
       2. source newer than exe → recompile
       3. gibbon compiler newer than exe → recompile (common sense: if the
          compiler was updated, old exes are stale)
+      4. compile command signature changed (stored in buildinfo sidecar) → recompile
     """
     if not exe.exists():
         return True, "exe missing"
@@ -766,6 +1029,18 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
             comp_dt = datetime.datetime.fromtimestamp(compiler_t).strftime("%Y-%m-%d %H:%M:%S")
             exe_dt  = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
             return True, f"compiler ({compiler_path}, {comp_dt}) newer than exe ({exe_dt})"
+
+    # Check whether the compile command used for this exe has changed.
+    if expected_cmd_sig is not None and buildinfo_file is not None:
+        if not buildinfo_file.exists():
+            return True, "compile metadata missing (command fingerprint unavailable)"
+        try:
+            meta = json.loads(buildinfo_file.read_text())
+            old_sig = meta.get("compile_cmd_signature")
+            if old_sig != expected_cmd_sig:
+                return True, "compile command changed"
+        except Exception:
+            return True, "compile metadata unreadable"
     
     exe_dt = datetime.datetime.fromtimestamp(exe_t).strftime("%Y-%m-%d %H:%M:%S")
     return False, f"exe up-to-date (compiled {exe_dt})"
@@ -774,14 +1049,33 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
 # Compile one variant  (called from thread pool)
 # ---------------------------------------------------------------------------
 def compile_one(source: Path, variant: str, out_dir: Path,
-                force: bool, use_mutable_cursors: bool = True
+                force: bool, use_mutable_cursors: bool = True,
+                enable_papi: bool = False
                 ) -> Tuple[bool, float, Optional[str]]:
     stem   = source.stem
     c_file = out_dir / f"{stem}.{variant}.c"
     exe    = out_dir / f"{stem}.{variant}.exe"
+    buildinfo_file = out_dir / f"{stem}.{variant}.buildinfo.json"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    recompile, reason = needs_recompilation(source, exe, c_file)
+    cmd = ["gibbon"]
+    if use_mutable_cursors:
+        cmd.append("--use-mutable-cursors")
+    if enable_papi:
+        cmd.append("--enable-papi")
+    cmd.extend([
+        "--packed", "--to-exe",
+        "--cfile",   str(c_file),
+        "--exefile", str(exe),
+        str(source),
+    ])
+    cmd_sig = " ".join(cmd)
+
+    recompile, reason = needs_recompilation(
+        source, exe, c_file,
+        expected_cmd_sig=cmd_sig,
+        buildinfo_file=buildinfo_file,
+    )
     if not force and not recompile:
         print(f"  [{variant.upper()}] {stem}: skipping  ({reason})")
         print(f"           exe: {exe}")
@@ -790,18 +1084,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
 
     if force:
         reason = "forced recompile"
-
-    cmd = ["gibbon"]
-    if use_mutable_cursors:
-        cmd.append("--use-mutable-cursors")
-    cmd.extend([
-        "--packed", "--to-exe",
-        "--cfile",   str(c_file),
-        "--exefile", str(exe),
-        str(source),
-    ])
     
     flags_str = "mut-cursors" if use_mutable_cursors else "imm-cursors"
+    if enable_papi:
+        flags_str += ",papi"
     print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
@@ -809,6 +1095,15 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         r = subprocess.run(cmd, capture_output=True, text=True)
         elapsed = time.time() - t0
         if r.returncode == 0:
+            meta = {
+                "compile_cmd": cmd,
+                "compile_cmd_signature": cmd_sig,
+                "source": str(source),
+                "c_file": str(c_file),
+                "exe": str(exe),
+                "compiled_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            }
+            buildinfo_file.write_text(json.dumps(meta, indent=2))
             print(f"           ok ({elapsed:.1f}s)")
             return True, elapsed, None
         print(f"           FAILED ({elapsed:.1f}s)")
@@ -831,8 +1126,8 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
     results: Dict = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         fmap = {
-            pool.submit(compile_one, src, var, od, force, use_mut): (prog, var)
-            for prog, var, src, od, force, use_mut in tasks
+            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi): (prog, var)
+            for prog, var, src, od, force, use_mut, enable_papi in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -846,7 +1141,9 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 # Run one executable  (always single-threaded)
 # ---------------------------------------------------------------------------
 def run_exe(exe: Path, iterations: int,
-            dump_dir: Optional[Path] = None) -> Tuple[bool, float, Optional[str], int]:
+            dump_dir: Optional[Path] = None,
+            env_override: Optional[Dict[str, str]] = None
+            ) -> Tuple[bool, float, Optional[str], int]:
     """
     Run executable and return (success, elapsed_time, stdout_or_stderr, returncode).
     returncode is used to detect OOM (e.g., 137 = killed by OOM, 139 = segfault).
@@ -862,7 +1159,10 @@ def run_exe(exe: Path, iterations: int,
     cmd = [str(exe), "--iterate", str(iterations)]
     t0  = time.time()
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        env = os.environ.copy()
+        if env_override:
+            env.update(env_override)
+        r = subprocess.run(cmd, capture_output=True, text=True, env=env)
         elapsed = time.time() - t0
         if r.returncode == 0:
             if dump_dir is not None:
@@ -883,6 +1183,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       source_cls_all: Dict,
                       dump_raw: bool = False,
                       benchmark_immutable: bool = False,
+                      enable_papi: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
     """
     Benchmark one program. Returns (aos_result, soa_result) for backwards compatibility.
@@ -911,7 +1212,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         src_dir = "AOS" if var.startswith("aos") else "SOA"
         src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force, use_mut))
+            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi))
         else:
             print(f"  Warning: {src} not found")
 
@@ -946,7 +1247,13 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         exe  = out_dir / f"{stem}.{var}.exe"
 
         print(f"  [{var.upper()}] running ...")
-        ok2, rt, stdout_or_stderr, returncode = run_exe(exe, iterations, dump_dir)
+        papi_before = _snapshot_papi_json_files(Path.cwd()) if enable_papi else {}
+        run_started_at = time.time()
+        papi_env = ({"PAPI_EVENTS": ",".join(_PAPI_SELECTED_EVENTS)}
+                    if (enable_papi and _PAPI_SELECTED_EVENTS) else None)
+        ok2, rt, stdout_or_stderr, returncode = run_exe(
+            exe, iterations, dump_dir, env_override=papi_env
+        )
         if not ok2:
             # Detect OOM from both exit code and stderr content
             # Common OOM exit codes: 137 (killed by OOM), 139 (segfault), -11 (SIGSEGV)
@@ -978,6 +1285,14 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                 res.output  = clean_output(stdout_or_stderr)
                 res.passes  = parse_passes(stdout_or_stderr)
                 apply_source_classification(res, src_data)
+                if enable_papi:
+                    attach_papi_to_passes(
+                        res,
+                        iterations=iterations,
+                        search_root=Path.cwd(),
+                        before_snapshot=papi_before,
+                        run_started_at=run_started_at,
+                    )
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = sum(p["median_time"] for p in res.passes.values())
@@ -1078,6 +1393,28 @@ def fmt_pm(median: float, stderr: float) -> str:
     # stderr shown with one more sig fig
     err_dp = min(dp + 1, 6)
     return f"{median:.{dp}f}$\\pm${stderr:.{err_dp}f}"
+
+
+def _tex_escape(text: str) -> str:
+    return text.replace("_", "\\_")
+
+
+def _fmt_counter(v: Optional[float]) -> str:
+    if v is None:
+        return "--"
+    if abs(v - round(v)) < 1e-9:
+        return f"{int(round(v)):,}"
+    if abs(v) >= 1e6:
+        return f"{v:.3e}"
+    return f"{v:.2f}"
+
+
+def _papi_pair_cell(ad: Dict, sd: Dict, counter: str) -> str:
+    a = (ad.get("papi_counters", {}).get(counter) or {}).get("median")
+    s = (sd.get("papi_counters", {}).get(counter) or {}).get("median")
+    if a is None and s is None:
+        return "--"
+    return f"{_fmt_counter(a)}/{_fmt_counter(s)}"
 
 # ---------------------------------------------------------------------------
 # LaTeX tables
@@ -1195,6 +1532,7 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
         f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
         f.write("% Requires: \\usepackage{booktabs} in preamble\n\n")
         _table_summary(f, all_results)
+        _table_papi_summary(f, all_results)
         if all_variants_results:
             _table_cursor_comparison(f, all_variants_results)
         _table_per_program(f, all_results, all_variants_results)
@@ -1274,6 +1612,92 @@ def _table_summary(f, all_results):
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
 
+def _collect_papi_counter_names(all_results: List[Tuple]) -> List[str]:
+    counters = set()
+    for aos, soa in all_results:
+        for res in (aos, soa):
+            if not res:
+                continue
+            for pdata in res.passes.values():
+                for c in (pdata.get("papi_counters") or {}).keys():
+                    counters.add(c)
+    if _PAPI_SELECTED_EVENTS:
+        ordered = [c for c in _PAPI_SELECTED_EVENTS if c in counters]
+        ordered += sorted(c for c in counters if c not in set(ordered))
+        return ordered
+    return sorted(counters)
+
+
+def _papi_total_for_result(res: Optional[BenchmarkResult], counter: str) -> Optional[float]:
+    if not res or not res.run_success:
+        return None
+    total = 0.0
+    seen = False
+    for pdata in res.passes.values():
+        v = ((pdata.get("papi_counters") or {}).get(counter) or {}).get("median")
+        if v is None:
+            continue
+        total += float(v)
+        seen = True
+    return total if seen else None
+
+
+def _table_papi_summary(f, all_results):
+    """
+    PAPI summary table:
+    Program | [counter1: AoS SoA Speedup] | [counter2: ...]
+    Totals are sum of per-pass median counter values.
+    """
+    counters = _collect_papi_counter_names(all_results)
+    if not counters:
+        return
+
+    f.write("% -- Table: PAPI Summary --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write(
+        "\\caption{PAPI counter summary across all passes. "
+        "For each program and counter, values are the sum of per-pass median counters. "
+        "Speedup is AoS/SoA; ${>}1{\\times}$ means SoA has fewer events.}\n"
+    )
+    f.write("\\label{tab:papi_summary}\n\\small\n")
+    f.write("\\begin{tabular}{l" + (" r r r" * len(counters)) + "}\n\\toprule\n")
+
+    hdr1 = "\\textbf{Program}"
+    for c in counters:
+        hdr1 += f" & \\multicolumn{{3}}{{c}}{{\\textbf{{{_tex_escape(c)}}}}}"
+    f.write(hdr1 + " \\\\\n")
+
+    hdr2 = " "
+    for _ in counters:
+        hdr2 += " & AoS & SoA & Speedup"
+    f.write(hdr2 + " \\\\\n")
+    f.write("\\midrule\n")
+
+    spd_map: Dict[str, List[float]] = {c: [] for c in counters}
+    for aos, soa in all_results:
+        if not (aos and soa and aos.run_success and soa.run_success):
+            continue
+        row = aos.program.replace(".hs", "").replace("_", "\\_")
+        for c in counters:
+            at = _papi_total_for_result(aos, c)
+            st = _papi_total_for_result(soa, c)
+            if at is not None and st is not None and st > 0:
+                spd = at / st
+                spd_map[c].append(spd)
+                row += f" & {_fmt_counter(at)} & {_fmt_counter(st)} & {_spd_cell(spd)}"
+            else:
+                row += f" & {_fmt_counter(at)} & {_fmt_counter(st)} & --"
+        f.write(row + " \\\\\n")
+
+    gm_row = "\\textbf{Geomean}"
+    for c in counters:
+        vals = spd_map.get(c, [])
+        gm_row += f" & & & {(_spd_cell(statistics.geometric_mean(vals)) if vals else '--')}"
+    f.write("\\midrule\n")
+    f.write(gm_row + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+
+
 def _table_per_program(f, all_results, all_variants_results=None):
     """
     One table per program showing per-pass performance.
@@ -1336,6 +1760,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
             "T: F=fold, M=map. "
             "Uses: fields accessed / total (recursive + non-recursive). "
             "Dead\\%: fraction of fields not accessed by this pass. "
+            "PAPI columns (A/S) show AoS/SoA median PAPI counters per pass, "
+            "mapped chronologically in --iterate-sized chunks. "
             "Speedup ${>}1{\\times}$ means SoA is faster. "
             "OOM = out of memory.}}\n"
         )
@@ -1347,11 +1773,34 @@ def _table_per_program(f, all_results, all_variants_results=None):
             soa.passes.get(p, {}).get("uses") is not None
             for p in passes
         )
+        papi_counter_set = {
+            c
+            for p in passes
+            for c in (
+                list((aos.passes.get(p, {}).get("papi_counters") or {}).keys()) +
+                list((soa.passes.get(p, {}).get("papi_counters") or {}).keys()) +
+                (list((aos_imm.passes.get(p, {}).get("papi_counters") or {}).keys())
+                 if (aos_imm and aos_imm.run_success) else []) +
+                (list((soa_imm.passes.get(p, {}).get("papi_counters") or {}).keys())
+                 if (soa_imm and soa_imm.run_success) else [])
+            )
+        }
+        if _PAPI_SELECTED_EVENTS:
+            papi_counter_names = [c for c in _PAPI_SELECTED_EVENTS if c in papi_counter_set]
+            papi_counter_names += sorted(c for c in papi_counter_set if c not in set(papi_counter_names))
+        else:
+            papi_counter_names = sorted(papi_counter_set)
+        papi_colspec = " r" * len(papi_counter_names)
+        papi_header_suffix = "".join(
+            f" & \\textbf{{{_tex_escape(counter)} (A/S)}}"
+            for counter in papi_counter_names
+        )
+        papi_empty_suffix = "".join(" & --" for _ in papi_counter_names)
 
         # Table header depends on whether we show 2 or 4 variants
         if show_4_variants:
             if has_uses and adt is not None:
-                f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
@@ -1360,10 +1809,11 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
                     " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
                     " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}}"
+                    f"{papi_header_suffix} \\\\\n"
                 )
             else:
-                f.write("\\begin{tabular}{l c r r r r r r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
@@ -1371,22 +1821,25 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
                     " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
                     " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
+                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}}"
+                    f"{papi_header_suffix} \\\\\n"
                 )
         else:
             # Original 2-variant table
             if has_uses and adt is not None:
-                f.write("\\begin{tabular}{l c c r r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
-                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
+                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup}"
+                    f"{papi_header_suffix} \\\\\n"
                 )
             else:
-                f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
+                f.write("\\begin{tabular}{l c r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
-                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup} \\\\\n"
+                    " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup}"
+                    f"{papi_header_suffix} \\\\\n"
                 )
         f.write("\\midrule\n")
 
@@ -1405,6 +1858,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
             uses   = ad.get("uses") or sd.get("uses")
             dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
+            papi_cells_s = "".join(
+                f" & {_papi_pair_cell(ad, sd, counter)}"
+                for counter in papi_counter_names
+            )
 
             if show_4_variants:
                 # Get data for all 4 variants
@@ -1485,7 +1942,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
-                            f" & {spd_imm_layout_s} \\\\\n")
+                            f" & {spd_imm_layout_s}"
+                            f"{papi_cells_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
                             f" & {aost_mut} & {aost_imm}"
@@ -1493,7 +1951,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
-                            f" & {spd_imm_layout_s} \\\\\n")
+                            f" & {spd_imm_layout_s}"
+                            f"{papi_cells_s} \\\\\n")
             
             else:
                 # Original 2-variant logic
@@ -1524,10 +1983,12 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     uses_s = f"{uses}/{adt}" if uses is not None else "--"
                     dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                     f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
-                            f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+                            f" & {at_f_r} & {st_f_r} & {spd_s}"
+                            f"{papi_cells_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
-                            f" & {at_f_r} & {st_f_r} & {spd_s} \\\\\n")
+                            f" & {at_f_r} & {st_f_r} & {spd_s}"
+                            f"{papi_cells_s} \\\\\n")
 
                 if spd > 0:
                     speedups_mut.append(spd)
@@ -1573,7 +2034,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     f" & {_spd_cell(sp_mut_tot) if sp_mut_tot else '--'}"
                     f" & {_spd_cell(sp_aos_imm_over_aos_mut_tot) if sp_aos_imm_over_aos_mut_tot else '--'}"
                     f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'}"
-                    f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'} \\\\\n")
+                    f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'}"
+                    f"{papi_empty_suffix} \\\\\n")
             if speedups_mut:
                 gm_mut = statistics.geometric_mean(speedups_mut)
                 gm_aos_imm_over_aos_mut = (
@@ -1589,16 +2051,19 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         f"& & & & & {_spd_cell(gm_mut)}"
                         f" & {_spd_cell(gm_aos_imm_over_aos_mut) if gm_aos_imm_over_aos_mut else '--'}"
                         f" & {_spd_cell(gm_imm) if gm_imm else '--'}"
-                        f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'} \\\\\n")
+                        f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'}"
+                        f"{papi_empty_suffix} \\\\\n")
         else:
             extra_cols = "& & " if (has_uses and adt is not None) else ""
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
-                    f"& {fmt(aost_mut_tot)} & {fmt(soat_mut_tot)} & {_spd_cell(sp_mut_tot)} \\\\\n")
+                    f"& {fmt(aost_mut_tot)} & {fmt(soat_mut_tot)} & {_spd_cell(sp_mut_tot)}"
+                    f"{papi_empty_suffix} \\\\\n")
             if speedups_mut:
                 gm = statistics.geometric_mean(speedups_mut)
                 f.write(f"\\textbf{{Geomean}} & {extra_cols}"
-                        f"& & & {_spd_cell(gm)} \\\\\n")
+                        f"& & & {_spd_cell(gm)}"
+                        f"{papi_empty_suffix} \\\\\n")
 
         f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 def compile_latex_preview(tex_file: Path, out_dir: Path):
@@ -1748,6 +2213,10 @@ def write_json_results(all_results: List[Tuple], out_file: Path,
                 "aos_buffers":      1,
                 "soa_total_buffers": adt_info["soa_total_buffers"] if adt_info else None,
                 "nonrec_field_slots": adt_info["nonrec_field_slots"] if adt_info else None,
+                "papi_file":        getattr(r, "papi_file", None),
+                "papi_counters":    getattr(r, "papi_counters", []),
+                "papi_regions_total": getattr(r, "papi_regions_total", 0),
+                "papi_regions_used": getattr(r, "papi_regions_used", 0),
                 "passes": {k: {kk: vv for kk, vv in v.items()
                                if kk != "iter_times"}
                            for k, v in r.passes.items()},
@@ -2137,6 +2606,9 @@ def main():
                     help="Also compile and benchmark immutable cursor variants "
                          "(aos_imm, soa_imm) in addition to mutable cursor variants. "
                          "Generates Table 2 showing 4-way comparison.")
+    ap.add_argument("--enable-papi", action="store_true",
+                    help="Compile with --enable-papi, export PAPI_EVENTS, parse papi_hl_output JSON, "
+                         "and add PAPI columns to tables.")
     args = ap.parse_args()
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
@@ -2153,6 +2625,7 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Immutable    : {'YES  (4 variants: aos, aos_imm, soa, soa_imm)' if args.benchmark_immutable else 'no  (2 variants: aos, soa)'}")
+    print(f"  PAPI         : {'YES' if args.enable_papi else 'no'}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
     
     # Show which gibbon compiler will be used and its mtime
@@ -2164,6 +2637,18 @@ def main():
         print(f"  Compiler mtime: {compiler_dt}  (exes older than this will be rebuilt)")
     else:
         print(f"  Compiler     : gibbon NOT FOUND in PATH")
+
+    if args.enable_papi:
+        global _PAPI_SELECTED_EVENTS
+        _PAPI_SELECTED_EVENTS = select_preferred_papi_events()
+        if _PAPI_SELECTED_EVENTS:
+            papi_events_str = ",".join(_PAPI_SELECTED_EVENTS)
+            os.environ["PAPI_EVENTS"] = papi_events_str
+            print(f"  PAPI_EVENTS  : {papi_events_str}")
+            print(f"  Export cmd   : export PAPI_EVENTS=\"{papi_events_str}\"")
+        else:
+            print("  PAPI warning : no preferred PAPI events found via papi_avail")
+
     print("=" * 72)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -2180,6 +2665,7 @@ def main():
             args.iterations, args.clean, source_cls_all,
             dump_raw=args.dump_raw,
             benchmark_immutable=args.benchmark_immutable,
+            enable_papi=args.enable_papi,
         )
         all_results.append((aos, soa))
 
