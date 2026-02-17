@@ -201,6 +201,45 @@ usesTraverseCall = go
         _ -> False
       _ -> False
 
+-- | Collect variables mentioned in an expression subtree.
+-- This is used to avoid repeatedly traversing the same `CaseE` body
+-- when computing per-field liveness.
+varsMentionedInExp :: Exp2 -> S.Set Var
+varsMentionedInExp = go
+  where
+    go :: Exp2 -> S.Set Var
+    go ex = case ex of
+      VarE v -> S.singleton v
+      LitE{} -> S.empty
+      CharE{} -> S.empty
+      FloatE{} -> S.empty
+      LitSymE{} -> S.empty
+      AppE _ _ _ args -> S.unions (map go args)
+      PrimAppE _ args -> S.unions (map go args)
+      LetE (_, _, _, rhs) bod -> go rhs `S.union` go bod
+      IfE a b c -> go a `S.union` go b `S.union` go c
+      MkProdE ls -> S.unions (map go ls)
+      ProjE _ e -> go e
+      CaseE scrt brs -> go scrt `S.union` S.unions [go rhs | (_, _, rhs) <- brs]
+      DataConE _ _ args -> S.unions (map go args)
+      TimeIt e _ _ -> go e
+      SpawnE _ _ args -> S.unions (map go args)
+      SyncE -> S.empty
+      MapE (_, _, rhs) bod -> go rhs `S.union` go bod
+      FoldE (_, _, r1) (_, _, r2) bod -> go r1 `S.union` go r2 `S.union` go bod
+      WithArenaE _ e -> go e
+      Ext ext -> case ext of
+        L2.LetRegionE _ _ _ _ bod -> go bod
+        L2.LetParRegionE _ _ _ bod -> go bod
+        L2.LetLocE _ locexp bod -> gFreeVars locexp `S.union` go bod
+        L2.LetRegE _ _ bod -> go bod
+        L2.IndirectionE _ _ _ _ e -> go e
+        L2.StartOfPkdCursor v -> S.singleton v
+        L2.RetE _ v -> S.singleton v
+        L2.AddFixed v _ -> S.singleton v
+        L2.LetAvail _ bod -> go bod
+        _ -> S.empty
+
 -- | Things we cannot define until we see a join point. There's a Ty2 to so that
 -- we can extend the environment.
 type SyncEnv = M.Map Var [(Var, [()], Ty3, Ty2, Exp3)]
@@ -1004,19 +1043,20 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
               | (dcon, var_locs, _) <- brs,
                 idx <- [0 .. length var_locs - 1]
               ]
+      let vars_mentioned = varsMentionedInExp ex
       let alive_buffers =
             if isNoDeadFieldElim denv
               then all_buffers_alive
               else
-                foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
-                                                                                                   then
-                                                                                                      let id = fromJust $ L.elemIndex e var_locs
-                                                                                                          acc' = S.insert (dcon, id) acc
-                                                                                                       in acc'
-                                                                                                   else acc
-                                                                                 ) env var_locs
-                                                                 in env'
-                                   ) S.empty brs
+                foldr
+                  ( \(dcon, var_locs, _) acc ->
+                      foldr
+                        (\(idx, (var, _)) acc' -> if S.member var vars_mentioned then S.insert (dcon, idx) acc' else acc')
+                        acc
+                        (zip [0 ..] var_locs)
+                  )
+                  S.empty
+                  brs
       --let alive_buffers = S.empty
       case ty_of_scrut of
         CursorTy -> do 
@@ -1780,19 +1820,20 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
               | (dcon, var_locs, _) <- brs,
                 idx <- [0 .. length var_locs - 1]
               ]
+      let vars_mentioned = varsMentionedInExp ex
       let alive_buffers =
             if isNoDeadFieldElim denv
               then all_buffers_alive
               else
-                foldr (\(dcon, var_locs, e) env -> let env' = foldr (\e@(v, _) acc -> if isVariableReadOrWrittenTo v freeVarToVarEnv' ex False
-                                                                                                   then
-                                                                                                      let id = fromJust $ L.elemIndex e var_locs
-                                                                                                          acc' = S.insert (dcon, id) acc
-                                                                                                       in acc'
-                                                                                                   else acc
-                                                                                 ) env var_locs
-                                                                 in env'
-                                   ) S.empty brs
+                foldr
+                  ( \(dcon, var_locs, _) acc ->
+                      foldr
+                        (\(idx, (var, _)) acc' -> if S.member var vars_mentioned then S.insert (dcon, idx) acc' else acc')
+                        acc
+                        (zip [0 ..] var_locs)
+                  )
+                  S.empty
+                  brs
       --let alive_buffers = S.empty
       case ty_of_scrut of
         CursorTy -> (,,,) <$> (dl <$> CaseE (VarE $ v))
@@ -5419,6 +5460,21 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
       (exp_unp, _, _) <- go m1 m2 field_cur freeVarToVarEnv_unpack vlocs1 tys1 True denv1 tenv1'
       return exp_unp
       where
+        rhsUsesTraverse :: Bool
+        rhsUsesTraverse = usesTraverseCall rhs
+
+        rhsVarsMentioned :: S.Set Var
+        rhsVarsMentioned = varsMentionedInExp rhs
+
+        vlocToIndex :: M.Map (Var, LocArg) Int
+        vlocToIndex = M.fromList (zip vlocs1 [0..])
+
+        lookupFieldIdx :: (Var, LocArg) -> Int
+        lookupFieldIdx vl =
+          case M.lookup vl vlocToIndex of
+            Just idx -> idx
+            Nothing -> error $ "unpackRegularDataCon: missing field index for " ++ sdoc vl
+
         -- Vidush: Change function signature to return the mutable loc pts to envs etc.
         go :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> WindowIntoCursor -> M.Map FreeVarsTy Var -> [(Var, LocArg)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Var Ty2 -> PassM (Exp3, MutableLocPtsToEnv, MutableLocOldValueEnv)
         go m1 m2 curw fenv vlocs tys canBind denv tenv = do
@@ -5605,7 +5661,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                    in case ty of
                         -- Int, Float, Sym, or Bool
                         _ | isScalarTy ty -> do
-                          let isVarAlive = isNoDeadFieldElim denv || usesTraverseCall rhs || isVariableReadOrWrittenTo v fenv rhs False
+                          let isVarAlive = isNoDeadFieldElim denv || rhsUsesTraverse || S.member v rhsVarsMentioned
                           loc_var <- lookupVariable loc fenv
                           -- This won't work 
                           -- VS: We need to take union of all branches 
@@ -6440,7 +6496,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                               let ty3_of_field = getCursorizeTyFromLocVar' Nothing useMutableCursorsCall ploc
                               let ty3_of_field2 :: Ty3 = getCursorizeTyFromLocVar Nothing useMutableCursorsCall ploc
                               let tenv' = M.insert v ( ty3_of_field) tenv
-                              let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                              let field_idx = lookupFieldIdx (v, locarg)
                               -- let cur = fromJust $ L.lookup (dcon, field_idx) field_cur
                               let cur = dcur
                               loc_var <- lookupVariable loc fenv
@@ -6502,7 +6558,7 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
                               let ty3_of_field = getCursorizeTyFromLocVar' Nothing useMutableCursorsCall ploc
                               let ty3_of_field2 :: Ty3 = getCursorizeTyFromLocVar Nothing useMutableCursorsCall ploc
                               let tenv' = M.insert v (ty3_of_field) tenv
-                              let field_idx = fromJust $ L.elemIndex (v, locarg) vlocs1
+                              let field_idx = lookupFieldIdx (v, locarg)
                               let cur = fromJust $ L.lookup (dcon, field_idx) _field_cur
                               -- let cur = dcur
                               loc_var <- lookupVariable loc fenv
