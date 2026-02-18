@@ -670,6 +670,9 @@ def select_preferred_papi_native_metrics() -> List[str]:
 def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> None:
     """
     Parse native PAPI lines from executable stdout and attach per-pass summaries.
+    Supports both:
+      1) per-iteration immediate prints
+      2) bulk-per-pass prints after the loop (current compiler behavior)
     Expected line format:
       PAPI_NATIVE <METRIC>[<EVENT_NAME>]=<VALUE>
     """
@@ -686,6 +689,8 @@ def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> No
     metric_values_by_pass: Dict[str, Dict[str, List[float]]] = {}
     metric_event_name: Dict[str, str] = {}
 
+    # Collect by pass block (Running pass ... End) so ordering inside a pass
+    # does not matter (e.g. native metrics printed after the full loop).
     for line in raw_stdout.splitlines():
         s = line.strip()
         m = pass_re.match(s)
@@ -718,12 +723,16 @@ def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> No
         if not by_metric:
             continue
         pdata.setdefault("papi_counters", {})
-        pdata["papi_sample_count"] = max((len(vs) for vs in by_metric.values()), default=0)
+        sample_count = max((len(vs) for vs in by_metric.values()), default=0)
+        pdata["papi_sample_count"] = sample_count
         pdata["papi_native_events"] = {}
         for metric, vals in by_metric.items():
             if vals:
                 pdata["papi_counters"][metric] = _counter_stats(vals)
                 pdata["papi_native_events"][metric] = metric_event_name.get(metric, "")
+        expected_n = pdata.get("n")
+        if isinstance(expected_n, int) and expected_n > 0 and sample_count not in (0, expected_n):
+            print(f"           Native PAPI warning: pass '{pname}' has {sample_count} samples, expected {expected_n}")
 
 
 def _papi_json_files(search_root: Path) -> List[Path]:

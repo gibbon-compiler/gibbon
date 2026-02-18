@@ -737,7 +737,9 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
        empty <- gensym "e" 
        papi_retval <- gensym "papi_retval"
        papi_region <- gensym "papi_region"
-       papi_values <- gensym "papi_values"
+       papi_before <- gensym "papi_before"
+       papi_after <- gensym "papi_after"
+       papi_samples <- gensym "papi_samples"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> empty
@@ -765,7 +767,6 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                                          gib_ptr_bumpalloc_restore_state();
                                                          } |]
                                        , C.BlockDecl [cdecl| double $id:itertime = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
-                                       , C.BlockStm [cstm| printf("itertime: %lf\n", $id:itertime); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
                                 -- TODO: Find a better way to get a name for the region id.
@@ -775,13 +776,11 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                 endif = "#endif"
                                 body' = [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
-                                          , C.BlockStm [cstm| papi_init_or_die(); |]
-                                          , C.BlockDecl [cdecl| int $id:papi_retval = PAPI_start(gibbon_native_papi_eventset);|]
+                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_before);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
-                                                                fprintf(stderr, "PAPI_start failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                                fprintf(stderr, "PAPI_read(before) failed: %s\n", PAPI_strerror($id:papi_retval));
                                                                 exit(1);
                                                                 } |]
-                                          , C.BlockDecl [cdecl| long long $id:papi_values[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {0};|]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:ifndef_papi_native |]
                                           , C.BlockDecl [cdecl| char $id:papi_region[128];|]
@@ -796,22 +795,14 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                         body ++ 
                                         [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
-                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_stop(gibbon_native_papi_eventset, $id:papi_values);|]
+                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_after);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
-                                                                fprintf(stderr, "PAPI_stop failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                                fprintf(stderr, "PAPI_read(after) failed: %s\n", PAPI_strerror($id:papi_retval));
                                                                 exit(1);
                                                                 } |]
                                           , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
-                                                                printf("PAPI_NATIVE %s[%s]=%lld\n",
-                                                                       gibbon_native_papi_metric_labels[papi_i],
-                                                                       gibbon_native_papi_selected_events[papi_i],
-                                                                       $id:papi_values[papi_i]);
+                                                                $id:papi_samples[papi_i][$id:iters] = $id:papi_after[papi_i] - $id:papi_before[papi_i];
                                                               } |]
-                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_reset(gibbon_native_papi_eventset);|]
-                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
-                                                                fprintf(stderr, "PAPI_reset failed: %s\n", PAPI_strerror($id:papi_retval));
-                                                                exit(1);
-                                                                } |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:ifndef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_hl_region_end($id:papi_region);|]
@@ -822,7 +813,47 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                         ]                                        
-                            in [  C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                            in [  C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
+                                , C.BlockStm [cstm| papi_init_or_die(); |]
+                                , C.BlockDecl [cdecl| int $id:papi_retval = PAPI_start(gibbon_native_papi_eventset);|]
+                                , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                      fprintf(stderr, "PAPI_start failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                      exit(1);
+                                                      } |]
+                                , C.BlockDecl [cdecl| long long $id:papi_before[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {0};|]
+                                , C.BlockDecl [cdecl| long long $id:papi_after[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {0};|]
+                                , C.BlockDecl [cdecl| long long *$id:papi_samples[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {0};|]
+                                , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                      $id:papi_samples[papi_i] = (long long*) malloc(sizeof(long long) * gib_get_iters_param());
+                                                      if ($id:papi_samples[papi_i] == NULL) {
+                                                          fprintf(stderr, "malloc failed for native PAPI samples\n");
+                                                          exit(1);
+                                                      }
+                                                  } |]
+                                , C.BlockStm [cstm| $escstm:endif |]
+                                , C.BlockStm [cstm| $escstm:endif |]
+                                , C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                                , C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
+                                , C.BlockStm [cstm| $id:papi_retval = PAPI_stop(gibbon_native_papi_eventset, $id:papi_after);|]
+                                , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                      fprintf(stderr, "PAPI_stop failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                      exit(1);
+                                                      } |]
+                                , C.BlockStm [cstm| for (long long iter_i = 0; iter_i < gib_get_iters_param(); iter_i++) {
+                                                      for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                          printf("PAPI_NATIVE %s[%s]=%lld\n",
+                                                                 gibbon_native_papi_metric_labels[papi_i],
+                                                                 gibbon_native_papi_selected_events[papi_i],
+                                                                 $id:papi_samples[papi_i][iter_i]);
+                                                      }
+                                                  } |]
+                                , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                      free($id:papi_samples[papi_i]);
+                                                  } |]
+                                , C.BlockStm [cstm| $escstm:endif |]
+                                , C.BlockStm [cstm| $escstm:endif |]
                                 , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
                                 , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
                                 , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
