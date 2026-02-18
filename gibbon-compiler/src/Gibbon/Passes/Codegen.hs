@@ -332,6 +332,69 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#ifdef _GIBBON_ENABLE_PAPI\n\
         \#include <papi.h>\n\
         \#endif\n\n\
+        \#ifdef _GIBBON_ENABLE_PAPI_NATIVE\n\
+        \static int gibbon_native_papi_eventset = PAPI_NULL;\n\
+        \static int gibbon_native_papi_inited = 0;\n\
+        \#define GIBBON_NATIVE_PAPI_EVENT_COUNT 7\n\
+        \#define GIBBON_NATIVE_PAPI_MAX_ALTS 4\n\
+        \static const char *gibbon_native_papi_metric_labels[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {\n\
+        \    \"CPU_CYCLES\",\n\
+        \    \"INSTRUCTIONS\",\n\
+        \    \"L1D_LOAD_MISSES\",\n\
+        \    \"L1I_LOAD_MISSES\",\n\
+        \    \"L2D_MISSES\",\n\
+        \    \"L2I_MISSES\",\n\
+        \    \"LLC_LOAD_MISSES\",\n\
+        \};\n\
+        \static const char *gibbon_native_papi_event_candidates[GIBBON_NATIVE_PAPI_EVENT_COUNT][GIBBON_NATIVE_PAPI_MAX_ALTS] = {\n\
+        \    {\"perf::PERF_COUNT_HW_CPU_CYCLES\", \"perf::CPU-CYCLES\", \"perf::CYCLES\", \"ix86arch::UNHALTED_CORE_CYCLES\"},\n\
+        \    {\"perf::PERF_COUNT_HW_INSTRUCTIONS\", \"perf::INSTRUCTIONS\", \"ix86arch::INSTRUCTION_RETIRED\", NULL},\n\
+        \    {\"perf::L1-DCACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1D\", NULL, NULL},\n\
+        \    {\"perf::L1-ICACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1I\", NULL, NULL},\n\
+        \    {\"L2_RQSTS:DEMAND_DATA_RD_MISS\", \"L2_RQSTS:MISS\", \"L2_REQUEST:DEMAND_DATA_RD_MISS\", \"L2_REQUEST:MISS\"},\n\
+        \    {\"L2_RQSTS:CODE_RD_MISS\", \"L2_REQUEST:CODE_RD_MISS\", NULL, NULL},\n\
+        \    {\"perf::LLC-LOAD-MISSES\", \"ix86arch::LLC_MISSES\", \"LONGEST_LAT_CACHE:MISS\", \"adl_grt::LONGEST_LAT_CACHE:MISS\"},\n\
+        \};\n\
+        \static const char *gibbon_native_papi_selected_events[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {NULL};\n\
+        \static void papi_init_or_die(void) {\n\
+        \    if (gibbon_native_papi_inited) return;\n\
+        \    int rv = PAPI_library_init(PAPI_VER_CURRENT);\n\
+        \    if (rv != PAPI_VER_CURRENT) {\n\
+        \        fprintf(stderr, \"PAPI_library_init failed: %d\\n\", rv);\n\
+        \        exit(1);\n\
+        \    }\n\
+        \    rv = PAPI_create_eventset(&gibbon_native_papi_eventset);\n\
+        \    if (rv != PAPI_OK) {\n\
+        \        fprintf(stderr, \"PAPI_create_eventset failed: %s\\n\", PAPI_strerror(rv));\n\
+        \        exit(1);\n\
+        \    }\n\
+        \    for (int i = 0; i < GIBBON_NATIVE_PAPI_EVENT_COUNT; i++) {\n\
+        \        int added = 0;\n\
+        \        for (int j = 0; j < GIBBON_NATIVE_PAPI_MAX_ALTS; j++) {\n\
+        \            const char *ev_name = gibbon_native_papi_event_candidates[i][j];\n\
+        \            int code;\n\
+        \            if (ev_name == NULL) {\n\
+        \                continue;\n\
+        \            }\n\
+        \            rv = PAPI_event_name_to_code((char*)ev_name, &code);\n\
+        \            if (rv != PAPI_OK) {\n\
+        \                continue;\n\
+        \            }\n\
+        \            rv = PAPI_add_event(gibbon_native_papi_eventset, code);\n\
+        \            if (rv == PAPI_OK) {\n\
+        \                gibbon_native_papi_selected_events[i] = ev_name;\n\
+        \                added = 1;\n\
+        \                break;\n\
+        \            }\n\
+        \        }\n\
+        \        if (!added) {\n\
+        \            fprintf(stderr, \"No usable native PAPI event found for metric %s\\n\", gibbon_native_papi_metric_labels[i]);\n\
+        \            exit(1);\n\
+        \        }\n\
+        \    }\n\
+        \    gibbon_native_papi_inited = 1;\n\
+        \}\n\
+        \#endif\n\n\
         \/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
         \ * Program starts here\n\
         \ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
@@ -674,6 +737,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
        empty <- gensym "e" 
        papi_retval <- gensym "papi_retval"
        papi_region <- gensym "papi_region"
+       papi_values <- gensym "papi_values"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> empty
@@ -704,30 +768,61 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                        , C.BlockStm [cstm| printf("itertime: %lf\n", $id:itertime); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
-                                -- TODO: Find a better way to get a name for the region id.                                
-                                ifdef = "#ifdef _GIBBON_ENABLE_PAPI"
+                                -- TODO: Find a better way to get a name for the region id.
+                                ifdef_papi = "#ifdef _GIBBON_ENABLE_PAPI"
+                                ifdef_papi_native = "#ifdef _GIBBON_ENABLE_PAPI_NATIVE"
+                                ifndef_papi_native = "#ifndef _GIBBON_ENABLE_PAPI_NATIVE"
                                 endif = "#endif"
-                                body' = [   C.BlockStm [cstm| $escstm:ifdef |]
-                                          , C.BlockStm [cstm| sprintf($id:papi_region, "%d", get_papi_region_id());|]
+                                body' = [   C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                          , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
+                                          , C.BlockStm [cstm| papi_init_or_die(); |]
+                                          , C.BlockDecl [cdecl| int $id:papi_retval = PAPI_start(gibbon_native_papi_eventset);|]
+                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                                fprintf(stderr, "PAPI_start failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                                exit(1);
+                                                                } |]
+                                          , C.BlockDecl [cdecl| long long $id:papi_values[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {0};|]
+                                          , C.BlockStm [cstm| $escstm:endif |]
+                                          , C.BlockStm [cstm| $escstm:ifndef_papi_native |]
+                                          , C.BlockDecl [cdecl| char $id:papi_region[128];|]
+                                          , C.BlockStm [cstm| sprintf($id:papi_region, "%llu", (unsigned long long) get_papi_region_id());|]
                                           , C.BlockDecl [cdecl| int $id:papi_retval = PAPI_hl_region_begin($id:papi_region);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
                                                                 exit(1);
                                                                 } |]
                                           , C.BlockStm [cstm| $escstm:endif |]
+                                          , C.BlockStm [cstm| $escstm:endif |]
                                         ] ++ 
                                         body ++ 
-                                        [   C.BlockStm [cstm| $escstm:ifdef |]
+                                        [   C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                          , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
+                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_stop(gibbon_native_papi_eventset, $id:papi_values);|]
+                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                                fprintf(stderr, "PAPI_stop failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                                exit(1);
+                                                                } |]
+                                          , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                                printf("PAPI_NATIVE %s[%s]=%lld\n",
+                                                                       gibbon_native_papi_metric_labels[papi_i],
+                                                                       gibbon_native_papi_selected_events[papi_i],
+                                                                       $id:papi_values[papi_i]);
+                                                              } |]
+                                          , C.BlockStm [cstm| $id:papi_retval = PAPI_reset(gibbon_native_papi_eventset);|]
+                                          , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
+                                                                fprintf(stderr, "PAPI_reset failed: %s\n", PAPI_strerror($id:papi_retval));
+                                                                exit(1);
+                                                                } |]
+                                          , C.BlockStm [cstm| $escstm:endif |]
+                                          , C.BlockStm [cstm| $escstm:ifndef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_hl_region_end($id:papi_region);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
                                                                 exit(1);
                                                                 } |]
                                           , C.BlockStm [cstm| increment_papi_region_id(); |]
                                           , C.BlockStm [cstm| $escstm:endif |]
+                                          , C.BlockStm [cstm| $escstm:endif |]
                                         ]                                        
-                            in [  C.BlockStm [cstm| $escstm:ifdef |]
-                                , C.BlockDecl [cdecl| char $id:papi_region[128];|]
-                                , C.BlockStm [cstm| $escstm:endif |]
-                                , C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                            in [  C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
                                 , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
                                 , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
                                 , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
