@@ -570,6 +570,7 @@ def _stats(times: List[float], pass_type: str = "unknown",
 
 _PAPI_AVAIL_COUNTERS_CACHE: Optional[List[str]] = None
 _PAPI_SELECTED_EVENTS: List[str] = []
+_PAPI_COUNTER_ORDER: List[str] = []
 
 
 def _to_int_maybe(val) -> Optional[int]:
@@ -649,6 +650,80 @@ def select_preferred_papi_events() -> List[str]:
         if ev and ev not in selected:
             selected.append(ev)
     return selected
+
+
+def select_preferred_papi_native_metrics() -> List[str]:
+    """
+    Logical native metrics emitted by --enable-papi-native output lines.
+    """
+    return [
+        "CPU_CYCLES",
+        "INSTRUCTIONS",
+        "L1D_LOAD_MISSES",
+        "L1I_LOAD_MISSES",
+        "L2D_MISSES",
+        "L2I_MISSES",
+        "LLC_LOAD_MISSES",
+    ]
+
+
+def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> None:
+    """
+    Parse native PAPI lines from executable stdout and attach per-pass summaries.
+    Expected line format:
+      PAPI_NATIVE <METRIC>[<EVENT_NAME>]=<VALUE>
+    """
+    pass_re = re.compile(
+        r'Running\s+pass\s+([^(:\n]+?)\s*'
+        r'(?:\(\s*([^,)]+?)\s*(?:,\s*uses\s*=\s*(\d+))?\s*\))?\s*:',
+        re.IGNORECASE,
+    )
+    native_re = re.compile(
+        r'^PAPI_NATIVE\s+([A-Za-z0-9_]+)\[([^\]]+)\]=(-?\d+(?:\.\d+)?)$'
+    )
+
+    current: Optional[str] = None
+    metric_values_by_pass: Dict[str, Dict[str, List[float]]] = {}
+    metric_event_name: Dict[str, str] = {}
+
+    for line in raw_stdout.splitlines():
+        s = line.strip()
+        m = pass_re.match(s)
+        if m:
+            current = m.group(1).strip()
+            metric_values_by_pass.setdefault(current, {})
+            continue
+        if s == "End":
+            current = None
+            continue
+        m2 = native_re.match(s)
+        if m2 and current is not None:
+            metric = m2.group(1)
+            event_name = m2.group(2)
+            try:
+                value = float(m2.group(3))
+            except ValueError:
+                continue
+            metric_event_name.setdefault(metric, event_name)
+            metric_values_by_pass.setdefault(current, {}).setdefault(metric, []).append(value)
+
+    if not metric_values_by_pass:
+        return
+
+    metric_order = _PAPI_COUNTER_ORDER or sorted(metric_event_name.keys())
+    result.papi_counters = [m for m in metric_order if any(m in by_m for by_m in metric_values_by_pass.values())]
+
+    for pname, pdata in result.passes.items():
+        by_metric = metric_values_by_pass.get(pname, {})
+        if not by_metric:
+            continue
+        pdata.setdefault("papi_counters", {})
+        pdata["papi_sample_count"] = max((len(vs) for vs in by_metric.values()), default=0)
+        pdata["papi_native_events"] = {}
+        for metric, vals in by_metric.items():
+            if vals:
+                pdata["papi_counters"][metric] = _counter_stats(vals)
+                pdata["papi_native_events"][metric] = metric_event_name.get(metric, "")
 
 
 def _papi_json_files(search_root: Path) -> List[Path]:
@@ -873,6 +948,7 @@ def apply_source_classification(result: BenchmarkResult,
 # ---------------------------------------------------------------------------
 _GC_RE = re.compile(
     r"itertime:|ITER TIMES:|ITERS:|SIZE:|BATCHTIME:|SELFTIMED:|"
+    r"PAPI_NATIVE\s+|"
     r"Running pass|Running program|^End$|INFO_TABLE:|Initialized footer at|"
     r"GibOldgenChunkFooter|GibRegionInfo|refcount:.*outset:|"
     r"Total allocated bytes:|Total copied bytes:|ALLOC_TOTAL:|GC_TOTAL:",
@@ -1050,7 +1126,8 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
 # ---------------------------------------------------------------------------
 def compile_one(source: Path, variant: str, out_dir: Path,
                 force: bool, use_mutable_cursors: bool = True,
-                enable_papi: bool = False
+                enable_papi: bool = False,
+                enable_papi_native: bool = False,
                 ) -> Tuple[bool, float, Optional[str]]:
     stem   = source.stem
     c_file = out_dir / f"{stem}.{variant}.c"
@@ -1061,6 +1138,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     cmd = ["gibbon"]
     if use_mutable_cursors:
         cmd.append("--use-mutable-cursors")
+    if enable_papi_native:
+        cmd.append("--enable-papi-native")
     if enable_papi:
         cmd.append("--enable-papi")
     cmd.extend([
@@ -1087,6 +1166,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         reason = "forced recompile"
     
     flags_str = "mut-cursors" if use_mutable_cursors else "imm-cursors"
+    if enable_papi_native:
+        flags_str += ",papi-native"
     if enable_papi:
         flags_str += ",papi"
     print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
@@ -1127,8 +1208,8 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
     results: Dict = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         fmap = {
-            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi): (prog, var)
-            for prog, var, src, od, force, use_mut, enable_papi in tasks
+            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi, enable_papi_native): (prog, var)
+            for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -1185,6 +1266,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       dump_raw: bool = False,
                       benchmark_immutable: bool = False,
                       enable_papi: bool = False,
+                      enable_papi_native: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
     """
     Benchmark one program. Returns (aos_result, soa_result) for backwards compatibility.
@@ -1213,7 +1295,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         src_dir = "AOS" if var.startswith("aos") else "SOA"
         src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi))
+            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi, enable_papi_native))
         else:
             print(f"  Warning: {src} not found")
 
@@ -1224,7 +1306,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
 
     dump_dir = (out_dir / "raw_output") if dump_raw else None
 
-    for var, use_mut in variants:
+    for idx, (var, use_mut) in enumerate(variants):
         res = BenchmarkResult(prog, var)
         res.adt_fields = src_data.get("adt_fields")
         key = (prog, var)
@@ -1294,6 +1376,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         before_snapshot=papi_before,
                         run_started_at=run_started_at,
                     )
+                if enable_papi_native:
+                    attach_papi_native_to_passes(res, stdout_or_stderr)
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = sum(p["median_time"] for p in res.passes.values())
@@ -1312,6 +1396,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                           f"min={mn:.4f}s  max={mx:.4f}s  n={n}")
 
         results[var] = res
+
+        # Cooldown between variant executions to reduce thermal/cache carryover.
+        if idx < len(variants) - 1:
+            print("           waiting 3s before next variant run ...")
+            time.sleep(3)
 
     # For backwards compatibility, return (aos, soa) with mutable cursors
     # Also store all results globally if benchmarking immutable variants
@@ -1403,11 +1492,9 @@ def _tex_escape(text: str) -> str:
 def _fmt_counter(v: Optional[float]) -> str:
     if v is None:
         return "--"
-    if abs(v - round(v)) < 1e-9:
-        return f"{int(round(v)):,}"
-    if abs(v) >= 1e6:
-        return f"{v:.3e}"
-    return f"{v:.2f}"
+    # Scientific notation with 2 significant digits for readability.
+    # Python format ".1e" => 2 significant digits total.
+    return f"{float(v):.1e}"
 
 
 def _papi_pair_cell(ad: Dict, sd: Dict, counter: str) -> str:
@@ -1415,7 +1502,41 @@ def _papi_pair_cell(ad: Dict, sd: Dict, counter: str) -> str:
     s = (sd.get("papi_counters", {}).get(counter) or {}).get("median")
     if a is None and s is None:
         return "--"
-    return f"{_fmt_counter(a)}/{_fmt_counter(s)}"
+    a_s = _fmt_counter(a)
+    s_s = _fmt_counter(s)
+    if a is not None and s is not None:
+        if a < s:
+            a_s = f"\\textbf{{{a_s}}}"
+        elif s < a:
+            s_s = f"\\textbf{{{s_s}}}"
+    return f"{a_s}/{s_s}"
+
+
+def _short_counter_label(counter: str) -> str:
+    mapping = {
+        "CPU_CYCLES": "CYC",
+        "INSTRUCTIONS": "INS",
+        "L1D_LOAD_MISSES": "L1D",
+        "L1I_LOAD_MISSES": "L1I",
+        "L2D_MISSES": "L2D",
+        "L2I_MISSES": "L2I",
+        "LLC_LOAD_MISSES": "LLC",
+        "PAPI_TOT_CYC": "TOT_CYC",
+        "PAPI_L1_TCM": "L1_TCM",
+        "PAPI_L1_DCM": "L1_DCM",
+        "PAPI_L1_ICM": "L1_ICM",
+        "PAPI_L2_TCM": "L2_TCM",
+        "PAPI_L2_DCM": "L2_DCM",
+        "PAPI_L2_ICM": "L2_ICM",
+        "PAPI_L3_TCM": "L3_TCM",
+        "PAPI_L3_DCM": "L3_DCM",
+        "PAPI_L3_ICM": "L3_ICM",
+    }
+    if counter in mapping:
+        return mapping[counter]
+    if counter.startswith("PAPI_"):
+        return counter.replace("PAPI_", "")
+    return counter
 
 # ---------------------------------------------------------------------------
 # LaTeX tables
@@ -1429,26 +1550,8 @@ def _table_cursor_comparison(f, all_variants_results):
     f.write("% ============================================================================\n")
     f.write("% Table 2: Mutable vs Immutable Cursor Comparison\n")
     f.write("% ============================================================================\n\n")
-    f.write("\\begin{table}[htbp]\n\\centering\n")
-    f.write("\\caption{Mutable vs immutable cursor comparison. "
-            "Times are median per iteration (s). "
-            "Speedups shown are AoS-mut/SoA-mut, AoS-imm/AoS-mut, "
-            "AoS-imm/SoA-mut, and AoS-imm/SoA-imm. "
-            "${>}1{\\times}$ means the denominator is faster. "
-            "\\textbf{Bold} marks the fastest time across all four variants.}\n")
-    f.write("\\label{tab:cursor_comparison}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r r r r r r}\n\\toprule\n")
-    f.write(
-        "\\textbf{Program}"
-        " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
-        " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-        " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
-        " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
-        " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
-        " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}} \\\\\n"
-    )
-    f.write("\\midrule\n")
 
+    rows = []
     for entry in all_variants_results:
         prog = entry['program'].replace(".hs", "").replace("_", "\\_")
         aos_mut = entry.get('aos')
@@ -1516,14 +1619,58 @@ def _table_cursor_comparison(f, all_variants_results):
         spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
         spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
 
-        f.write(f"{prog}"
-                f" & {aos_mut_f} & {aos_imm_f}"
-                f" & {soa_mut_f} & {soa_imm_f}"
-                f" & {spd_mut_s}"
-                f" & {spd_aos_imm_over_aos_mut_s}"
-                f" & {spd_imm_s}"
-                f" & {spd_imm_layout_s} \\\\\n")
+        rows.append({
+            "prog": prog,
+            "aos_mut": aos_mut_f,
+            "aos_imm": aos_imm_f,
+            "soa_mut": soa_mut_f,
+            "soa_imm": soa_imm_f,
+            "spd_mut": spd_mut_s,
+            "spd_aos_imm_over_aos_mut": spd_aos_imm_over_aos_mut_s,
+            "spd_imm": spd_imm_s,
+            "spd_imm_layout": spd_imm_layout_s,
+        })
 
+    # 2A: raw times
+    f.write("\\begin{table}[htbp]\n\\centering\n")
+    f.write("\\caption{Mutable vs immutable cursor comparison (times only). "
+            "Times are median per iteration (s). "
+            "\\textbf{Bold} marks the fastest time across all four variants.}\n")
+    f.write("\\label{tab:cursor_comparison_times}\n\\small\n")
+    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
+    f.write(
+        "\\textbf{Program}"
+        " & \\textbf{Am} & \\textbf{Ai}"
+        " & \\textbf{Sm} & \\textbf{Si} \\\\\n"
+    )
+    f.write("\\midrule\n")
+    for r in rows:
+        f.write(f"{r['prog']}"
+                f" & {r['aos_mut']} & {r['aos_imm']}"
+                f" & {r['soa_mut']} & {r['soa_imm']} \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+
+    # 2B: speedups
+    f.write("\\begin{table}[htbp]\n\\centering\n")
+    f.write("\\caption{Mutable vs immutable cursor comparison (speedups). "
+            "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. "
+            "${>}1{\\times}$ means the denominator is faster.}\n")
+    f.write("\\label{tab:cursor_comparison_speedups}\n\\small\n")
+    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
+    f.write(
+        "\\textbf{Program}"
+        " & \\textbf{Am/Sm}"
+        " & \\textbf{Ai/Am}"
+        " & \\textbf{Ai/Sm}"
+        " & \\textbf{Ai/Si} \\\\\n"
+    )
+    f.write("\\midrule\n")
+    for r in rows:
+        f.write(f"{r['prog']}"
+                f" & {r['spd_mut']}"
+                f" & {r['spd_aos_imm_over_aos_mut']}"
+                f" & {r['spd_imm']}"
+                f" & {r['spd_imm_layout']} \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
 
@@ -1622,8 +1769,8 @@ def _collect_papi_counter_names(all_results: List[Tuple]) -> List[str]:
             for pdata in res.passes.values():
                 for c in (pdata.get("papi_counters") or {}).keys():
                     counters.add(c)
-    if _PAPI_SELECTED_EVENTS:
-        ordered = [c for c in _PAPI_SELECTED_EVENTS if c in counters]
+    if _PAPI_COUNTER_ORDER:
+        ordered = [c for c in _PAPI_COUNTER_ORDER if c in counters]
         ordered += sorted(c for c in counters if c not in set(ordered))
         return ordered
     return sorted(counters)
@@ -1645,33 +1792,33 @@ def _papi_total_for_result(res: Optional[BenchmarkResult], counter: str) -> Opti
 
 def _table_papi_summary(f, all_results):
     """
-    PAPI summary table:
-    Program | [counter1: AoS SoA Speedup] | [counter2: ...]
-    Totals are sum of per-pass median counter values.
+    PAPI summary split into two compact tables:
+      1) Speedups only (AoS/SoA)
+      2) Cache stats as AoS/SoA value pairs
+    Totals are sums of per-pass median counter values.
     """
     counters = _collect_papi_counter_names(all_results)
     if not counters:
         return
 
-    f.write("% -- Table: PAPI Summary --\n")
+    short = [_short_counter_label(c) for c in counters]
+
+    # ------------------------------------------------------------------
+    # Table A: speedup only
+    # ------------------------------------------------------------------
+    f.write("% -- Table: PAPI Speedup Summary --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
-        "\\caption{PAPI counter summary across all passes. "
-        "For each program and counter, values are the sum of per-pass median counters. "
-        "Speedup is AoS/SoA; ${>}1{\\times}$ means SoA has fewer events.}\n"
+        "\\caption{PAPI speedup summary across all passes. "
+        "For each program and counter, speedup is AoS/SoA using summed per-pass median counters. "
+        "${>}1{\\times}$ means SoA has fewer events.}\n"
     )
-    f.write("\\label{tab:papi_summary}\n\\small\n")
-    f.write("\\begin{tabular}{l" + (" r r r" * len(counters)) + "}\n\\toprule\n")
-
-    hdr1 = "\\textbf{Program}"
-    for c in counters:
-        hdr1 += f" & \\multicolumn{{3}}{{c}}{{\\textbf{{{_tex_escape(c)}}}}}"
-    f.write(hdr1 + " \\\\\n")
-
-    hdr2 = " "
-    for _ in counters:
-        hdr2 += " & AoS & SoA & Speedup"
-    f.write(hdr2 + " \\\\\n")
+    f.write("\\label{tab:papi_summary_speedup}\n\\small\n")
+    f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
+    hdr = "\\textbf{Program}"
+    for c in short:
+        hdr += f" & \\textbf{{{_tex_escape(c)}}}"
+    f.write(hdr + " \\\\\n")
     f.write("\\midrule\n")
 
     spd_map: Dict[str, List[float]] = {c: [] for c in counters}
@@ -1685,17 +1832,56 @@ def _table_papi_summary(f, all_results):
             if at is not None and st is not None and st > 0:
                 spd = at / st
                 spd_map[c].append(spd)
-                row += f" & {_fmt_counter(at)} & {_fmt_counter(st)} & {_spd_cell(spd)}"
+                row += f" & {_spd_cell(spd)}"
             else:
-                row += f" & {_fmt_counter(at)} & {_fmt_counter(st)} & --"
+                row += " & --"
         f.write(row + " \\\\\n")
 
     gm_row = "\\textbf{Geomean}"
     for c in counters:
         vals = spd_map.get(c, [])
-        gm_row += f" & & & {(_spd_cell(statistics.geometric_mean(vals)) if vals else '--')}"
+        gm_row += f" & {(_spd_cell(statistics.geometric_mean(vals)) if vals else '--')}"
     f.write("\\midrule\n")
     f.write(gm_row + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+
+    # ------------------------------------------------------------------
+    # Table B: raw cache stats (AoS/SoA in one cell)
+    # ------------------------------------------------------------------
+    f.write("% -- Table: PAPI Cache Stats Summary --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write(
+        "\\caption{PAPI counter totals across all passes (AoS/SoA). "
+        "Each entry is the sum of per-pass median counter values.}\n"
+    )
+    f.write("\\label{tab:papi_summary_values}\n\\small\n")
+    f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
+    hdr = "\\textbf{Program}"
+    for c in short:
+        hdr += f" & \\textbf{{{_tex_escape(c)} (A/S)}}"
+    f.write(hdr + " \\\\\n")
+    f.write("\\midrule\n")
+
+    for aos, soa in all_results:
+        if not (aos and soa and aos.run_success and soa.run_success):
+            continue
+        row = aos.program.replace(".hs", "").replace("_", "\\_")
+        for c in counters:
+            at = _papi_total_for_result(aos, c)
+            st = _papi_total_for_result(soa, c)
+            if at is None and st is None:
+                row += " & --"
+            else:
+                a_s = _fmt_counter(at)
+                s_s = _fmt_counter(st)
+                if at is not None and st is not None:
+                    if at < st:
+                        a_s = f"\\textbf{{{a_s}}}"
+                    elif st < at:
+                        s_s = f"\\textbf{{{s_s}}}"
+                row += f" & {a_s}/{s_s}"
+        f.write(row + " \\\\\n")
+
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
 
@@ -1761,8 +1947,6 @@ def _table_per_program(f, all_results, all_variants_results=None):
             "T: F=fold, M=map. "
             "Uses: fields accessed / total (recursive + non-recursive). "
             "Dead\\%: fraction of fields not accessed by this pass. "
-            "PAPI columns (A/S) show AoS/SoA median PAPI counters per pass, "
-            "mapped chronologically in --iterate-sized chunks. "
             "Speedup ${>}1{\\times}$ means SoA is faster. "
             "OOM = out of memory.}}\n"
         )
@@ -1786,12 +1970,14 @@ def _table_per_program(f, all_results, all_variants_results=None):
                  if (soa_imm and soa_imm.run_success) else [])
             )
         }
-        if _PAPI_SELECTED_EVENTS:
-            papi_counter_names = [c for c in _PAPI_SELECTED_EVENTS if c in papi_counter_set]
-            papi_counter_names += sorted(c for c in papi_counter_set if c not in set(papi_counter_names))
+        if _PAPI_COUNTER_ORDER:
+            papi_counter_names_all = [c for c in _PAPI_COUNTER_ORDER if c in papi_counter_set]
+            papi_counter_names_all += sorted(c for c in papi_counter_set if c not in set(papi_counter_names_all))
         else:
-            papi_counter_names = sorted(papi_counter_set)
-        papi_colspec = " r" * len(papi_counter_names)
+            papi_counter_names_all = sorted(papi_counter_set)
+        # Keep runtime table compact; emit PAPI counters in a separate table below.
+        papi_counter_names: List[str] = []
+        papi_colspec = ""
         papi_header_suffix = "".join(
             f" & \\textbf{{{_tex_escape(counter)} (A/S)}}"
             for counter in papi_counter_names
@@ -1805,24 +1991,24 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
-                    " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
-                    " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-                    " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}}"
+                    " & \\textbf{Am} & \\textbf{Ai}"
+                    " & \\textbf{Sm} & \\textbf{Si}"
+                    " & \\textbf{Am/Sm}"
+                    " & \\textbf{Ai/Am}"
+                    " & \\textbf{Ai/Sm}"
+                    " & \\textbf{Ai/Si}"
                     f"{papi_header_suffix} \\\\\n"
                 )
             else:
                 f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
-                    " & \\textbf{AoS-mut} & \\textbf{AoS-imm}"
-                    " & \\textbf{SoA-mut} & \\textbf{SoA-imm}"
-                    " & \\textbf{\\shortstack{AoS-mut/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\AoS-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-mut}}"
-                    " & \\textbf{\\shortstack{AoS-imm/\\\\SoA-imm}}"
+                    " & \\textbf{Am} & \\textbf{Ai}"
+                    " & \\textbf{Sm} & \\textbf{Si}"
+                    " & \\textbf{Am/Sm}"
+                    " & \\textbf{Ai/Am}"
+                    " & \\textbf{Ai/Sm}"
+                    " & \\textbf{Ai/Si}"
                     f"{papi_header_suffix} \\\\\n"
                 )
         else:
@@ -2067,11 +2253,76 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         f"{papi_empty_suffix} \\\\\n")
 
         f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+        _table_per_program_papi_one_pair(
+            f, prog, pdisplay, passes,
+            aos, soa, papi_counter_names_all,
+            pair_label="A/S", label_suffix="mut"
+        )
+        if aos_imm is not None and soa_imm is not None:
+            _table_per_program_papi_one_pair(
+                f, prog, pdisplay, passes,
+                aos_imm, soa_imm, papi_counter_names_all,
+                pair_label="Ai/Si", label_suffix="imm"
+            )
+
+
+def _table_per_program_papi_one_pair(
+    f, prog: str, pdisplay: str, passes: List[str],
+    left: BenchmarkResult, right: BenchmarkResult,
+    counters: List[str], pair_label: str, label_suffix: str
+) -> None:
+    if not counters:
+        return
+    f.write(f"% -- Table: {prog} PAPI {pair_label} --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write(
+        f"\\caption{{Per-pass PAPI counters for \\texttt{{{pdisplay}}} ({pair_label}). "
+        "Each cell is median counter value pair per pass. "
+        "Counter headers are abbreviated for compactness: "
+        "CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}\n"
+    )
+    f.write(f"\\label{{tab:{prog}_papi_{label_suffix}}}\n\\small\n")
+    f.write("\\setlength{\\tabcolsep}{4pt}\n")
+    f.write("\\begin{tabular}{l c" + (" r" * len(counters)) + "}\n\\toprule\n")
+    hdr = "\\textbf{Pass} & \\textbf{T}"
+    for c in counters:
+        hdr += f" & \\textbf{{{_tex_escape(_short_counter_label(c))} ({_tex_escape(pair_label)})}}"
+    f.write(hdr + " \\\\\n")
+    f.write("\\midrule\n")
+
+    for pname in passes:
+        ad = left.passes.get(pname, {})
+        sd = right.passes.get(pname, {})
+        has_any = any(
+            ((ad.get("papi_counters", {}).get(c) or {}).get("median") is not None) or
+            ((sd.get("papi_counters", {}).get(c) or {}).get("median") is not None)
+            for c in counters
+        )
+        if not has_any:
+            continue
+        ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
+        tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
+        row = f"{pname.replace('_', '\\_')} & {tchar}"
+        for c in counters:
+            row += f" & {_papi_pair_cell(ad, sd, c)}"
+        f.write(row + " \\\\\n")
+
+    f.write("\\midrule\n")
+    total_row = "\\textbf{Total} & "
+    for c in counters:
+        at = _papi_total_for_result(left, c)
+        st = _papi_total_for_result(right, c)
+        total_row += f" & {_fmt_counter(at)}/{_fmt_counter(st)}"
+    f.write(total_row + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+
+
 def compile_latex_preview(tex_file: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     wrapper = (
         "\\documentclass{article}\n"
         "\\usepackage{booktabs}\n"
+        "\\usepackage{graphicx}\n"
         "\\usepackage[margin=0.5in,a3paper]{geometry}\n"
         "\\begin{document}\\pagestyle{empty}\n"
         f"\\input{{{tex_file.name}}}\n"
@@ -2610,7 +2861,13 @@ def main():
     ap.add_argument("--enable-papi", action="store_true",
                     help="Compile with --enable-papi, export PAPI_EVENTS, parse papi_hl_output JSON, "
                          "and add PAPI columns to tables.")
+    ap.add_argument("--enable-papi-native", action="store_true",
+                    help="Compile with --enable-papi-native, parse PAPI_NATIVE stdout lines, "
+                         "and add native PAPI columns to tables.")
     args = ap.parse_args()
+
+    if args.enable_papi and args.enable_papi_native:
+        ap.error("Choose only one mode: --enable-papi OR --enable-papi-native")
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
 
@@ -2626,7 +2883,8 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Immutable    : {'YES  (4 variants: aos, aos_imm, soa, soa_imm)' if args.benchmark_immutable else 'no  (2 variants: aos, soa)'}")
-    print(f"  PAPI         : {'YES' if args.enable_papi else 'no'}")
+    papi_mode = ("native" if args.enable_papi_native else ("high-level" if args.enable_papi else "off"))
+    print(f"  PAPI mode    : {papi_mode}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
     
     # Show which gibbon compiler will be used and its mtime
@@ -2639,9 +2897,10 @@ def main():
     else:
         print(f"  Compiler     : gibbon NOT FOUND in PATH")
 
+    global _PAPI_SELECTED_EVENTS, _PAPI_COUNTER_ORDER
     if args.enable_papi:
-        global _PAPI_SELECTED_EVENTS
         _PAPI_SELECTED_EVENTS = select_preferred_papi_events()
+        _PAPI_COUNTER_ORDER = list(_PAPI_SELECTED_EVENTS)
         if _PAPI_SELECTED_EVENTS:
             papi_events_str = ",".join(_PAPI_SELECTED_EVENTS)
             os.environ["PAPI_EVENTS"] = papi_events_str
@@ -2649,6 +2908,9 @@ def main():
             print(f"  Export cmd   : export PAPI_EVENTS=\"{papi_events_str}\"")
         else:
             print("  PAPI warning : no preferred PAPI events found via papi_avail")
+    elif args.enable_papi_native:
+        _PAPI_COUNTER_ORDER = select_preferred_papi_native_metrics()
+        print(f"  Native PAPI metrics: {', '.join(_PAPI_COUNTER_ORDER)}")
 
     print("=" * 72)
 
@@ -2667,6 +2929,7 @@ def main():
             dump_raw=args.dump_raw,
             benchmark_immutable=args.benchmark_immutable,
             enable_papi=args.enable_papi,
+            enable_papi_native=args.enable_papi_native,
         )
         all_results.append((aos, soa))
 
