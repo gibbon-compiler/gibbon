@@ -68,14 +68,14 @@ case_test2 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
 
 case_test3 :: Assertion
 case_test3 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
                               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
                               LitE 1
 
 
 case_test4 :: Assertion
 case_test4 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
                               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
                               LetE ("throwaway", [],
                                               PackedTy "Tree" (singleLocVar "l"),
@@ -85,7 +85,7 @@ case_test4 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
 
 case_test4_error1 :: Assertion
 case_test4_error1 =  assertError exp expected
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r1")) $
               LetE ("throwaway", [], PackedTy "Tree" (singleLocVar "l"),
                               DataConE (singleLocVar "l") "Leaf" [LitE 1]) $
@@ -96,7 +96,7 @@ case_test4_error1 =  assertError exp expected
 
 case_test4_error2 :: Assertion
 case_test4_error2 =  assertError exp expected
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
               LetE ("throwaway", [], PackedTy "Tree" (singleLocVar "l1"),
                               DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
@@ -107,7 +107,7 @@ case_test4_error2 =  assertError exp expected
 
 case_test5 :: Assertion
 case_test5 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
               Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
               LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"), DataConE (singleLocVar "l1") "Leaf" [LitE 1]) $
@@ -118,7 +118,7 @@ case_test5 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
 
 case_test5_error1 :: Assertion
 case_test5_error1 =  assertError exp expected
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
               Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
               LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"),
@@ -135,7 +135,7 @@ case_test5_error1 =  assertError exp expected
 
 case_test6 :: Assertion
 case_test6 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
-  where exp = Ext $ LetRegionE (VarR "r") Undefined Nothing $
+  where exp = Ext $ LetRegionE (VarR "r") Undefined RegionImmutable Nothing $
               Ext $ LetLocE (singleLocVar "l") (StartOfRegionLE (VarR "r")) $
               Ext $ LetLocE (singleLocVar "l1") (AfterConstantLE 1 (singleLocVar "l")) $
               LetE ("x", [], PackedTy "Tree" (singleLocVar "l1"),
