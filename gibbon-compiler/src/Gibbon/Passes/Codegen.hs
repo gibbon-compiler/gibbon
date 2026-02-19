@@ -1835,8 +1835,13 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         expr' = codegenTriv venv expr
                     case expr of 
                         IndexCursorArrayTriv{} -> do 
-                          -- tmp <- gensym "tmp_copy"
-                          return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($exp:expr'); |] ] 
+                          case outT of
+                                MutCursorTy -> if L.isPrefixOf "end" (fromVar outV)
+                                               then return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = &($exp:expr'); |] ]
+                                               else return [ C.BlockDecl [cdecl| typename GibCursor * restrict $id:outV = &($exp:expr'); |] ]
+                                -- add other Ty cases here if they also mean GibCursor*
+                                _ ->
+                                  return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = &($exp:expr'); |] ]
                         _ -> do 
                              tmp <- gensym "tmp_copy"
                              return [ 
@@ -1930,7 +1935,7 @@ codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
 codegenTy (CursorArrayTy size) = [cty| typename GibCursor[$int:size] |]
-codegenTy MutCursorTy = [cty|typename GibCursor* |]
+codegenTy MutCursorTy = [cty|typename GibCursor*z|]
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
