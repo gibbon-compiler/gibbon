@@ -238,6 +238,63 @@ pointCloudNeighborhood t qx qy qz radius =
     KDEmpty ->
       0
 
+-- Multi-phase photon-mapping-style traversal.
+-- Ray origin/direction are derived from seed per phase (no hardcoded query point).
+-- Structure mirrors ray_cast style:
+-- local_term + kreflect * reflected_ray + krefract * refracted_ray.
+photonMappingBenchmark :: KDTree -> Int -> Int -> Int -> Int -> Int
+photonMappingBenchmark t phases rays seed radius =
+  case t of
+    KDLeaf x y z _ _ ->
+      let active = if phases == 0 then 0 else if rays == 0 then 0 else 1
+          ox = (seed * 13) - (phases * 7)
+          oy = (seed * 5) + (rays * 3)
+          oz = (seed * 11) - rays
+          d = dist3 x y z ox oy oz
+          mHit = if d <= radius then 1 else 0
+      in active * mHit * rays
+
+    KDNode splitDim splitVal minX minY minZ maxX maxY maxZ _ _ l r ->
+      let active = if phases == 0 then 0 else if rays == 0 then 0 else 1
+          ox = (seed * 13) - (phases * 7)
+          oy = (seed * 5) + (rays * 3)
+          oz = (seed * 11) - rays
+          dx = (seed * 3) - (phases * 2)
+          dy = (seed * 7) - rays
+          dz = (seed * 5) - (phases + rays)
+          oCoord = coordAt splitDim ox oy oz
+          dCoord = coordAt splitDim dx dy dz
+          planeDist = absI (oCoord - splitVal)
+          boxDist = bboxLowerBound minX minY minZ maxX maxY maxZ ox oy oz
+          reflected = rays / 2
+          ior_i = 2 + splitDim
+          ior_t = 1 + (splitVal - (splitVal / 3) * 3)
+          tir = if ior_i > ior_t
+                then if (planeDist * ior_i) > (radius * ior_t) then 1 else 0
+                else 0
+          refracted = if tir == 1 then 0 else rays / 3
+          nextRays = active * (reflected + refracted)
+          nextPhase = if phases > 0 then phases - 1 else 0
+          nextSeed = seed + 17
+          nextRadius = if radius > 3 then radius - 3 else 3
+          _ = if dCoord < 0 then 0 - dCoord else dCoord
+          hl = photonMappingBenchmark l nextPhase nextRays nextSeed nextRadius
+          hr = photonMappingBenchmark r nextPhase nextRays nextSeed nextRadius
+          side = if oCoord < splitVal then 1 else 0
+          near = side * hl + ((1 - side) * hr)
+          far  = side * hr + ((1 - side) * hl)
+          mBox = if boxDist > radius then 0 else 1
+          mPlane = if planeDist <= radius then 1 else 0
+          local = mBox * rays
+          kReflect = 2 + (splitDim - (splitDim / 2) * 2)      -- [2..3]
+          kRefract = if tir == 1 then 0 else 1 + (ior_t / 2)  -- [1..2]
+          reflectedTerm = (kReflect * near) / 3
+          refractedTerm = (kRefract * mPlane * far) / 3
+      in active * (local + reflectedTerm + refractedTerm)
+
+    KDEmpty ->
+      0
+
 -- Benchmark entrypoint: build tree and iterate nearest-neighbor query.
 gibbon_main =
             let _ = printsym (quote "Running program KDTree: ")
@@ -266,6 +323,11 @@ gibbon_main =
                 _ = printsym (quote "Running pass pointCloudNeighborhood (fold_like, uses=11): ")
                 _ = printsym (quote "NEWLINE")
                 cloudCount = iterate (pointCloudNeighborhood kdTree 0 0 0 24)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass photonMappingBenchmark (fold_like, uses=12): ")
+                _ = printsym (quote "NEWLINE")
+                photonHits = iterate (photonMappingBenchmark kdTree 5 16 7 18)
                 _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
-            in (dist, inRangeCount, massInRange, corrCount, cloudCount)
+            in (dist, inRangeCount, massInRange, corrCount, cloudCount, photonHits)

@@ -59,6 +59,39 @@ countLarge h limit =
     Null ->
       0
 
+-- GC accounting: bytes in marked objects (live set size).
+liveBytes :: Heap -> Int
+liveBytes h =
+  case h of
+    Obj _ size mark l r ->
+      let here = if (mark == 1) then size else 0
+      in here + liveBytes l + liveBytes r
+    Null ->
+      0
+
+-- GC accounting: bytes in unmarked objects (reclaimable at sweep).
+deadBytes :: Heap -> Int
+deadBytes h =
+  case h of
+    Obj _ size mark l r ->
+      let here = if (mark == 0) then size else 0
+      in here + deadBytes l + deadBytes r
+    Null ->
+      0
+
+-- Generational-style stat: number of marked objects below a size cutoff.
+countSurvivors :: Heap -> Int -> Int
+countSurvivors h maxSize =
+  case h of
+    Obj _ size mark l r ->
+      let here =
+            if (mark == 1)
+            then if (size <= maxSize) then 1 else 0
+            else 0
+      in here + countSurvivors l maxSize + countSurvivors r maxSize
+    Null ->
+      0
+
 -- Debug / profiling checksum
 -- Reads ONLY object id
 sumObjIds :: Heap -> Int
@@ -81,6 +114,19 @@ clearMarks h =
     Null ->
       Null
 
+-- Sweep phase:
+-- reclaim unmarked objects by zeroing size, and clear mark bits for next cycle.
+sweepUnmarked :: Heap -> Heap
+sweepUnmarked h =
+  case h of
+    Obj id size mark l r ->
+      let size' = if (mark == 1) then size else 0
+      in Obj id size' 0
+             (sweepUnmarked l)
+             (sweepUnmarked r)
+    Null ->
+      Null
+
 -- Allocation growth simulation
 -- Updates ONLY size field
 inflateSizes :: Heap -> Int -> Heap
@@ -93,10 +139,42 @@ inflateSizes h k =
     Null ->
       Null
 
+-- Mutator-style update:
+-- periodically "touch" hot objects, setting mark and increasing size.
+touchHotObjects :: Heap -> Int -> Int -> Heap
+touchHotObjects h stride delta =
+  case h of
+    Obj id size mark l r ->
+      let hot = (mod id stride) == 0
+          size' = if hot then size + delta else size
+          mark' = if hot then 1 else mark
+      in Obj id size' mark'
+             (touchHotObjects l stride delta)
+             (touchHotObjects r stride delta)
+    Null ->
+      Null
+
+-- Decay pass:
+-- shrink cold/unmarked objects to emulate reclamation/compaction pressure.
+decayColdObjects :: Heap -> Int -> Heap
+decayColdObjects h k =
+  case h of
+    Obj id size mark l r ->
+      let reduced = size - k
+          size' =
+            if (mark == 0)
+            then if (reduced < 0) then 0 else reduced
+            else size
+      in Obj id size' mark
+             (decayColdObjects l k)
+             (decayColdObjects r k)
+    Null ->
+      Null
+
 gibbon_main =
             let _ = printsym (quote "Running program ObjectGraph Simulated a GC Program: ")
                 _ = printsym (quote "NEWLINE")
-                heap = buildHeap 20
+                heap = buildHeap 23
                 _ = printsym (quote "Running pass totalHeapSize (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 heapSize = iterate (totalHeapSize heap)
@@ -112,19 +190,34 @@ gibbon_main =
                 countLargeItems = iterate (countLarge heap 100)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass liveBytes (fold, uses=4): ")
+                _ = printsym (quote "NEWLINE")
+                liveSet = iterate (liveBytes heap)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass deadBytes (fold, uses=4): ")
+                _ = printsym (quote "NEWLINE")
+                reclaimable = iterate (deadBytes heap)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass countSurvivors (fold, uses=4): ")
+                _ = printsym (quote "NEWLINE")
+                survivors = iterate (countSurvivors heap 120)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
                 _ = printsym (quote "Running pass sumObjIds (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 sObjIds = iterate (sumObjIds heap)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass clearMarks (map, uses=4): ")
+                _ = printsym (quote "Running pass sweepUnmarked (map, uses=5): ")
                 _ = printsym (quote "NEWLINE")
-                heap' = iterate (clearMarks heap)
+                heapSwept = iterate (sweepUnmarked heap)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass inflateSizes (map, uses=5): ")
+                _ = printsym (quote "Running pass touchHotObjects (map, uses=5): ")
                 _ = printsym (quote "NEWLINE")
-                heap'' = iterate (inflateSizes heap 10)
+                heapHot = iterate (touchHotObjects heap 4 12)
                 _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
-            in (heapSize, countMarkedItems, countLargeItems, sObjIds)
+            in (heapSize, countMarkedItems, countLargeItems, liveSet, reclaimable, survivors, sObjIds)
