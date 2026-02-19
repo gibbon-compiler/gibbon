@@ -542,7 +542,7 @@ findMarker _ [] = Nothing
 findMarker marker str =
   case stripPrefix marker str of
     Just rest -> Just rest
-    Nothing   -> findMarker marker (tail str)
+    Nothing   -> findMarker marker (drop 1 str)
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
 execCmd dir cmd msg errmsg = do
