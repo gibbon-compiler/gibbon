@@ -7,6 +7,7 @@ import Data.Map as M
 import Data.Set as S
 import Gibbon.Common hiding (FunDef)
 import Gibbon.NewL2.Syntax as L2
+import Gibbon.L2.Syntax as OldL2
 import Gibbon.Passes.HoistBoundsCheck
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -23,7 +24,7 @@ case_t1 = expected @=? actual
         IfE
           (VarE "b")
           ( Ext
-              $ LetRegionE (VarR "r1") Undefined Nothing
+              $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
               $ LetE
                 ( "_",
                   [],
@@ -35,7 +36,7 @@ case_t1 = expected @=? actual
                       (EndOfReg (SingleR "r1") Output (SingleR "end_r1"))
                 )
               $ Ext
-              $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+              $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
               $ (MkProdE [])
           )
           (MkProdE [])
@@ -43,9 +44,9 @@ case_t1 = expected @=? actual
     expected :: L2.Exp2
     expected =
       Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
+        $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
         $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+        $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
         $ LetE
           ( "_",
             [],
@@ -74,7 +75,7 @@ case_t2 = expected @=? actual
         IfE
           (VarE "b")
           ( Ext
-              $ LetRegionE (VarR "r1") Undefined Nothing
+              $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
               $ LetE
                 ( "_",
                   [],
@@ -95,11 +96,11 @@ case_t2 = expected @=? actual
                       ]
                 )
               $ Ext
-              $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+              $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
               $ Ext 
-              $ LetRegionE (VarR "r2") Undefined Nothing
+              $ LetRegionE (VarR "r2") Undefined RegionImmutable Nothing
               $ Ext
-              $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
+              $ LetLocE (Loc (LREM (singleLocVar "l2") (SingleR "r2") (SingleR "end_r2") Output)) (StartOfRegionLE (VarR "r2"))
               $ (MkProdE [])
           )
           (MkProdE [])
@@ -107,13 +108,13 @@ case_t2 = expected @=? actual
     expected :: L2.Exp2
     expected =
       Ext
-        $ LetRegionE (VarR "r2") Undefined Nothing
+        $ LetRegionE (VarR "r2") Undefined RegionImmutable Nothing
         $ Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
+        $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
         $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+        $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
         $ Ext 
-        $ LetLocE (singleLocVar "l2") (StartOfRegionLE (VarR "r2"))
+        $ LetLocE (Loc (LREM (singleLocVar "l2") (SingleR "r2") (SingleR "end_r2") Output)) (StartOfRegionLE (VarR "r2"))
         $ LetE
           ( "_",
             [],
@@ -154,7 +155,7 @@ case_t3 = expected @=? actual
           (VarE "b")
           (MkProdE [])
           ( Ext
-              $ LetRegionE (VarR "r1") Undefined Nothing
+              $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
               $ LetE
                 ( "_",
                   [],
@@ -166,16 +167,16 @@ case_t3 = expected @=? actual
                       (EndOfReg (SingleR "r1") Output (SingleR "end_r1"))
                 )
               $ Ext
-              $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+              $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
               $ (MkProdE [])
           )
     
     expected :: L2.Exp2
     expected =
       Ext
-        $ LetRegionE (VarR "r1") Undefined Nothing
+        $ LetRegionE (VarR "r1") Undefined RegionImmutable Nothing
         $ Ext
-        $ LetLocE (singleLocVar "l1") (StartOfRegionLE (VarR "r1"))
+        $ LetLocE (Loc (LREM (singleLocVar "l1") (SingleR "r1") (SingleR "end_r1") Output)) (StartOfRegionLE (VarR "r1"))
         $ LetE
           ( "_",
             [],
