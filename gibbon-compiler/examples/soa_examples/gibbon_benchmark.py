@@ -69,11 +69,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import numpy as np
+HAS_PLOT_LIBS = True
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import numpy as np
+except ModuleNotFoundError:
+    HAS_PLOT_LIBS = False
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # ---------------------------------------------------------------------------
 # Default program list
@@ -1138,6 +1144,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 enable_papi: bool = False,
                 enable_papi_native: bool = False,
                 ) -> Tuple[bool, float, Optional[str]]:
+    source = source.resolve()
+    out_dir = out_dir.resolve()
     stem   = source.stem
     c_file = out_dir / f"{stem}.{variant}.c"
     exe    = out_dir / f"{stem}.{variant}.exe"
@@ -1183,7 +1191,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
         elapsed = time.time() - t0
         if r.returncode == 0:
             meta = {
@@ -2985,9 +2993,13 @@ def main():
         # Get extended results if they were collected
         write_latex_tables(all_results, args.latex_table, extended_results)
         compile_latex_preview(args.latex_table, args.figures_dir)
-        generate_all_figures(all_results, args.figures_dir)
+        if HAS_PLOT_LIBS:
+            generate_all_figures(all_results, args.figures_dir)
+        else:
+            print("  Skipping figures: matplotlib/numpy not installed.")
         print(f"\n  LaTeX  : {args.latex_table}")
-        print(f"  Figs   : {args.figures_dir}/")
+        if HAS_PLOT_LIBS:
+            print(f"  Figs   : {args.figures_dir}/")
 
 
 if __name__ == "__main__":

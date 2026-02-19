@@ -1,55 +1,72 @@
 -- @BENCH adt_fields=15
 data Query
-  = Join Int  -- join type
-         Int  -- estimated rows
-         Int  -- cost
-         Int  -- memory
+  = Join Int  -- join type (0=nested-loop,1=hash,2=merge)
+         Int  -- estimated output rows
+         Int  -- total cost
+         Int  -- memory grant
          Query Query
   | Filter Int  -- predicate id
-           Int  -- selectivity
-           Int  -- cost
+           Int  -- selectivity (permille)
+           Int  -- cpu cost
            Int  -- flags
            Query
   | Scan Int  -- table id
-         Int  -- rows
-         Int  -- cost
-         Int  -- width
+         Int  -- base rows
+         Int  -- scan cost
+         Int  -- row width
   | QEmpty
 
 {-# ANN type Query "Linear" #-}
 
--- buildQuery :: Int -> Query
--- buildQuery d =
---   if d == 0
---   then Scan d (d*100) (d*5) (d*2)
---   else Join (mod d 3) (d*50) (d*10) (d*4)
---        (buildQuery (d-1))
---        (buildQuery (d-1))
+absI :: Int -> Int
+absI x = if x < 0 then 0 - x else x
 
-buildQuery :: Int -> Query
-buildQuery d =
+maxI :: Int -> Int -> Int
+maxI a b = if a > b then a else b
+
+mixSeed :: Int -> Int -> Int
+mixSeed s salt = s * 1103 + salt * 97 + 13
+
+-- Build a synthetic query plan tree with join/filter/scan operators.
+buildQuery :: Int -> Int -> Query
+buildQuery d seed =
   if d == 0
   then
-    Scan d (d*100 + 1000) (d*5 + 10) (d*2 + 50)
+    let tableId = mod (absI seed) 17
+        rows = 2000 + mod (absI (mixSeed seed 3)) 6000
+        cost = 20 + rows / 16
+        width = 24 + mod (absI (mixSeed seed 7)) 120
+    in Scan tableId rows cost width
   else
-    if mod d 3 == 0 then
-      -- Filter node (very common in real query plans)
-      Filter (mod d 7)        -- predicate id
-             (mod d 100)      -- selectivity %
-             (d*3)            -- filter cost
-             (mod d 2)
-             (buildQuery (d-1))
-    else
-      -- Join node
-      Join (mod d 2)          -- join type
-           (d*50 + 500)       -- left rows
-           (d*40 + 400)       -- right rows
-           (d*10 + 100)       -- join cost
-           (buildQuery (d-1))
-           (buildQuery (d-1))
+    let tag = mod (absI (mixSeed seed 11)) 4
+    in if tag < 2
+       then
+         let l = buildQuery (d - 1) (mixSeed seed 1)
+             rDepth = if d > 1 then d - 2 else 0
+             r = buildQuery rDepth (mixSeed seed 2)
+             joinTy = mod (absI (mixSeed seed 13)) 3
+             lRows = 1200 + d * 220 + mod (absI (mixSeed seed 17)) 2000
+             rRows = 1000 + d * 170 + mod (absI (mixSeed seed 19)) 1700
+             sel = 60 + mod (absI (mixSeed seed 23)) 260
+             outRows = maxI 1 ((lRows * rRows) / (sel * 10 + 1))
+             joinCpu =
+               if joinTy == 0
+               then (lRows * rRows) / 2400
+               else if joinTy == 1
+                    then (lRows + rRows) / 7
+                    else (lRows + rRows) / 9
+             total = 30 + joinCpu + outRows / 20
+             mem = if joinTy == 1 then (rRows / 2) else (outRows / 8)
+         in Join joinTy outRows total mem l r
+       else
+         let s = buildQuery (d - 1) (mixSeed seed 3)
+             predId = mod (absI (mixSeed seed 29)) 31
+             sel = 120 + mod (absI (mixSeed seed 31)) 760
+             cpu = 4 + mod (absI (mixSeed seed 37)) 40
+             flags = mod (absI (mixSeed seed 41)) 8
+         in Filter predId sel cpu flags s
 
--- Reduction 1: Total cost
--- Cost-based optimization
+-- Reduction 1: total optimizer cost across the plan tree.
 sumCost :: Query -> Int
 sumCost q =
   case q of
@@ -58,18 +75,19 @@ sumCost q =
     Scan _ _ c _ -> c
     QEmpty -> 0
 
--- Reduction 2: Total rows
--- Cardinality estimation
+-- Reduction 2: sum of estimated rows emitted by operators.
 sumRows :: Query -> Int
 sumRows q =
   case q of
     Join _ r _ _ l s -> r + sumRows l + sumRows s
-    Filter _ sel _ _ s -> sel + sumRows s
+    Filter _ sel _ _ s ->
+      let childRows = sumRows s
+          outRows = maxI 1 ((childRows * sel) / 1000)
+      in outRows + childRows
     Scan _ r _ _ -> r
     QEmpty -> 0
 
--- Reduction 3: Count joins
--- Heuristic optimization
+-- Reduction 3: number of joins in the plan.
 countJoins :: Query -> Int
 countJoins q =
   case q of
@@ -78,18 +96,36 @@ countJoins q =
     Scan _ _ _ _ -> 0
     QEmpty -> 0
 
--- Reduction 4: Memory footprint
--- Execution planning
+-- Reduction 4: memory pressure proxy for execution.
 sumMemory :: Query -> Int
 sumMemory q =
   case q of
     Join _ _ _ m l r -> m + sumMemory l + sumMemory r
-    Filter _ _ _ m s -> m + sumMemory s
+    Filter _ _ c _ s -> c + sumMemory s
     Scan _ _ _ w -> w
     QEmpty -> 0
 
--- Map 1: Scale costs
--- Cost model tuning
+-- Reduction 5: hash-join spill pressure (uses only join-type + memory).
+hashJoinPressure :: Query -> Int
+hashJoinPressure q =
+  case q of
+    Join jt _ _ m l r ->
+      let mine = if jt == 1 then m else 0
+      in mine + hashJoinPressure l + hashJoinPressure r
+    Filter _ _ _ _ s -> hashJoinPressure s
+    Scan _ _ _ _ -> 0
+    QEmpty -> 0
+
+-- Reduction 6: filter selectivity skew from a 50% baseline.
+filterSelectivitySkew :: Query -> Int
+filterSelectivitySkew q =
+  case q of
+    Filter _ sel _ _ s -> absI (sel - 500) + filterSelectivitySkew s
+    Join _ _ _ _ l r -> filterSelectivitySkew l + filterSelectivitySkew r
+    Scan _ _ _ _ -> 0
+    QEmpty -> 0
+
+-- Map 1: scale planner costs for cost-model retuning.
 scaleCosts :: Query -> Int -> Query
 scaleCosts q k =
   case q of
@@ -102,13 +138,12 @@ scaleCosts q k =
     QEmpty ->
       QEmpty
 
--- Map 2: Clear flags
--- After optimization phase
+-- Map 2: clear transient filter flags after rewrite.
 clearQueryFlags :: Query -> Query
 clearQueryFlags q =
   case q of
-    Filter p s c _ sub ->
-      Filter p s c 0 (clearQueryFlags sub)
+    Filter p sel c _ sub ->
+      Filter p sel c 0 (clearQueryFlags sub)
     Join t r c m l s ->
       Join t r c m (clearQueryFlags l) (clearQueryFlags s)
     Scan t r c w ->
@@ -120,7 +155,7 @@ clearQueryFlags q =
 gibbon_main =
             let _ = printsym (quote "Running Data base Query Pass: ")
                 _ = printsym (quote "NEWLINE")
-                queryTree = buildQuery 33
+                queryTree = buildQuery 75 17
                 _ = printsym (quote "Running pass sumCost (fold, uses=6): ")
                 _ = printsym (quote "NEWLINE")
                 totCost = iterate (sumCost queryTree)
@@ -141,6 +176,16 @@ gibbon_main =
                 totMem = iterate (sumMemory queryTree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass hashJoinPressure (fold, uses=5): ")
+                _ = printsym (quote "NEWLINE")
+                hashPressure = iterate (hashJoinPressure queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+                _ = printsym (quote "Running pass filterSelectivitySkew (fold, uses=5): ")
+                _ = printsym (quote "NEWLINE")
+                selSkew = iterate (filterSelectivitySkew queryTree)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
                 _ = printsym (quote "Running pass scaleCosts (map, uses=15): ")
                 _ = printsym (quote "NEWLINE")
                 queryTree' = iterate (scaleCosts queryTree 10)
@@ -151,11 +196,4 @@ gibbon_main =
                 queryTree'' = iterate (clearQueryFlags queryTree')
                 _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
-            in (totCost, totRows, totJoins, totMem)
-
-
-
-
-
-
-
+            in (totCost, totRows, totJoins, totMem, hashPressure, selSkew)

@@ -1,156 +1,150 @@
-
 -- @BENCH adt_fields=8
 data PW
-  = Leaf Int    -- coefficient
-         Int    -- degree
-         Int    -- error estimate
+  = Leaf Int    -- scaling-function coefficient
+         Int    -- local scale level
+         Int    -- detail/error proxy
   | Node Int    -- split dimension
          Int    -- split value
-         Int    -- bounding box info
+         Int    -- node level
          PW
          PW
 
 {-# ANN type PW "Factored" #-}
 
+absI :: Int -> Int
+absI x = if x < 0 then 0 - x else x
 
--- Builds a balanced kd-tree of given depth
-buildPW :: Int -> PW
-buildPW d =
-  if (d == 0)
+maxI :: Int -> Int -> Int
+maxI a b = if a > b then a else b
+
+mixSeed :: Int -> Int -> Int
+mixSeed s salt = s * 1103 + salt * 97 + 13
+
+-- Build an adaptive piecewise tree with synthetic coefficients and split metadata.
+buildPW :: Int -> Int -> PW
+buildPW d seed =
+  if d == 0
   then
-    Leaf (d + 1)      -- coefficient
-         (d + 2)      -- degree
-         (d + 3)      -- error estimate
+    let coeff = 5 + mod (absI (mixSeed seed 3)) 29
+        scale = 1 + mod (absI (mixSeed seed 5)) 12
+        detail = mod (absI (mixSeed seed 7)) 40
+    in Leaf coeff scale detail
   else
-    let splitDim = d - (d / 3) * 3   -- pseudo cycling dim
-        splitVal = d * 10
-        bbox     = d * 100
-        l        = buildPW (d - 1)
-        r        = buildPW (d - 1)
-    in Node splitDim splitVal bbox l r
+    let dim = mod (absI (mixSeed seed 11)) 3
+        cut = mod (absI (mixSeed seed 13)) 1000
+        lvl = d
+        l = buildPW (d - 1) (mixSeed seed 1)
+        r = buildPW (d - 1) (mixSeed seed 2)
+    in Node dim cut lvl l r
 
--- Computes integral-like metric
--- Reads ONLY coefficient
-sumCoeffs :: PW -> Int
-sumCoeffs p =
+-- MADNESS-inspired fold: estimate L2 norm contribution from local coefficients/details.
+-- Inspiration: madness/src/madness/mra/mra.h (norm2 traversal over function tree data).
+norm2Estimate :: PW -> Int
+norm2Estimate p =
   case p of
-    Leaf coeff _ _ ->
-      coeff
-    Node _ _ _ l r ->
-      sumCoeffs l + sumCoeffs r
+    Leaf c s d -> c * c + (d * d) / (s + 1)
+    Node _ _ _ l r -> norm2Estimate l + norm2Estimate r
 
--- Used in adaptive refinement decisions
--- Reads ONLY degree field
-maxDegree :: PW -> Int
-maxDegree p =
+-- MADNESS-inspired fold: count leaves violating a truncation tolerance.
+-- Inspiration: madness/src/madness/mra/funcimpl.h (truncate_tol / get_thresh style thresholding).
+truncateTolViolations :: PW -> Int -> Int
+truncateTolViolations p tol =
   case p of
-    Leaf _ deg _ ->
-      deg
-    Node _ _ _ l r ->
-      let dl = maxDegree l
-          dr = maxDegree r
-      in if (dl > dr) then dl else dr
+    Leaf _ _ d -> if d > tol then 1 else 0
+    Node _ _ _ l r -> truncateTolViolations l tol + truncateTolViolations r tol
 
--- Error accumulation pass
--- Reads ONLY error field
-sumError :: PW -> Int
-sumError p =
+-- MADNESS-inspired fold: coefficient-only mass used as compress/reconstruct proxy.
+-- Inspiration: madness/src/madness/mra/mra.h (compress/reconstruct on coefficient trees).
+compressMass :: PW -> Int
+compressMass p =
   case p of
-    Leaf _ _ err ->
-      err
-    Node _ _ _ l r ->
-      sumError l + sumError r
+    Leaf c _ _ -> absI c
+    Node _ _ _ l r -> compressMass l + compressMass r
 
--- Tree structure statistics
--- Reads ONLY split dimension
-countSplit :: PW -> Int -> Int
-countSplit p dim =
+-- MADNESS-inspired fold: maximum active refinement level.
+-- Inspiration: madness/src/madness/mra/mra.h (set_autorefine / set_refine level propagation).
+autorefineMaxLevel :: PW -> Int
+autorefineMaxLevel p =
   case p of
-    Node d _ _ l r ->
-      let here = if (d == dim) then 1 else 0
-      in here + countSplit l dim + countSplit r dim
-    Leaf _ _ _ ->
-      0
+    Leaf _ s _ -> s
+    Node _ _ lvl l r -> maxI lvl (maxI (autorefineMaxLevel l) (autorefineMaxLevel r))
 
--- Squares the polynomial coefficient
--- Models f(x) -> f(x)^2
--- Updates ONLY coefficient
-squarePW :: PW -> PW
-squarePW p =
+-- MADNESS-inspired fold: process-map cut histogram from split values.
+-- Inspiration: madness/src/madness/world/worlddc.h + mra/funcdefaults.h (pmap partitioning).
+pmapCutHistogram :: PW -> Int -> Int
+pmapCutHistogram p cut =
   case p of
-    Leaf coeff deg err ->
-      Leaf (coeff * coeff) deg err
-    Node d v b l r ->
-      Node d v b
-           (squarePW l)
-           (squarePW r)
+    Node dim split _ l r ->
+      let here = if split > cut then dim + 1 else 0
+      in here + pmapCutHistogram l cut + pmapCutHistogram r cut
+    Leaf _ _ _ -> 0
 
--- Models f(x) -> f(x) + c
--- Updates ONLY coefficient
+-- MADNESS-inspired fold: load-balance work estimate from levels/details.
+-- Inspiration: madness/src/madness/mra/lbdeux.h (LBDeux weighted load estimates).
+lbDeuxLoadProxy :: PW -> Int
+lbDeuxLoadProxy p =
+  case p of
+    Leaf _ lvl detail -> (lvl + 1) * (1 + detail / 8)
+    Node _ _ lvl l r -> (lvl + 1) + lbDeuxLoadProxy l + lbDeuxLoadProxy r
+
+-- Map-like operator: add a constant potential term to all leaves.
+-- Inspiration: high-level MADNESS function addition on adaptive function variables.
 addConstPW :: PW -> Int -> PW
 addConstPW p c =
   case p of
-    Leaf coeff deg err ->
-      Leaf (coeff + c) deg err
-    Node d v b l r ->
-      Node d v b
-           (addConstPW l c)
-           (addConstPW r c)
+    Leaf coeff sc det -> Leaf (coeff + c) sc det
+    Node d v lvl l r -> Node d v lvl (addConstPW l c) (addConstPW r c)
 
--- Symbolic differentiation
--- Updates coefficient and degree
+-- Map-like operator: local differentiation proxy on basis coefficients.
+-- Inspiration: MADNESS operator differentiation over function trees.
 diffPW :: PW -> PW
 diffPW p =
   case p of
-    Leaf coeff deg err ->
-      if (deg == 0)
-      then Leaf 0 0 err
-      else Leaf (coeff * deg) (deg - 1) err
-    Node d v b l r ->
-      Node d v b
-           (diffPW l)
-           (diffPW r)
+    Leaf coeff sc det -> if sc == 0 then Leaf 0 0 det else Leaf (coeff * sc) (sc - 1) det
+    Node d v lvl l r -> Node d v lvl (diffPW l) (diffPW r)
 
 gibbon_main =
-            let _ = printsym (quote "Running Progam Piecewise Functions: ")
+            let _ = printsym (quote "Running Program Piecewise Functions (MADNESS style): ")
                 _ = printsym (quote "NEWLINE")
-                pfTree = buildPW 20
-                _ = printsym (quote "Running pass sum co-efficients (fold, uses=3): ")
+                pfTree = buildPW 23 17
+                _ = printsym (quote "Running pass norm2Estimate (fold, uses=5): ")
                 _ = printsym (quote "NEWLINE")
-                totCoeffs = iterate (sumCoeffs pfTree)
+                norm = iterate (norm2Estimate pfTree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass max degree (fold, uses=3): ")
+                _ = printsym (quote "Running pass truncateTolViolations (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
-                deg = iterate (maxDegree pfTree)
+                refineCnt = iterate (truncateTolViolations pfTree 18)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass sumError (fold, uses=3): ")
+                _ = printsym (quote "Running pass compressMass (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
-                err = iterate (sumError pfTree)
+                mass = iterate (compressMass pfTree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass countSplit (fold, uses=3): ")
+                _ = printsym (quote "Running pass autorefineMaxLevel (fold, uses=4): ")
                 _ = printsym (quote "NEWLINE")
-                spltCount = iterate (countSplit pfTree 2)
+                maxLvl = iterate (autorefineMaxLevel pfTree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass square (map, uses=8): ")
+                _ = printsym (quote "Running pass pmapCutHistogram (fold, uses=4): ")
                 _ = printsym (quote "NEWLINE")
-                squarePfTree = iterate (squarePW pfTree)
+                pmapCuts = iterate (pmapCutHistogram pfTree 500)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass add constant (map, uses=8): ")
+                _ = printsym (quote "Running pass lbDeuxLoadProxy (fold, uses=5): ")
                 _ = printsym (quote "NEWLINE")
-                addConstPfTree = iterate (addConstPW pfTree 100)
+                loadW = iterate (lbDeuxLoadProxy pfTree)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-                _ = printsym (quote "Running pass differentiate (map, uses=8): ")
+                _ = printsym (quote "Running pass addConstPW (map, uses=8): ")
                 _ = printsym (quote "NEWLINE")
-                addConstDfTree = iterate (diffPW addConstPfTree)
+                shifted = iterate (addConstPW pfTree 10)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-            in (totCoeffs, deg, err, spltCount)
-
-
-
+                _ = printsym (quote "Running pass diffPW (map, uses=8): ")
+                _ = printsym (quote "NEWLINE")
+                _diffed = iterate (diffPW shifted)
+                _ = printsym (quote "End")
+                _ = printsym (quote "NEWLINE")
+            in (norm, refineCnt, mass, maxLvl, pmapCuts, loadW)
