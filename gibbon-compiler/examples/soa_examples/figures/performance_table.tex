@@ -13,18 +13,18 @@
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}
  & fields & bufs & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
 \midrule
-Compiler & 9 & 8 & 0.1300 & 0.0390 & \textbf{3.33$\times$} & 0.1594 & 0.1857 & 0.86$\times$ \\
-DBQuery & 15 & 13 & 0.1223 & 0.0883 & \textbf{1.39$\times$} & 0.1375 & 0.2008 & 0.68$\times$ \\
-DecisionTree & 7 & 6 & 3.872 & 3.151 & \textbf{1.23$\times$} & -- & -- & -- \\
-DomTree & 15 & 14 & 0.1403 & 0.0623 & \textbf{2.25$\times$} & 0.0585 & 0.0885 & 0.66$\times$ \\
-KDTree & 17 & 16 & 0.1833 & 0.1410 & \textbf{1.30$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 0.0286 & 0.0050 & \textbf{5.74$\times$} & -- & -- & -- \\
-List & 2 & 2 & 0.0880 & 0.0903 & 0.97$\times$ & 0.2961 & 0.3338 & 0.89$\times$ \\
-MonoTree & 3 & 2 & 0.0236 & 0.0225 & 1.05$\times$ & 0.0463 & 0.0421 & \textbf{1.10$\times$} \\
-ObjectGraph & 5 & 4 & 0.1033 & 0.0807 & \textbf{1.28$\times$} & 0.1505 & 0.1565 & 0.96$\times$ \\
-PiecewiseFunctions & 8 & 7 & 0.1408 & 0.0909 & \textbf{1.55$\times$} & 0.2395 & 0.2690 & 0.89$\times$ \\
-TernaryTree & 5 & 3 & 0.0299 & 0.0292 & 1.02$\times$ & 0.0843 & 0.0773 & 1.09$\times$ \\
-Trie & 10 & 9 & 0.0635 & 0.0332 & \textbf{1.91$\times$} & 0.1496 & 0.1882 & 0.79$\times$ \\
+Compiler & 9 & 8 & 0.1239 & 0.0398 & \textbf{3.11$\times$} & 0.1584 & 0.1785 & 0.89$\times$ \\
+DBQuery & 15 & 13 & 0.1188 & 0.0880 & \textbf{1.35$\times$} & 0.1363 & 0.1649 & 0.83$\times$ \\
+DecisionTree & 7 & 6 & 3.632 & 2.925 & \textbf{1.24$\times$} & -- & -- & -- \\
+DomTree & 15 & 14 & 0.1344 & 0.0610 & \textbf{2.21$\times$} & 0.0576 & 0.0791 & 0.73$\times$ \\
+KDTree & 17 & 16 & 0.1745 & 0.1383 & \textbf{1.26$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.0289 & 0.0049 & \textbf{5.84$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.0884 & 0.0895 & 0.99$\times$ & 0.2921 & 0.3607 & 0.81$\times$ \\
+MonoTree & 3 & 2 & 0.0172 & 0.0224 & 0.77$\times$ & 0.0453 & 0.0428 & 1.06$\times$ \\
+ObjectGraph & 5 & 4 & 0.0878 & 0.0804 & 1.09$\times$ & 0.1425 & 0.1611 & 0.88$\times$ \\
+PiecewiseFunctions & 8 & 7 & 0.1368 & 0.0905 & \textbf{1.51$\times$} & 0.2396 & 0.2641 & 0.91$\times$ \\
+TernaryTree & 5 & 3 & 0.0278 & 0.0256 & 1.09$\times$ & 0.0829 & 0.0800 & 1.04$\times$ \\
+Trie & 10 & 9 & 0.0631 & 0.0320 & \textbf{1.97$\times$} & 0.1494 & 0.1665 & 0.90$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -40,20 +40,20 @@ Trie & 10 & 9 & 0.0635 & 0.0332 & \textbf{1.91$\times$} & 0.1496 & 0.1882 & 0.79
 \toprule
 \textbf{Program} & \textbf{CYC} & \textbf{INS} & \textbf{L1D} & \textbf{L1I} & \textbf{L2D} & \textbf{L2I} & \textbf{LLC} \\
 \midrule
-Compiler & \textbf{1.54$\times$} & 0.48$\times$ & \textbf{3.70$\times$} & 0.67$\times$ & \textbf{14.57$\times$} & 0.33$\times$ & \textbf{6.80$\times$} \\
-DBQuery & 0.89$\times$ & 0.41$\times$ & \textbf{1.20$\times$} & 0.35$\times$ & \textbf{8.94$\times$} & 0.29$\times$ & \textbf{6.30$\times$} \\
-DecisionTree & \textbf{1.23$\times$} & 0.69$\times$ & \textbf{18.71$\times$} & \textbf{3.13$\times$} & 0.88$\times$ & \textbf{3.25$\times$} & \textbf{36.32$\times$} \\
-DomTree & \textbf{1.42$\times$} & 0.53$\times$ & \textbf{2.43$\times$} & 1.07$\times$ & \textbf{19.60$\times$} & 0.53$\times$ & \textbf{10.66$\times$} \\
-KDTree & \textbf{1.30$\times$} & 0.81$\times$ & \textbf{1.18$\times$} & 1.01$\times$ & 0.38$\times$ & 1.02$\times$ & \textbf{4.71$\times$} \\
-LinearListReduction & \textbf{5.78$\times$} & 0.90$\times$ & \textbf{80.67$\times$} & \textbf{18.00$\times$} & \textbf{262.81$\times$} & \textbf{17.56$\times$} & \textbf{11.42$\times$} \\
-List & 0.90$\times$ & 0.74$\times$ & \textbf{3.60$\times$} & 0.55$\times$ & 0.13$\times$ & 1.04$\times$ & \textbf{1.44$\times$} \\
-MonoTree & \textbf{1.12$\times$} & 0.82$\times$ & 0.30$\times$ & 0.62$\times$ & 0.24$\times$ & 0.83$\times$ & \textbf{1.13$\times$} \\
-ObjectGraph & 1.10$\times$ & 0.74$\times$ & \textbf{2.23$\times$} & 0.74$\times$ & 0.53$\times$ & \textbf{1.23$\times$} & \textbf{2.67$\times$} \\
-PiecewiseFunctions & 1.08$\times$ & 0.58$\times$ & \textbf{2.35$\times$} & \textbf{1.18$\times$} & \textbf{1.56$\times$} & 0.65$\times$ & \textbf{4.25$\times$} \\
-TernaryTree & \textbf{1.14$\times$} & 0.78$\times$ & 0.33$\times$ & 0.51$\times$ & 0.25$\times$ & 0.86$\times$ & \textbf{1.41$\times$} \\
-Trie & 0.94$\times$ & 0.50$\times$ & \textbf{3.06$\times$} & 0.71$\times$ & \textbf{3.22$\times$} & 0.17$\times$ & \textbf{6.55$\times$} \\
+Compiler & \textbf{1.54$\times$} & 0.52$\times$ & \textbf{4.46$\times$} & 0.77$\times$ & \textbf{14.10$\times$} & 0.47$\times$ & \textbf{6.93$\times$} \\
+DBQuery & 1.05$\times$ & 0.47$\times$ & \textbf{1.28$\times$} & 0.52$\times$ & \textbf{8.31$\times$} & 0.24$\times$ & \textbf{6.26$\times$} \\
+DecisionTree & \textbf{1.24$\times$} & 0.59$\times$ & \textbf{16.91$\times$} & \textbf{3.22$\times$} & 0.90$\times$ & \textbf{3.39$\times$} & \textbf{37.30$\times$} \\
+DomTree & \textbf{1.50$\times$} & 0.57$\times$ & \textbf{3.16$\times$} & 1.01$\times$ & \textbf{21.04$\times$} & 0.13$\times$ & \textbf{10.72$\times$} \\
+KDTree & \textbf{1.26$\times$} & 0.77$\times$ & \textbf{1.26$\times$} & 0.78$\times$ & 0.23$\times$ & 0.79$\times$ & \textbf{4.96$\times$} \\
+LinearListReduction & \textbf{5.87$\times$} & 0.90$\times$ & \textbf{33.22$\times$} & \textbf{5.35$\times$} & \textbf{39.43$\times$} & \textbf{5.25$\times$} & \textbf{11.64$\times$} \\
+List & 0.82$\times$ & 0.80$\times$ & \textbf{3.55$\times$} & 0.51$\times$ & 0.10$\times$ & 0.68$\times$ & \textbf{1.46$\times$} \\
+MonoTree & 0.97$\times$ & 0.85$\times$ & 0.52$\times$ & 0.76$\times$ & 0.29$\times$ & 0.65$\times$ & \textbf{1.23$\times$} \\
+ObjectGraph & 0.94$\times$ & 0.75$\times$ & \textbf{5.03$\times$} & 0.81$\times$ & 0.53$\times$ & 0.63$\times$ & \textbf{2.86$\times$} \\
+PiecewiseFunctions & 1.10$\times$ & 0.60$\times$ & \textbf{2.85$\times$} & 0.94$\times$ & \textbf{2.23$\times$} & 0.47$\times$ & \textbf{4.48$\times$} \\
+TernaryTree & \textbf{1.13$\times$} & 0.79$\times$ & 0.32$\times$ & 0.36$\times$ & 0.20$\times$ & \textbf{2.66$\times$} & \textbf{1.38$\times$} \\
+Trie & \textbf{1.13$\times$} & 0.56$\times$ & \textbf{3.42$\times$} & 0.87$\times$ & \textbf{3.18$\times$} & 0.12$\times$ & \textbf{6.27$\times$} \\
 \midrule
-\textbf{Geomean} & \textbf{1.30$\times$} & 0.65$\times$ & \textbf{2.63$\times$} & 1.04$\times$ & \textbf{2.02$\times$} & 0.90$\times$ & \textbf{4.80$\times$} \\
+\textbf{Geomean} & \textbf{1.30$\times$} & 0.67$\times$ & \textbf{2.91$\times$} & 0.95$\times$ & \textbf{1.66$\times$} & 0.67$\times$ & \textbf{4.92$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -69,18 +69,18 @@ Trie & 0.94$\times$ & 0.50$\times$ & \textbf{3.06$\times$} & 0.71$\times$ & \tex
 \toprule
 \textbf{Program} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-Compiler & 9.7e+08/\textbf{6.3e+08} & \textbf{9.9e+08}/2.1e+09 & 1.3e+07/\textbf{3.4e+06} & \textbf{2.5e+05}/3.7e+05 & 1.3e+06/\textbf{9.0e+04} & \textbf{1.9e+04}/5.6e+04 & 5.1e+07/\textbf{7.4e+06} \\
-DBQuery & \textbf{9.5e+08}/1.1e+09 & \textbf{1.1e+09}/2.6e+09 & 3.9e+06/\textbf{3.3e+06} & \textbf{1.7e+05}/4.8e+05 & 8.7e+05/\textbf{9.8e+04} & \textbf{1.2e+04}/4.1e+04 & 2.0e+07/\textbf{3.2e+06} \\
-DecisionTree & 2.0e+10/\textbf{1.6e+10} & \textbf{4.3e+10}/6.3e+10 & 5.9e+08/\textbf{3.1e+07} & 1.7e+05/\textbf{5.5e+04} & \textbf{1.9e+06}/2.1e+06 & 1.7e+05/\textbf{5.3e+04} & 1.1e+09/\textbf{3.0e+07} \\
-DomTree & 8.4e+08/\textbf{5.9e+08} & \textbf{1.2e+09}/2.3e+09 & 1.2e+07/\textbf{4.8e+06} & 1.3e+05/\textbf{1.2e+05} & 1.1e+06/\textbf{5.6e+04} & \textbf{1.5e+04}/2.9e+04 & 5.7e+07/\textbf{5.3e+06} \\
-KDTree & 9.3e+08/\textbf{7.2e+08} & \textbf{3.3e+09}/4.1e+09 & 1.6e+07/\textbf{1.4e+07} & 1.0e+03/\textbf{1.0e+03} & \textbf{4.2e+04}/1.1e+05 & 1.0e+03/\textbf{1.0e+03} & 4.4e+07/\textbf{9.3e+06} \\
-LinearListReduction & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 4.7e+06/\textbf{5.8e+04} & 7.6e+02/\textbf{4.2e+01} & 1.9e+06/\textbf{7.3e+03} & 7.6e+02/\textbf{4.3e+01} & 1.2e+07/\textbf{1.1e+06} \\
-List & \textbf{1.3e+09}/1.4e+09 & \textbf{4.5e+09}/6.1e+09 & 9.8e+06/\textbf{2.7e+06} & \textbf{3.1e+05}/5.7e+05 & \textbf{2.4e+04}/1.8e+05 & 1.5e+04/\textbf{1.4e+04} & 4.9e+07/\textbf{3.4e+07} \\
-MonoTree & 2.9e+08/\textbf{2.6e+08} & \textbf{9.1e+08}/1.1e+09 & \textbf{1.6e+05}/5.3e+05 & \textbf{4.7e+04}/7.6e+04 & \textbf{3.4e+03}/1.4e+04 & \textbf{4.1e+03}/4.9e+03 & 1.9e+06/\textbf{1.7e+06} \\
-ObjectGraph & 9.4e+08/\textbf{8.6e+08} & \textbf{3.0e+09}/4.0e+09 & 3.0e+06/\textbf{1.3e+06} & \textbf{1.7e+05}/2.4e+05 & \textbf{3.1e+04}/5.7e+04 & 2.2e+04/\textbf{1.8e+04} & 2.2e+07/\textbf{8.3e+06} \\
-PiecewiseFunctions & 1.3e+09/\textbf{1.2e+09} & \textbf{2.9e+09}/5.0e+09 & 1.2e+07/\textbf{5.3e+06} & 4.9e+05/\textbf{4.2e+05} & 1.5e+05/\textbf{9.3e+04} & \textbf{4.0e+04}/6.2e+04 & 4.4e+07/\textbf{1.0e+07} \\
-TernaryTree & 4.3e+08/\textbf{3.7e+08} & \textbf{1.2e+09}/1.6e+09 & \textbf{4.8e+05}/1.5e+06 & \textbf{6.6e+04}/1.3e+05 & \textbf{5.1e+03}/2.0e+04 & \textbf{3.7e+03}/4.4e+03 & 3.2e+06/\textbf{2.3e+06} \\
-Trie & \textbf{6.5e+08}/6.9e+08 & \textbf{1.2e+09}/2.5e+09 & 8.6e+06/\textbf{2.8e+06} & \textbf{2.2e+05}/3.0e+05 & 1.5e+05/\textbf{4.7e+04} & \textbf{7.8e+03}/4.7e+04 & 2.6e+07/\textbf{3.9e+06} \\
+Compiler & 9.3e+08/\textbf{6.0e+08} & \textbf{9.9e+08}/1.9e+09 & 1.3e+07/\textbf{2.9e+06} & \textbf{2.2e+05}/2.9e+05 & 1.2e+06/\textbf{8.7e+04} & \textbf{1.3e+04}/2.8e+04 & 5.1e+07/\textbf{7.3e+06} \\
+DBQuery & 9.3e+08/\textbf{8.9e+08} & \textbf{1.1e+09}/2.2e+09 & 3.9e+06/\textbf{3.0e+06} & \textbf{1.7e+05}/3.3e+05 & 8.0e+05/\textbf{9.6e+04} & \textbf{6.8e+03}/2.9e+04 & 2.1e+07/\textbf{3.3e+06} \\
+DecisionTree & 1.8e+10/\textbf{1.5e+10} & \textbf{4.0e+10}/6.8e+10 & 5.3e+08/\textbf{3.2e+07} & 1.1e+05/\textbf{3.5e+04} & \textbf{1.9e+06}/2.1e+06 & 1.1e+05/\textbf{3.4e+04} & 1.1e+09/\textbf{2.9e+07} \\
+DomTree & 8.1e+08/\textbf{5.4e+08} & \textbf{1.2e+09}/2.2e+09 & 1.2e+07/\textbf{3.8e+06} & 1.1e+05/\textbf{1.1e+05} & 1.1e+06/\textbf{5.1e+04} & \textbf{4.3e+03}/3.3e+04 & 5.7e+07/\textbf{5.3e+06} \\
+KDTree & 8.8e+08/\textbf{7.0e+08} & \textbf{3.1e+09}/4.0e+09 & 1.5e+07/\textbf{1.2e+07} & \textbf{7.7e+02}/9.8e+02 & \textbf{2.1e+04}/9.5e+04 & \textbf{7.8e+02}/9.8e+02 & 4.4e+07/\textbf{8.9e+06} \\
+LinearListReduction & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 1.5e+06/\textbf{4.6e+04} & 2.3e+02/\textbf{4.3e+01} & 2.7e+05/\textbf{6.9e+03} & 2.3e+02/\textbf{4.4e+01} & 1.2e+07/\textbf{1.1e+06} \\
+List & \textbf{1.2e+09}/1.5e+09 & \textbf{4.5e+09}/5.6e+09 & 9.4e+06/\textbf{2.6e+06} & \textbf{3.0e+05}/5.9e+05 & \textbf{1.9e+04}/2.0e+05 & \textbf{9.6e+03}/1.4e+04 & 4.8e+07/\textbf{3.3e+07} \\
+MonoTree & \textbf{2.5e+08}/2.6e+08 & \textbf{9.1e+08}/1.1e+09 & \textbf{2.4e+05}/4.6e+05 & \textbf{3.5e+04}/4.6e+04 & \textbf{3.7e+03}/1.3e+04 & \textbf{1.5e+03}/2.3e+03 & 2.0e+06/\textbf{1.7e+06} \\
+ObjectGraph & \textbf{8.2e+08}/8.8e+08 & \textbf{3.0e+09}/4.0e+09 & 9.0e+06/\textbf{1.8e+06} & \textbf{2.1e+05}/2.6e+05 & \textbf{3.0e+04}/5.6e+04 & \textbf{1.1e+04}/1.8e+04 & 2.4e+07/\textbf{8.3e+06} \\
+PiecewiseFunctions & 1.2e+09/\textbf{1.1e+09} & \textbf{2.8e+09}/4.7e+09 & 1.5e+07/\textbf{5.2e+06} & \textbf{4.5e+05}/4.8e+05 & 2.0e+05/\textbf{8.8e+04} & \textbf{2.2e+04}/4.6e+04 & 4.4e+07/\textbf{9.9e+06} \\
+TernaryTree & 4.1e+08/\textbf{3.6e+08} & \textbf{1.2e+09}/1.5e+09 & \textbf{5.1e+05}/1.6e+06 & \textbf{6.3e+04}/1.7e+05 & \textbf{4.2e+03}/2.1e+04 & 2.6e+03/\textbf{9.6e+02} & 3.3e+06/\textbf{2.4e+06} \\
+Trie & 6.5e+08/\textbf{5.7e+08} & \textbf{1.2e+09}/2.2e+09 & 9.2e+06/\textbf{2.7e+06} & \textbf{2.0e+05}/2.3e+05 & 1.6e+05/\textbf{5.2e+04} & \textbf{6.0e+03}/5.0e+04 & 2.5e+07/\textbf{4.1e+06} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -101,19 +101,19 @@ Trie & \textbf{6.5e+08}/6.9e+08 & \textbf{1.2e+09}/2.5e+09 & 8.6e+06/\textbf{2.8
 \toprule
 \textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} \\
 \midrule
-Compiler & 0.2894 & 1.226 & \textbf{0.2247} & \textit{OOM} \\
-DBQuery & \textbf{0.2598} & 0.3344 & 0.2891 & 1.468 \\
-DecisionTree & 3.872 & 5.816 & \textbf{3.151} & 28.39 \\
-DomTree & 0.1988 & 0.3437 & \textbf{0.1508} & 1.026 \\
-KDTree & 0.1833 & 0.2519 & \textbf{0.1410} & 0.8018 \\
-LinearListReduction & 0.0286 & 0.1628 & \textbf{0.0050} & \textit{OOM} \\
-List & \textbf{0.3840} & \textit{OOM} & 0.4241 & \textit{OOM} \\
-MonoTree & 0.0699 & 0.1507 & \textbf{0.0645} & 0.2933 \\
-ObjectGraph & 0.2538 & 0.5022 & \textbf{0.2371} & 0.7727 \\
-OctTree & \textbf{0.5791} & 0.6525 & -- & \textit{OOM} \\
-PiecewiseFunctions & 0.3803 & 0.5810 & \textbf{0.3598} & 2.419 \\
-TernaryTree & 0.1142 & 0.1490 & \textbf{0.1065} & 0.6170 \\
-Trie & \textbf{0.2130} & 0.3027 & 0.2214 & 1.102 \\
+Compiler & 0.2823 & 1.111 & \textbf{0.2183} & \textit{OOM} \\
+DBQuery & 0.2551 & 0.3269 & \textbf{0.2529} & 1.123 \\
+DecisionTree & 3.632 & 5.621 & \textbf{2.925} & 25.22 \\
+DomTree & 0.1921 & 0.3329 & \textbf{0.1400} & 0.5272 \\
+KDTree & 0.1745 & 0.2435 & \textbf{0.1383} & 0.7226 \\
+LinearListReduction & 0.0289 & 0.1391 & \textbf{0.0049} & \textit{OOM} \\
+List & \textbf{0.3805} & \textit{OOM} & 0.4503 & \textit{OOM} \\
+MonoTree & \textbf{0.0626} & 0.1407 & 0.0652 & 0.2735 \\
+ObjectGraph & \textbf{0.2303} & 0.4812 & 0.2415 & 0.7037 \\
+OctTree & \textbf{0.5774} & 0.6404 & -- & \textit{OOM} \\
+PiecewiseFunctions & 0.3764 & 0.5558 & \textbf{0.3546} & 2.161 \\
+TernaryTree & 0.1108 & 0.1436 & \textbf{0.1056} & 0.6178 \\
+Trie & 0.2125 & 0.2939 & \textbf{0.1985} & 1.050 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -127,19 +127,19 @@ Trie & \textbf{0.2130} & 0.3027 & 0.2214 & 1.102 \\
 \toprule
 \textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-Compiler & \textbf{1.29$\times$} & \textbf{4.24$\times$} & \textbf{5.46$\times$} & -- \\
-DBQuery & 0.90$\times$ & \textbf{1.29$\times$} & \textbf{1.16$\times$} & 0.23$\times$ \\
-DecisionTree & \textbf{1.23$\times$} & \textbf{1.50$\times$} & \textbf{1.85$\times$} & 0.20$\times$ \\
-DomTree & \textbf{1.32$\times$} & \textbf{1.73$\times$} & \textbf{2.28$\times$} & 0.34$\times$ \\
-KDTree & \textbf{1.30$\times$} & \textbf{1.37$\times$} & \textbf{1.79$\times$} & 0.31$\times$ \\
-LinearListReduction & \textbf{5.74$\times$} & \textbf{5.69$\times$} & \textbf{32.70$\times$} & -- \\
-List & 0.91$\times$ & -- & -- & -- \\
-MonoTree & 1.08$\times$ & \textbf{2.16$\times$} & \textbf{2.34$\times$} & 0.51$\times$ \\
-ObjectGraph & 1.07$\times$ & \textbf{1.98$\times$} & \textbf{2.12$\times$} & 0.65$\times$ \\
-OctTree & -- & \textbf{1.13$\times$} & -- & -- \\
-PiecewiseFunctions & 1.06$\times$ & \textbf{1.53$\times$} & \textbf{1.61$\times$} & 0.24$\times$ \\
-TernaryTree & 1.07$\times$ & \textbf{1.30$\times$} & \textbf{1.40$\times$} & 0.24$\times$ \\
-Trie & 0.96$\times$ & \textbf{1.42$\times$} & \textbf{1.37$\times$} & 0.27$\times$ \\
+Compiler & \textbf{1.29$\times$} & \textbf{3.93$\times$} & \textbf{5.09$\times$} & -- \\
+DBQuery & 1.01$\times$ & \textbf{1.28$\times$} & \textbf{1.29$\times$} & 0.29$\times$ \\
+DecisionTree & \textbf{1.24$\times$} & \textbf{1.55$\times$} & \textbf{1.92$\times$} & 0.22$\times$ \\
+DomTree & \textbf{1.37$\times$} & \textbf{1.73$\times$} & \textbf{2.38$\times$} & 0.63$\times$ \\
+KDTree & \textbf{1.26$\times$} & \textbf{1.40$\times$} & \textbf{1.76$\times$} & 0.34$\times$ \\
+LinearListReduction & \textbf{5.84$\times$} & \textbf{4.82$\times$} & \textbf{28.11$\times$} & -- \\
+List & 0.85$\times$ & -- & -- & -- \\
+MonoTree & 0.96$\times$ & \textbf{2.25$\times$} & \textbf{2.16$\times$} & 0.51$\times$ \\
+ObjectGraph & 0.95$\times$ & \textbf{2.09$\times$} & \textbf{1.99$\times$} & 0.68$\times$ \\
+OctTree & -- & \textbf{1.11$\times$} & -- & -- \\
+PiecewiseFunctions & 1.06$\times$ & \textbf{1.48$\times$} & \textbf{1.57$\times$} & 0.26$\times$ \\
+TernaryTree & 1.05$\times$ & \textbf{1.30$\times$} & \textbf{1.36$\times$} & 0.23$\times$ \\
+Trie & 1.07$\times$ & \textbf{1.38$\times$} & \textbf{1.48$\times$} & 0.28$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -154,20 +154,20 @@ Trie & 0.96$\times$ & \textbf{1.42$\times$} & \textbf{1.37$\times$} & 0.27$\time
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-blockCountPass & F & 2/9 & 78\% & 0.0123$\pm$0.00001 & 0.0865$\pm$0.00003 & \textbf{0.0019$\pm$0.00002} & \textit{OOM} & \textbf{6.41$\times$} & \textbf{7.04$\times$} & \textbf{45.12$\times$} & -- \\
-branchStatsPass & F & 2/9 & 78\% & 0.0119$\pm$0.00001 & 0.1001$\pm$0.00113 & \textbf{0.0034$\pm$0.00000} & \textit{OOM} & \textbf{3.48$\times$} & \textbf{8.41$\times$} & \textbf{29.30$\times$} & -- \\
-castInstCountPass & F & 3/9 & 67\% & 0.0187$\pm$0.00001 & 0.0994$\pm$0.00115 & \textbf{0.0013$\pm$0.00000} & \textit{OOM} & \textbf{14.54$\times$} & \textbf{5.31$\times$} & \textbf{77.29$\times$} & -- \\
-has cycle & F & 4/9 & 56\% & 0.0254$\pm$0.00079 & 0.1009$\pm$0.00093 & \textbf{0.0172$\pm$0.00079} & \textit{OOM} & \textbf{1.48$\times$} & \textbf{3.96$\times$} & \textbf{5.86$\times$} & -- \\
-instCountPass & F & 2/9 & 78\% & 0.0123$\pm$0.00042 & 0.0875$\pm$0.00017 & \textbf{0.0019$\pm$0.00003} & \textit{OOM} & \textbf{6.40$\times$} & \textbf{7.10$\times$} & \textbf{45.47$\times$} & -- \\
-latencyModelPass & F & 3/9 & 67\% & 0.0122$\pm$0.00001 & 0.0998$\pm$0.00137 & \textbf{0.0030$\pm$0.00000} & \textit{OOM} & \textbf{4.12$\times$} & \textbf{8.15$\times$} & \textbf{33.56$\times$} & -- \\
-memoryOpStatsPass & F & 3/9 & 67\% & 0.0121$\pm$0.00037 & 0.0993$\pm$0.00113 & \textbf{0.0038$\pm$0.00000} & \textit{OOM} & \textbf{3.16$\times$} & \textbf{8.22$\times$} & \textbf{25.98$\times$} & -- \\
-stripSideEffectsPass & M & 7/9 & 22\% & \textbf{0.0804$\pm$0.00141} & 0.1921$\pm$0.00100 & 0.0932$\pm$0.00124 & \textit{OOM} & 0.86$\times$ & \textbf{2.39$\times$} & \textbf{2.06$\times$} & -- \\
-targetReturnPass & M & 9/9 & 0\% & \textbf{0.0790$\pm$0.00016} & 0.1901$\pm$0.00029 & 0.0925$\pm$0.00123 & \textit{OOM} & 0.85$\times$ & \textbf{2.41$\times$} & \textbf{2.06$\times$} & -- \\
-throughputModelPass & F & 3/9 & 67\% & 0.0123$\pm$0.00000 & 0.0993$\pm$0.00130 & \textbf{0.0030$\pm$0.00000} & \textit{OOM} & \textbf{4.13$\times$} & \textbf{8.07$\times$} & \textbf{33.36$\times$} & -- \\
-verifyIR & F & 9/9 & 0\% & 0.0127$\pm$0.00015 & 0.0713$\pm$0.00001 & \textbf{0.0035$\pm$0.00035} & \textit{OOM} & \textbf{3.66$\times$} & \textbf{5.63$\times$} & \textbf{20.61$\times$} & -- \\
+blockCountPass & F & 2/9 & 78\% & 0.0118$\pm$0.00001 & 0.0801$\pm$0.00109 & \textbf{0.0019$\pm$0.00000} & \textit{OOM} & \textbf{6.14$\times$} & \textbf{6.80$\times$} & \textbf{41.77$\times$} & -- \\
+branchStatsPass & F & 2/9 & 78\% & 0.0114$\pm$0.00001 & 0.0806$\pm$0.00002 & \textbf{0.0036$\pm$0.00000} & \textit{OOM} & \textbf{3.20$\times$} & \textbf{7.05$\times$} & \textbf{22.61$\times$} & -- \\
+castInstCountPass & F & 3/9 & 67\% & 0.0179$\pm$0.00089 & 0.0806$\pm$0.00003 & \textbf{0.0013$\pm$0.00000} & \textit{OOM} & \textbf{13.88$\times$} & \textbf{4.50$\times$} & \textbf{62.53$\times$} & -- \\
+has cycle & F & 4/9 & 56\% & 0.0239$\pm$0.00079 & 0.0951$\pm$0.00002 & \textbf{0.0180$\pm$0.00014} & \textit{OOM} & \textbf{1.33$\times$} & \textbf{3.98$\times$} & \textbf{5.29$\times$} & -- \\
+instCountPass & F & 2/9 & 78\% & 0.0118$\pm$0.00002 & 0.0812$\pm$0.00002 & \textbf{0.0019$\pm$0.00000} & \textit{OOM} & \textbf{6.06$\times$} & \textbf{6.88$\times$} & \textbf{41.68$\times$} & -- \\
+latencyModelPass & F & 3/9 & 67\% & 0.0116$\pm$0.00000 & 0.0813$\pm$0.00002 & \textbf{0.0030$\pm$0.00000} & \textit{OOM} & \textbf{3.93$\times$} & \textbf{6.98$\times$} & \textbf{27.47$\times$} & -- \\
+memoryOpStatsPass & F & 3/9 & 67\% & 0.0115$\pm$0.00001 & 0.0806$\pm$0.00131 & \textbf{0.0038$\pm$0.00001} & \textit{OOM} & \textbf{3.03$\times$} & \textbf{6.98$\times$} & \textbf{21.18$\times$} & -- \\
+stripSideEffectsPass & M & 7/9 & 22\% & \textbf{0.0793$\pm$0.00142} & 0.1910$\pm$0.00020 & 0.0885$\pm$0.00164 & \textit{OOM} & 0.90$\times$ & \textbf{2.41$\times$} & \textbf{2.16$\times$} & -- \\
+targetReturnPass & M & 9/9 & 0\% & \textbf{0.0791$\pm$0.00017} & 0.1891$\pm$0.00023 & 0.0900$\pm$0.00011 & \textit{OOM} & 0.88$\times$ & \textbf{2.39$\times$} & \textbf{2.10$\times$} & -- \\
+throughputModelPass & F & 3/9 & 67\% & 0.0117$\pm$0.00006 & 0.0806$\pm$0.00086 & \textbf{0.0029$\pm$0.00000} & \textit{OOM} & \textbf{3.96$\times$} & \textbf{6.90$\times$} & \textbf{27.32$\times$} & -- \\
+verifyIR & F & 9/9 & 0\% & 0.0122$\pm$0.00017 & 0.0706$\pm$0.00154 & \textbf{0.0034$\pm$0.00024} & \textit{OOM} & \textbf{3.56$\times$} & \textbf{5.79$\times$} & \textbf{20.59$\times$} & -- \\
 \midrule
-\textbf{Total} & & & & 0.2894 & 1.226 & \textbf{0.2247} & -- & \textbf{1.29$\times$} & \textbf{4.24$\times$} & \textbf{5.46$\times$} & -- \\
-\textbf{Geomean} & & & & & & & & \textbf{3.26$\times$} & \textbf{5.55$\times$} & \textbf{18.12$\times$} & -- \\
+\textbf{Total} & & & & 0.2823 & 1.111 & \textbf{0.2183} & -- & \textbf{1.29$\times$} & \textbf{3.93$\times$} & \textbf{5.09$\times$} & -- \\
+\textbf{Geomean} & & & & & & & & \textbf{3.14$\times$} & \textbf{5.14$\times$} & \textbf{16.14$\times$} & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -184,19 +184,19 @@ verifyIR & F & 9/9 & 0\% & 0.0127$\pm$0.00015 & 0.0713$\pm$0.00001 & \textbf{0.0
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-blockCountPass & F & 6.2e+07/\textbf{9.7e+06} & 5.1e+07/\textbf{5.1e+07} & 1.3e+06/\textbf{1.1e+04} & 4.2e+02/\textbf{4.1e+01} & 2.3e+05/\textbf{1.1e+03} & 4.3e+02/\textbf{4.1e+01} & 4.6e+06/\textbf{5.7e+02} \\
-branchStatsPass & F & 6.0e+07/\textbf{1.7e+07} & \textbf{7.9e+07}/8.6e+07 & 8.4e+05/\textbf{2.4e+04} & 7.0e+02/\textbf{6.7e+01} & 5.3e+04/\textbf{3.2e+03} & 6.9e+02/\textbf{6.9e+01} & 4.6e+06/\textbf{4.4e+05} \\
-castInstCountPass & F & 9.5e+07/\textbf{6.5e+06} & 5.1e+07/\textbf{3.2e+07} & \textbf{1.3e+04}/1.6e+04 & 6.1e+01/\textbf{3.1e+01} & \textbf{9.2e+02}/1.1e+03 & 6.2e+01/\textbf{3.2e+01} & 4.6e+06/\textbf{1.9e+03} \\
-has cycle & F & 1.3e+08/\textbf{8.7e+07} & \textbf{1.1e+08}/1.5e+08 & 2.5e+06/\textbf{3.2e+05} & 7.8e+02/\textbf{1.6e+02} & 1.8e+05/\textbf{2.2e+04} & 7.7e+02/\textbf{1.6e+02} & 5.6e+06/\textbf{2.4e+06} \\
-instCountPass & F & 6.2e+07/\textbf{9.8e+06} & \textbf{5.6e+07}/5.7e+07 & 1.3e+06/\textbf{1.0e+04} & 6.4e+02/\textbf{2.9e+01} & 2.3e+05/\textbf{1.2e+03} & 6.4e+02/\textbf{2.8e+01} & 4.6e+06/\textbf{7.0e+02} \\
-latencyModelPass & F & 6.2e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{3.5e+04} & 4.9e+02/\textbf{7.5e+01} & 2.1e+05/\textbf{4.0e+03} & 5.0e+02/\textbf{7.5e+01} & 4.7e+06/\textbf{5.3e+05} \\
-memoryOpStatsPass & F & 6.1e+07/\textbf{1.9e+07} & \textbf{8.5e+07}/9.1e+07 & 6.8e+05/\textbf{3.6e+04} & 4.8e+02/\textbf{6.8e+01} & 3.4e+04/\textbf{3.1e+03} & 4.8e+02/\textbf{6.8e+01} & 4.6e+06/\textbf{4.4e+05} \\
-stripSideEffectsPass & M & \textbf{1.6e+08}/2.2e+08 & \textbf{1.8e+08}/6.5e+08 & \textbf{1.2e+06}/1.5e+06 & \textbf{1.1e+05}/1.6e+05 & \textbf{6.8e+03}/2.1e+04 & \textbf{5.6e+03}/2.5e+04 & 4.0e+06/\textbf{1.2e+06} \\
-targetReturnPass & M & \textbf{1.5e+08}/2.1e+08 & \textbf{1.7e+08}/7.1e+08 & 1.7e+06/\textbf{1.5e+06} & \textbf{1.3e+05}/2.1e+05 & \textbf{7.1e+03}/2.5e+04 & \textbf{8.2e+03}/3.1e+04 & 4.1e+06/\textbf{1.5e+06} \\
-throughputModelPass & F & 6.2e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{3.3e+04} & 4.3e+02/\textbf{5.4e+01} & 2.1e+05/\textbf{3.5e+03} & 4.3e+02/\textbf{5.6e+01} & 4.7e+06/\textbf{5.4e+05} \\
-verifyIR & F & 6.4e+07/\textbf{1.7e+07} & \textbf{7.4e+07}/8.6e+07 & 9.6e+05/\textbf{1.9e+04} & 6.8e+02/\textbf{1.4e+02} & 1.4e+05/\textbf{4.0e+03} & 6.8e+02/\textbf{1.4e+02} & 4.6e+06/\textbf{4.4e+05} \\
+blockCountPass & F & 6.0e+07/\textbf{9.7e+06} & 5.1e+07/\textbf{4.5e+07} & 1.2e+06/\textbf{6.1e+03} & 1.3e+02/\textbf{2.3e+01} & 2.2e+05/\textbf{1.1e+03} & 1.3e+02/\textbf{2.3e+01} & 4.7e+06/\textbf{1.1e+03} \\
+branchStatsPass & F & 5.8e+07/\textbf{1.8e+07} & \textbf{7.9e+07}/8.6e+07 & 8.2e+05/\textbf{2.2e+04} & 2.4e+02/\textbf{3.8e+01} & 4.9e+04/\textbf{3.2e+03} & 2.4e+02/\textbf{3.9e+01} & 4.7e+06/\textbf{4.3e+05} \\
+castInstCountPass & F & 9.0e+07/\textbf{6.6e+06} & 5.1e+07/\textbf{3.9e+07} & \textbf{1.3e+04}/2.2e+04 & 8.2e+01/\textbf{2.1e+01} & \textbf{7.9e+02}/1.1e+03 & 8.1e+01/\textbf{2.1e+01} & 4.6e+06/\textbf{3.8e+03} \\
+has cycle & F & 1.2e+08/\textbf{9.1e+07} & \textbf{1.1e+08}/1.5e+08 & 2.3e+06/\textbf{2.2e+05} & 3.5e+02/\textbf{1.1e+02} & 1.5e+05/\textbf{2.2e+04} & 3.6e+02/\textbf{1.1e+02} & 5.1e+06/\textbf{2.3e+06} \\
+instCountPass & F & 6.0e+07/\textbf{9.9e+06} & \textbf{5.6e+07}/5.7e+07 & 1.2e+06/\textbf{1.6e+04} & 1.1e+02/\textbf{2.7e+01} & 2.3e+05/\textbf{1.1e+03} & 1.2e+02/\textbf{2.7e+01} & 4.7e+06/\textbf{1.3e+03} \\
+latencyModelPass & F & 5.9e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{3.7e+04} & 2.9e+02/\textbf{3.7e+01} & 2.0e+05/\textbf{3.9e+03} & 3.0e+02/\textbf{3.7e+01} & 4.7e+06/\textbf{5.3e+05} \\
+memoryOpStatsPass & F & 5.9e+07/\textbf{1.9e+07} & \textbf{8.5e+07}/9.1e+07 & 6.7e+05/\textbf{3.1e+04} & 1.1e+02/\textbf{3.9e+01} & 3.0e+04/\textbf{3.2e+03} & 1.1e+02/\textbf{4.2e+01} & 4.6e+06/\textbf{4.4e+05} \\
+stripSideEffectsPass & M & \textbf{1.5e+08}/2.0e+08 & \textbf{1.8e+08}/6.0e+08 & 1.8e+06/\textbf{9.9e+05} & \textbf{1.1e+05}/1.5e+05 & \textbf{6.0e+03}/2.1e+04 & \textbf{4.2e+03}/7.6e+03 & 4.1e+06/\textbf{1.2e+06} \\
+targetReturnPass & M & \textbf{1.5e+08}/2.0e+08 & \textbf{1.7e+08}/6.3e+08 & 1.5e+06/\textbf{1.5e+06} & \textbf{1.1e+05}/1.3e+05 & \textbf{5.5e+03}/2.3e+04 & \textbf{6.8e+03}/2.0e+04 & 4.2e+06/\textbf{1.4e+06} \\
+throughputModelPass & F & 5.9e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{3.3e+04} & 2.6e+02/\textbf{3.7e+01} & 2.0e+05/\textbf{3.6e+03} & 2.6e+02/\textbf{3.8e+01} & 4.7e+06/\textbf{5.4e+05} \\
+verifyIR & F & 6.2e+07/\textbf{1.7e+07} & \textbf{7.4e+07}/8.6e+07 & 8.9e+05/\textbf{1.9e+04} & 4.0e+02/\textbf{1.0e+02} & 1.4e+05/\textbf{4.1e+03} & 4.0e+02/\textbf{1.0e+02} & 4.7e+06/\textbf{4.5e+05} \\
 \midrule
-\textbf{Total} &  & 9.7e+08/6.3e+08 & 9.9e+08/2.1e+09 & 1.3e+07/3.4e+06 & 2.5e+05/3.7e+05 & 1.3e+06/9.0e+04 & 1.9e+04/5.6e+04 & 5.1e+07/7.4e+06 \\
+\textbf{Total} &  & 9.3e+08/6.0e+08 & 9.9e+08/1.9e+09 & 1.3e+07/2.9e+06 & 2.2e+05/2.9e+05 & 1.2e+06/8.7e+04 & 1.3e+04/2.8e+04 & 5.1e+07/7.3e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -213,19 +213,19 @@ verifyIR & F & 6.4e+07/\textbf{1.7e+07} & \textbf{7.4e+07}/8.6e+07 & 9.6e+05/\te
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-blockCountPass & F & 4.4e+08/-- & 2.2e+08/-- & 2.6e+06/-- & 1.1e+03/-- & 1.3e+05/-- & 1.1e+03/-- & 1.5e+07/-- \\
-branchStatsPass & F & 5.1e+08/-- & 2.5e+08/-- & 2.7e+06/-- & 6.0e+02/-- & 8.7e+04/-- & 6.0e+02/-- & 1.7e+07/-- \\
-castInstCountPass & F & 5.0e+08/-- & 2.5e+08/-- & 2.7e+06/-- & 9.2e+02/-- & 8.9e+04/-- & 9.2e+02/-- & 1.7e+07/-- \\
-has cycle & F & 5.1e+08/-- & 2.6e+08/-- & 2.7e+06/-- & 3.6e+02/-- & 8.3e+04/-- & 3.6e+02/-- & 1.7e+07/-- \\
-instCountPass & F & 4.4e+08/-- & 2.2e+08/-- & 2.6e+06/-- & 9.2e+02/-- & 1.3e+05/-- & 9.1e+02/-- & 1.4e+07/-- \\
-latencyModelPass & F & 5.1e+08/-- & 2.4e+08/-- & 2.7e+06/-- & 5.6e+02/-- & 8.7e+04/-- & 5.5e+02/-- & 1.7e+07/-- \\
-memoryOpStatsPass & F & 5.0e+08/-- & 2.6e+08/-- & 2.7e+06/-- & 7.6e+02/-- & 8.9e+04/-- & 7.6e+02/-- & 1.7e+07/-- \\
-stripSideEffectsPass & M & 7.1e+08/-- & 4.2e+08/-- & 1.6e+06/-- & 1.3e+05/-- & 1.7e+05/-- & 2.6e+04/-- & 2.4e+07/-- \\
-targetReturnPass & M & 7.0e+08/-- & 4.0e+08/-- & 1.8e+06/-- & 1.2e+05/-- & 1.6e+05/-- & 3.3e+04/-- & 2.4e+07/-- \\
-throughputModelPass & F & 5.0e+08/-- & 2.4e+08/-- & 2.7e+06/-- & 6.2e+02/-- & 8.6e+04/-- & 6.2e+02/-- & 1.7e+07/-- \\
-verifyIR & F & 3.6e+08/-- & 1.4e+08/-- & 2.4e+06/-- & 8.3e+02/-- & 1.4e+05/-- & 8.3e+02/-- & 1.2e+07/-- \\
+blockCountPass & F & 4.1e+08/-- & 1.6e+08/-- & 2.2e+06/-- & 7.2e+02/-- & 9.1e+04/-- & 7.2e+02/-- & 1.4e+07/-- \\
+branchStatsPass & F & 4.1e+08/-- & 1.8e+08/-- & 2.1e+06/-- & 6.8e+02/-- & 4.4e+04/-- & 6.8e+02/-- & 1.5e+07/-- \\
+castInstCountPass & F & 4.1e+08/-- & 1.8e+08/-- & 2.1e+06/-- & 5.7e+02/-- & 4.5e+04/-- & 5.7e+02/-- & 1.5e+07/-- \\
+has cycle & F & 4.8e+08/-- & 2.1e+08/-- & 2.5e+06/-- & 2.3e+02/-- & 7.0e+04/-- & 2.4e+02/-- & 1.7e+07/-- \\
+instCountPass & F & 4.1e+08/-- & 1.6e+08/-- & 2.2e+06/-- & 3.8e+02/-- & 9.7e+04/-- & 3.8e+02/-- & 1.4e+07/-- \\
+latencyModelPass & F & 4.1e+08/-- & 1.7e+08/-- & 2.1e+06/-- & 3.4e+02/-- & 4.5e+04/-- & 3.4e+02/-- & 1.4e+07/-- \\
+memoryOpStatsPass & F & 4.1e+08/-- & 1.9e+08/-- & 2.0e+06/-- & 5.3e+02/-- & 4.2e+04/-- & 5.4e+02/-- & 1.5e+07/-- \\
+stripSideEffectsPass & M & 7.1e+08/-- & 3.3e+08/-- & 2.0e+06/-- & 1.2e+05/-- & 2.2e+05/-- & 2.9e+04/-- & 2.4e+07/-- \\
+targetReturnPass & M & 7.0e+08/-- & 3.2e+08/-- & 2.1e+06/-- & 1.0e+05/-- & 2.2e+05/-- & 3.5e+04/-- & 2.4e+07/-- \\
+throughputModelPass & F & 4.1e+08/-- & 1.7e+08/-- & 2.1e+06/-- & 2.6e+02/-- & 4.4e+04/-- & 2.7e+02/-- & 1.5e+07/-- \\
+verifyIR & F & 3.6e+08/-- & 1.2e+08/-- & 2.5e+06/-- & 4.3e+02/-- & 2.0e+05/-- & 4.4e+02/-- & 1.1e+07/-- \\
 \midrule
-\textbf{Total} &  & 5.7e+09/-- & 2.9e+09/-- & 2.7e+07/-- & 2.5e+05/-- & 1.3e+06/-- & 6.5e+04/-- & 1.9e+08/-- \\
+\textbf{Total} &  & 5.1e+09/-- & 2.2e+09/-- & 2.4e+07/-- & 2.3e+05/-- & 1.1e+06/-- & 6.9e+04/-- & 1.8e+08/-- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -241,17 +241,17 @@ verifyIR & F & 3.6e+08/-- & 1.4e+08/-- & 2.4e+06/-- & 8.3e+02/-- & 1.4e+05/-- & 
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0692$\pm$0.00011} & 0.0786$\pm$0.00009 & 0.0920$\pm$0.00007 & 0.3317$\pm$0.00235 & 0.75$\times$ & \textbf{1.14$\times$} & 0.86$\times$ & 0.24$\times$ \\
-countJoins & F & 3/15 & 80\% & 0.0192$\pm$0.00001 & 0.0296$\pm$0.00001 & \textbf{0.0115$\pm$0.00001} & 0.1304$\pm$0.00004 & \textbf{1.67$\times$} & \textbf{1.54$\times$} & \textbf{2.57$\times$} & 0.23$\times$ \\
-filterSelectivitySkew & F & 5/15 & 67\% & 0.0188$\pm$0.00079 & 0.0298$\pm$0.00002 & \textbf{0.0124$\pm$0.00001} & 0.1593$\pm$0.00004 & \textbf{1.51$\times$} & \textbf{1.59$\times$} & \textbf{2.40$\times$} & 0.19$\times$ \\
-hashJoinPressure & F & 5/15 & 67\% & 0.0192$\pm$0.00070 & 0.0298$\pm$0.00001 & \textbf{0.0126$\pm$0.00069} & 0.1314$\pm$0.00003 & \textbf{1.53$\times$} & \textbf{1.55$\times$} & \textbf{2.37$\times$} & 0.23$\times$ \\
-scaleCosts & M & 15/15 & 0\% & \textbf{0.0683$\pm$0.00010} & 0.0786$\pm$0.00107 & 0.1089$\pm$0.00006 & 0.3269$\pm$0.00346 & 0.63$\times$ & \textbf{1.15$\times$} & 0.72$\times$ & 0.24$\times$ \\
-sumCost & F & 6/15 & 60\% & 0.0193$\pm$0.00009 & 0.0291$\pm$0.00020 & \textbf{0.0144$\pm$0.00005} & 0.1395$\pm$0.00129 & \textbf{1.34$\times$} & \textbf{1.51$\times$} & \textbf{2.02$\times$} & 0.21$\times$ \\
-sumMemory & F & 6/15 & 60\% & 0.0190$\pm$0.00001 & 0.0290$\pm$0.00004 & \textbf{0.0150$\pm$0.00004} & 0.1389$\pm$0.00172 & \textbf{1.27$\times$} & \textbf{1.52$\times$} & \textbf{1.94$\times$} & 0.21$\times$ \\
-sumRows & F & 6/15 & 60\% & 0.0267$\pm$0.00001 & 0.0298$\pm$0.00002 & \textbf{0.0223$\pm$0.00002} & 0.1093$\pm$0.00118 & \textbf{1.20$\times$} & \textbf{1.12$\times$} & \textbf{1.34$\times$} & 0.27$\times$ \\
+clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0684$\pm$0.00127} & 0.0759$\pm$0.00010 & 0.0821$\pm$0.00100 & 0.2974$\pm$0.00315 & 0.83$\times$ & \textbf{1.11$\times$} & 0.92$\times$ & 0.26$\times$ \\
+countJoins & F & 3/15 & 80\% & 0.0186$\pm$0.00001 & 0.0285$\pm$0.00001 & \textbf{0.0112$\pm$0.00000} & 0.0860$\pm$0.00017 & \textbf{1.65$\times$} & \textbf{1.53$\times$} & \textbf{2.53$\times$} & 0.33$\times$ \\
+filterSelectivitySkew & F & 5/15 & 67\% & 0.0186$\pm$0.00001 & 0.0282$\pm$0.00001 & \textbf{0.0122$\pm$0.00001} & 0.0883$\pm$0.00173 & \textbf{1.53$\times$} & \textbf{1.51$\times$} & \textbf{2.31$\times$} & 0.32$\times$ \\
+hashJoinPressure & F & 5/15 & 67\% & 0.0190$\pm$0.00079 & 0.0324$\pm$0.00001 & \textbf{0.0124$\pm$0.00002} & 0.0870$\pm$0.00255 & \textbf{1.52$\times$} & \textbf{1.71$\times$} & \textbf{2.60$\times$} & 0.37$\times$ \\
+scaleCosts & M & 15/15 & 0\% & \textbf{0.0678$\pm$0.00011} & 0.0754$\pm$0.00109 & 0.0828$\pm$0.00009 & 0.2979$\pm$0.00189 & 0.82$\times$ & \textbf{1.11$\times$} & 0.91$\times$ & 0.25$\times$ \\
+sumCost & F & 6/15 & 60\% & 0.0185$\pm$0.00011 & 0.0282$\pm$0.00011 & \textbf{0.0149$\pm$0.00007} & 0.0892$\pm$0.00002 & \textbf{1.24$\times$} & \textbf{1.52$\times$} & \textbf{1.89$\times$} & 0.32$\times$ \\
+sumMemory & F & 6/15 & 60\% & 0.0184$\pm$0.00106 & 0.0284$\pm$0.00001 & \textbf{0.0152$\pm$0.00074} & 0.0894$\pm$0.00128 & \textbf{1.21$\times$} & \textbf{1.54$\times$} & \textbf{1.87$\times$} & 0.32$\times$ \\
+sumRows & F & 6/15 & 60\% & 0.0257$\pm$0.00003 & 0.0298$\pm$0.00002 & \textbf{0.0219$\pm$0.00001} & 0.0883$\pm$0.00001 & \textbf{1.17$\times$} & \textbf{1.16$\times$} & \textbf{1.36$\times$} & 0.34$\times$ \\
 \midrule
-\textbf{Total} & & & & \textbf{0.2598} & 0.3344 & 0.2891 & 1.468 & 0.90$\times$ & \textbf{1.29$\times$} & \textbf{1.16$\times$} & 0.23$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.18$\times$} & \textbf{1.37$\times$} & \textbf{1.62$\times$} & 0.22$\times$ \\
+\textbf{Total} & & & & 0.2551 & 0.3269 & \textbf{0.2529} & 1.123 & 1.01$\times$ & \textbf{1.28$\times$} & \textbf{1.29$\times$} & 0.29$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.21$\times$} & \textbf{1.38$\times$} & \textbf{1.67$\times$} & 0.31$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -268,16 +268,16 @@ sumRows & F & 6/15 & 60\% & 0.0267$\pm$0.00001 & 0.0298$\pm$0.00002 & \textbf{0.
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-clearQueryFlags & M & \textbf{1.7e+08}/2.7e+08 & \textbf{1.9e+08}/8.9e+08 & \textbf{2.8e+05}/1.3e+06 & \textbf{8.9e+04}/1.8e+05 & 4.6e+04/\textbf{2.3e+04} & \textbf{4.6e+03}/1.1e+04 & 2.5e+06/\textbf{8.9e+05} \\
-countJoins & F & 9.7e+07/\textbf{5.8e+07} & \textbf{7.5e+07}/8.1e+07 & 6.6e+05/\textbf{3.1e+04} & 3.6e+02/\textbf{1.2e+02} & 1.5e+05/\textbf{2.2e+03} & 3.6e+02/\textbf{6.6e+01} & 2.6e+06/\textbf{6.4e+02} \\
-filterSelectivitySkew & F & 9.5e+07/\textbf{6.3e+07} & \textbf{1.0e+08}/1.2e+08 & 5.3e+05/\textbf{7.5e+04} & 3.4e+02/\textbf{1.1e+02} & 1.1e+05/\textbf{6.1e+03} & 3.4e+02/\textbf{1.1e+02} & 2.6e+06/\textbf{2.3e+05} \\
-hashJoinPressure & F & 9.7e+07/\textbf{6.4e+07} & \textbf{8.5e+07}/1.0e+08 & 8.5e+05/\textbf{7.7e+04} & 5.1e+02/\textbf{5.5e+01} & 2.0e+05/\textbf{7.1e+03} & 5.1e+02/\textbf{5.6e+01} & 2.7e+06/\textbf{1.2e+05} \\
-scaleCosts & M & \textbf{1.6e+08}/3.5e+08 & \textbf{2.3e+08}/9.2e+08 & \textbf{2.3e+05}/1.5e+06 & \textbf{7.6e+04}/2.9e+05 & 4.0e+04/\textbf{2.8e+04} & \textbf{5.2e+03}/2.9e+04 & 2.4e+06/\textbf{1.1e+06} \\
-sumCost & F & 9.8e+07/\textbf{7.3e+07} & \textbf{9.1e+07}/1.3e+08 & 5.6e+05/\textbf{7.9e+04} & 3.0e+02/\textbf{8.4e+01} & 1.4e+05/\textbf{1.1e+04} & 3.1e+02/\textbf{8.4e+01} & 2.7e+06/\textbf{3.3e+05} \\
-sumMemory & F & 9.6e+07/\textbf{7.6e+07} & \textbf{9.1e+07}/1.3e+08 & 6.9e+05/\textbf{8.4e+04} & 4.6e+02/\textbf{5.3e+01} & 1.6e+05/\textbf{1.1e+04} & 4.6e+02/\textbf{5.3e+01} & 2.7e+06/\textbf{3.2e+05} \\
-sumRows & F & 1.4e+08/\textbf{1.1e+08} & \textbf{2.2e+08}/2.4e+08 & \textbf{8.8e+04}/9.5e+04 & 2.3e+02/\textbf{8.4e+01} & 1.4e+04/\textbf{8.9e+03} & 2.3e+02/\textbf{8.8e+01} & 2.3e+06/\textbf{2.8e+05} \\
+clearQueryFlags & M & \textbf{1.7e+08}/2.2e+08 & \textbf{1.9e+08}/7.2e+08 & \textbf{2.9e+05}/1.2e+06 & \textbf{9.8e+04}/1.6e+05 & 3.2e+04/\textbf{2.3e+04} & \textbf{2.7e+03}/1.1e+04 & 2.5e+06/\textbf{9.2e+05} \\
+countJoins & F & 9.4e+07/\textbf{5.7e+07} & 7.4e+07/\textbf{7.1e+07} & 6.1e+05/\textbf{2.6e+04} & 4.2e+02/\textbf{9.1e+01} & 1.4e+05/\textbf{2.1e+03} & 4.3e+02/\textbf{5.4e+01} & 2.6e+06/\textbf{2.5e+03} \\
+filterSelectivitySkew & F & 9.4e+07/\textbf{6.2e+07} & \textbf{1.0e+08}/1.1e+08 & 5.2e+05/\textbf{7.2e+04} & 2.7e+02/\textbf{9.7e+01} & 1.2e+05/\textbf{6.3e+03} & 2.8e+02/\textbf{9.7e+01} & 2.6e+06/\textbf{2.2e+05} \\
+hashJoinPressure & F & 9.6e+07/\textbf{6.3e+07} & \textbf{8.4e+07}/9.9e+07 & 7.3e+05/\textbf{1.0e+05} & 4.3e+02/\textbf{1.1e+02} & 1.9e+05/\textbf{7.5e+03} & 4.3e+02/\textbf{1.1e+02} & 2.7e+06/\textbf{1.1e+05} \\
+scaleCosts & M & \textbf{1.6e+08}/2.2e+08 & \textbf{2.2e+08}/7.5e+08 & \textbf{2.6e+05}/1.3e+06 & \textbf{7.0e+04}/1.6e+05 & 3.1e+04/\textbf{2.8e+04} & \textbf{2.3e+03}/1.7e+04 & 2.4e+06/\textbf{1.1e+06} \\
+sumCost & F & 9.4e+07/\textbf{7.5e+07} & \textbf{9.0e+07}/1.2e+08 & 5.5e+05/\textbf{8.1e+04} & 1.0e+02/\textbf{6.1e+01} & 1.2e+05/\textbf{1.1e+04} & 1.1e+02/\textbf{6.7e+01} & 2.7e+06/\textbf{3.2e+05} \\
+sumMemory & F & 9.3e+07/\textbf{7.7e+07} & \textbf{9.0e+07}/1.2e+08 & 6.7e+05/\textbf{8.1e+04} & 3.4e+02/\textbf{6.0e+01} & 1.6e+05/\textbf{1.1e+04} & 3.4e+02/\textbf{6.0e+01} & 2.7e+06/\textbf{3.2e+05} \\
+sumRows & F & 1.3e+08/\textbf{1.1e+08} & \textbf{2.1e+08}/2.3e+08 & 2.7e+05/\textbf{1.1e+05} & 1.5e+02/\textbf{1.1e+02} & 2.1e+04/\textbf{7.7e+03} & 1.6e+02/\textbf{1.1e+02} & 2.4e+06/\textbf{2.8e+05} \\
 \midrule
-\textbf{Total} &  & 9.5e+08/1.1e+09 & 1.1e+09/2.6e+09 & 3.9e+06/3.3e+06 & 1.7e+05/4.8e+05 & 8.7e+05/9.8e+04 & 1.2e+04/4.1e+04 & 2.0e+07/3.2e+06 \\
+\textbf{Total} &  & 9.3e+08/8.9e+08 & 1.1e+09/2.2e+09 & 3.9e+06/3.0e+06 & 1.7e+05/3.3e+05 & 8.0e+05/9.6e+04 & 6.8e+03/2.9e+04 & 2.1e+07/3.3e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -294,16 +294,16 @@ sumRows & F & 1.4e+08/\textbf{1.1e+08} & \textbf{2.2e+08}/2.4e+08 & \textbf{8.8e
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-clearQueryFlags & M & \textbf{2.1e+08}/1.5e+09 & \textbf{4.0e+08}/2.7e+09 & \textbf{6.5e+05}/1.9e+07 & \textbf{7.8e+04}/7.0e+05 & \textbf{1.6e+04}/4.6e+04 & \textbf{2.5e+03}/5.5e+04 & 2.2e+06/\textbf{9.2e+05} \\
-countJoins & F & \textbf{1.5e+08}/6.6e+08 & \textbf{2.4e+08}/9.1e+08 & 2.0e+06/\textbf{3.0e+05} & \textbf{4.2e+02}/1.8e+03 & 9.4e+04/\textbf{1.3e+04} & 4.2e+02/\textbf{1.8e+02} & 2.3e+06/\textbf{3.0e+04} \\
-filterSelectivitySkew & F & \textbf{1.5e+08}/8.1e+08 & \textbf{2.7e+08}/9.6e+08 & 1.1e+06/\textbf{9.5e+05} & \textbf{1.5e+02}/2.1e+03 & 3.8e+04/\textbf{1.7e+04} & \textbf{1.5e+02}/3.0e+02 & 2.2e+06/\textbf{2.2e+05} \\
-hashJoinPressure & F & \textbf{1.5e+08}/6.7e+08 & \textbf{2.6e+08}/9.1e+08 & 1.7e+06/\textbf{6.1e+05} & \textbf{1.7e+02}/1.4e+03 & 5.0e+04/\textbf{1.6e+04} & \textbf{1.7e+02}/2.6e+02 & 2.2e+06/\textbf{1.1e+05} \\
-scaleCosts & M & \textbf{2.1e+08}/1.5e+09 & \textbf{4.3e+08}/2.7e+09 & \textbf{5.1e+05}/2.3e+07 & \textbf{7.9e+04}/4.9e+05 & \textbf{1.4e+04}/4.7e+04 & \textbf{4.6e+03}/6.2e+04 & 2.2e+06/\textbf{1.1e+06} \\
-sumCost & F & \textbf{1.5e+08}/7.1e+08 & \textbf{2.6e+08}/9.4e+08 & \textbf{6.4e+05}/1.2e+06 & \textbf{2.2e+02}/1.8e+03 & 2.0e+04/\textbf{2.0e+04} & \textbf{2.2e+02}/3.9e+02 & 2.3e+06/\textbf{3.2e+05} \\
-sumMemory & F & \textbf{1.5e+08}/7.1e+08 & \textbf{2.6e+08}/9.4e+08 & \textbf{6.6e+05}/1.2e+06 & \textbf{1.5e+02}/1.9e+03 & 2.1e+04/\textbf{2.0e+04} & \textbf{1.5e+02}/4.3e+02 & 2.2e+06/\textbf{3.0e+05} \\
-sumRows & F & \textbf{1.5e+08}/5.5e+08 & \textbf{3.1e+08}/1.0e+09 & \textbf{5.2e+05}/1.3e+06 & \textbf{1.9e+02}/1.6e+03 & \textbf{1.8e+04}/2.1e+04 & \textbf{2.0e+02}/5.4e+02 & 2.2e+06/\textbf{3.2e+05} \\
+clearQueryFlags & M & \textbf{2.0e+08}/1.3e+09 & \textbf{3.2e+08}/2.4e+09 & \textbf{5.9e+05}/2.0e+07 & \textbf{8.9e+04}/6.8e+05 & \textbf{1.9e+04}/4.4e+04 & \textbf{2.5e+03}/5.4e+04 & 2.2e+06/\textbf{9.8e+05} \\
+countJoins & F & \textbf{1.4e+08}/4.4e+08 & \textbf{1.6e+08}/7.7e+08 & 1.9e+06/\textbf{3.1e+05} & \textbf{2.8e+02}/7.6e+02 & 1.1e+05/\textbf{1.3e+04} & 2.8e+02/\textbf{1.1e+02} & 2.3e+06/\textbf{1.9e+04} \\
+filterSelectivitySkew & F & \textbf{1.4e+08}/4.5e+08 & \textbf{2.0e+08}/7.9e+08 & 1.4e+06/\textbf{8.2e+05} & \textbf{2.0e+02}/1.0e+03 & 6.4e+04/\textbf{1.7e+04} & \textbf{2.0e+02}/2.9e+02 & 2.3e+06/\textbf{1.9e+05} \\
+hashJoinPressure & F & \textbf{1.6e+08}/4.4e+08 & \textbf{1.8e+08}/7.7e+08 & 1.7e+06/\textbf{6.4e+05} & \textbf{2.0e+02}/7.7e+02 & 1.1e+05/\textbf{1.6e+04} & 2.0e+02/\textbf{1.9e+02} & 2.2e+06/\textbf{1.0e+05} \\
+scaleCosts & M & \textbf{2.0e+08}/1.3e+09 & \textbf{3.5e+08}/2.4e+09 & \textbf{5.2e+05}/2.3e+07 & \textbf{7.8e+04}/3.0e+05 & \textbf{1.6e+04}/5.4e+04 & \textbf{3.7e+03}/5.9e+04 & 2.3e+06/\textbf{1.2e+06} \\
+sumCost & F & \textbf{1.4e+08}/4.5e+08 & \textbf{1.8e+08}/7.8e+08 & 1.7e+06/\textbf{1.2e+06} & \textbf{1.0e+02}/8.9e+02 & 7.4e+04/\textbf{2.2e+04} & \textbf{1.0e+02}/4.9e+02 & 2.3e+06/\textbf{3.2e+05} \\
+sumMemory & F & \textbf{1.4e+08}/4.5e+08 & \textbf{1.8e+08}/7.8e+08 & 1.5e+06/\textbf{1.1e+06} & \textbf{3.5e+02}/9.7e+02 & 6.9e+04/\textbf{2.1e+04} & \textbf{3.6e+02}/4.6e+02 & 2.3e+06/\textbf{3.1e+05} \\
+sumRows & F & \textbf{1.5e+08}/4.5e+08 & \textbf{2.3e+08}/8.3e+08 & 1.6e+06/\textbf{1.2e+06} & \textbf{1.4e+02}/7.6e+02 & 5.8e+04/\textbf{2.2e+04} & \textbf{1.4e+02}/4.7e+02 & 2.2e+06/\textbf{3.2e+05} \\
 \midrule
-\textbf{Total} &  & 1.3e+09/7.0e+09 & 2.4e+09/1.1e+10 & 7.8e+06/4.7e+07 & 1.6e+05/1.2e+06 & 2.7e+05/2.0e+05 & 8.4e+03/1.2e+05 & 1.8e+07/3.3e+06 \\
+\textbf{Total} &  & 1.3e+09/5.3e+09 & 1.8e+09/9.5e+09 & 1.1e+07/4.8e+07 & 1.7e+05/9.8e+05 & 5.2e+05/2.1e+05 & 7.5e+03/1.1e+05 & 1.8e+07/3.4e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -319,21 +319,21 @@ sumRows & F & \textbf{1.5e+08}/5.5e+08 & \textbf{3.1e+08}/1.0e+09 & \textbf{5.2e
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-classify Batch & F & 5/7 & 29\% & 3.310$\pm$0.0052 & 4.412$\pm$0.0057 & \textbf{2.787$\pm$0.0054} & 24.34$\pm$0.012 & \textbf{1.19$\times$} & \textbf{1.33$\times$} & \textbf{1.58$\times$} & 0.18$\times$ \\
-classify Depth & F & 4/7 & 43\% & 0.0473$\pm$0.00078 & 0.0632$\pm$0.00001 & \textbf{0.0372$\pm$0.00010} & 0.3473$\pm$0.00163 & \textbf{1.27$\times$} & \textbf{1.33$\times$} & \textbf{1.70$\times$} & 0.18$\times$ \\
-classify tree & F & 5/7 & 29\% & 0.0473$\pm$0.00001 & 0.0631$\pm$0.00001 & \textbf{0.0372$\pm$0.00097} & 0.3474$\pm$0.00206 & \textbf{1.27$\times$} & \textbf{1.33$\times$} & \textbf{1.70$\times$} & 0.18$\times$ \\
-countFeatureUses & F & 3/7 & 57\% & 0.0522$\pm$0.00002 & 0.1418$\pm$0.00116 & \textbf{0.0324$\pm$0.00003} & 0.3930$\pm$0.00175 & \textbf{1.61$\times$} & \textbf{2.72$\times$} & \textbf{4.38$\times$} & 0.36$\times$ \\
-countLeaves & F & 2/7 & 71\% & 0.0515$\pm$0.00002 & 0.1435$\pm$0.00160 & \textbf{0.0310$\pm$0.00001} & 0.3739$\pm$0.00202 & \textbf{1.66$\times$} & \textbf{2.79$\times$} & \textbf{4.64$\times$} & 0.38$\times$ \\
-countNodes & F & 2/7 & 71\% & 0.0512$\pm$0.00001 & 0.1408$\pm$0.00128 & \textbf{0.0311$\pm$0.00003} & 0.3750$\pm$0.00028 & \textbf{1.64$\times$} & \textbf{2.75$\times$} & \textbf{4.52$\times$} & 0.38$\times$ \\
-countSmallLeaves & F & 3/7 & 57\% & 0.0522$\pm$0.00108 & 0.1411$\pm$0.00118 & \textbf{0.0325$\pm$0.00004} & 0.3229$\pm$0.00122 & \textbf{1.60$\times$} & \textbf{2.71$\times$} & \textbf{4.34$\times$} & 0.44$\times$ \\
-inferenceCost & F & 2/7 & 71\% & 0.0516$\pm$0.00108 & 0.1434$\pm$0.00003 & \textbf{0.0309$\pm$0.00001} & 0.3761$\pm$0.00208 & \textbf{1.67$\times$} & \textbf{2.78$\times$} & \textbf{4.64$\times$} & 0.38$\times$ \\
-sumImpurity & F & 3/7 & 57\% & 0.0518$\pm$0.00133 & 0.1398$\pm$0.00087 & \textbf{0.0318$\pm$0.00002} & 0.3847$\pm$0.00260 & \textbf{1.63$\times$} & \textbf{2.70$\times$} & \textbf{4.40$\times$} & 0.36$\times$ \\
-sumPathLengths & F & 3/7 & 57\% & 0.0532$\pm$0.00014 & 0.1449$\pm$0.00018 & \textbf{0.0338$\pm$0.00001} & 0.3777$\pm$0.00149 & \textbf{1.57$\times$} & \textbf{2.73$\times$} & \textbf{4.29$\times$} & 0.38$\times$ \\
-sumSamples & F & 3/7 & 57\% & 0.0510$\pm$0.00002 & 0.1391$\pm$0.00003 & \textbf{0.0324$\pm$0.00002} & 0.3789$\pm$0.00274 & \textbf{1.57$\times$} & \textbf{2.72$\times$} & \textbf{4.29$\times$} & 0.37$\times$ \\
-treeDepth & F & 2/7 & 71\% & 0.0521$\pm$0.00001 & 0.1435$\pm$0.00004 & \textbf{0.0335$\pm$0.00016} & 0.3761$\pm$0.00367 & \textbf{1.55$\times$} & \textbf{2.76$\times$} & \textbf{4.28$\times$} & 0.38$\times$ \\
+classify Batch & F & 5/7 & 29\% & 3.114$\pm$0.0044 & 4.258$\pm$0.0044 & \textbf{2.583$\pm$0.0036} & 21.25$\pm$0.010 & \textbf{1.21$\times$} & \textbf{1.37$\times$} & \textbf{1.65$\times$} & 0.20$\times$ \\
+classify Depth & F & 4/7 & 43\% & 0.0447$\pm$0.00001 & 0.0609$\pm$0.00001 & \textbf{0.0365$\pm$0.00006} & 0.2991$\pm$0.00143 & \textbf{1.23$\times$} & \textbf{1.36$\times$} & \textbf{1.67$\times$} & 0.20$\times$ \\
+classify tree & F & 5/7 & 29\% & 0.0446$\pm$0.00001 & 0.0609$\pm$0.00096 & \textbf{0.0365$\pm$0.00090} & 0.3000$\pm$0.00164 & \textbf{1.22$\times$} & \textbf{1.36$\times$} & \textbf{1.67$\times$} & 0.20$\times$ \\
+countFeatureUses & F & 3/7 & 57\% & 0.0477$\pm$0.00001 & 0.1412$\pm$0.00141 & \textbf{0.0318$\pm$0.00002} & 0.3783$\pm$0.00116 & \textbf{1.50$\times$} & \textbf{2.96$\times$} & \textbf{4.44$\times$} & 0.37$\times$ \\
+countLeaves & F & 2/7 & 71\% & 0.0455$\pm$0.00001 & 0.1393$\pm$0.00136 & \textbf{0.0249$\pm$0.00001} & 0.3689$\pm$0.00130 & \textbf{1.83$\times$} & \textbf{3.06$\times$} & \textbf{5.59$\times$} & 0.38$\times$ \\
+countNodes & F & 2/7 & 71\% & 0.0451$\pm$0.00001 & 0.1395$\pm$0.00146 & \textbf{0.0260$\pm$0.00003} & 0.3686$\pm$0.00147 & \textbf{1.73$\times$} & \textbf{3.09$\times$} & \textbf{5.36$\times$} & 0.38$\times$ \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0485$\pm$0.00003 & 0.1353$\pm$0.00002 & \textbf{0.0321$\pm$0.00001} & 0.3714$\pm$0.00181 & \textbf{1.51$\times$} & \textbf{2.79$\times$} & \textbf{4.22$\times$} & 0.36$\times$ \\
+inferenceCost & F & 2/7 & 71\% & 0.0489$\pm$0.00084 & 0.1379$\pm$0.00141 & \textbf{0.0290$\pm$0.00001} & 0.3700$\pm$0.00209 & \textbf{1.69$\times$} & \textbf{2.82$\times$} & \textbf{4.76$\times$} & 0.37$\times$ \\
+sumImpurity & F & 3/7 & 57\% & 0.0477$\pm$0.00002 & 0.1381$\pm$0.00006 & \textbf{0.0320$\pm$0.00002} & 0.3808$\pm$0.00174 & \textbf{1.49$\times$} & \textbf{2.89$\times$} & \textbf{4.31$\times$} & 0.36$\times$ \\
+sumPathLengths & F & 3/7 & 57\% & 0.0504$\pm$0.00002 & 0.1379$\pm$0.00002 & \textbf{0.0339$\pm$0.00001} & 0.3872$\pm$0.00112 & \textbf{1.49$\times$} & \textbf{2.73$\times$} & \textbf{4.07$\times$} & 0.36$\times$ \\
+sumSamples & F & 3/7 & 57\% & 0.0458$\pm$0.00002 & 0.1340$\pm$0.00130 & \textbf{0.0316$\pm$0.00002} & 0.3837$\pm$0.00119 & \textbf{1.45$\times$} & \textbf{2.92$\times$} & \textbf{4.23$\times$} & 0.35$\times$ \\
+treeDepth & F & 2/7 & 71\% & 0.0487$\pm$0.00072 & 0.1379$\pm$0.00019 & \textbf{0.0280$\pm$0.00081} & 0.3699$\pm$0.00174 & \textbf{1.74$\times$} & \textbf{2.83$\times$} & \textbf{4.93$\times$} & 0.37$\times$ \\
 \midrule
-\textbf{Total} & & & & 3.872 & 5.816 & \textbf{3.151} & 28.39 & \textbf{1.23$\times$} & \textbf{1.50$\times$} & \textbf{1.85$\times$} & 0.20$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.51$\times$} & \textbf{2.29$\times$} & \textbf{3.46$\times$} & 0.32$\times$ \\
+\textbf{Total} & & & & 3.632 & 5.621 & \textbf{2.925} & 25.22 & \textbf{1.24$\times$} & \textbf{1.55$\times$} & \textbf{1.92$\times$} & 0.22$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.49$\times$} & \textbf{2.40$\times$} & \textbf{3.58$\times$} & 0.32$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -350,20 +350,20 @@ treeDepth & F & 2/7 & 71\% & 0.0521$\pm$0.00001 & 0.1435$\pm$0.00004 & \textbf{0
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-classify Batch & F & 1.7e+10/\textbf{1.4e+10} & \textbf{3.6e+10}/5.5e+10 & 5.1e+08/\textbf{2.8e+07} & 1.5e+05/\textbf{4.8e+04} & \textbf{1.5e+06}/2.0e+06 & 1.4e+05/\textbf{4.5e+04} & 9.2e+08/\textbf{1.8e+07} \\
-classify Depth & F & 2.4e+08/\textbf{1.9e+08} & \textbf{5.1e+08}/7.8e+08 & 7.2e+06/\textbf{4.3e+05} & 1.8e+03/\textbf{6.3e+02} & \textbf{2.1e+04}/2.8e+04 & 1.8e+03/\textbf{6.1e+02} & 1.3e+07/\textbf{2.8e+05} \\
-classify tree & F & 2.4e+08/\textbf{1.9e+08} & \textbf{5.1e+08}/7.8e+08 & 7.3e+06/\textbf{4.3e+05} & 2.0e+03/\textbf{5.4e+02} & \textbf{2.3e+04}/2.8e+04 & 2.0e+03/\textbf{5.2e+02} & 1.3e+07/\textbf{2.8e+05} \\
-countFeatureUses & F & 2.6e+08/\textbf{1.6e+08} & \textbf{7.7e+08}/8.4e+08 & 6.5e+06/\textbf{4.0e+05} & 2.7e+03/\textbf{4.8e+02} & 3.7e+04/\textbf{1.2e+04} & 2.7e+03/\textbf{4.9e+02} & 1.5e+07/\textbf{2.0e+06} \\
-countLeaves & F & 2.6e+08/\textbf{1.6e+08} & 5.7e+08/\textbf{5.5e+08} & 6.4e+06/\textbf{1.2e+05} & 3.1e+03/\textbf{8.0e+02} & 4.4e+04/\textbf{8.5e+03} & 3.0e+03/\textbf{7.7e+02} & 1.4e+07/\textbf{3.4e+05} \\
-countNodes & F & 2.6e+08/\textbf{1.6e+08} & 5.7e+08/\textbf{5.5e+08} & 6.6e+06/\textbf{1.2e+05} & 3.1e+03/\textbf{8.4e+02} & 4.6e+04/\textbf{8.5e+03} & 3.1e+03/\textbf{8.0e+02} & 1.4e+07/\textbf{3.5e+05} \\
-countSmallLeaves & F & 2.6e+08/\textbf{1.6e+08} & \textbf{6.6e+08}/7.8e+08 & 5.4e+06/\textbf{8.5e+04} & 2.7e+03/\textbf{5.9e+02} & 3.8e+04/\textbf{1.3e+04} & 2.7e+03/\textbf{5.8e+02} & 1.5e+07/\textbf{2.0e+06} \\
-inferenceCost & F & 2.6e+08/\textbf{1.6e+08} & 6.9e+08/\textbf{6.9e+08} & 8.9e+06/\textbf{1.4e+05} & 2.2e+03/\textbf{6.1e+02} & 2.1e+04/\textbf{8.1e+03} & 2.2e+03/\textbf{6.0e+02} & 1.4e+07/\textbf{3.3e+05} \\
-sumImpurity & F & 2.6e+08/\textbf{1.6e+08} & \textbf{7.0e+08}/7.8e+08 & 6.8e+06/\textbf{3.3e+05} & 2.4e+03/\textbf{6.3e+02} & 3.7e+04/\textbf{1.2e+04} & 2.4e+03/\textbf{6.3e+02} & 1.4e+07/\textbf{2.0e+06} \\
-sumPathLengths & F & 2.7e+08/\textbf{1.7e+08} & \textbf{7.4e+08}/8.7e+08 & 7.8e+06/\textbf{7.9e+05} & 3.0e+03/\textbf{6.0e+02} & 4.8e+04/\textbf{1.3e+04} & 3.0e+03/\textbf{6.1e+02} & 1.5e+07/\textbf{2.0e+06} \\
-sumSamples & F & 2.6e+08/\textbf{1.6e+08} & \textbf{5.9e+08}/7.1e+08 & 6.1e+06/\textbf{2.1e+05} & 2.6e+03/\textbf{1.6e+03} & 4.2e+04/\textbf{1.5e+04} & 2.5e+03/\textbf{1.6e+03} & 1.5e+07/\textbf{2.0e+06} \\
-treeDepth & F & 2.6e+08/\textbf{1.7e+08} & 6.9e+08/\textbf{6.9e+08} & 8.6e+06/\textbf{1.4e+05} & 1.6e+03/\textbf{4.6e+02} & 1.8e+04/\textbf{7.8e+03} & 1.6e+03/\textbf{4.7e+02} & 1.4e+07/\textbf{3.3e+05} \\
+classify Batch & F & 1.6e+10/\textbf{1.3e+10} & \textbf{3.3e+10}/5.9e+10 & 4.6e+08/\textbf{2.6e+07} & 1.0e+05/\textbf{2.9e+04} & \textbf{1.5e+06}/2.0e+06 & 1.0e+05/\textbf{2.7e+04} & 9.2e+08/\textbf{1.7e+07} \\
+classify Depth & F & 2.3e+08/\textbf{1.8e+08} & \textbf{4.7e+08}/8.5e+08 & 6.5e+06/\textbf{3.7e+05} & 1.2e+03/\textbf{5.8e+02} & \textbf{1.8e+04}/2.8e+04 & 1.2e+03/\textbf{5.4e+02} & 1.3e+07/\textbf{2.7e+05} \\
+classify tree & F & 2.3e+08/\textbf{1.9e+08} & \textbf{4.7e+08}/8.5e+08 & 6.5e+06/\textbf{3.7e+05} & 9.5e+02/\textbf{5.3e+02} & \textbf{2.2e+04}/2.8e+04 & 9.5e+02/\textbf{5.0e+02} & 1.3e+07/\textbf{2.8e+05} \\
+countFeatureUses & F & 2.4e+08/\textbf{1.6e+08} & \textbf{7.5e+08}/7.8e+08 & 7.3e+06/\textbf{1.1e+06} & \textbf{6.6e+02}/8.2e+02 & 3.6e+04/\textbf{1.4e+04} & \textbf{6.6e+02}/8.2e+02 & 1.5e+07/\textbf{2.1e+06} \\
+countLeaves & F & 2.3e+08/\textbf{1.3e+08} & \textbf{6.0e+08}/6.1e+08 & 7.2e+06/\textbf{1.1e+05} & 1.0e+03/\textbf{3.7e+02} & 4.4e+04/\textbf{8.1e+03} & 1.0e+03/\textbf{3.7e+02} & 1.4e+07/\textbf{3.3e+05} \\
+countNodes & F & 2.3e+08/\textbf{1.3e+08} & \textbf{6.1e+08}/6.2e+08 & 7.2e+06/\textbf{1.1e+05} & 7.1e+02/\textbf{3.1e+02} & 4.8e+04/\textbf{8.1e+03} & 7.2e+02/\textbf{3.1e+02} & 1.4e+07/\textbf{3.5e+05} \\
+countSmallLeaves & F & 2.5e+08/\textbf{1.6e+08} & \textbf{7.1e+08}/8.4e+08 & 5.7e+06/\textbf{2.0e+05} & \textbf{7.5e+02}/7.9e+02 & 2.7e+04/\textbf{1.3e+04} & \textbf{7.5e+02}/7.9e+02 & 1.6e+07/\textbf{2.0e+06} \\
+inferenceCost & F & 2.5e+08/\textbf{1.5e+08} & 6.1e+08/\textbf{6.1e+08} & 8.1e+06/\textbf{1.2e+05} & 1.3e+03/\textbf{4.0e+02} & 1.3e+05/\textbf{7.9e+03} & 1.3e+03/\textbf{4.0e+02} & 1.4e+07/\textbf{3.3e+05} \\
+sumImpurity & F & 2.4e+08/\textbf{1.6e+08} & \textbf{7.6e+08}/7.8e+08 & 7.5e+06/\textbf{1.0e+06} & 1.0e+03/\textbf{7.3e+02} & 3.5e+04/\textbf{1.3e+04} & 1.0e+03/\textbf{7.3e+02} & 1.5e+07/\textbf{2.1e+06} \\
+sumPathLengths & F & 2.6e+08/\textbf{1.7e+08} & \textbf{8.0e+08}/9.0e+08 & 7.4e+06/\textbf{1.2e+06} & 1.0e+03/\textbf{9.5e+02} & 3.6e+04/\textbf{1.4e+04} & 1.0e+03/\textbf{9.5e+02} & 1.5e+07/\textbf{2.0e+06} \\
+sumSamples & F & 2.3e+08/\textbf{1.6e+08} & \textbf{6.4e+08}/7.7e+08 & 6.1e+06/\textbf{4.6e+05} & 6.9e+02/\textbf{6.8e+02} & 3.7e+04/\textbf{1.4e+04} & 6.9e+02/\textbf{6.7e+02} & 1.5e+07/\textbf{2.0e+06} \\
+treeDepth & F & 2.5e+08/\textbf{1.4e+08} & 6.1e+08/\textbf{6.1e+08} & 8.1e+06/\textbf{1.1e+05} & 1.1e+03/\textbf{4.8e+02} & 1.5e+04/\textbf{8.1e+03} & 1.1e+03/\textbf{4.7e+02} & 1.4e+07/\textbf{3.3e+05} \\
 \midrule
-\textbf{Total} &  & 2.0e+10/1.6e+10 & 4.3e+10/6.3e+10 & 5.9e+08/3.1e+07 & 1.7e+05/5.5e+04 & 1.9e+06/2.1e+06 & 1.7e+05/5.3e+04 & 1.1e+09/3.0e+07 \\
+\textbf{Total} &  & 1.8e+10/1.5e+10 & 4.0e+10/6.8e+10 & 5.3e+08/3.2e+07 & 1.1e+05/3.5e+04 & 1.9e+06/2.1e+06 & 1.1e+05/3.4e+04 & 1.1e+09/2.9e+07 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -380,20 +380,20 @@ treeDepth & F & 2.6e+08/\textbf{1.7e+08} & 6.9e+08/\textbf{6.9e+08} & 8.6e+06/\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-classify Batch & F & \textbf{2.2e+10}/1.2e+11 & \textbf{6.6e+10}/2.4e+11 & 5.1e+07/\textbf{4.8e+07} & \textbf{3.1e+04}/3.4e+04 & \textbf{3.4e+05}/2.2e+06 & 3.0e+04/\textbf{2.7e+04} & 8.4e+08/\textbf{1.8e+07} \\
-classify Depth & F & \textbf{3.2e+08}/1.8e+09 & \textbf{9.4e+08}/3.4e+09 & \textbf{4.6e+05}/6.8e+05 & 3.8e+02/\textbf{3.7e+02} & \textbf{7.0e+03}/3.2e+04 & 3.8e+02/\textbf{3.3e+02} & 1.2e+07/\textbf{3.0e+05} \\
-classify tree & F & \textbf{3.2e+08}/1.8e+09 & \textbf{9.4e+08}/3.4e+09 & \textbf{4.6e+05}/6.8e+05 & \textbf{3.4e+02}/3.7e+02 & \textbf{6.9e+03}/3.2e+04 & 3.4e+02/\textbf{3.2e+02} & 1.2e+07/\textbf{3.0e+05} \\
-countFeatureUses & F & \textbf{7.2e+08}/2.0e+09 & \textbf{1.9e+09}/4.0e+09 & \textbf{2.1e+06}/3.7e+06 & \textbf{5.4e+02}/1.2e+03 & \textbf{4.9e+03}/7.5e+04 & 5.4e+02/\textbf{4.2e+02} & 9.2e+06/\textbf{1.2e+06} \\
-countLeaves & F & \textbf{7.3e+08}/1.9e+09 & \textbf{1.7e+09}/3.8e+09 & 6.2e+06/\textbf{7.3e+05} & \textbf{5.0e+02}/2.1e+03 & \textbf{8.0e+03}/3.4e+04 & 4.9e+02/\textbf{3.6e+02} & 9.1e+06/\textbf{3.1e+05} \\
-countNodes & F & \textbf{7.1e+08}/1.9e+09 & \textbf{1.7e+09}/3.8e+09 & 3.3e+06/\textbf{7.4e+05} & \textbf{9.2e+02}/1.5e+03 & \textbf{7.5e+03}/3.4e+04 & 9.0e+02/\textbf{2.0e+02} & 9.3e+06/\textbf{3.2e+05} \\
-countSmallLeaves & F & \textbf{7.2e+08}/1.6e+09 & \textbf{1.8e+09}/3.9e+09 & \textbf{1.2e+06}/3.6e+06 & \textbf{3.1e+02}/2.1e+03 & \textbf{4.4e+03}/7.8e+04 & \textbf{3.2e+02}/1.0e+03 & 9.3e+06/\textbf{1.2e+06} \\
-inferenceCost & F & \textbf{7.3e+08}/1.9e+09 & \textbf{1.8e+09}/3.8e+09 & 5.3e+06/\textbf{7.2e+05} & \textbf{5.0e+02}/2.6e+03 & \textbf{7.9e+03}/3.4e+04 & 5.1e+02/\textbf{2.4e+02} & 9.1e+06/\textbf{3.1e+05} \\
-sumImpurity & F & \textbf{7.1e+08}/2.0e+09 & \textbf{1.8e+09}/3.8e+09 & \textbf{1.0e+06}/3.6e+06 & \textbf{1.9e+02}/4.8e+02 & \textbf{4.1e+03}/7.3e+04 & \textbf{1.9e+02}/4.3e+02 & 9.3e+06/\textbf{1.1e+06} \\
-sumPathLengths & F & \textbf{7.4e+08}/1.9e+09 & \textbf{1.9e+09}/3.9e+09 & \textbf{1.5e+06}/3.7e+06 & 7.3e+02/\textbf{3.7e+02} & \textbf{4.7e+03}/7.9e+04 & 7.3e+02/\textbf{3.5e+02} & 9.1e+06/\textbf{1.1e+06} \\
-sumSamples & F & \textbf{7.0e+08}/1.9e+09 & \textbf{1.7e+09}/3.8e+09 & \textbf{9.3e+05}/3.7e+06 & \textbf{7.4e+02}/1.1e+03 & \textbf{4.7e+03}/7.9e+04 & 7.4e+02/\textbf{4.5e+02} & 9.3e+06/\textbf{1.2e+06} \\
-treeDepth & F & \textbf{7.3e+08}/1.9e+09 & \textbf{1.8e+09}/3.8e+09 & 5.3e+06/\textbf{7.2e+05} & \textbf{6.5e+02}/2.3e+03 & \textbf{7.4e+03}/3.4e+04 & 6.6e+02/\textbf{3.7e+02} & 9.1e+06/\textbf{3.2e+05} \\
+classify Batch & F & \textbf{2.2e+10}/1.1e+11 & \textbf{5.1e+10}/1.9e+11 & \textbf{1.4e+07}/4.5e+07 & \textbf{2.4e+04}/1.5e+05 & \textbf{3.6e+05}/2.1e+06 & \textbf{2.4e+04}/3.1e+04 & 8.5e+08/\textbf{1.8e+07} \\
+classify Depth & F & \textbf{3.1e+08}/1.5e+09 & \textbf{7.4e+08}/2.7e+09 & \textbf{2.5e+05}/6.8e+05 & \textbf{3.0e+02}/1.5e+03 & \textbf{4.7e+03}/3.2e+04 & 3.0e+02/\textbf{2.3e+02} & 1.2e+07/\textbf{2.7e+05} \\
+classify tree & F & \textbf{3.1e+08}/1.5e+09 & \textbf{7.4e+08}/2.7e+09 & \textbf{2.5e+05}/6.1e+05 & \textbf{3.0e+02}/1.6e+03 & \textbf{4.7e+03}/3.0e+04 & 3.0e+02/\textbf{2.0e+02} & 1.2e+07/\textbf{2.9e+05} \\
+countFeatureUses & F & \textbf{7.1e+08}/1.9e+09 & \textbf{1.3e+09}/3.1e+09 & \textbf{2.0e+06}/3.2e+06 & \textbf{8.9e+02}/2.1e+03 & \textbf{7.3e+03}/6.9e+04 & 8.9e+02/\textbf{7.2e+02} & 9.3e+06/\textbf{1.2e+06} \\
+countLeaves & F & \textbf{7.1e+08}/1.9e+09 & \textbf{1.2e+09}/2.9e+09 & 4.4e+06/\textbf{6.7e+05} & \textbf{6.6e+02}/2.6e+03 & \textbf{1.1e+04}/3.2e+04 & 6.6e+02/\textbf{2.1e+02} & 9.2e+06/\textbf{3.0e+05} \\
+countNodes & F & \textbf{7.1e+08}/1.9e+09 & \textbf{1.2e+09}/3.0e+09 & 4.4e+06/\textbf{6.8e+05} & \textbf{7.0e+02}/2.1e+03 & \textbf{8.1e+03}/3.2e+04 & 6.9e+02/\textbf{4.4e+02} & 9.2e+06/\textbf{3.1e+05} \\
+countSmallLeaves & F & \textbf{6.8e+08}/1.9e+09 & \textbf{1.3e+09}/2.9e+09 & \textbf{1.1e+06}/3.4e+06 & \textbf{1.1e+03}/1.9e+03 & \textbf{6.0e+03}/7.3e+04 & 1.1e+03/\textbf{6.5e+02} & 9.3e+06/\textbf{1.2e+06} \\
+inferenceCost & F & \textbf{7.0e+08}/1.9e+09 & \textbf{1.3e+09}/3.0e+09 & 4.4e+06/\textbf{6.1e+05} & \textbf{6.9e+02}/1.4e+03 & \textbf{7.8e+03}/3.0e+04 & 6.8e+02/\textbf{2.5e+02} & 9.2e+06/\textbf{3.3e+05} \\
+sumImpurity & F & \textbf{7.0e+08}/1.9e+09 & \textbf{1.3e+09}/3.0e+09 & \textbf{2.2e+06}/3.5e+06 & 3.1e+02/\textbf{2.6e+02} & \textbf{7.7e+03}/7.5e+04 & 3.2e+02/\textbf{2.5e+02} & 9.4e+06/\textbf{1.2e+06} \\
+sumPathLengths & F & \textbf{7.0e+08}/2.0e+09 & \textbf{1.3e+09}/3.1e+09 & \textbf{1.5e+06}/3.6e+06 & \textbf{4.0e+02}/3.0e+03 & \textbf{5.9e+03}/7.8e+04 & \textbf{4.0e+02}/8.1e+02 & 9.2e+06/\textbf{1.1e+06} \\
+sumSamples & F & \textbf{6.8e+08}/1.9e+09 & \textbf{1.2e+09}/3.0e+09 & \textbf{1.1e+06}/3.6e+06 & \textbf{1.3e+03}/2.4e+03 & \textbf{5.3e+03}/7.7e+04 & 1.3e+03/\textbf{8.9e+02} & 9.3e+06/\textbf{1.2e+06} \\
+treeDepth & F & \textbf{7.0e+08}/1.9e+09 & \textbf{1.3e+09}/3.0e+09 & 4.4e+06/\textbf{6.2e+05} & \textbf{3.3e+02}/1.5e+03 & \textbf{7.8e+03}/3.1e+04 & 3.3e+02/\textbf{2.2e+02} & 9.2e+06/\textbf{3.3e+05} \\
 \midrule
-\textbf{Total} &  & 2.9e+10/1.4e+11 & 8.4e+10/2.8e+11 & 7.8e+07/7.1e+07 & 3.7e+04/4.8e+04 & 4.1e+05/2.8e+06 & 3.6e+04/3.2e+04 & 9.4e+08/2.6e+07 \\
+\textbf{Total} &  & 2.8e+10/1.3e+11 & 6.4e+10/2.2e+11 & 4.0e+07/6.6e+07 & 3.1e+04/1.7e+05 & 4.4e+05/2.7e+06 & 3.1e+04/3.6e+04 & 9.6e+08/2.6e+07 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -409,15 +409,15 @@ treeDepth & F & \textbf{7.3e+08}/1.9e+09 & \textbf{1.8e+09}/3.8e+09 & 5.3e+06/\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-SumArea & F & 6/15 & 60\% & 0.0359$\pm$0.00070 & 0.0715$\pm$0.00083 & \textbf{0.0189$\pm$0.00005} & 0.1969$\pm$0.00130 & \textbf{1.91$\times$} & \textbf{1.99$\times$} & \textbf{3.79$\times$} & 0.36$\times$ \\
-computeWidths & M & 14/15 & 7\% & \textbf{0.0298$\pm$0.00004} & 0.0314$\pm$0.00004 & 0.0487$\pm$0.00106 & 0.0991$\pm$0.00094 & 0.61$\times$ & 1.06$\times$ & 0.65$\times$ & 0.32$\times$ \\
-count styled & F & 3/15 & 80\% & 0.0350$\pm$0.00001 & 0.0705$\pm$0.00001 & \textbf{0.0117$\pm$0.00002} & 0.1850$\pm$0.00129 & \textbf{3.00$\times$} & \textbf{2.02$\times$} & \textbf{6.05$\times$} & 0.38$\times$ \\
-find max Bottom & F & 5/15 & 67\% & 0.0348$\pm$0.00001 & 0.0700$\pm$0.00202 & \textbf{0.0202$\pm$0.00001} & 0.1997$\pm$0.00119 & \textbf{1.73$\times$} & \textbf{2.01$\times$} & \textbf{3.47$\times$} & 0.35$\times$ \\
-scaleLayout & M & 15/15 & 0\% & \textbf{0.0287$\pm$0.00004} & 0.0306$\pm$0.00004 & 0.0398$\pm$0.00004 & 0.0898$\pm$0.00116 & 0.72$\times$ & 1.07$\times$ & 0.77$\times$ & 0.34$\times$ \\
-sumTextWidth & F & 3/15 & 80\% & 0.0346$\pm$0.00001 & 0.0696$\pm$0.00113 & \textbf{0.0116$\pm$0.00001} & 0.2551$\pm$0.00019 & \textbf{2.99$\times$} & \textbf{2.01$\times$} & \textbf{6.00$\times$} & 0.27$\times$ \\
+SumArea & F & 6/15 & 60\% & 0.0345$\pm$0.00002 & 0.0683$\pm$0.00007 & \textbf{0.0190$\pm$0.00003} & 0.0901$\pm$0.00003 & \textbf{1.82$\times$} & \textbf{1.98$\times$} & \textbf{3.60$\times$} & 0.76$\times$ \\
+computeWidths & M & 14/15 & 7\% & \textbf{0.0294$\pm$0.00005} & 0.0300$\pm$0.00003 & 0.0446$\pm$0.00016 & 0.0867$\pm$0.00006 & 0.66$\times$ & 1.02$\times$ & 0.67$\times$ & 0.35$\times$ \\
+count styled & F & 3/15 & 80\% & 0.0334$\pm$0.00001 & 0.0681$\pm$0.00112 & \textbf{0.0116$\pm$0.00001} & 0.0880$\pm$0.00002 & \textbf{2.88$\times$} & \textbf{2.04$\times$} & \textbf{5.87$\times$} & 0.77$\times$ \\
+find max Bottom & F & 5/15 & 67\% & 0.0333$\pm$0.00001 & 0.0678$\pm$0.00001 & \textbf{0.0188$\pm$0.00004} & 0.0878$\pm$0.00132 & \textbf{1.78$\times$} & \textbf{2.03$\times$} & \textbf{3.61$\times$} & 0.77$\times$ \\
+scaleLayout & M & 15/15 & 0\% & \textbf{0.0282$\pm$0.00003} & 0.0301$\pm$0.00005 & 0.0345$\pm$0.00004 & 0.0862$\pm$0.00007 & 0.82$\times$ & 1.07$\times$ & 0.87$\times$ & 0.35$\times$ \\
+sumTextWidth & F & 3/15 & 80\% & 0.0331$\pm$0.00002 & 0.0687$\pm$0.00102 & \textbf{0.0116$\pm$0.00002} & 0.0883$\pm$0.00115 & \textbf{2.85$\times$} & \textbf{2.07$\times$} & \textbf{5.92$\times$} & 0.78$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.1988 & 0.3437 & \textbf{0.1508} & 1.026 & \textbf{1.32$\times$} & \textbf{1.73$\times$} & \textbf{2.28$\times$} & 0.34$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.53$\times$} & \textbf{1.62$\times$} & \textbf{2.49$\times$} & 0.34$\times$ \\
+\textbf{Total} & & & & 0.1921 & 0.3329 & \textbf{0.1400} & 0.5272 & \textbf{1.37$\times$} & \textbf{1.73$\times$} & \textbf{2.38$\times$} & 0.63$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.56$\times$} & \textbf{1.63$\times$} & \textbf{2.53$\times$} & 0.59$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -434,14 +434,14 @@ sumTextWidth & F & 3/15 & 80\% & 0.0346$\pm$0.00001 & 0.0696$\pm$0.00113 & \text
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-SumArea & F & 1.8e+08/\textbf{9.6e+07} & \textbf{2.7e+08}/4.2e+08 & 2.4e+06/\textbf{8.1e+05} & 2.3e+03/\textbf{6.9e+01} & 1.8e+05/\textbf{1.2e+04} & 2.3e+03/\textbf{6.9e+01} & 1.4e+07/\textbf{1.9e+06} \\
-computeWidths & M & \textbf{6.6e+07}/1.6e+08 & \textbf{1.4e+08}/5.8e+08 & \textbf{1.3e+06}/1.4e+06 & \textbf{4.1e+04}/6.6e+04 & \textbf{4.4e+03}/1.3e+04 & \textbf{3.1e+03}/1.6e+04 & 1.1e+06/\textbf{4.2e+05} \\
-count styled & F & 1.8e+08/\textbf{5.9e+07} & \textbf{2.5e+08}/2.6e+08 & 2.2e+06/\textbf{2.7e+04} & 2.9e+03/\textbf{6.4e+01} & 2.8e+05/\textbf{4.9e+03} & 2.8e+03/\textbf{6.4e+01} & 1.4e+07/\textbf{6.4e+05} \\
-find max Bottom & F & 1.8e+08/\textbf{1.0e+08} & \textbf{2.6e+08}/4.7e+08 & 2.3e+06/\textbf{1.3e+06} & 5.1e+02/\textbf{9.8e+01} & 1.7e+05/\textbf{9.6e+03} & 5.1e+02/\textbf{9.7e+01} & 1.4e+07/\textbf{1.3e+06} \\
-scaleLayout & M & \textbf{6.0e+07}/1.2e+08 & \textbf{8.8e+07}/3.6e+08 & \textbf{1.0e+06}/1.3e+06 & 7.8e+04/\textbf{5.3e+04} & 1.5e+04/\textbf{1.2e+04} & \textbf{4.4e+03}/1.3e+04 & 1.2e+06/\textbf{4.4e+05} \\
-sumTextWidth & F & 1.8e+08/\textbf{5.9e+07} & \textbf{2.0e+08}/2.4e+08 & 2.5e+06/\textbf{2.1e+04} & 2.2e+03/\textbf{9.3e+01} & 4.6e+05/\textbf{4.3e+03} & 2.2e+03/\textbf{9.1e+01} & 1.3e+07/\textbf{6.5e+05} \\
+SumArea & F & 1.7e+08/\textbf{9.6e+07} & \textbf{2.9e+08}/4.9e+08 & 2.7e+06/\textbf{4.7e+05} & 3.3e+02/\textbf{1.2e+02} & 1.7e+05/\textbf{1.2e+04} & 3.3e+02/\textbf{1.2e+02} & 1.4e+07/\textbf{1.8e+06} \\
+computeWidths & M & \textbf{6.5e+07}/1.4e+08 & \textbf{1.4e+08}/4.6e+08 & \textbf{1.2e+06}/1.5e+06 & \textbf{5.1e+04}/6.3e+04 & \textbf{5.3e+03}/1.1e+04 & \textbf{1.3e+03}/1.8e+04 & 1.2e+06/\textbf{4.3e+05} \\
+count styled & F & 1.7e+08/\textbf{5.9e+07} & \textbf{2.6e+08}/2.6e+08 & 2.1e+06/\textbf{2.4e+04} & 5.1e+02/\textbf{7.3e+01} & 3.0e+05/\textbf{5.0e+03} & 5.1e+02/\textbf{7.6e+01} & 1.4e+07/\textbf{6.4e+05} \\
+find max Bottom & F & 1.7e+08/\textbf{9.5e+07} & \textbf{2.5e+08}/4.1e+08 & 2.4e+06/\textbf{1.0e+06} & 2.9e+02/\textbf{7.3e+01} & 1.5e+05/\textbf{1.1e+04} & 3.0e+02/\textbf{7.6e+01} & 1.4e+07/\textbf{1.4e+06} \\
+scaleLayout & M & \textbf{5.9e+07}/9.0e+07 & \textbf{8.8e+07}/2.9e+08 & 1.1e+06/\textbf{7.5e+05} & 5.8e+04/\textbf{4.5e+04} & 1.5e+04/\textbf{8.7e+03} & \textbf{1.4e+03}/1.4e+04 & 1.3e+06/\textbf{4.5e+05} \\
+sumTextWidth & F & 1.7e+08/\textbf{5.9e+07} & \textbf{2.0e+08}/2.4e+08 & 2.4e+06/\textbf{1.9e+04} & 5.5e+02/\textbf{7.6e+01} & 4.2e+05/\textbf{4.2e+03} & 5.5e+02/\textbf{7.5e+01} & 1.4e+07/\textbf{6.4e+05} \\
 \midrule
-\textbf{Total} &  & 8.4e+08/5.9e+08 & 1.2e+09/2.3e+09 & 1.2e+07/4.8e+06 & 1.3e+05/1.2e+05 & 1.1e+06/5.6e+04 & 1.5e+04/2.9e+04 & 5.7e+07/5.3e+06 \\
+\textbf{Total} &  & 8.1e+08/5.4e+08 & 1.2e+09/2.2e+09 & 1.2e+07/3.8e+06 & 1.1e+05/1.1e+05 & 1.1e+06/5.1e+04 & 4.3e+03/3.3e+04 & 5.7e+07/5.3e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -458,14 +458,14 @@ sumTextWidth & F & 1.8e+08/\textbf{5.9e+07} & \textbf{2.0e+08}/2.4e+08 & 2.5e+06
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-SumArea & F & \textbf{3.6e+08}/1.0e+09 & \textbf{6.4e+08}/2.1e+09 & 8.5e+06/\textbf{3.3e+06} & \textbf{4.2e+02}/1.7e+03 & \textbf{1.2e+04}/5.4e+04 & \textbf{4.2e+02}/1.7e+03 & 9.9e+06/\textbf{1.3e+06} \\
-computeWidths & M & \textbf{7.3e+07}/4.1e+08 & \textbf{1.8e+08}/1.0e+09 & \textbf{1.3e+06}/3.4e+06 & \textbf{5.6e+04}/8.4e+04 & \textbf{4.5e+03}/2.4e+04 & \textbf{2.2e+03}/2.2e+04 & 1.1e+06/\textbf{4.4e+05} \\
-count styled & F & \textbf{3.6e+08}/9.4e+08 & \textbf{6.3e+08}/2.1e+09 & 9.9e+06/\textbf{1.3e+06} & \textbf{2.9e+02}/1.7e+03 & \textbf{1.5e+04}/3.9e+04 & 2.9e+02/\textbf{2.8e+02} & 1.0e+07/\textbf{4.1e+05} \\
-find max Bottom & F & \textbf{3.6e+08}/1.0e+09 & \textbf{6.6e+08}/2.2e+09 & 8.9e+06/\textbf{3.0e+06} & \textbf{4.6e+02}/1.8e+03 & \textbf{1.2e+04}/5.7e+04 & \textbf{4.6e+02}/1.4e+03 & 1.0e+07/\textbf{1.0e+06} \\
-scaleLayout & M & \textbf{6.9e+07}/3.7e+08 & \textbf{1.3e+08}/8.5e+08 & \textbf{9.1e+05}/2.9e+06 & \textbf{4.2e+04}/1.1e+05 & \textbf{3.7e+03}/1.6e+04 & \textbf{2.1e+03}/2.2e+04 & 1.1e+06/\textbf{4.6e+05} \\
-sumTextWidth & F & \textbf{3.5e+08}/1.3e+09 & \textbf{5.8e+08}/2.1e+09 & 8.6e+06/\textbf{1.3e+06} & \textbf{2.3e+02}/2.3e+03 & 5.6e+04/\textbf{4.0e+04} & \textbf{2.3e+02}/2.8e+02 & 1.0e+07/\textbf{4.1e+05} \\
+SumArea & F & \textbf{3.5e+08}/4.6e+08 & \textbf{4.4e+08}/1.8e+09 & 8.2e+06/\textbf{2.2e+06} & \textbf{2.0e+02}/8.8e+02 & \textbf{1.2e+04}/3.2e+04 & \textbf{2.0e+02}/8.8e+02 & 1.0e+07/\textbf{1.3e+06} \\
+computeWidths & M & \textbf{6.7e+07}/3.5e+08 & \textbf{1.5e+08}/9.0e+08 & \textbf{1.4e+06}/3.2e+06 & \textbf{4.6e+04}/2.4e+05 & \textbf{5.9e+03}/1.6e+04 & \textbf{1.1e+03}/2.3e+04 & 1.2e+06/\textbf{4.3e+05} \\
+count styled & F & \textbf{3.5e+08}/4.5e+08 & \textbf{4.3e+08}/1.7e+09 & 1.0e+07/\textbf{1.2e+06} & \textbf{1.3e+02}/3.6e+02 & \textbf{3.5e+04}/3.7e+04 & \textbf{1.3e+02}/3.2e+02 & 1.0e+07/\textbf{4.1e+05} \\
+find max Bottom & F & \textbf{3.4e+08}/4.5e+08 & \textbf{4.6e+08}/1.8e+09 & 1.0e+07/\textbf{1.6e+06} & \textbf{8.0e+01}/6.9e+02 & \textbf{1.4e+04}/2.6e+04 & \textbf{8.0e+01}/6.9e+02 & 1.0e+07/\textbf{9.5e+05} \\
+scaleLayout & M & \textbf{6.7e+07}/3.5e+08 & \textbf{1.1e+08}/7.6e+08 & \textbf{9.8e+05}/2.8e+06 & \textbf{5.1e+04}/8.5e+04 & \textbf{3.8e+03}/1.2e+04 & \textbf{1.2e+03}/2.4e+04 & 1.1e+06/\textbf{4.6e+05} \\
+sumTextWidth & F & \textbf{3.5e+08}/4.5e+08 & \textbf{3.9e+08}/1.7e+09 & 1.1e+07/\textbf{1.3e+06} & \textbf{3.9e+02}/8.4e+02 & 8.7e+04/\textbf{3.9e+04} & \textbf{3.9e+02}/6.9e+02 & 1.0e+07/\textbf{4.1e+05} \\
 \midrule
-\textbf{Total} &  & 1.6e+09/5.0e+09 & 2.8e+09/1.0e+10 & 3.8e+07/1.5e+07 & 9.9e+04/2.0e+05 & 1.0e+05/2.3e+05 & 5.7e+03/4.7e+04 & 4.2e+07/4.0e+06 \\
+\textbf{Total} &  & 1.5e+09/2.5e+09 & 2.0e+09/8.6e+09 & 4.1e+07/1.2e+07 & 9.8e+04/3.3e+05 & 1.6e+05/1.6e+05 & 3.1e+03/5.0e+04 & 4.3e+07/4.0e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -481,15 +481,15 @@ sumTextWidth & F & \textbf{3.5e+08}/1.3e+09 & \textbf{5.8e+08}/2.1e+09 & 8.6e+06
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-Find nearest Neighbour & F & 13/17 & 24\% & 0.0278$\pm$0.00003 & 0.0409$\pm$0.00005 & \textbf{0.0212$\pm$0.00002} & 0.1334$\pm$0.00109 & \textbf{1.31$\times$} & \textbf{1.47$\times$} & \textbf{1.93$\times$} & 0.31$\times$ \\
-countInRange tight\_box & F & 13/17 & 24\% & 0.0285$\pm$0.00001 & 0.0411$\pm$0.00002 & \textbf{0.0208$\pm$0.00001} & 0.1320$\pm$0.00001 & \textbf{1.37$\times$} & \textbf{1.44$\times$} & \textbf{1.97$\times$} & 0.31$\times$ \\
-photonMappingBenchmark & F & 12/17 & 29\% & 0.0440$\pm$0.00001 & 0.0491$\pm$0.00002 & \textbf{0.0409$\pm$0.00001} & 0.1414$\pm$0.00020 & 1.08$\times$ & \textbf{1.12$\times$} & \textbf{1.20$\times$} & 0.35$\times$ \\
-pointCloudNeighborhood & F & 11/17 & 35\% & 0.0252$\pm$0.00074 & 0.0386$\pm$0.00001 & \textbf{0.0162$\pm$0.00000} & 0.1299$\pm$0.00114 & \textbf{1.55$\times$} & \textbf{1.53$\times$} & \textbf{2.38$\times$} & 0.30$\times$ \\
-sumMassInRange & F & 14/17 & 18\% & 0.0284$\pm$0.00001 & 0.0413$\pm$0.00001 & \textbf{0.0218$\pm$0.00001} & 0.1334$\pm$0.00084 & \textbf{1.30$\times$} & \textbf{1.46$\times$} & \textbf{1.90$\times$} & 0.31$\times$ \\
-twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0294$\pm$0.00001 & 0.0409$\pm$0.00097 & \textbf{0.0201$\pm$0.00013} & 0.1316$\pm$0.00001 & \textbf{1.47$\times$} & \textbf{1.39$\times$} & \textbf{2.04$\times$} & 0.31$\times$ \\
+Find nearest Neighbour & F & 13/17 & 24\% & 0.0270$\pm$0.00004 & 0.0390$\pm$0.00005 & \textbf{0.0210$\pm$0.00003} & 0.1178$\pm$0.00129 & \textbf{1.28$\times$} & \textbf{1.45$\times$} & \textbf{1.86$\times$} & 0.33$\times$ \\
+countInRange tight\_box & F & 13/17 & 24\% & 0.0272$\pm$0.00001 & 0.0402$\pm$0.00001 & \textbf{0.0195$\pm$0.00001} & 0.1236$\pm$0.00131 & \textbf{1.39$\times$} & \textbf{1.48$\times$} & \textbf{2.06$\times$} & 0.32$\times$ \\
+photonMappingBenchmark & F & 12/17 & 29\% & 0.0417$\pm$0.00108 & 0.0473$\pm$0.00001 & \textbf{0.0409$\pm$0.00001} & 0.1303$\pm$0.00164 & 1.02$\times$ & \textbf{1.13$\times$} & \textbf{1.16$\times$} & 0.36$\times$ \\
+pointCloudNeighborhood & F & 11/17 & 35\% & 0.0241$\pm$0.00001 & 0.0380$\pm$0.00014 & \textbf{0.0162$\pm$0.00000} & 0.1142$\pm$0.00003 & \textbf{1.49$\times$} & \textbf{1.58$\times$} & \textbf{2.34$\times$} & 0.33$\times$ \\
+sumMassInRange & F & 14/17 & 18\% & 0.0265$\pm$0.00002 & 0.0402$\pm$0.00001 & \textbf{0.0199$\pm$0.00000} & 0.1233$\pm$0.00001 & \textbf{1.33$\times$} & \textbf{1.52$\times$} & \textbf{2.02$\times$} & 0.33$\times$ \\
+twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0281$\pm$0.00001 & 0.0388$\pm$0.00108 & \textbf{0.0208$\pm$0.00000} & 0.1135$\pm$0.00020 & \textbf{1.35$\times$} & \textbf{1.38$\times$} & \textbf{1.87$\times$} & 0.34$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.1833 & 0.2519 & \textbf{0.1410} & 0.8018 & \textbf{1.30$\times$} & \textbf{1.37$\times$} & \textbf{1.79$\times$} & 0.31$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.34$\times$} & \textbf{1.39$\times$} & \textbf{1.87$\times$} & 0.31$\times$ \\
+\textbf{Total} & & & & 0.1745 & 0.2435 & \textbf{0.1383} & 0.7226 & \textbf{1.26$\times$} & \textbf{1.40$\times$} & \textbf{1.76$\times$} & 0.34$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.30$\times$} & \textbf{1.41$\times$} & \textbf{1.84$\times$} & 0.34$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -506,14 +506,14 @@ twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0294$\pm$0.00001 & 0.0409$
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-Find nearest Neighbour & F & 1.4e+08/\textbf{1.1e+08} & \textbf{5.1e+08}/6.4e+08 & 3.3e+06/\textbf{2.3e+06} & 1.0e+02/\textbf{6.9e+01} & \textbf{5.3e+03}/1.9e+04 & 1.0e+02/\textbf{6.9e+01} & 7.7e+06/\textbf{1.6e+06} \\
-countInRange tight\_box & F & 1.4e+08/\textbf{1.1e+08} & \textbf{4.6e+08}/6.0e+08 & 3.1e+06/\textbf{2.4e+06} & 7.0e+01/\textbf{6.8e+01} & \textbf{5.0e+03}/2.0e+04 & 7.4e+01/\textbf{6.8e+01} & 7.7e+06/\textbf{1.7e+06} \\
-photonMappingBenchmark & F & 2.2e+08/\textbf{2.1e+08} & \textbf{1.0e+09}/1.2e+09 & \textbf{2.0e+06}/2.6e+06 & 4.8e+02/\textbf{4.0e+02} & \textbf{2.9e+03}/1.6e+04 & 4.8e+02/\textbf{4.0e+02} & 5.4e+06/\textbf{1.4e+06} \\
-pointCloudNeighborhood & F & 1.3e+08/\textbf{8.2e+07} & \textbf{3.5e+08}/4.7e+08 & 2.9e+06/\textbf{2.1e+06} & \textbf{1.4e+02}/1.6e+02 & \textbf{5.1e+03}/1.8e+04 & \textbf{1.5e+02}/1.6e+02 & 7.7e+06/\textbf{1.4e+06} \\
-sumMassInRange & F & 1.4e+08/\textbf{1.1e+08} & \textbf{4.6e+08}/6.2e+08 & \textbf{3.1e+06}/3.6e+06 & 1.6e+02/\textbf{1.5e+02} & \textbf{4.8e+03}/2.6e+04 & 1.6e+02/\textbf{1.5e+02} & 7.6e+06/\textbf{1.8e+06} \\
-twoPointCorrelation bin\_8\_16 & F & 1.5e+08/\textbf{1.0e+08} & \textbf{5.1e+08}/6.1e+08 & 1.9e+06/\textbf{7.9e+05} & \textbf{6.5e+01}/1.7e+02 & 1.9e+04/\textbf{1.2e+04} & \textbf{6.5e+01}/1.7e+02 & 7.6e+06/\textbf{1.3e+06} \\
+Find nearest Neighbour & F & 1.4e+08/\textbf{1.1e+08} & \textbf{4.7e+08}/6.3e+08 & 2.9e+06/\textbf{1.6e+06} & 1.7e+02/\textbf{1.4e+02} & \textbf{4.4e+03}/1.7e+04 & 1.7e+02/\textbf{1.5e+02} & 7.7e+06/\textbf{1.6e+06} \\
+countInRange tight\_box & F & 1.4e+08/\textbf{9.9e+07} & \textbf{4.0e+08}/5.5e+08 & 2.2e+06/\textbf{1.8e+06} & 1.4e+02/\textbf{1.0e+02} & \textbf{3.4e+03}/1.6e+04 & 1.4e+02/\textbf{1.0e+02} & 7.7e+06/\textbf{1.6e+06} \\
+photonMappingBenchmark & F & 2.1e+08/\textbf{2.1e+08} & \textbf{1.0e+09}/1.2e+09 & \textbf{2.1e+06}/2.5e+06 & \textbf{2.1e+02}/4.1e+02 & \textbf{3.3e+03}/1.4e+04 & \textbf{2.1e+02}/4.1e+02 & 5.6e+06/\textbf{1.4e+06} \\
+pointCloudNeighborhood & F & 1.2e+08/\textbf{8.2e+07} & \textbf{3.3e+08}/4.8e+08 & 2.6e+06/\textbf{2.0e+06} & \textbf{8.2e+01}/9.0e+01 & \textbf{3.9e+03}/1.5e+04 & \textbf{8.2e+01}/9.0e+01 & 7.8e+06/\textbf{1.3e+06} \\
+sumMassInRange & F & 1.3e+08/\textbf{1.0e+08} & \textbf{4.0e+08}/5.7e+08 & \textbf{2.6e+06}/3.0e+06 & \textbf{8.1e+01}/1.2e+02 & \textbf{3.7e+03}/1.8e+04 & \textbf{8.3e+01}/1.2e+02 & 7.7e+06/\textbf{1.7e+06} \\
+twoPointCorrelation bin\_8\_16 & F & 1.4e+08/\textbf{1.1e+08} & \textbf{4.8e+08}/6.1e+08 & 2.1e+06/\textbf{6.1e+05} & \textbf{9.6e+01}/1.1e+02 & \textbf{2.8e+03}/1.4e+04 & \textbf{9.6e+01}/1.1e+02 & 7.7e+06/\textbf{1.2e+06} \\
 \midrule
-\textbf{Total} &  & 9.3e+08/7.2e+08 & 3.3e+09/4.1e+09 & 1.6e+07/1.4e+07 & 1.0e+03/1.0e+03 & 4.2e+04/1.1e+05 & 1.0e+03/1.0e+03 & 4.4e+07/9.3e+06 \\
+\textbf{Total} &  & 8.8e+08/7.0e+08 & 3.1e+09/4.0e+09 & 1.5e+07/1.2e+07 & 7.7e+02/9.8e+02 & 2.1e+04/9.5e+04 & 7.8e+02/9.8e+02 & 4.4e+07/8.9e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -530,14 +530,14 @@ twoPointCorrelation bin\_8\_16 & F & 1.5e+08/\textbf{1.0e+08} & \textbf{5.1e+08}
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-Find nearest Neighbour & F & \textbf{2.1e+08}/6.8e+08 & \textbf{6.2e+08}/1.5e+09 & \textbf{4.8e+06}/5.9e+06 & \textbf{2.6e+02}/2.0e+03 & \textbf{5.4e+03}/2.3e+04 & \textbf{2.6e+02}/1.9e+03 & 5.7e+06/\textbf{1.5e+06} \\
-countInRange tight\_box & F & \textbf{2.1e+08}/6.7e+08 & \textbf{5.4e+08}/1.3e+09 & \textbf{5.0e+06}/5.8e+06 & \textbf{1.2e+02}/1.9e+03 & \textbf{4.8e+03}/2.0e+04 & \textbf{1.2e+02}/1.9e+03 & 5.7e+06/\textbf{1.5e+06} \\
-photonMappingBenchmark & F & \textbf{2.5e+08}/7.2e+08 & \textbf{1.2e+09}/2.1e+09 & \textbf{2.3e+06}/5.6e+06 & \textbf{3.8e+02}/2.3e+03 & \textbf{3.1e+03}/2.3e+04 & \textbf{3.8e+02}/2.3e+03 & 5.1e+06/\textbf{1.6e+06} \\
-pointCloudNeighborhood & F & \textbf{2.0e+08}/6.6e+08 & \textbf{5.0e+08}/1.4e+09 & \textbf{4.3e+06}/4.9e+06 & \textbf{8.6e+01}/1.6e+03 & \textbf{5.7e+03}/1.8e+04 & \textbf{8.8e+01}/1.6e+03 & 5.9e+06/\textbf{1.4e+06} \\
-sumMassInRange & F & \textbf{2.1e+08}/6.8e+08 & \textbf{5.6e+08}/1.4e+09 & \textbf{5.1e+06}/6.6e+06 & \textbf{7.7e+01}/1.5e+03 & \textbf{4.8e+03}/2.1e+04 & \textbf{7.7e+01}/1.5e+03 & 5.6e+06/\textbf{1.6e+06} \\
-twoPointCorrelation bin\_8\_16 & F & \textbf{2.1e+08}/6.7e+08 & \textbf{6.8e+08}/1.5e+09 & 5.1e+06/\textbf{3.9e+06} & \textbf{3.0e+02}/1.5e+03 & \textbf{9.3e+03}/1.7e+04 & \textbf{3.0e+02}/1.5e+03 & 5.7e+06/\textbf{1.2e+06} \\
+Find nearest Neighbour & F & \textbf{2.0e+08}/6.0e+08 & \textbf{4.9e+08}/1.3e+09 & \textbf{4.7e+06}/5.3e+06 & \textbf{1.1e+02}/1.4e+03 & \textbf{4.5e+03}/1.9e+04 & \textbf{1.1e+02}/1.4e+03 & 5.8e+06/\textbf{1.5e+06} \\
+countInRange tight\_box & F & \textbf{2.0e+08}/6.3e+08 & \textbf{4.5e+08}/1.3e+09 & \textbf{5.2e+06}/5.9e+06 & \textbf{1.5e+02}/1.9e+03 & 3.5e+04/\textbf{1.9e+04} & \textbf{1.5e+02}/1.9e+03 & 5.6e+06/\textbf{1.5e+06} \\
+photonMappingBenchmark & F & \textbf{2.4e+08}/6.6e+08 & \textbf{1.1e+09}/2.0e+09 & \textbf{2.8e+06}/5.9e+06 & \textbf{3.9e+02}/1.5e+03 & \textbf{2.7e+03}/2.3e+04 & \textbf{3.9e+02}/1.5e+03 & 5.1e+06/\textbf{1.5e+06} \\
+pointCloudNeighborhood & F & \textbf{1.9e+08}/5.8e+08 & \textbf{4.1e+08}/1.3e+09 & 5.1e+06/\textbf{4.8e+06} & \textbf{2.0e+02}/1.2e+03 & \textbf{5.3e+03}/1.7e+04 & \textbf{2.0e+02}/1.2e+03 & 5.9e+06/\textbf{1.4e+06} \\
+sumMassInRange & F & \textbf{2.0e+08}/6.3e+08 & \textbf{4.7e+08}/1.3e+09 & \textbf{5.1e+06}/6.4e+06 & \textbf{1.6e+02}/1.5e+03 & 3.3e+04/\textbf{2.0e+04} & \textbf{1.6e+02}/1.5e+03 & 5.6e+06/\textbf{1.6e+06} \\
+twoPointCorrelation bin\_8\_16 & F & \textbf{2.0e+08}/5.8e+08 & \textbf{6.1e+08}/1.4e+09 & 4.8e+06/\textbf{3.7e+06} & \textbf{2.5e+02}/1.3e+03 & \textbf{7.8e+03}/1.6e+04 & \textbf{2.5e+02}/1.3e+03 & 5.8e+06/\textbf{1.3e+06} \\
 \midrule
-\textbf{Total} &  & 1.3e+09/4.1e+09 & 4.1e+09/9.2e+09 & 2.7e+07/3.3e+07 & 1.2e+03/1.1e+04 & 3.3e+04/1.2e+05 & 1.2e+03/1.1e+04 & 3.4e+07/8.8e+06 \\
+\textbf{Total} &  & 1.2e+09/3.7e+09 & 3.5e+09/8.4e+09 & 2.8e+07/3.2e+07 & 1.3e+03/8.9e+03 & 8.9e+04/1.1e+05 & 1.3e+03/8.9e+03 & 3.4e+07/8.7e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -553,10 +553,10 @@ twoPointCorrelation bin\_8\_16 & F & \textbf{2.1e+08}/6.7e+08 & \textbf{6.8e+08}
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-reduction & F & 2/11 & 82\% & 0.0286$\pm$0.00002 & 0.1628$\pm$0.00125 & \textbf{0.0050$\pm$0.00002} & \textit{OOM} & \textbf{5.74$\times$} & \textbf{5.69$\times$} & \textbf{32.70$\times$} & -- \\
+reduction & F & 2/11 & 82\% & 0.0289$\pm$0.00002 & 0.1391$\pm$0.00174 & \textbf{0.0049$\pm$0.00001} & \textit{OOM} & \textbf{5.84$\times$} & \textbf{4.82$\times$} & \textbf{28.11$\times$} & -- \\
 \midrule
-\textbf{Total} & & & & 0.0286 & 0.1628 & \textbf{0.0050} & -- & \textbf{5.74$\times$} & \textbf{5.69$\times$} & \textbf{32.70$\times$} & -- \\
-\textbf{Geomean} & & & & & & & & \textbf{5.74$\times$} & \textbf{5.69$\times$} & \textbf{32.70$\times$} & -- \\
+\textbf{Total} & & & & 0.0289 & 0.1391 & \textbf{0.0049} & -- & \textbf{5.84$\times$} & \textbf{4.82$\times$} & \textbf{28.11$\times$} & -- \\
+\textbf{Geomean} & & & & & & & & \textbf{5.84$\times$} & \textbf{4.82$\times$} & \textbf{28.11$\times$} & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -573,9 +573,9 @@ reduction & F & 2/11 & 82\% & 0.0286$\pm$0.00002 & 0.1628$\pm$0.00125 & \textbf{
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-reduction & F & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 4.7e+06/\textbf{5.8e+04} & 7.6e+02/\textbf{4.2e+01} & 1.9e+06/\textbf{7.3e+03} & 7.6e+02/\textbf{4.3e+01} & 1.2e+07/\textbf{1.1e+06} \\
+reduction & F & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 1.5e+06/\textbf{4.6e+04} & 2.3e+02/\textbf{4.3e+01} & 2.7e+05/\textbf{6.9e+03} & 2.3e+02/\textbf{4.4e+01} & 1.2e+07/\textbf{1.1e+06} \\
 \midrule
-\textbf{Total} &  & 1.5e+08/2.5e+07 & 9.0e+07/1.0e+08 & 4.7e+06/5.8e+04 & 7.6e+02/4.2e+01 & 1.9e+06/7.3e+03 & 7.6e+02/4.3e+01 & 1.2e+07/1.1e+06 \\
+\textbf{Total} &  & 1.5e+08/2.5e+07 & 9.0e+07/1.0e+08 & 1.5e+06/4.6e+04 & 2.3e+02/4.3e+01 & 2.7e+05/6.9e+03 & 2.3e+02/4.4e+01 & 1.2e+07/1.1e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -592,9 +592,9 @@ reduction & F & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 4.7e+06/\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-reduction & F & 8.3e+08/-- & 3.7e+08/-- & 5.0e+06/-- & 2.8e+03/-- & 3.3e+05/-- & 2.8e+03/-- & 3.0e+07/-- \\
+reduction & F & 7.1e+08/-- & 2.5e+08/-- & 5.0e+06/-- & 4.4e+02/-- & 5.3e+05/-- & 4.5e+02/-- & 2.6e+07/-- \\
 \midrule
-\textbf{Total} &  & 8.3e+08/-- & 3.7e+08/-- & 5.0e+06/-- & 2.8e+03/-- & 3.3e+05/-- & 2.8e+03/-- & 3.0e+07/-- \\
+\textbf{Total} &  & 7.1e+08/-- & 2.5e+08/-- & 5.0e+06/-- & 4.4e+02/-- & 5.3e+05/-- & 4.5e+02/-- & 2.6e+07/-- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -610,13 +610,13 @@ reduction & F & 8.3e+08/-- & 3.7e+08/-- & 5.0e+06/-- & 2.8e+03/-- & 3.3e+05/-- &
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-add1 List & M & 2/2 & 0\% & \textbf{0.2548$\pm$0.00158} & \textit{OOM} & 0.3122$\pm$0.00115 & \textit{OOM} & 0.82$\times$ & -- & -- & -- \\
-length List & M & 1/2 & 50\% & 0.0413$\pm$0.00002 & \textit{OOM} & \textbf{0.0216$\pm$0.00001} & \textit{OOM} & \textbf{1.91$\times$} & -- & -- & -- \\
-sumList & F & 2/2 & 0\% & \textbf{0.0440$\pm$0.00001} & \textit{OOM} & 0.0453$\pm$0.00001 & \textit{OOM} & 0.97$\times$ & -- & -- & -- \\
-sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0440$\pm$0.00001} & \textit{OOM} & 0.0450$\pm$0.00001 & \textit{OOM} & 0.98$\times$ & -- & -- & -- \\
+add1 List & M & 2/2 & 0\% & \textbf{0.2508$\pm$0.00204} & \textit{OOM} & 0.3392$\pm$0.00213 & \textit{OOM} & 0.74$\times$ & -- & -- & -- \\
+length List & M & 1/2 & 50\% & 0.0413$\pm$0.00001 & \textit{OOM} & \textbf{0.0215$\pm$0.00003} & \textit{OOM} & \textbf{1.92$\times$} & -- & -- & -- \\
+sumList & F & 2/2 & 0\% & \textbf{0.0441$\pm$0.00002} & \textit{OOM} & 0.0451$\pm$0.00022 & \textit{OOM} & 0.98$\times$ & -- & -- & -- \\
+sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0443$\pm$0.00002} & \textit{OOM} & 0.0445$\pm$0.00001 & \textit{OOM} & 1.00$\times$ & -- & -- & -- \\
 \midrule
-\textbf{Total} & & & & \textbf{0.3840} & -- & 0.4241 & -- & 0.91$\times$ & -- & -- & -- \\
-\textbf{Geomean} & & & & & & & & \textbf{1.10$\times$} & -- & -- & -- \\
+\textbf{Total} & & & & \textbf{0.3805} & -- & 0.4503 & -- & 0.85$\times$ & -- & -- & -- \\
+\textbf{Geomean} & & & & & & & & 1.08$\times$ & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -633,12 +633,12 @@ sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0440$\pm$0.00001} & \textit{O
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-add1 List & M & \textbf{6.0e+08}/8.3e+08 & \textbf{1.9e+09}/3.1e+09 & 7.8e+06/\textbf{1.1e+06} & \textbf{3.1e+05}/5.7e+05 & \textbf{1.2e+04}/5.5e+04 & 1.4e+04/\textbf{1.4e+04} & 9.1e+06/\textbf{8.1e+06} \\
-length List & M & 2.1e+08/\textbf{1.1e+08} & 8.0e+08/\textbf{8.0e+08} & \textbf{1.3e+05}/2.8e+05 & 1.9e+02/\textbf{7.4e+01} & \textbf{3.4e+03}/1.8e+04 & 1.9e+02/\textbf{7.4e+01} & 1.3e+07/\textbf{1.2e+06} \\
-sumList & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.1e+09 & 9.5e+05/\textbf{6.2e+05} & 2.5e+02/\textbf{7.8e+01} & \textbf{4.1e+03}/5.9e+04 & 2.5e+02/\textbf{7.9e+01} & 1.3e+07/\textbf{1.2e+07} \\
-sumList tail recursive & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.1e+09 & 9.5e+05/\textbf{7.0e+05} & 1.8e+02/\textbf{1.3e+02} & \textbf{4.1e+03}/5.3e+04 & 1.9e+02/\textbf{1.3e+02} & 1.3e+07/\textbf{1.2e+07} \\
+add1 List & M & \textbf{5.9e+08}/9.6e+08 & \textbf{1.9e+09}/2.8e+09 & 8.0e+06/\textbf{1.4e+06} & \textbf{3.0e+05}/5.9e+05 & \textbf{1.1e+04}/5.6e+04 & \textbf{9.2e+03}/1.4e+04 & 9.1e+06/\textbf{7.8e+06} \\
+length List & M & 2.1e+08/\textbf{1.1e+08} & 8.0e+08/\textbf{8.0e+08} & 1.1e+05/\textbf{8.8e+04} & 1.0e+02/\textbf{7.9e+01} & \textbf{2.7e+03}/1.4e+04 & 1.0e+02/\textbf{8.0e+01} & 1.3e+07/\textbf{1.1e+06} \\
+sumList & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.0e+09 & 6.8e+05/\textbf{5.4e+05} & 8.9e+01/\textbf{7.9e+01} & \textbf{3.1e+03}/6.8e+04 & 9.0e+01/\textbf{8.0e+01} & 1.3e+07/\textbf{1.2e+07} \\
+sumList tail recursive & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.0e+09 & \textbf{5.5e+05}/5.6e+05 & \textbf{1.3e+02}/1.4e+02 & \textbf{2.8e+03}/5.8e+04 & \textbf{1.4e+02}/1.4e+02 & 1.3e+07/\textbf{1.2e+07} \\
 \midrule
-\textbf{Total} &  & 1.3e+09/1.4e+09 & 4.5e+09/6.1e+09 & 9.8e+06/2.7e+06 & 3.1e+05/5.7e+05 & 2.4e+04/1.8e+05 & 1.5e+04/1.4e+04 & 4.9e+07/3.4e+07 \\
+\textbf{Total} &  & 1.2e+09/1.5e+09 & 4.5e+09/5.6e+09 & 9.4e+06/2.6e+06 & 3.0e+05/5.9e+05 & 1.9e+04/2.0e+05 & 9.6e+03/1.4e+04 & 4.8e+07/3.3e+07 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -672,12 +672,12 @@ sumList tail recursive & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.1e+09
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-add1Tree & M & 3/3 & 0\% & 0.0463$\pm$0.00130 & 0.0658$\pm$0.00117 & \textbf{0.0421$\pm$0.00041} & 0.1299$\pm$0.00010 & \textbf{1.10$\times$} & \textbf{1.42$\times$} & \textbf{1.56$\times$} & 0.51$\times$ \\
-sumTree & F & 3/3 & 0\% & 0.0116$\pm$0.00001 & 0.0424$\pm$0.00001 & \textbf{0.0113$\pm$0.00001} & 0.0813$\pm$0.00172 & 1.02$\times$ & \textbf{3.67$\times$} & \textbf{3.74$\times$} & 0.52$\times$ \\
-sumTree TailRec & F & 3/3 & 0\% & 0.0120$\pm$0.00000 & 0.0425$\pm$0.00001 & \textbf{0.0111$\pm$0.00001} & 0.0820$\pm$0.00005 & 1.08$\times$ & \textbf{3.54$\times$} & \textbf{3.82$\times$} & 0.52$\times$ \\
+add1Tree & M & 3/3 & 0\% & 0.0453$\pm$0.00040 & 0.0604$\pm$0.00041 & \textbf{0.0428$\pm$0.00043} & 0.1125$\pm$0.00117 & 1.06$\times$ & \textbf{1.33$\times$} & \textbf{1.41$\times$} & 0.54$\times$ \\
+sumTree & F & 3/3 & 0\% & \textbf{0.0090$\pm$0.00000} & 0.0401$\pm$0.00001 & 0.0113$\pm$0.00001 & 0.0805$\pm$0.00002 & 0.79$\times$ & \textbf{4.48$\times$} & \textbf{3.55$\times$} & 0.50$\times$ \\
+sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0083$\pm$0.00000} & 0.0401$\pm$0.00115 & 0.0111$\pm$0.00002 & 0.0806$\pm$0.00002 & 0.75$\times$ & \textbf{4.85$\times$} & \textbf{3.63$\times$} & 0.50$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.0699 & 0.1507 & \textbf{0.0645} & 0.2933 & 1.08$\times$ & \textbf{2.16$\times$} & \textbf{2.34$\times$} & 0.51$\times$ \\
-\textbf{Geomean} & & & & & & & & 1.07$\times$ & \textbf{2.64$\times$} & \textbf{2.82$\times$} & 0.52$\times$ \\
+\textbf{Total} & & & & \textbf{0.0626} & 0.1407 & 0.0652 & 0.2735 & 0.96$\times$ & \textbf{2.25$\times$} & \textbf{2.16$\times$} & 0.51$\times$ \\
+\textbf{Geomean} & & & & & & & & 0.86$\times$ & \textbf{3.07$\times$} & \textbf{2.63$\times$} & 0.51$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -694,11 +694,11 @@ sumTree TailRec & F & 3/3 & 0\% & 0.0120$\pm$0.00000 & 0.0425$\pm$0.00001 & \tex
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-add1Tree & M & 1.7e+08/\textbf{1.4e+08} & \textbf{5.0e+08}/6.4e+08 & \textbf{1.5e+05}/4.4e+05 & \textbf{4.6e+04}/7.4e+04 & \textbf{2.4e+03}/5.8e+03 & \textbf{3.7e+03}/3.9e+03 & 5.0e+05/\textbf{4.6e+05} \\
-sumTree & F & 5.8e+07/\textbf{5.8e+07} & \textbf{2.1e+08}/2.5e+08 & \textbf{3.9e+03}/4.9e+04 & \textbf{2.0e+02}/5.2e+02 & \textbf{4.7e+02}/4.3e+03 & \textbf{2.0e+02}/5.2e+02 & 7.1e+05/\textbf{6.2e+05} \\
-sumTree TailRec & F & 6.1e+07/\textbf{5.6e+07} & \textbf{1.9e+08}/2.2e+08 & \textbf{3.9e+03}/3.4e+04 & \textbf{2.2e+02}/5.1e+02 & \textbf{5.3e+02}/4.1e+03 & \textbf{2.2e+02}/5.1e+02 & 6.9e+05/\textbf{6.1e+05} \\
+add1Tree & M & 1.6e+08/\textbf{1.5e+08} & \textbf{5.0e+08}/5.9e+08 & \textbf{2.2e+05}/4.0e+05 & \textbf{3.5e+04}/4.5e+04 & \textbf{1.9e+03}/5.0e+03 & \textbf{1.2e+03}/1.7e+03 & 5.1e+05/\textbf{4.5e+05} \\
+sumTree & F & \textbf{4.6e+07}/5.7e+07 & \textbf{2.2e+08}/2.6e+08 & \textbf{1.0e+04}/3.3e+04 & \textbf{1.5e+02}/2.5e+02 & \textbf{1.1e+03}/3.9e+03 & \textbf{1.5e+02}/2.5e+02 & 7.6e+05/\textbf{6.1e+05} \\
+sumTree TailRec & F & \textbf{4.2e+07}/5.6e+07 & \textbf{1.9e+08}/2.2e+08 & \textbf{5.8e+03}/1.9e+04 & \textbf{1.6e+02}/3.1e+02 & \textbf{6.8e+02}/3.9e+03 & \textbf{1.7e+02}/3.1e+02 & 7.7e+05/\textbf{6.0e+05} \\
 \midrule
-\textbf{Total} &  & 2.9e+08/2.6e+08 & 9.1e+08/1.1e+09 & 1.6e+05/5.3e+05 & 4.7e+04/7.6e+04 & 3.4e+03/1.4e+04 & 4.1e+03/4.9e+03 & 1.9e+06/1.7e+06 \\
+\textbf{Total} &  & 2.5e+08/2.6e+08 & 9.1e+08/1.1e+09 & 2.4e+05/4.6e+05 & 3.5e+04/4.6e+04 & 3.7e+03/1.3e+04 & 1.5e+03/2.3e+03 & 2.0e+06/1.7e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -715,11 +715,11 @@ sumTree TailRec & F & 6.1e+07/\textbf{5.6e+07} & \textbf{1.9e+08}/2.2e+08 & \tex
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-add1Tree & M & \textbf{2.7e+08}/5.9e+08 & \textbf{9.1e+08}/1.4e+09 & \textbf{2.4e+05}/1.1e+06 & \textbf{3.6e+04}/6.6e+04 & \textbf{1.9e+03}/2.2e+04 & 3.0e+03/\textbf{2.5e+03} & 4.7e+05/\textbf{3.7e+05} \\
-sumTree & F & \textbf{2.2e+08}/4.1e+08 & \textbf{6.0e+08}/7.6e+08 & \textbf{9.2e+04}/1.1e+06 & \textbf{2.8e+02}/3.6e+02 & \textbf{8.3e+02}/1.8e+04 & 2.8e+02/\textbf{2.7e+02} & 3.7e+05/\textbf{3.5e+05} \\
-sumTree TailRec & F & \textbf{2.2e+08}/4.2e+08 & \textbf{6.0e+08}/7.6e+08 & \textbf{9.8e+04}/1.1e+06 & 1.7e+02/\textbf{9.5e+01} & \textbf{8.8e+02}/1.8e+04 & 1.7e+02/\textbf{9.6e+01} & \textbf{3.5e+05}/3.6e+05 \\
+add1Tree & M & \textbf{2.4e+08}/5.0e+08 & \textbf{7.1e+08}/1.2e+09 & \textbf{1.4e+05}/9.7e+05 & \textbf{3.2e+04}/5.0e+04 & \textbf{1.7e+03}/1.6e+04 & \textbf{1.3e+03}/3.0e+03 & 4.1e+05/\textbf{4.0e+05} \\
+sumTree & F & \textbf{2.0e+08}/4.1e+08 & \textbf{4.3e+08}/6.3e+08 & \textbf{7.6e+04}/8.9e+05 & \textbf{1.8e+02}/3.1e+02 & \textbf{1.0e+03}/1.3e+04 & \textbf{1.8e+02}/2.5e+02 & \textbf{3.3e+05}/3.5e+05 \\
+sumTree TailRec & F & \textbf{2.0e+08}/4.1e+08 & \textbf{4.1e+08}/6.4e+08 & \textbf{6.4e+04}/8.7e+05 & 5.1e+02/\textbf{9.2e+01} & \textbf{1.1e+03}/1.3e+04 & 5.0e+02/\textbf{8.9e+01} & \textbf{3.3e+05}/3.5e+05 \\
 \midrule
-\textbf{Total} &  & 7.0e+08/1.4e+09 & 2.1e+09/2.9e+09 & 4.3e+05/3.4e+06 & 3.7e+04/6.7e+04 & 3.6e+03/5.8e+04 & 3.5e+03/2.9e+03 & 1.2e+06/1.1e+06 \\
+\textbf{Total} &  & 6.5e+08/1.3e+09 & 1.6e+09/2.5e+09 & 2.8e+05/2.7e+06 & 3.3e+04/5.1e+04 & 3.8e+03/4.1e+04 & 2.0e+03/3.4e+03 & 1.1e+06/1.1e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -735,18 +735,18 @@ sumTree TailRec & F & \textbf{2.2e+08}/4.2e+08 & \textbf{6.0e+08}/7.6e+08 & \tex
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-countLargeItems & F & 3/5 & 40\% & 0.0145$\pm$0.00000 & 0.0452$\pm$0.00001 & \textbf{0.0109$\pm$0.00001} & 0.0523$\pm$0.00125 & \textbf{1.33$\times$} & \textbf{3.11$\times$} & \textbf{4.14$\times$} & 0.86$\times$ \\
-countMarked & F & 3/5 & 40\% & 0.0147$\pm$0.00000 & 0.0455$\pm$0.00001 & \textbf{0.0108$\pm$0.00002} & 0.0502$\pm$0.00109 & \textbf{1.36$\times$} & \textbf{3.09$\times$} & \textbf{4.20$\times$} & 0.91$\times$ \\
-countSurvivors & F & 4/5 & 20\% & 0.0147$\pm$0.00000 & 0.0475$\pm$0.00001 & \textbf{0.0128$\pm$0.00000} & 0.0520$\pm$0.00102 & \textbf{1.15$\times$} & \textbf{3.23$\times$} & \textbf{3.72$\times$} & 0.91$\times$ \\
-deadBytes & F & 4/5 & 20\% & 0.0154$\pm$0.00000 & 0.0464$\pm$0.00090 & \textbf{0.0127$\pm$0.00001} & 0.0512$\pm$0.00001 & \textbf{1.21$\times$} & \textbf{3.02$\times$} & \textbf{3.66$\times$} & 0.91$\times$ \\
-liveBytes & F & 4/5 & 20\% & 0.0155$\pm$0.00069 & 0.0464$\pm$0.00000 & \textbf{0.0127$\pm$0.00001} & 0.0512$\pm$0.00001 & \textbf{1.22$\times$} & \textbf{2.99$\times$} & \textbf{3.65$\times$} & 0.91$\times$ \\
-sumObjIds & F & 3/5 & 40\% & 0.0142$\pm$0.00001 & 0.0441$\pm$0.00002 & \textbf{0.0102$\pm$0.00002} & 0.0506$\pm$0.00001 & \textbf{1.39$\times$} & \textbf{3.10$\times$} & \textbf{4.31$\times$} & 0.87$\times$ \\
-sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0738$\pm$0.00006} & 0.0919$\pm$0.00007 & 0.0791$\pm$0.00105 & 0.2025$\pm$0.00022 & 0.93$\times$ & \textbf{1.25$\times$} & \textbf{1.16$\times$} & 0.45$\times$ \\
-totalHeapSize & F & 3/5 & 40\% & 0.0142$\pm$0.00017 & 0.0440$\pm$0.00016 & \textbf{0.0106$\pm$0.00101} & 0.0508$\pm$0.00003 & \textbf{1.35$\times$} & \textbf{3.09$\times$} & \textbf{4.16$\times$} & 0.87$\times$ \\
-touchHotObjects & M & 5/5 & 0\% & \textbf{0.0767$\pm$0.00006} & 0.0913$\pm$0.00022 & 0.0774$\pm$0.00004 & 0.2119$\pm$0.00155 & 0.99$\times$ & \textbf{1.19$\times$} & \textbf{1.18$\times$} & 0.43$\times$ \\
+countLargeItems & F & 3/5 & 40\% & 0.0122$\pm$0.00000 & 0.0444$\pm$0.00001 & \textbf{0.0103$\pm$0.00002} & 0.0464$\pm$0.00114 & \textbf{1.18$\times$} & \textbf{3.62$\times$} & \textbf{4.29$\times$} & 0.96$\times$ \\
+countMarked & F & 3/5 & 40\% & 0.0123$\pm$0.00000 & 0.0445$\pm$0.00001 & \textbf{0.0108$\pm$0.00002} & 0.0467$\pm$0.00002 & \textbf{1.13$\times$} & \textbf{3.64$\times$} & \textbf{4.12$\times$} & 0.95$\times$ \\
+countSurvivors & F & 4/5 & 20\% & 0.0133$\pm$0.00068 & 0.0447$\pm$0.00173 & \textbf{0.0131$\pm$0.00001} & 0.0468$\pm$0.00001 & 1.01$\times$ & \textbf{3.37$\times$} & \textbf{3.42$\times$} & 0.96$\times$ \\
+deadBytes & F & 4/5 & 20\% & 0.0129$\pm$0.00003 & 0.0440$\pm$0.00002 & \textbf{0.0125$\pm$0.00001} & 0.0470$\pm$0.00001 & 1.03$\times$ & \textbf{3.40$\times$} & \textbf{3.51$\times$} & 0.94$\times$ \\
+liveBytes & F & 4/5 & 20\% & 0.0129$\pm$0.00068 & 0.0433$\pm$0.00132 & \textbf{0.0126$\pm$0.00000} & 0.0470$\pm$0.00001 & 1.02$\times$ & \textbf{3.36$\times$} & \textbf{3.43$\times$} & 0.92$\times$ \\
+sumObjIds & F & 3/5 & 40\% & 0.0122$\pm$0.00001 & 0.0432$\pm$0.00001 & \textbf{0.0104$\pm$0.00002} & 0.0471$\pm$0.00015 & \textbf{1.17$\times$} & \textbf{3.55$\times$} & \textbf{4.14$\times$} & 0.92$\times$ \\
+sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0718$\pm$0.00006} & 0.0871$\pm$0.00006 & 0.0807$\pm$0.00114 & 0.1858$\pm$0.00007 & 0.89$\times$ & \textbf{1.21$\times$} & 1.08$\times$ & 0.47$\times$ \\
+totalHeapSize & F & 3/5 & 40\% & 0.0120$\pm$0.00011 & 0.0432$\pm$0.00127 & \textbf{0.0106$\pm$0.00010} & 0.0472$\pm$0.00004 & \textbf{1.14$\times$} & \textbf{3.58$\times$} & \textbf{4.07$\times$} & 0.92$\times$ \\
+touchHotObjects & M & 5/5 & 0\% & \textbf{0.0707$\pm$0.00108} & 0.0868$\pm$0.00022 & 0.0804$\pm$0.00002 & 0.1898$\pm$0.00247 & 0.88$\times$ & \textbf{1.23$\times$} & 1.08$\times$ & 0.46$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.2538 & 0.5022 & \textbf{0.2371} & 0.7727 & 1.07$\times$ & \textbf{1.98$\times$} & \textbf{2.12$\times$} & 0.65$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.20$\times$} & \textbf{2.51$\times$} & \textbf{3.03$\times$} & 0.76$\times$ \\
+\textbf{Total} & & & & \textbf{0.2303} & 0.4812 & 0.2415 & 0.7037 & 0.95$\times$ & \textbf{2.09$\times$} & \textbf{1.99$\times$} & 0.68$\times$ \\
+\textbf{Geomean} & & & & & & & & 1.05$\times$ & \textbf{2.77$\times$} & \textbf{2.90$\times$} & 0.80$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -763,17 +763,17 @@ touchHotObjects & M & 5/5 & 0\% & \textbf{0.0767$\pm$0.00006} & 0.0913$\pm$0.000
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-countLargeItems & F & 7.4e+07/\textbf{5.5e+07} & \textbf{2.7e+08}/3.0e+08 & 1.9e+05/\textbf{4.2e+04} & 4.6e+02/\textbf{3.5e+02} & \textbf{3.0e+03}/3.8e+03 & 4.6e+02/\textbf{3.5e+02} & 2.6e+06/\textbf{6.4e+05} \\
-countMarked & F & 7.5e+07/\textbf{5.5e+07} & \textbf{2.7e+08}/3.0e+08 & 1.9e+05/\textbf{4.2e+04} & 4.4e+02/\textbf{4.1e+02} & \textbf{2.7e+03}/4.4e+03 & 4.3e+02/\textbf{4.1e+02} & 2.6e+06/\textbf{6.6e+05} \\
-countSurvivors & F & 7.5e+07/\textbf{6.5e+07} & \textbf{3.0e+08}/3.5e+08 & 1.7e+05/\textbf{7.2e+04} & 4.4e+02/\textbf{3.0e+02} & \textbf{2.6e+03}/5.6e+03 & 4.4e+02/\textbf{3.0e+02} & 2.6e+06/\textbf{1.2e+06} \\
-deadBytes & F & 7.8e+07/\textbf{6.4e+07} & \textbf{2.6e+08}/3.3e+08 & 2.4e+05/\textbf{8.2e+04} & 4.5e+02/\textbf{4.0e+02} & \textbf{2.5e+03}/6.1e+03 & 4.5e+02/\textbf{4.0e+02} & 2.6e+06/\textbf{1.2e+06} \\
-liveBytes & F & 7.8e+07/\textbf{6.4e+07} & \textbf{2.6e+08}/3.3e+08 & 2.2e+05/\textbf{8.3e+04} & \textbf{2.1e+02}/2.5e+02 & \textbf{1.9e+03}/6.0e+03 & \textbf{2.2e+02}/2.5e+02 & 2.6e+06/\textbf{1.2e+06} \\
-sumObjIds & F & 7.2e+07/\textbf{5.2e+07} & \textbf{2.5e+08}/2.7e+08 & 3.0e+05/\textbf{2.9e+04} & 7.0e+02/\textbf{4.4e+02} & \textbf{3.6e+03}/4.8e+03 & 7.0e+02/\textbf{4.4e+02} & 2.6e+06/\textbf{6.4e+05} \\
-sweepUnmarked & M & \textbf{2.0e+08}/2.3e+08 & \textbf{5.5e+08}/9.4e+08 & 8.6e+05/\textbf{4.4e+05} & \textbf{9.3e+04}/1.2e+05 & \textbf{6.0e+03}/1.2e+04 & 1.1e+04/\textbf{9.2e+03} & 2.0e+06/\textbf{1.0e+06} \\
-totalHeapSize & F & 7.2e+07/\textbf{5.3e+07} & \textbf{2.5e+08}/2.7e+08 & 3.0e+05/\textbf{3.5e+04} & 5.5e+02/\textbf{4.6e+02} & \textbf{3.2e+03}/3.9e+03 & 5.5e+02/\textbf{4.5e+02} & 2.6e+06/\textbf{6.5e+05} \\
-touchHotObjects & M & \textbf{2.2e+08}/2.2e+08 & \textbf{5.5e+08}/9.3e+08 & 5.5e+05/\textbf{5.2e+05} & \textbf{7.8e+04}/1.1e+05 & \textbf{5.3e+03}/1.1e+04 & 8.1e+03/\textbf{6.1e+03} & 1.9e+06/\textbf{1.0e+06} \\
+countLargeItems & F & 6.2e+07/\textbf{5.2e+07} & \textbf{2.6e+08}/2.8e+08 & 1.2e+06/\textbf{5.4e+04} & 3.7e+02/\textbf{1.4e+02} & \textbf{3.3e+03}/3.7e+03 & 3.7e+02/\textbf{1.4e+02} & 2.9e+06/\textbf{6.5e+05} \\
+countMarked & F & 6.2e+07/\textbf{5.5e+07} & \textbf{2.6e+08}/2.8e+08 & 1.2e+06/\textbf{4.2e+04} & 2.6e+02/\textbf{1.7e+02} & \textbf{3.2e+03}/3.9e+03 & 2.6e+02/\textbf{1.7e+02} & 2.9e+06/\textbf{6.4e+05} \\
+countSurvivors & F & 6.7e+07/\textbf{6.6e+07} & \textbf{3.1e+08}/3.8e+08 & 9.9e+05/\textbf{6.9e+04} & 3.3e+02/\textbf{1.8e+02} & \textbf{2.4e+03}/5.3e+03 & 3.3e+02/\textbf{1.8e+02} & 2.7e+06/\textbf{1.2e+06} \\
+deadBytes & F & 6.6e+07/\textbf{6.3e+07} & \textbf{2.7e+08}/3.5e+08 & 7.2e+05/\textbf{5.8e+04} & 2.1e+02/\textbf{1.5e+02} & \textbf{2.3e+03}/5.3e+03 & 2.1e+02/\textbf{1.5e+02} & 2.7e+06/\textbf{1.2e+06} \\
+liveBytes & F & 6.5e+07/\textbf{6.4e+07} & \textbf{2.7e+08}/3.5e+08 & 8.8e+05/\textbf{5.8e+04} & 2.1e+02/\textbf{1.7e+02} & \textbf{2.4e+03}/5.4e+03 & 2.1e+02/\textbf{1.7e+02} & 2.8e+06/\textbf{1.2e+06} \\
+sumObjIds & F & 6.2e+07/\textbf{5.3e+07} & \textbf{2.5e+08}/2.7e+08 & 1.1e+06/\textbf{7.6e+04} & 3.2e+02/\textbf{1.1e+02} & \textbf{2.8e+03}/4.3e+03 & 3.2e+02/\textbf{1.1e+02} & 2.8e+06/\textbf{6.2e+05} \\
+sweepUnmarked & M & \textbf{1.9e+08}/2.4e+08 & \textbf{5.5e+08}/8.8e+08 & 9.8e+05/\textbf{8.0e+05} & 1.1e+05/\textbf{1.1e+05} & \textbf{5.3e+03}/1.4e+04 & \textbf{5.0e+03}/6.9e+03 & 2.0e+06/\textbf{1.0e+06} \\
+totalHeapSize & F & 6.1e+07/\textbf{5.3e+07} & \textbf{2.5e+08}/2.7e+08 & 1.2e+06/\textbf{8.6e+04} & 1.7e+02/\textbf{1.3e+02} & \textbf{2.4e+03}/3.6e+03 & 1.7e+02/\textbf{1.3e+02} & 2.9e+06/\textbf{6.4e+05} \\
+touchHotObjects & M & \textbf{1.9e+08}/2.3e+08 & \textbf{5.7e+08}/9.0e+08 & 8.1e+05/\textbf{5.5e+05} & \textbf{1.0e+05}/1.5e+05 & \textbf{5.8e+03}/1.1e+04 & \textbf{4.5e+03}/1.0e+04 & 2.0e+06/\textbf{1.1e+06} \\
 \midrule
-\textbf{Total} &  & 9.4e+08/8.6e+08 & 3.0e+09/4.0e+09 & 3.0e+06/1.3e+06 & 1.7e+05/2.4e+05 & 3.1e+04/5.7e+04 & 2.2e+04/1.8e+04 & 2.2e+07/8.3e+06 \\
+\textbf{Total} &  & 8.2e+08/8.8e+08 & 3.0e+09/4.0e+09 & 9.0e+06/1.8e+06 & 2.1e+05/2.6e+05 & 3.0e+04/5.6e+04 & 1.1e+04/1.8e+04 & 2.4e+07/8.3e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -790,17 +790,17 @@ touchHotObjects & M & \textbf{2.2e+08}/2.2e+08 & \textbf{5.5e+08}/9.3e+08 & 5.5e
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-countLargeItems & F & \textbf{2.3e+08}/2.7e+08 & \textbf{6.5e+08}/1.2e+09 & \textbf{9.2e+04}/1.1e+06 & \textbf{6.7e+01}/3.0e+02 & \textbf{1.0e+03}/1.7e+04 & \textbf{6.8e+01}/3.0e+02 & 1.8e+06/\textbf{3.5e+05} \\
-countMarked & F & \textbf{2.3e+08}/2.5e+08 & \textbf{6.5e+08}/1.1e+09 & \textbf{1.6e+05}/1.0e+06 & 1.3e+03/\textbf{2.0e+02} & \textbf{2.5e+03}/1.6e+04 & 1.3e+03/\textbf{2.1e+02} & 1.8e+06/\textbf{3.6e+05} \\
-countSurvivors & F & \textbf{2.4e+08}/2.6e+08 & \textbf{6.8e+08}/1.2e+09 & \textbf{1.2e+05}/1.7e+06 & \textbf{2.4e+02}/2.7e+02 & \textbf{1.3e+03}/7.1e+03 & \textbf{2.5e+02}/2.7e+02 & 1.7e+06/\textbf{5.8e+05} \\
-deadBytes & F & \textbf{2.4e+08}/2.6e+08 & \textbf{6.6e+08}/1.1e+09 & \textbf{1.3e+05}/1.3e+06 & \textbf{1.4e+02}/2.2e+02 & \textbf{1.3e+03}/8.4e+03 & \textbf{1.5e+02}/2.2e+02 & 1.8e+06/\textbf{6.0e+05} \\
-liveBytes & F & \textbf{2.4e+08}/2.6e+08 & \textbf{6.6e+08}/1.1e+09 & \textbf{1.3e+05}/1.3e+06 & 2.2e+02/\textbf{2.1e+02} & \textbf{1.2e+03}/8.4e+03 & 2.2e+02/\textbf{2.1e+02} & 1.8e+06/\textbf{6.1e+05} \\
-sumObjIds & F & \textbf{2.2e+08}/2.6e+08 & \textbf{6.4e+08}/1.1e+09 & \textbf{9.7e+04}/1.0e+06 & \textbf{9.0e+01}/2.1e+02 & \textbf{1.0e+03}/1.4e+04 & \textbf{9.2e+01}/2.1e+02 & 1.7e+06/\textbf{3.5e+05} \\
-sweepUnmarked & M & \textbf{3.0e+08}/8.5e+08 & \textbf{9.6e+08}/2.3e+09 & \textbf{2.1e+05}/2.5e+06 & \textbf{8.1e+04}/1.5e+05 & \textbf{4.4e+03}/2.3e+04 & \textbf{4.5e+03}/7.1e+03 & 1.8e+06/\textbf{9.4e+05} \\
-totalHeapSize & F & \textbf{2.2e+08}/2.6e+08 & \textbf{6.4e+08}/1.1e+09 & \textbf{9.4e+04}/1.0e+06 & \textbf{6.7e+01}/2.8e+02 & \textbf{9.7e+02}/1.7e+04 & \textbf{6.8e+01}/2.8e+02 & 1.8e+06/\textbf{3.6e+05} \\
-touchHotObjects & M & \textbf{2.9e+08}/9.0e+08 & \textbf{9.7e+08}/2.4e+09 & \textbf{1.7e+05}/2.5e+06 & \textbf{9.2e+04}/1.7e+05 & \textbf{4.1e+03}/2.3e+04 & \textbf{4.3e+03}/8.3e+03 & 1.8e+06/\textbf{9.3e+05} \\
+countLargeItems & F & \textbf{2.3e+08}/2.4e+08 & \textbf{4.6e+08}/7.9e+08 & 5.6e+05/\textbf{4.8e+05} & 2.4e+02/\textbf{6.2e+01} & \textbf{4.9e+03}/7.9e+03 & 2.4e+02/\textbf{6.3e+01} & 1.7e+06/\textbf{3.7e+05} \\
+countMarked & F & \textbf{2.3e+08}/2.4e+08 & \textbf{4.6e+08}/7.9e+08 & 5.6e+05/\textbf{4.9e+05} & 1.2e+02/\textbf{8.7e+01} & \textbf{5.1e+03}/9.6e+03 & 1.2e+02/\textbf{8.5e+01} & 1.7e+06/\textbf{3.8e+05} \\
+countSurvivors & F & \textbf{2.3e+08}/2.4e+08 & \textbf{5.5e+08}/8.2e+08 & \textbf{1.8e+05}/4.2e+05 & \textbf{1.6e+02}/2.6e+02 & \textbf{1.8e+03}/6.5e+03 & \textbf{1.6e+02}/2.6e+02 & 1.7e+06/\textbf{6.9e+05} \\
+deadBytes & F & \textbf{2.2e+08}/2.4e+08 & \textbf{4.9e+08}/8.1e+08 & \textbf{3.8e+05}/4.4e+05 & \textbf{1.1e+02}/3.2e+02 & \textbf{3.8e+03}/6.4e+03 & \textbf{1.1e+02}/3.2e+02 & 1.7e+06/\textbf{6.7e+05} \\
+liveBytes & F & \textbf{2.2e+08}/2.4e+08 & \textbf{5.0e+08}/8.1e+08 & \textbf{1.6e+05}/4.3e+05 & \textbf{1.3e+02}/3.0e+02 & \textbf{2.1e+03}/6.3e+03 & \textbf{1.3e+02}/3.0e+02 & 1.8e+06/\textbf{6.8e+05} \\
+sumObjIds & F & \textbf{2.2e+08}/2.4e+08 & \textbf{4.4e+08}/7.8e+08 & 5.5e+05/\textbf{5.0e+05} & 2.2e+02/\textbf{8.3e+01} & \textbf{4.9e+03}/8.9e+03 & 2.3e+02/\textbf{8.3e+01} & 1.7e+06/\textbf{3.6e+05} \\
+sweepUnmarked & M & \textbf{2.7e+08}/7.7e+08 & \textbf{7.6e+08}/2.1e+09 & \textbf{1.7e+05}/2.4e+06 & \textbf{7.8e+04}/1.4e+05 & \textbf{3.8e+03}/2.2e+04 & \textbf{2.2e+03}/5.1e+03 & 1.8e+06/\textbf{9.2e+05} \\
+totalHeapSize & F & \textbf{2.2e+08}/2.4e+08 & \textbf{4.4e+08}/7.8e+08 & \textbf{5.4e+05}/5.5e+05 & \textbf{9.1e+01}/3.5e+02 & \textbf{4.8e+03}/9.2e+03 & \textbf{9.2e+01}/3.5e+02 & 1.8e+06/\textbf{3.8e+05} \\
+touchHotObjects & M & \textbf{2.7e+08}/7.9e+08 & \textbf{7.7e+08}/2.2e+09 & \textbf{1.8e+05}/2.0e+06 & \textbf{8.9e+04}/1.3e+05 & \textbf{3.8e+03}/2.1e+04 & \textbf{2.7e+03}/6.2e+03 & 1.8e+06/\textbf{9.7e+05} \\
 \midrule
-\textbf{Total} &  & 2.2e+09/3.6e+09 & 6.5e+09/1.3e+10 & 1.2e+06/1.3e+07 & 1.8e+05/3.3e+05 & 1.8e+04/1.3e+05 & 1.1e+04/1.7e+04 & 1.6e+07/5.1e+06 \\
+\textbf{Total} &  & 2.1e+09/3.2e+09 & 4.9e+09/9.9e+09 & 3.3e+06/7.7e+06 & 1.7e+05/2.7e+05 & 3.5e+04/9.7e+04 & 6.0e+03/1.3e+04 & 1.6e+07/5.4e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -816,17 +816,17 @@ touchHotObjects & M & \textbf{2.9e+08}/9.0e+08 & \textbf{9.7e+08}/2.4e+09 & \tex
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-addConstPW & M & 8/8 & 0\% & \textbf{0.1195$\pm$0.00106} & 0.1351$\pm$0.00013 & 0.1346$\pm$0.00107 & 0.4465$\pm$0.00163 & 0.89$\times$ & \textbf{1.13$\times$} & 1.00$\times$ & 0.30$\times$ \\
-autorefineMaxLevel & F & 4/8 & 50\% & 0.0218$\pm$0.00072 & 0.0496$\pm$0.00001 & \textbf{0.0200$\pm$0.00012} & 0.2724$\pm$0.00157 & 1.09$\times$ & \textbf{2.27$\times$} & \textbf{2.48$\times$} & 0.18$\times$ \\
-compressMass & F & 3/8 & 62\% & 0.0198$\pm$0.00001 & 0.0468$\pm$0.00001 & \textbf{0.0116$\pm$0.00001} & 0.2352$\pm$0.00118 & \textbf{1.70$\times$} & \textbf{2.37$\times$} & \textbf{4.03$\times$} & 0.20$\times$ \\
-diffPW & M & 8/8 & 0\% & \textbf{0.1201$\pm$0.00015} & 0.1367$\pm$0.00127 & 0.1343$\pm$0.00116 & 0.4474$\pm$0.00120 & 0.89$\times$ & \textbf{1.14$\times$} & 1.02$\times$ & 0.31$\times$ \\
-lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0214$\pm$0.00000 & 0.0498$\pm$0.00001 & \textbf{0.0169$\pm$0.00002} & 0.2636$\pm$0.00117 & \textbf{1.27$\times$} & \textbf{2.32$\times$} & \textbf{2.95$\times$} & 0.19$\times$ \\
-norm2Estimate & F & 5/8 & 38\% & 0.0255$\pm$0.00016 & 0.0578$\pm$0.00005 & \textbf{0.0181$\pm$0.00005} & 0.2596$\pm$0.00226 & \textbf{1.41$\times$} & \textbf{2.26$\times$} & \textbf{3.19$\times$} & 0.22$\times$ \\
-pmapCutHistogram & F & 4/8 & 50\% & 0.0321$\pm$0.00001 & 0.0577$\pm$0.00117 & \textbf{0.0126$\pm$0.00000} & 0.2672$\pm$0.00013 & \textbf{2.55$\times$} & \textbf{1.80$\times$} & \textbf{4.58$\times$} & 0.22$\times$ \\
-truncateTolViolations & F & 3/8 & 62\% & 0.0201$\pm$0.00000 & 0.0475$\pm$0.00101 & \textbf{0.0117$\pm$0.00001} & 0.2267$\pm$0.00132 & \textbf{1.73$\times$} & \textbf{2.36$\times$} & \textbf{4.07$\times$} & 0.21$\times$ \\
+addConstPW & M & 8/8 & 0\% & \textbf{0.1195$\pm$0.00109} & 0.1300$\pm$0.00011 & 0.1333$\pm$0.00156 & 0.4056$\pm$0.00299 & 0.90$\times$ & 1.09$\times$ & 0.97$\times$ & 0.32$\times$ \\
+autorefineMaxLevel & F & 4/8 & 50\% & 0.0203$\pm$0.00000 & 0.0448$\pm$0.00001 & \textbf{0.0194$\pm$0.00085} & 0.2347$\pm$0.00174 & 1.04$\times$ & \textbf{2.21$\times$} & \textbf{2.31$\times$} & 0.19$\times$ \\
+compressMass & F & 3/8 & 62\% & 0.0194$\pm$0.00060 & 0.0453$\pm$0.00001 & \textbf{0.0114$\pm$0.00001} & 0.2338$\pm$0.00089 & \textbf{1.70$\times$} & \textbf{2.33$\times$} & \textbf{3.96$\times$} & 0.19$\times$ \\
+diffPW & M & 8/8 & 0\% & \textbf{0.1201$\pm$0.00013} & 0.1332$\pm$0.00147 & 0.1308$\pm$0.00113 & 0.4073$\pm$0.00135 & 0.92$\times$ & \textbf{1.11$\times$} & 1.02$\times$ & 0.33$\times$ \\
+lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0211$\pm$0.00001 & 0.0470$\pm$0.00002 & \textbf{0.0184$\pm$0.00001} & 0.2368$\pm$0.00164 & \textbf{1.15$\times$} & \textbf{2.22$\times$} & \textbf{2.56$\times$} & 0.20$\times$ \\
+norm2Estimate & F & 5/8 & 38\% & 0.0247$\pm$0.00003 & 0.0544$\pm$0.00008 & \textbf{0.0175$\pm$0.00005} & 0.1980$\pm$0.00128 & \textbf{1.41$\times$} & \textbf{2.21$\times$} & \textbf{3.11$\times$} & 0.27$\times$ \\
+pmapCutHistogram & F & 4/8 & 50\% & 0.0316$\pm$0.00001 & 0.0552$\pm$0.00114 & \textbf{0.0123$\pm$0.00001} & 0.2421$\pm$0.00284 & \textbf{2.56$\times$} & \textbf{1.75$\times$} & \textbf{4.48$\times$} & 0.23$\times$ \\
+truncateTolViolations & F & 3/8 & 62\% & 0.0197$\pm$0.00001 & 0.0459$\pm$0.00001 & \textbf{0.0114$\pm$0.00001} & 0.2022$\pm$0.00131 & \textbf{1.72$\times$} & \textbf{2.34$\times$} & \textbf{4.02$\times$} & 0.23$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.3803 & 0.5810 & \textbf{0.3598} & 2.419 & 1.06$\times$ & \textbf{1.53$\times$} & \textbf{1.61$\times$} & 0.24$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.36$\times$} & \textbf{1.88$\times$} & \textbf{2.55$\times$} & 0.22$\times$ \\
+\textbf{Total} & & & & 0.3764 & 0.5558 & \textbf{0.3546} & 2.161 & 1.06$\times$ & \textbf{1.48$\times$} & \textbf{1.57$\times$} & 0.26$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.34$\times$} & \textbf{1.83$\times$} & \textbf{2.45$\times$} & 0.24$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -843,16 +843,16 @@ truncateTolViolations & F & 3/8 & 62\% & 0.0201$\pm$0.00000 & 0.0475$\pm$0.00101
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-addConstPW & M & \textbf{2.8e+08}/3.6e+08 & \textbf{5.9e+08}/1.4e+09 & \textbf{1.2e+06}/2.2e+06 & 3.1e+05/\textbf{2.1e+05} & \textbf{1.3e+04}/2.8e+04 & \textbf{1.8e+04}/3.0e+04 & 4.4e+06/\textbf{1.8e+06} \\
-autorefineMaxLevel & F & 1.1e+08/\textbf{1.0e+08} & \textbf{3.1e+08}/4.6e+08 & 3.1e+06/\textbf{2.5e+05} & 1.0e+03/\textbf{5.8e+01} & \textbf{5.9e+03}/6.3e+03 & 1.0e+03/\textbf{5.9e+01} & 6.0e+06/\textbf{9.7e+05} \\
-compressMass & F & 1.0e+08/\textbf{5.9e+07} & \textbf{2.4e+08}/2.8e+08 & 2.1e+06/\textbf{3.3e+04} & 1.2e+03/\textbf{2.4e+02} & 1.8e+04/\textbf{4.6e+03} & 1.2e+03/\textbf{2.4e+02} & 6.2e+06/\textbf{6.1e+05} \\
-diffPW & M & \textbf{2.8e+08}/3.6e+08 & \textbf{6.0e+08}/1.4e+09 & \textbf{7.3e+05}/1.9e+06 & \textbf{1.7e+05}/2.1e+05 & \textbf{1.4e+04}/2.5e+04 & \textbf{1.5e+04}/3.1e+04 & 4.5e+06/\textbf{1.8e+06} \\
-lbDeuxLoadProxy & F & 1.1e+08/\textbf{8.6e+07} & \textbf{3.3e+08}/4.5e+08 & 2.2e+06/\textbf{3.2e+05} & 1.1e+03/\textbf{1.5e+02} & 1.7e+04/\textbf{8.7e+03} & 1.1e+03/\textbf{1.5e+02} & 6.2e+06/\textbf{1.7e+06} \\
-norm2Estimate & F & 1.3e+08/\textbf{9.2e+07} & \textbf{3.5e+08}/4.4e+08 & \textbf{1.6e+05}/5.1e+05 & 9.9e+02/\textbf{1.8e+02} & \textbf{6.1e+03}/9.4e+03 & 9.9e+02/\textbf{1.8e+02} & 5.4e+06/\textbf{1.5e+06} \\
-pmapCutHistogram & F & 1.6e+08/\textbf{6.4e+07} & \textbf{2.7e+08}/3.3e+08 & 9.3e+05/\textbf{4.9e+04} & 1.7e+03/\textbf{2.8e+02} & 5.6e+04/\textbf{7.0e+03} & 1.7e+03/\textbf{2.8e+02} & 4.6e+06/\textbf{1.3e+06} \\
-truncateTolViolations & F & 1.0e+08/\textbf{5.9e+07} & \textbf{2.4e+08}/2.8e+08 & 2.1e+06/\textbf{4.9e+04} & 1.0e+03/\textbf{2.9e+02} & 1.6e+04/\textbf{4.9e+03} & 1.0e+03/\textbf{2.9e+02} & 6.3e+06/\textbf{6.1e+05} \\
+addConstPW & M & \textbf{2.7e+08}/3.4e+08 & \textbf{5.7e+08}/1.2e+09 & \textbf{1.4e+06}/2.1e+06 & 2.9e+05/\textbf{2.7e+05} & \textbf{1.0e+04}/2.2e+04 & \textbf{8.2e+03}/2.2e+04 & 4.4e+06/\textbf{1.8e+06} \\
+autorefineMaxLevel & F & 1.0e+08/\textbf{9.8e+07} & \textbf{2.5e+08}/3.7e+08 & 2.5e+06/\textbf{1.9e+05} & 3.8e+02/\textbf{4.9e+01} & 6.5e+03/\textbf{6.2e+03} & 3.8e+02/\textbf{4.8e+01} & 6.1e+06/\textbf{9.0e+05} \\
+compressMass & F & 9.9e+07/\textbf{5.8e+07} & \textbf{2.5e+08}/2.8e+08 & 2.1e+06/\textbf{3.0e+04} & 7.4e+02/\textbf{2.8e+02} & 2.0e+04/\textbf{4.8e+03} & 7.4e+02/\textbf{2.8e+02} & 6.2e+06/\textbf{6.1e+05} \\
+diffPW & M & \textbf{2.8e+08}/3.4e+08 & \textbf{5.9e+08}/1.3e+09 & \textbf{1.1e+06}/2.1e+06 & \textbf{1.6e+05}/2.0e+05 & \textbf{1.1e+04}/2.5e+04 & \textbf{9.8e+03}/2.3e+04 & 4.4e+06/\textbf{1.8e+06} \\
+lbDeuxLoadProxy & F & 1.1e+08/\textbf{9.3e+07} & \textbf{3.3e+08}/4.9e+08 & 2.5e+06/\textbf{2.9e+05} & 4.2e+02/\textbf{1.7e+02} & 1.5e+04/\textbf{8.7e+03} & 4.2e+02/\textbf{1.7e+02} & 6.2e+06/\textbf{1.5e+06} \\
+norm2Estimate & F & 1.2e+08/\textbf{8.9e+07} & \textbf{3.4e+08}/4.4e+08 & 1.4e+06/\textbf{3.8e+05} & 2.4e+02/\textbf{1.2e+02} & 1.1e+04/\textbf{9.2e+03} & 2.5e+02/\textbf{1.2e+02} & 6.1e+06/\textbf{1.5e+06} \\
+pmapCutHistogram & F & 1.6e+08/\textbf{6.3e+07} & \textbf{2.8e+08}/3.7e+08 & 1.7e+06/\textbf{5.3e+04} & 1.6e+03/\textbf{4.1e+02} & 1.0e+05/\textbf{7.3e+03} & 1.6e+03/\textbf{4.1e+02} & 4.7e+06/\textbf{1.2e+06} \\
+truncateTolViolations & F & 1.0e+08/\textbf{5.8e+07} & \textbf{2.5e+08}/2.9e+08 & 2.1e+06/\textbf{3.2e+04} & 6.3e+02/\textbf{3.6e+02} & 1.8e+04/\textbf{4.8e+03} & 6.3e+02/\textbf{3.6e+02} & 6.3e+06/\textbf{6.2e+05} \\
 \midrule
-\textbf{Total} &  & 1.3e+09/1.2e+09 & 2.9e+09/5.0e+09 & 1.2e+07/5.3e+06 & 4.9e+05/4.2e+05 & 1.5e+05/9.3e+04 & 4.0e+04/6.2e+04 & 4.4e+07/1.0e+07 \\
+\textbf{Total} &  & 1.2e+09/1.1e+09 & 2.8e+09/4.7e+09 & 1.5e+07/5.2e+06 & 4.5e+05/4.8e+05 & 2.0e+05/8.8e+04 & 2.2e+04/4.6e+04 & 4.4e+07/9.9e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -869,16 +869,16 @@ truncateTolViolations & F & 1.0e+08/\textbf{5.9e+07} & \textbf{2.4e+08}/2.8e+08 
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-addConstPW & M & \textbf{3.5e+08}/1.9e+09 & \textbf{9.8e+08}/3.5e+09 & \textbf{4.0e+05}/5.0e+06 & \textbf{1.6e+05}/2.8e+05 & \textbf{7.8e+03}/4.2e+04 & \textbf{1.4e+04}/4.1e+04 & 4.1e+06/\textbf{1.8e+06} \\
-autorefineMaxLevel & F & \textbf{2.5e+08}/1.4e+09 & \textbf{6.8e+08}/1.5e+09 & \textbf{1.3e+06}/2.0e+06 & \textbf{1.0e+02}/1.7e+03 & \textbf{2.0e+03}/3.9e+04 & \textbf{1.0e+02}/5.5e+02 & 3.9e+06/\textbf{6.8e+05} \\
-compressMass & F & \textbf{2.4e+08}/1.2e+09 & \textbf{6.3e+08}/1.5e+09 & \textbf{2.1e+05}/1.3e+06 & \textbf{2.4e+02}/1.6e+03 & \textbf{1.8e+03}/3.0e+04 & \textbf{2.4e+02}/2.4e+02 & 4.1e+06/\textbf{3.9e+05} \\
-diffPW & M & \textbf{3.6e+08}/1.9e+09 & \textbf{1.0e+09}/3.6e+09 & \textbf{3.4e+05}/5.7e+06 & \textbf{1.4e+05}/3.6e+05 & \textbf{6.1e+03}/4.6e+04 & \textbf{7.1e+03}/2.6e+04 & 4.1e+06/\textbf{1.8e+06} \\
-lbDeuxLoadProxy & F & \textbf{2.5e+08}/1.3e+09 & \textbf{7.2e+08}/1.6e+09 & \textbf{3.2e+05}/2.7e+06 & \textbf{1.0e+02}/1.6e+03 & \textbf{1.9e+03}/4.4e+04 & \textbf{1.0e+02}/9.6e+02 & 3.9e+06/\textbf{1.0e+06} \\
-norm2Estimate & F & \textbf{2.9e+08}/1.3e+09 & \textbf{6.7e+08}/1.6e+09 & \textbf{3.6e+05}/2.7e+06 & \textbf{2.0e+02}/2.1e+03 & \textbf{1.5e+03}/4.6e+04 & \textbf{2.0e+02}/1.1e+03 & 3.8e+06/\textbf{9.7e+05} \\
-pmapCutHistogram & F & \textbf{2.9e+08}/1.4e+09 & \textbf{6.8e+08}/1.6e+09 & \textbf{4.6e+05}/1.9e+06 & 1.7e+03/\textbf{1.3e+03} & \textbf{8.5e+03}/3.7e+04 & 1.7e+03/\textbf{3.8e+02} & 3.9e+06/\textbf{6.8e+05} \\
-truncateTolViolations & F & \textbf{2.4e+08}/1.2e+09 & \textbf{6.1e+08}/1.6e+09 & \textbf{2.3e+05}/1.3e+06 & \textbf{4.6e+02}/2.1e+03 & \textbf{3.2e+03}/2.8e+04 & 4.6e+02/\textbf{4.1e+02} & 4.1e+06/\textbf{3.8e+05} \\
+addConstPW & M & \textbf{3.3e+08}/1.7e+09 & \textbf{7.8e+08}/3.3e+09 & \textbf{2.9e+05}/5.1e+06 & \textbf{1.3e+05}/3.6e+05 & \textbf{5.3e+03}/3.8e+04 & \textbf{4.3e+03}/3.3e+04 & 4.2e+06/\textbf{2.0e+06} \\
+autorefineMaxLevel & F & \textbf{2.3e+08}/1.2e+09 & \textbf{4.9e+08}/1.3e+09 & \textbf{2.9e+05}/2.1e+06 & \textbf{2.3e+02}/1.3e+03 & \textbf{1.5e+03}/4.1e+04 & \textbf{2.3e+02}/4.9e+02 & 4.1e+06/\textbf{6.8e+05} \\
+compressMass & F & \textbf{2.3e+08}/1.2e+09 & \textbf{4.7e+08}/1.2e+09 & \textbf{3.0e+05}/1.3e+06 & \textbf{1.8e+02}/1.5e+03 & \textbf{1.5e+03}/3.0e+04 & \textbf{1.8e+02}/2.4e+02 & 4.1e+06/\textbf{3.7e+05} \\
+diffPW & M & \textbf{3.4e+08}/1.7e+09 & \textbf{8.1e+08}/3.3e+09 & \textbf{2.9e+05}/5.1e+06 & \textbf{1.2e+05}/2.7e+05 & \textbf{5.6e+03}/3.6e+04 & \textbf{4.0e+03}/2.1e+04 & 4.2e+06/\textbf{1.8e+06} \\
+lbDeuxLoadProxy & F & \textbf{2.4e+08}/1.2e+09 & \textbf{5.3e+08}/1.3e+09 & \textbf{1.5e+05}/2.6e+06 & \textbf{1.4e+02}/3.1e+02 & \textbf{1.6e+03}/4.3e+04 & \textbf{1.4e+02}/3.0e+02 & 4.1e+06/\textbf{9.9e+05} \\
+norm2Estimate & F & \textbf{2.8e+08}/1.0e+09 & \textbf{5.1e+08}/1.3e+09 & \textbf{2.5e+05}/2.5e+06 & \textbf{9.7e+01}/7.0e+02 & \textbf{1.4e+03}/4.3e+04 & \textbf{9.7e+01}/5.8e+02 & 3.9e+06/\textbf{9.6e+05} \\
+pmapCutHistogram & F & \textbf{2.8e+08}/1.2e+09 & \textbf{5.0e+08}/1.3e+09 & \textbf{7.5e+05}/2.0e+06 & \textbf{9.6e+02}/2.1e+03 & \textbf{1.0e+04}/3.8e+04 & 9.7e+02/\textbf{5.9e+02} & 3.9e+06/\textbf{6.7e+05} \\
+truncateTolViolations & F & \textbf{2.3e+08}/1.0e+09 & \textbf{4.4e+08}/1.3e+09 & \textbf{3.2e+05}/1.3e+06 & \textbf{3.9e+02}/3.8e+03 & \textbf{3.6e+03}/2.7e+04 & \textbf{3.9e+02}/1.0e+03 & 4.0e+06/\textbf{3.7e+05} \\
 \midrule
-\textbf{Total} &  & 2.3e+09/1.2e+10 & 6.0e+09/1.7e+10 & 3.6e+06/2.3e+07 & 3.1e+05/6.5e+05 & 3.3e+04/3.1e+05 & 2.4e+04/7.1e+04 & 3.2e+07/7.7e+06 \\
+\textbf{Total} &  & 2.2e+09/1.0e+10 & 4.5e+09/1.4e+10 & 2.6e+06/2.2e+07 & 2.5e+05/6.4e+05 & 3.1e+04/2.9e+05 & 1.0e+04/5.8e+04 & 3.2e+07/7.8e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -894,11 +894,11 @@ truncateTolViolations & F & \textbf{2.4e+08}/1.2e+09 & \textbf{6.1e+08}/1.6e+09 
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-add 1 tree & M & 5/5 & 0\% & 0.0843$\pm$0.00107 & 0.0966$\pm$0.00015 & \textbf{0.0773$\pm$0.00118} & 0.3663$\pm$0.00210 & 1.09$\times$ & \textbf{1.15$\times$} & \textbf{1.25$\times$} & 0.26$\times$ \\
-sum tree & F & 5/5 & 0\% & 0.0299$\pm$0.00003 & 0.0524$\pm$0.00001 & \textbf{0.0292$\pm$0.00012} & 0.2507$\pm$0.00119 & 1.02$\times$ & \textbf{1.75$\times$} & \textbf{1.80$\times$} & 0.21$\times$ \\
+add 1 tree & M & 5/5 & 0\% & 0.0829$\pm$0.00015 & 0.0933$\pm$0.00021 & \textbf{0.0800$\pm$0.00289} & 0.3410$\pm$0.00173 & 1.04$\times$ & \textbf{1.12$\times$} & \textbf{1.17$\times$} & 0.27$\times$ \\
+sum tree & F & 5/5 & 0\% & 0.0278$\pm$0.00099 & 0.0503$\pm$0.00002 & \textbf{0.0256$\pm$0.00008} & 0.2768$\pm$0.00211 & 1.09$\times$ & \textbf{1.81$\times$} & \textbf{1.96$\times$} & 0.18$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.1142 & 0.1490 & \textbf{0.1065} & 0.6170 & 1.07$\times$ & \textbf{1.30$\times$} & \textbf{1.40$\times$} & 0.24$\times$ \\
-\textbf{Geomean} & & & & & & & & 1.06$\times$ & \textbf{1.42$\times$} & \textbf{1.50$\times$} & 0.23$\times$ \\
+\textbf{Total} & & & & 0.1108 & 0.1436 & \textbf{0.1056} & 0.6178 & 1.05$\times$ & \textbf{1.30$\times$} & \textbf{1.36$\times$} & 0.23$\times$ \\
+\textbf{Geomean} & & & & & & & & 1.06$\times$ & \textbf{1.43$\times$} & \textbf{1.51$\times$} & 0.22$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -915,10 +915,10 @@ sum tree & F & 5/5 & 0\% & 0.0299$\pm$0.00003 & 0.0524$\pm$0.00001 & \textbf{0.0
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-add 1 tree & M & 2.7e+08/\textbf{2.3e+08} & \textbf{7.5e+08}/1.1e+09 & \textbf{4.3e+05}/1.3e+06 & \textbf{6.6e+04}/1.3e+05 & \textbf{4.3e+03}/1.2e+04 & \textbf{3.6e+03}/4.0e+03 & 1.5e+06/\textbf{1.1e+06} \\
-sum tree & F & 1.5e+08/\textbf{1.5e+08} & \textbf{4.8e+08}/5.1e+08 & \textbf{5.8e+04}/1.5e+05 & \textbf{1.1e+02}/3.4e+02 & \textbf{8.3e+02}/9.0e+03 & \textbf{1.1e+02}/3.4e+02 & 1.7e+06/\textbf{1.2e+06} \\
+add 1 tree & M & 2.7e+08/\textbf{2.3e+08} & \textbf{7.5e+08}/9.8e+08 & \textbf{4.3e+05}/1.2e+06 & \textbf{6.3e+04}/1.7e+05 & \textbf{3.4e+03}/1.2e+04 & 2.5e+03/\textbf{9.0e+02} & 1.5e+06/\textbf{1.1e+06} \\
+sum tree & F & 1.4e+08/\textbf{1.3e+08} & \textbf{4.6e+08}/5.4e+08 & \textbf{7.9e+04}/4.1e+05 & \textbf{6.0e+01}/6.9e+01 & \textbf{7.8e+02}/9.1e+03 & \textbf{6.1e+01}/6.9e+01 & 1.7e+06/\textbf{1.3e+06} \\
 \midrule
-\textbf{Total} &  & 4.3e+08/3.7e+08 & 1.2e+09/1.6e+09 & 4.8e+05/1.5e+06 & 6.6e+04/1.3e+05 & 5.1e+03/2.0e+04 & 3.7e+03/4.4e+03 & 3.2e+06/2.3e+06 \\
+\textbf{Total} &  & 4.1e+08/3.6e+08 & 1.2e+09/1.5e+09 & 5.1e+05/1.6e+06 & 6.3e+04/1.7e+05 & 4.2e+03/2.1e+04 & 2.6e+03/9.6e+02 & 3.3e+06/2.4e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -935,10 +935,10 @@ sum tree & F & 1.5e+08/\textbf{1.5e+08} & \textbf{4.8e+08}/5.1e+08 & \textbf{5.8
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-add 1 tree & M & \textbf{3.4e+08}/1.7e+09 & \textbf{1.2e+09}/2.7e+09 & \textbf{1.9e+05}/2.5e+06 & \textbf{7.4e+04}/2.1e+05 & \textbf{2.9e+03}/4.5e+04 & \textbf{3.7e+03}/6.9e+03 & 1.4e+06/\textbf{9.5e+05} \\
-sum tree & F & \textbf{2.7e+08}/1.3e+09 & \textbf{8.3e+08}/1.3e+09 & \textbf{9.8e+04}/2.7e+06 & \textbf{1.5e+02}/6.6e+02 & \textbf{2.1e+03}/4.7e+04 & \textbf{1.5e+02}/2.6e+02 & 1.4e+06/\textbf{8.7e+05} \\
+add 1 tree & M & \textbf{3.2e+08}/1.6e+09 & \textbf{9.5e+08}/2.4e+09 & \textbf{2.0e+05}/2.3e+06 & \textbf{6.7e+04}/1.9e+05 & \textbf{2.9e+03}/4.4e+04 & \textbf{3.2e+03}/5.5e+03 & 1.5e+06/\textbf{9.6e+05} \\
+sum tree & F & \textbf{2.6e+08}/1.4e+09 & \textbf{5.8e+08}/1.0e+09 & \textbf{8.8e+04}/2.4e+06 & \textbf{9.7e+01}/1.1e+03 & \textbf{1.4e+03}/4.2e+04 & \textbf{1.0e+02}/2.6e+02 & 1.3e+06/\textbf{8.7e+05} \\
 \midrule
-\textbf{Total} &  & 6.1e+08/3.0e+09 & 2.0e+09/4.0e+09 & 2.9e+05/5.2e+06 & 7.4e+04/2.1e+05 & 5.0e+03/9.3e+04 & 3.8e+03/7.2e+03 & 2.8e+06/1.8e+06 \\
+\textbf{Total} &  & 5.8e+08/3.0e+09 & 1.5e+09/3.4e+09 & 2.9e+05/4.7e+06 & 6.7e+04/1.9e+05 & 4.3e+03/8.6e+04 & 3.3e+03/5.7e+03 & 2.8e+06/1.8e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -954,16 +954,16 @@ sum tree & F & \textbf{2.7e+08}/1.3e+09 & \textbf{8.3e+08}/1.3e+09 & \textbf{9.8
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-autocompleteTopKProxy & F & 5/10 & 50\% & 0.0142$\pm$0.00000 & 0.0262$\pm$0.00001 & \textbf{0.0095$\pm$0.00004} & 0.1496$\pm$0.00106 & \textbf{1.50$\times$} & \textbf{1.84$\times$} & \textbf{2.76$\times$} & 0.18$\times$ \\
-countLazyNodes & F & 4/10 & 60\% & 0.0130$\pm$0.00000 & 0.0269$\pm$0.00001 & \textbf{0.0064$\pm$0.00001} & 0.1054$\pm$0.00002 & \textbf{2.02$\times$} & \textbf{2.07$\times$} & \textbf{4.19$\times$} & 0.26$\times$ \\
-countTerminals & F & 3/10 & 70\% & 0.0120$\pm$0.00001 & 0.0261$\pm$0.00001 & \textbf{0.0057$\pm$0.00001} & 0.1193$\pm$0.00118 & \textbf{2.10$\times$} & \textbf{2.18$\times$} & \textbf{4.56$\times$} & 0.22$\times$ \\
-decayTrieStats & M & 10/10 & 0\% & \textbf{0.0745$\pm$0.00012} & 0.0812$\pm$0.00008 & 0.0950$\pm$0.00012 & 0.2511$\pm$0.00272 & 0.78$\times$ & 1.09$\times$ & 0.85$\times$ & 0.32$\times$ \\
-resetTraversalState & M & 10/10 & 0\% & \textbf{0.0750$\pm$0.00012} & 0.0834$\pm$0.00022 & 0.0931$\pm$0.00018 & 0.2538$\pm$0.00021 & 0.81$\times$ & \textbf{1.11$\times$} & 0.90$\times$ & 0.33$\times$ \\
-sumPrefixFreq & F & 3/10 & 70\% & 0.0121$\pm$0.00006 & 0.0253$\pm$0.00016 & \textbf{0.0058$\pm$0.00007} & 0.1112$\pm$0.00003 & \textbf{2.08$\times$} & \textbf{2.09$\times$} & \textbf{4.34$\times$} & 0.23$\times$ \\
-sumSubtreeHints & F & 3/10 & 70\% & 0.0121$\pm$0.00009 & 0.0336$\pm$0.00097 & \textbf{0.0057$\pm$0.00001} & 0.1112$\pm$0.00002 & \textbf{2.11$\times$} & \textbf{2.76$\times$} & \textbf{5.84$\times$} & 0.30$\times$ \\
+autocompleteTopKProxy & F & 5/10 & 50\% & 0.0147$\pm$0.00001 & 0.0272$\pm$0.00000 & \textbf{0.0082$\pm$0.00003} & 0.1077$\pm$0.00004 & \textbf{1.80$\times$} & \textbf{1.85$\times$} & \textbf{3.34$\times$} & 0.25$\times$ \\
+countLazyNodes & F & 4/10 & 60\% & 0.0126$\pm$0.00000 & 0.0275$\pm$0.00001 & \textbf{0.0066$\pm$0.00000} & 0.1107$\pm$0.00117 & \textbf{1.91$\times$} & \textbf{2.19$\times$} & \textbf{4.19$\times$} & 0.25$\times$ \\
+countTerminals & F & 3/10 & 70\% & 0.0119$\pm$0.00000 & 0.0256$\pm$0.00015 & \textbf{0.0058$\pm$0.00000} & 0.1113$\pm$0.00002 & \textbf{2.04$\times$} & \textbf{2.15$\times$} & \textbf{4.40$\times$} & 0.23$\times$ \\
+decayTrieStats & M & 10/10 & 0\% & \textbf{0.0742$\pm$0.00092} & 0.0801$\pm$0.00122 & 0.0842$\pm$0.00012 & 0.2393$\pm$0.00120 & 0.88$\times$ & 1.08$\times$ & 0.95$\times$ & 0.33$\times$ \\
+resetTraversalState & M & 10/10 & 0\% & \textbf{0.0752$\pm$0.00012} & 0.0815$\pm$0.00105 & 0.0823$\pm$0.00116 & 0.2387$\pm$0.00144 & 0.91$\times$ & 1.08$\times$ & 0.99$\times$ & 0.34$\times$ \\
+sumPrefixFreq & F & 3/10 & 70\% & 0.0120$\pm$0.00007 & 0.0261$\pm$0.00103 & \textbf{0.0057$\pm$0.00008} & 0.1212$\pm$0.00170 & \textbf{2.09$\times$} & \textbf{2.18$\times$} & \textbf{4.54$\times$} & 0.22$\times$ \\
+sumSubtreeHints & F & 3/10 & 70\% & 0.0120$\pm$0.00001 & 0.0260$\pm$0.00000 & \textbf{0.0057$\pm$0.00000} & 0.1212$\pm$0.00018 & \textbf{2.09$\times$} & \textbf{2.17$\times$} & \textbf{4.54$\times$} & 0.21$\times$ \\
 \midrule
-\textbf{Total} & & & & \textbf{0.2130} & 0.3027 & 0.2214 & 1.102 & 0.96$\times$ & \textbf{1.42$\times$} & \textbf{1.37$\times$} & 0.27$\times$ \\
-\textbf{Geomean} & & & & & & & & \textbf{1.51$\times$} & \textbf{1.79$\times$} & \textbf{2.69$\times$} & 0.26$\times$ \\
+\textbf{Total} & & & & 0.2125 & 0.2939 & \textbf{0.1985} & 1.050 & 1.07$\times$ & \textbf{1.38$\times$} & \textbf{1.48$\times$} & 0.28$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.58$\times$} & \textbf{1.74$\times$} & \textbf{2.75$\times$} & 0.26$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -980,15 +980,15 @@ sumSubtreeHints & F & 3/10 & 70\% & 0.0121$\pm$0.00009 & 0.0336$\pm$0.00097 & \t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
 \midrule
-autocompleteTopKProxy & F & 7.2e+07/\textbf{4.8e+07} & \textbf{1.3e+08}/2.0e+08 & 1.5e+06/\textbf{1.5e+05} & 4.8e+02/\textbf{5.4e+01} & 4.8e+04/\textbf{5.0e+03} & 4.8e+02/\textbf{5.0e+01} & 3.7e+06/\textbf{6.8e+05} \\
-countLazyNodes & F & 6.6e+07/\textbf{3.2e+07} & \textbf{1.4e+08}/1.7e+08 & 1.3e+06/\textbf{2.3e+04} & 1.2e+02/\textbf{7.5e+01} & 1.2e+04/\textbf{3.3e+03} & 1.2e+02/\textbf{7.5e+01} & 4.1e+06/\textbf{5.5e+05} \\
-countTerminals & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.0e+08}/1.2e+08 & 1.4e+06/\textbf{9.4e+03} & 8.1e+01/\textbf{5.3e+01} & 3.0e+04/\textbf{2.3e+03} & 8.6e+01/\textbf{5.2e+01} & 4.0e+06/\textbf{2.2e+05} \\
-decayTrieStats & M & \textbf{1.6e+08}/2.7e+08 & \textbf{3.6e+08}/9.3e+08 & \textbf{7.7e+05}/1.4e+06 & \textbf{1.2e+05}/1.7e+05 & \textbf{6.8e+03}/1.8e+04 & \textbf{4.0e+03}/2.8e+04 & 3.1e+06/\textbf{1.2e+06} \\
-resetTraversalState & M & \textbf{1.7e+08}/2.5e+08 & \textbf{2.8e+08}/8.4e+08 & \textbf{7.0e+05}/1.2e+06 & \textbf{9.1e+04}/1.3e+05 & \textbf{8.0e+03}/1.3e+04 & \textbf{3.0e+03}/1.9e+04 & 3.1e+06/\textbf{8.9e+05} \\
-sumPrefixFreq & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.4e+06/\textbf{1.3e+04} & 6.7e+01/6.7e+01 & 2.6e+04/\textbf{2.5e+03} & 6.9e+01/\textbf{6.6e+01} & 4.0e+06/\textbf{2.2e+05} \\
-sumSubtreeHints & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e+06/\textbf{1.3e+04} & 7.3e+01/\textbf{6.1e+01} & 1.9e+04/\textbf{2.5e+03} & 7.6e+01/\textbf{6.1e+01} & 3.9e+06/\textbf{2.1e+05} \\
+autocompleteTopKProxy & F & 7.4e+07/\textbf{4.1e+07} & \textbf{1.3e+08}/2.1e+08 & 1.5e+06/\textbf{4.8e+05} & 6.0e+01/\textbf{4.4e+01} & 5.4e+04/\textbf{4.7e+03} & 6.7e+01/\textbf{4.5e+01} & 3.6e+06/\textbf{7.6e+05} \\
+countLazyNodes & F & 6.4e+07/\textbf{3.3e+07} & \textbf{1.3e+08}/1.6e+08 & 1.4e+06/\textbf{3.1e+04} & 1.0e+02/\textbf{8.6e+01} & 1.6e+04/\textbf{3.3e+03} & 1.1e+02/\textbf{9.0e+01} & 4.0e+06/\textbf{5.6e+05} \\
+countTerminals & F & 6.0e+07/\textbf{2.9e+07} & \textbf{1.0e+08}/1.2e+08 & 1.5e+06/\textbf{1.1e+04} & 1.3e+02/\textbf{6.2e+01} & 2.5e+04/\textbf{2.3e+03} & 1.3e+02/\textbf{6.6e+01} & 3.9e+06/\textbf{2.2e+05} \\
+decayTrieStats & M & \textbf{1.6e+08}/2.1e+08 & \textbf{3.5e+08}/7.9e+08 & \textbf{9.4e+05}/1.4e+06 & \textbf{1.1e+05}/1.1e+05 & \textbf{6.0e+03}/2.1e+04 & \textbf{3.4e+03}/2.8e+04 & 3.1e+06/\textbf{1.2e+06} \\
+resetTraversalState & M & \textbf{1.7e+08}/2.0e+08 & \textbf{2.8e+08}/7.0e+08 & 9.3e+05/\textbf{7.7e+05} & \textbf{9.4e+04}/1.2e+05 & \textbf{6.8e+03}/1.5e+04 & \textbf{2.0e+03}/2.1e+04 & 3.1e+06/\textbf{9.1e+05} \\
+sumPrefixFreq & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e+06/\textbf{1.3e+04} & 9.3e+01/\textbf{6.1e+01} & 2.9e+04/\textbf{2.5e+03} & 9.4e+01/\textbf{6.4e+01} & 3.9e+06/\textbf{2.0e+05} \\
+sumSubtreeHints & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e+06/\textbf{1.5e+04} & 1.3e+02/\textbf{7.0e+01} & 2.7e+04/\textbf{2.5e+03} & 1.4e+02/\textbf{7.1e+01} & 3.9e+06/\textbf{2.1e+05} \\
 \midrule
-\textbf{Total} &  & 6.5e+08/6.9e+08 & 1.2e+09/2.5e+09 & 8.6e+06/2.8e+06 & 2.2e+05/3.0e+05 & 1.5e+05/4.7e+04 & 7.8e+03/4.7e+04 & 2.6e+07/3.9e+06 \\
+\textbf{Total} &  & 6.5e+08/5.7e+08 & 1.2e+09/2.2e+09 & 9.2e+06/2.7e+06 & 2.0e+05/2.3e+05 & 1.6e+05/5.2e+04 & 6.0e+03/5.0e+04 & 2.5e+07/4.1e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1005,15 +1005,15 @@ sumSubtreeHints & F & 6.1e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Ai/Si)} & \textbf{INS (Ai/Si)} & \textbf{L1D (Ai/Si)} & \textbf{L1I (Ai/Si)} & \textbf{L2D (Ai/Si)} & \textbf{L2I (Ai/Si)} & \textbf{LLC (Ai/Si)} \\
 \midrule
-autocompleteTopKProxy & F & \textbf{1.3e+08}/7.6e+08 & \textbf{3.3e+08}/9.1e+08 & \textbf{1.6e+05}/1.5e+06 & \textbf{1.2e+02}/1.3e+03 & \textbf{2.0e+03}/2.8e+04 & \textbf{1.2e+02}/7.7e+02 & 2.9e+06/\textbf{4.8e+05} \\
-countLazyNodes & F & \textbf{1.4e+08}/5.4e+08 & \textbf{3.2e+08}/9.1e+08 & \textbf{5.5e+05}/1.1e+06 & \textbf{1.3e+02}/1.0e+03 & \textbf{1.8e+03}/2.2e+04 & \textbf{1.3e+02}/4.3e+02 & 2.8e+06/\textbf{3.3e+05} \\
-countTerminals & F & \textbf{1.3e+08}/6.1e+08 & \textbf{2.9e+08}/8.5e+08 & 9.1e+05/\textbf{6.5e+05} & \textbf{1.2e+02}/9.2e+02 & \textbf{1.9e+03}/1.6e+04 & \textbf{1.2e+02}/1.4e+02 & 2.8e+06/\textbf{1.4e+05} \\
-decayTrieStats & M & \textbf{1.9e+08}/1.1e+09 & \textbf{5.4e+08}/2.3e+09 & \textbf{3.3e+05}/4.7e+06 & \textbf{1.1e+05}/2.3e+05 & \textbf{4.8e+03}/3.3e+04 & \textbf{3.9e+03}/5.1e+04 & 2.8e+06/\textbf{1.2e+06} \\
-resetTraversalState & M & \textbf{2.1e+08}/1.1e+09 & \textbf{4.7e+08}/2.2e+09 & \textbf{4.0e+05}/3.5e+06 & \textbf{1.3e+05}/2.1e+05 & \textbf{4.5e+03}/2.8e+04 & \textbf{3.9e+03}/2.6e+04 & 2.8e+06/\textbf{9.0e+05} \\
-sumPrefixFreq & F & \textbf{1.3e+08}/5.6e+08 & \textbf{3.1e+08}/8.5e+08 & \textbf{2.0e+05}/6.1e+05 & \textbf{9.0e+01}/5.4e+02 & \textbf{1.3e+03}/1.6e+04 & \textbf{9.0e+01}/1.5e+02 & 3.0e+06/\textbf{1.4e+05} \\
-sumSubtreeHints & F & \textbf{1.7e+08}/5.6e+08 & \textbf{3.1e+08}/8.5e+08 & 4.1e+06/\textbf{6.0e+05} & \textbf{1.0e+02}/6.2e+02 & 7.7e+04/\textbf{1.6e+04} & \textbf{1.0e+02}/1.7e+02 & 2.4e+06/\textbf{1.5e+05} \\
+autocompleteTopKProxy & F & \textbf{1.4e+08}/5.5e+08 & \textbf{2.3e+08}/7.5e+08 & \textbf{1.1e+06}/1.5e+06 & \textbf{1.2e+02}/7.0e+02 & \textbf{3.1e+03}/2.7e+04 & \textbf{1.2e+02}/5.8e+02 & 2.7e+06/\textbf{4.6e+05} \\
+countLazyNodes & F & \textbf{1.4e+08}/5.6e+08 & \textbf{2.2e+08}/7.6e+08 & 2.2e+06/\textbf{1.1e+06} & \textbf{6.7e+01}/6.9e+02 & \textbf{2.7e+03}/2.2e+04 & \textbf{6.7e+01}/2.2e+02 & 2.6e+06/\textbf{3.1e+05} \\
+countTerminals & F & \textbf{1.3e+08}/5.7e+08 & \textbf{2.0e+08}/7.3e+08 & 1.2e+06/\textbf{6.4e+05} & \textbf{5.8e+01}/1.1e+03 & \textbf{1.7e+03}/1.6e+04 & \textbf{6.0e+01}/1.3e+02 & 2.8e+06/\textbf{1.5e+05} \\
+decayTrieStats & M & \textbf{1.9e+08}/1.0e+09 & \textbf{4.5e+08}/2.1e+09 & \textbf{3.0e+05}/5.2e+06 & \textbf{9.5e+04}/3.9e+05 & \textbf{3.4e+03}/3.4e+04 & \textbf{5.4e+03}/3.7e+04 & 2.8e+06/\textbf{1.2e+06} \\
+resetTraversalState & M & \textbf{2.0e+08}/9.9e+08 & \textbf{3.7e+08}/2.0e+09 & \textbf{3.3e+05}/3.3e+06 & \textbf{1.3e+05}/1.6e+05 & \textbf{3.9e+03}/2.7e+04 & \textbf{4.9e+03}/3.0e+04 & 2.9e+06/\textbf{9.8e+05} \\
+sumPrefixFreq & F & \textbf{1.3e+08}/6.2e+08 & \textbf{2.1e+08}/7.3e+08 & 1.4e+06/\textbf{6.1e+05} & \textbf{1.4e+02}/9.0e+02 & \textbf{1.4e+03}/1.6e+04 & 1.4e+02/\textbf{1.2e+02} & 2.8e+06/\textbf{1.5e+05} \\
+sumSubtreeHints & F & \textbf{1.3e+08}/6.2e+08 & \textbf{2.1e+08}/7.3e+08 & 1.4e+06/\textbf{6.1e+05} & \textbf{7.0e+01}/9.0e+02 & \textbf{1.4e+03}/1.6e+04 & \textbf{7.7e+01}/1.2e+02 & 2.7e+06/\textbf{1.5e+05} \\
 \midrule
-\textbf{Total} &  & 1.1e+09/5.2e+09 & 2.6e+09/8.9e+09 & 6.7e+06/1.3e+07 & 2.4e+05/4.4e+05 & 9.3e+04/1.6e+05 & 8.4e+03/7.9e+04 & 1.9e+07/3.3e+06 \\
+\textbf{Total} &  & 1.1e+09/4.9e+09 & 1.9e+09/7.8e+09 & 7.8e+06/1.3e+07 & 2.2e+05/5.5e+05 & 1.8e+04/1.6e+05 & 1.1e+04/6.8e+04 & 1.9e+07/3.4e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}
