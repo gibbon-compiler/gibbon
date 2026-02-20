@@ -88,7 +88,7 @@ DEFAULT_PROGRAMS = [
     "Compiler.hs", "DBQuery.hs", "DecisionTree.hs", "DomTree.hs",
     "KDTree.hs", "LinearListReduction.hs", "List.hs", "MonoTree.hs",
     "ObjectGraph.hs", "OctTree.hs", "PiecewiseFunctions.hs",
-    "TernaryTree.hs", "Trie.hs",
+    "TernaryTree.hs", "Trie.hs", "ColorOctree.hs"
 ]
 
 # ---------------------------------------------------------------------------
