@@ -1817,7 +1817,8 @@ def _table_summary(f, all_results):
     f.write(
         "\\caption{End-to-end execution time (s, median per iteration) "
         "and speedup split by pass type. "
-        "ColorOctree marks the combined OctTree row that includes ColorOctree passes. "
+        "When present, the OctTree row includes ColorOctree passes; a separate "
+        "ColorOctree row reports only those passes. "
         "ADT fields = non-recursive fields annotated with {\\tt @BENCH adt\\_fields}; "
         "SoA bufs = $1 + $ non-recursive field slots across all constructors "
         "(recursive children are stored in the tag buffer). "
@@ -1825,15 +1826,15 @@ def _table_summary(f, all_results):
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
     f.write("\\label{tab:summary}\n\\small\n")
-    f.write("\\begin{tabular}{l c c c r r r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{l c c r r r r r r}\n\\toprule\n")
     f.write(
-        "\\textbf{Program} & \\textbf{ColorOctree} & \\textbf{ADT} & \\textbf{SoA}"
+        "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
         " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
         " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
     )
-    f.write("\\cmidrule(lr){5-7}\\cmidrule(lr){8-10}\n")
+    f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\n")
     f.write(
-        " &  & fields & bufs"
+        " & fields & bufs"
         " & AoS (s) & SoA (s) & Speedup"
         " & AoS (s) & SoA (s) & Speedup \\\\\n"
     )
@@ -1841,6 +1842,14 @@ def _table_summary(f, all_results):
 
     combined, filtered = _merge_octree_results(all_results)
     summary_results = ([combined] if combined else []) + filtered
+    if combined:
+        pair_map: Dict[str, Tuple[BenchmarkResult, BenchmarkResult]] = {}
+        for aos, soa in all_results:
+            if aos and soa:
+                pair_map[aos.program] = (aos, soa)
+        color_pair = pair_map.get("ColorOctree.hs")
+        if color_pair:
+            summary_results.append(color_pair)
 
     for aos, soa in summary_results:
         if not (aos and soa and aos.run_success and soa.run_success):
@@ -1851,7 +1860,6 @@ def _table_summary(f, all_results):
         adt_str  = str(adt) if adt is not None else "--"
         adt_info = getattr(aos, "adt_info", None)
         bufs_str = str(adt_info["soa_total_buffers"]) if adt_info else "--"
-        color_str = "yes" if prog_raw == "OctTreeCombined" else "--"
 
         af = sum(p["median_time"] for p in aos.passes.values()
                  if p["pass_type"] == "fold")
@@ -1866,7 +1874,7 @@ def _table_summary(f, all_results):
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
 
         f.write(
-            f"{prog} & {color_str} & {adt_str} & {bufs_str}"
+            f"{prog} & {adt_str} & {bufs_str}"
             f" & {fmt(af) if af > 0 else '--'}"
             f" & {fmt(sf) if sf > 0 else '--'}"
             f" & {fspd_s}"
