@@ -1,4 +1,8 @@
 -- @BENCH adt_fields=15
+import Data.Word
+import Data.Int
+import Data.Bits
+
 data Query
   = Join Int  -- join type (0=nested-loop,1=hash,2=merge)
          Int  -- estimated output rows
@@ -24,8 +28,20 @@ absI x = if x < 0 then 0 - x else x
 maxI :: Int -> Int -> Int
 maxI a b = if a > b then a else b
 
+-- Multiplication with wrapping to avoid overflow
+wrappingMul :: Int -> Int -> Int
+wrappingMul a b =
+  let wa = fromIntegral a :: Word32
+      wb = fromIntegral b :: Word32
+      w = wa * wb :: Word32
+  in fromIntegral (fromIntegral w :: Int32)
+
 mixSeed :: Int -> Int -> Int
-mixSeed s salt = s * 1103 + salt * 97 + 13
+mixSeed s salt =
+  let ws = fromIntegral s :: Word32
+      wsalt = fromIntegral salt :: Word32
+      w = (ws * 1103 + wsalt * 97 + 13) :: Word32
+  in fromIntegral (fromIntegral w :: Int32)
 
 -- Build a synthetic query plan tree with join/filter/scan operators.
 buildQuery :: Int -> Int -> Query
@@ -45,13 +61,13 @@ buildQuery d seed =
              rDepth = if d > 1 then d - 2 else 0
              r = buildQuery rDepth (mixSeed seed 2)
              joinTy = mod (absI (mixSeed seed 13)) 3
-             lRows = 1200 + d * 220 + mod (absI (mixSeed seed 17)) 2000
-             rRows = 1000 + d * 170 + mod (absI (mixSeed seed 19)) 1700
+             lRows = 1200 + wrappingMul d 20 + mod (absI (mixSeed seed 17)) 2000
+             rRows = 1000 + wrappingMul d 15 + mod (absI (mixSeed seed 19)) 1700
              sel = 60 + mod (absI (mixSeed seed 23)) 260
-             outRows = maxI 1 ((lRows * rRows) / (sel * 10 + 1))
+             outRows = maxI 1 ((wrappingMul lRows rRows) / (sel * 10 + 1))
              joinCpu =
                if joinTy == 0
-               then (lRows * rRows) / 2400
+               then (wrappingMul lRows rRows) / 2400
                else if joinTy == 1
                     then (lRows + rRows) / 7
                     else (lRows + rRows) / 9
@@ -82,7 +98,7 @@ sumRows q =
     Join _ r _ _ l s -> r + sumRows l + sumRows s
     Filter _ sel _ _ s ->
       let childRows = sumRows s
-          outRows = maxI 1 ((childRows * sel) / 1000)
+          outRows = maxI 1 ((wrappingMul childRows sel) / 1000)
       in outRows + childRows
     Scan _ r _ _ -> r
     QEmpty -> 0
@@ -155,7 +171,7 @@ clearQueryFlags q =
 gibbon_main =
             let _ = printsym (quote "Running Data base Query Pass: ")
                 _ = printsym (quote "NEWLINE")
-                queryTree = buildQuery 75 17
+                queryTree = buildQuery (sizeParam + 75) 17
                 _ = printsym (quote "Running pass sumCost (fold, uses=6): ")
                 _ = printsym (quote "NEWLINE")
                 totCost = iterate (sumCost queryTree)
@@ -196,4 +212,6 @@ gibbon_main =
                 queryTree'' = iterate (clearQueryFlags queryTree')
                 _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
-            in (totCost, totRows, totJoins, totMem, hashPressure, selSkew)
+                mapCost1 = sumCost queryTree'
+                mapCost2 = sumCost queryTree''
+            in (totCost, totRows, totJoins, totMem, hashPressure, selSkew, mapCost1, mapCost2)

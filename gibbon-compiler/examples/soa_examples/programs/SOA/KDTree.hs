@@ -299,7 +299,7 @@ photonMappingBenchmark t phases rays seed radius =
 gibbon_main =
             let _ = printsym (quote "Running program KDTree: ")
                 _ = printsym (quote "NEWLINE")
-                kdTree = buildKD 22 0
+                kdTree = buildKD (sizeParam + 22) 0
                 _ = printsym (quote "Running pass Find nearest Neighbour (fold_like, uses=13): ")
                 _ = printsym (quote "NEWLINE")
                 dist = iterate (nearestDist kdTree 1 2 3)

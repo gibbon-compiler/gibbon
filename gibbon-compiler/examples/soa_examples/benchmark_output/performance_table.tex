@@ -1,0 +1,363 @@
+% Gibbon Benchmark Suite v3.1 – auto-generated
+% Requires: \usepackage{booktabs} in preamble
+
+% -- Table 1: Summary by pass type --
+\begin{table}[t]
+\centering
+\caption{End-to-end execution time (s, median per iteration) and speedup split by pass type. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means SoA is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\label{tab:summary}
+\small
+\begin{tabular}{l c c r r r r r r}
+\toprule
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}
+ & fields & bufs & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
+\midrule
+Compiler & 9 & 8 & 0.1790 & 0.0551 & \textbf{3.25$\times$} & 0.2425 & 0.2774 & 0.87$\times$ \\
+DBQuery & 15 & 13 & 0.0643 & 0.0348 & \textbf{1.85$\times$} & 0.1728 & 0.2498 & 0.69$\times$ \\
+DecisionTree & 7 & 6 & 0.4865 & 0.2884 & \textbf{1.69$\times$} & -- & -- & -- \\
+DomTree & 15 & 14 & 0.1500 & 0.0596 & \textbf{2.52$\times$} & 0.0594 & 0.0897 & 0.66$\times$ \\
+KDTree & 19 & 12 & 0.3547 & 0.2961 & \textbf{1.20$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.0301 & 0.0050 & \textbf{6.05$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.0417 & 0.0524 & 0.80$\times$ & 0.2556 & 0.3141 & 0.81$\times$ \\
+MonoTree & 3 & 2 & 0.0111 & 0.0114 & 0.97$\times$ & 0.0474 & 0.0436 & 1.09$\times$ \\
+ObjectGraph & 5 & 4 & 0.0191 & 0.0052 & \textbf{3.67$\times$} & 0.0187 & 0.0199 & 0.94$\times$ \\
+OctTree & 16 & 9 & 0.0310 & 0.0212 & \textbf{1.47$\times$} & 0.0389 & 0.0489 & 0.80$\times$ \\
+PiecewiseFunctions & 8 & 7 & 0.0184 & 0.0152 & \textbf{1.21$\times$} & 0.0460 & 0.0517 & 0.89$\times$ \\
+TernaryTree & 5 & 3 & 0.0304 & 0.0312 & 0.97$\times$ & 0.0838 & 0.0790 & 1.06$\times$ \\
+Trie & 10 & 9 & 0.0243 & 0.0119 & \textbf{2.03$\times$} & 0.0754 & 0.0949 & 0.79$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+% ============================================================================
+% Table 2: Mutable vs Immutable Cursor Comparison
+% ============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Mutable vs immutable cursor comparison. Times are median per iteration (s). Speedups shown are AoS-mut/SoA-mut, AoS-imm/AoS-mut, and AoS-imm/SoA-mut. ${>}1{\times}$ means the denominator is faster. \textbf{Bold} marks faster variant within each layout.}
+\label{tab:cursor_comparison}
+\small
+\begin{tabular}{l r r r r r r r}
+\toprule
+\textbf{Program} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+Compiler & \textbf{0.4216} & 1.727 & 0.3325 & \textit{OOM} & \textbf{1.27$\times$} & \textbf{4.10$\times$} & \textbf{5.19$\times$} \\
+DBQuery & \textbf{0.2371} & 0.3136 & \textbf{0.2846} & 1.381 & 0.83$\times$ & \textbf{1.32$\times$} & \textbf{1.10$\times$} \\
+DecisionTree & \textbf{0.4865} & 1.296 & \textbf{0.2884} & 3.356 & \textbf{1.69$\times$} & \textbf{2.66$\times$} & \textbf{4.49$\times$} \\
+DomTree & \textbf{0.2094} & 0.3567 & \textbf{0.1493} & 1.024 & \textbf{1.40$\times$} & \textbf{1.70$\times$} & \textbf{2.39$\times$} \\
+KDTree & \textbf{0.3547} & 0.4653 & 0.2961 & \textit{OOM} & \textbf{1.20$\times$} & \textbf{1.31$\times$} & \textbf{1.57$\times$} \\
+LinearListReduction & \textbf{0.0301} & 0.1646 & 0.0050 & \textit{OOM} & \textbf{6.05$\times$} & \textbf{5.47$\times$} & \textbf{33.05$\times$} \\
+List & 0.2973 & \textit{OOM} & 0.3665 & \textit{OOM} & 0.81$\times$ & -- & -- \\
+MonoTree & \textbf{0.0585} & 0.1080 & \textbf{0.0550} & 0.2135 & 1.06$\times$ & \textbf{1.85$\times$} & \textbf{1.96$\times$} \\
+ObjectGraph & \textbf{0.0379} & 0.0546 & \textbf{0.0251} & 0.0799 & \textbf{1.51$\times$} & \textbf{1.44$\times$} & \textbf{2.18$\times$} \\
+OctTree & 0.0699 & \textbf{0.0589} & \textbf{0.0701} & 0.2480 & 1.00$\times$ & 0.84$\times$ & 0.84$\times$ \\
+PiecewiseFunctions & \textbf{0.0644} & 0.0767 & \textbf{0.0668} & 0.2934 & 0.96$\times$ & \textbf{1.19$\times$} & \textbf{1.15$\times$} \\
+TernaryTree & \textbf{0.1142} & 0.1513 & \textbf{0.1103} & 0.6167 & 1.04$\times$ & \textbf{1.32$\times$} & \textbf{1.37$\times$} \\
+Trie & \textbf{0.0997} & 0.1371 & \textbf{0.1069} & 0.4743 & 0.93$\times$ & \textbf{1.38$\times$} & \textbf{1.28$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -- Table: Compiler --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{Compiler}, ADT has 9 fields, SoA uses 8 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:Compiler}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+blockCountPass & F & 2/9 & 78\% & 0.0199$\pm$0.00001 & 0.1316$\pm$0.00038 & 0.0030$\pm$0.00001 & \textit{OOM} & \textbf{6.57$\times$} & \textbf{6.63$\times$} & \textbf{43.50$\times$} \\
+branchStatsPass & F & 2/9 & 78\% & 0.0202$\pm$0.00001 & 0.1488$\pm$0.00005 & 0.0056$\pm$0.00000 & \textit{OOM} & \textbf{3.63$\times$} & \textbf{7.36$\times$} & \textbf{26.70$\times$} \\
+castInstCountPass & F & 3/9 & 67\% & 0.0200$\pm$0.00004 & 0.1494$\pm$0.01035 & 0.0020$\pm$0.00001 & \textit{OOM} & \textbf{9.93$\times$} & \textbf{7.47$\times$} & \textbf{74.21$\times$} \\
+has cycle & F & 4/9 & 56\% & 0.0386$\pm$0.00227 & 0.1495$\pm$0.00014 & 0.0253$\pm$0.00217 & \textit{OOM} & \textbf{1.52$\times$} & \textbf{3.87$\times$} & \textbf{5.90$\times$} \\
+instCountPass & F & 2/9 & 78\% & 0.0199$\pm$0.00003 & 0.1302$\pm$0.00010 & 0.0032$\pm$0.00002 & \textit{OOM} & \textbf{6.26$\times$} & \textbf{6.55$\times$} & \textbf{40.96$\times$} \\
+latencyModelPass & F & 3/9 & 67\% & 0.0200$\pm$0.00002 & 0.1492$\pm$0.00004 & 0.0050$\pm$0.00001 & \textit{OOM} & \textbf{4.02$\times$} & \textbf{7.47$\times$} & \textbf{30.01$\times$} \\
+memoryOpStatsPass & F & 3/9 & 67\% & 0.0205$\pm$0.00017 & 0.1494$\pm$0.00013 & 0.0060$\pm$0.00001 & \textit{OOM} & \textbf{3.44$\times$} & \textbf{7.28$\times$} & \textbf{25.06$\times$} \\
+stripSideEffectsPass & M & 7/9 & 22\% & 0.1214$\pm$0.00071 & 0.2857$\pm$0.00034 & 0.1381$\pm$0.00016 & \textit{OOM} & 0.88$\times$ & \textbf{2.35$\times$} & \textbf{2.07$\times$} \\
+targetReturnPass & M & 9/9 & 0\% & 0.1211$\pm$0.00100 & 0.2845$\pm$0.01393 & 0.1393$\pm$0.00079 & \textit{OOM} & 0.87$\times$ & \textbf{2.35$\times$} & \textbf{2.04$\times$} \\
+throughputModelPass & F & 3/9 & 67\% & 0.0200$\pm$0.00001 & 0.1488$\pm$0.00730 & 0.0050$\pm$0.00001 & \textit{OOM} & \textbf{3.96$\times$} & \textbf{7.46$\times$} & \textbf{29.52$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.4216 & 1.727 & 0.3325 & -- & \textbf{1.27$\times$} & \textbf{4.10$\times$} & \textbf{5.19$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{3.14$\times$} & \textbf{5.39$\times$} & \textbf{16.95$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DBQuery --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DBQuery}, ADT has 15 fields, SoA uses 13 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DBQuery}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+clearQueryFlags & M & 14/15 & 7\% & 0.0857$\pm$0.00041 & 0.0971$\pm$0.00032 & 0.1248$\pm$0.00042 & 0.3861$\pm$0.00005 & 0.69$\times$ & \textbf{1.13$\times$} & 0.78$\times$ \\
+countJoins & F & 3/15 & 80\% & 0.0159$\pm$0.00002 & 0.0311$\pm$0.00004 & 0.0066$\pm$0.00001 & 0.1384$\pm$0.00005 & \textbf{2.40$\times$} & \textbf{1.95$\times$} & \textbf{4.69$\times$} \\
+scaleCosts & M & 15/15 & 0\% & 0.0871$\pm$0.00063 & 0.0980$\pm$0.01008 & 0.1250$\pm$0.00060 & 0.3862$\pm$0.00048 & 0.70$\times$ & \textbf{1.12$\times$} & 0.78$\times$ \\
+sumCost & F & 6/15 & 60\% & 0.0161$\pm$0.00002 & 0.0290$\pm$0.00002 & 0.0095$\pm$0.00016 & 0.1572$\pm$0.00004 & \textbf{1.70$\times$} & \textbf{1.80$\times$} & \textbf{3.06$\times$} \\
+sumMemory & F & 6/15 & 60\% & 0.0160$\pm$0.00005 & 0.0292$\pm$0.00002 & 0.0094$\pm$0.00016 & 0.1558$\pm$0.00009 & \textbf{1.71$\times$} & \textbf{1.83$\times$} & \textbf{3.12$\times$} \\
+sumRows & F & 6/15 & 60\% & 0.0163$\pm$0.00002 & 0.0292$\pm$0.00002 & 0.0093$\pm$0.00023 & 0.1577$\pm$0.00005 & \textbf{1.75$\times$} & \textbf{1.79$\times$} & \textbf{3.13$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.2371 & 0.3136 & 0.2846 & 1.381 & 0.83$\times$ & \textbf{1.32$\times$} & \textbf{1.10$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.34$\times$} & \textbf{1.56$\times$} & \textbf{2.10$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DecisionTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DecisionTree}, ADT has 7 fields, SoA uses 6 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DecisionTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+countFeatureUses & F & 3/7 & 57\% & 0.0550$\pm$0.00004 & 0.1442$\pm$0.00010 & 0.0321$\pm$0.00008 & 0.3925$\pm$0.00005 & \textbf{1.71$\times$} & \textbf{2.62$\times$} & \textbf{4.50$\times$} \\
+countLeaves & F & 2/7 & 71\% & 0.0538$\pm$0.00002 & 0.1456$\pm$0.00007 & 0.0310$\pm$0.00003 & 0.3737$\pm$0.00004 & \textbf{1.73$\times$} & \textbf{2.71$\times$} & \textbf{4.70$\times$} \\
+countNodes & F & 2/7 & 71\% & 0.0538$\pm$0.00002 & 0.1428$\pm$0.00009 & 0.0309$\pm$0.00004 & 0.3750$\pm$0.00167 & \textbf{1.74$\times$} & \textbf{2.65$\times$} & \textbf{4.62$\times$} \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0544$\pm$0.00657 & 0.1433$\pm$0.00004 & 0.0327$\pm$0.00004 & 0.3225$\pm$0.00018 & \textbf{1.66$\times$} & \textbf{2.64$\times$} & \textbf{4.38$\times$} \\
+inferenceCost & F & 2/7 & 71\% & 0.0533$\pm$0.00003 & 0.1458$\pm$0.00011 & 0.0309$\pm$0.00002 & 0.3761$\pm$0.00004 & \textbf{1.72$\times$} & \textbf{2.74$\times$} & \textbf{4.71$\times$} \\
+sumImpurity & F & 3/7 & 57\% & 0.0539$\pm$0.00006 & 0.1414$\pm$0.00004 & 0.0317$\pm$0.00008 & 0.3844$\pm$0.00074 & \textbf{1.70$\times$} & \textbf{2.62$\times$} & \textbf{4.46$\times$} \\
+sumPathLengths & F & 3/7 & 57\% & 0.0555$\pm$0.00002 & 0.1468$\pm$0.00937 & 0.0335$\pm$0.00004 & 0.3774$\pm$0.00006 & \textbf{1.66$\times$} & \textbf{2.65$\times$} & \textbf{4.39$\times$} \\
+sumSamples & F & 3/7 & 57\% & 0.0530$\pm$0.00005 & 0.1409$\pm$0.00004 & 0.0321$\pm$0.00011 & 0.3785$\pm$0.00031 & \textbf{1.65$\times$} & \textbf{2.66$\times$} & \textbf{4.39$\times$} \\
+treeDepth & F & 2/7 & 71\% & 0.0540$\pm$0.00002 & 0.1454$\pm$0.00008 & 0.0336$\pm$0.00002 & 0.3760$\pm$0.00005 & \textbf{1.61$\times$} & \textbf{2.69$\times$} & \textbf{4.33$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.4865 & 1.296 & 0.2884 & 3.356 & \textbf{1.69$\times$} & \textbf{2.66$\times$} & \textbf{4.49$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.69$\times$} & \textbf{2.66$\times$} & \textbf{4.50$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DomTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DomTree}, ADT has 15 fields, SoA uses 14 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DomTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+SumArea & F & 6/15 & 60\% & 0.0383$\pm$0.00005 & 0.0745$\pm$0.00016 & 0.0186$\pm$0.00104 & 0.1957$\pm$0.00190 & \textbf{2.06$\times$} & \textbf{1.94$\times$} & \textbf{4.01$\times$} \\
+computeWidths & M & 14/15 & 7\% & 0.0304$\pm$0.00011 & 0.0319$\pm$0.00013 & 0.0498$\pm$0.00027 & 0.0985$\pm$0.00028 & 0.61$\times$ & 1.05$\times$ & 0.64$\times$ \\
+count styled & F & 3/15 & 80\% & 0.0374$\pm$0.00003 & 0.0739$\pm$0.00002 & 0.0119$\pm$0.00002 & 0.1856$\pm$0.00004 & \textbf{3.14$\times$} & \textbf{1.98$\times$} & \textbf{6.21$\times$} \\
+find max Bottom & F & 5/15 & 67\% & 0.0372$\pm$0.00002 & 0.0734$\pm$0.00006 & 0.0175$\pm$0.00010 & 0.1973$\pm$0.00005 & \textbf{2.13$\times$} & \textbf{1.97$\times$} & \textbf{4.20$\times$} \\
+scaleLayout & M & 15/15 & 0\% & 0.0290$\pm$0.00011 & 0.0308$\pm$0.00010 & 0.0399$\pm$0.00013 & 0.0926$\pm$0.00026 & 0.73$\times$ & 1.06$\times$ & 0.77$\times$ \\
+sumTextWidth & F & 3/15 & 80\% & 0.0371$\pm$0.00002 & 0.0721$\pm$0.00003 & 0.0116$\pm$0.00003 & 0.2545$\pm$0.00002 & \textbf{3.19$\times$} & \textbf{1.95$\times$} & \textbf{6.20$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.2094 & 0.3567 & 0.1493 & 1.024 & \textbf{1.40$\times$} & \textbf{1.70$\times$} & \textbf{2.39$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.64$\times$} & \textbf{1.59$\times$} & \textbf{2.62$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: KDTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{KDTree}, ADT has 19 fields, SoA uses 12 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:KDTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+Find nearest Neighbour & F & 11/19 & 42\% & 0.3547$\pm$0.00029 & 0.4653$\pm$0.00339 & 0.2961$\pm$0.00035 & \textit{OOM} & \textbf{1.20$\times$} & \textbf{1.31$\times$} & \textbf{1.57$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.3547 & 0.4653 & 0.2961 & -- & \textbf{1.20$\times$} & \textbf{1.31$\times$} & \textbf{1.57$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.20$\times$} & \textbf{1.31$\times$} & \textbf{1.57$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{LinearListReduction}, ADT has 11 fields, SoA uses 11 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:LinearListReduction}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+reduction & F & 2/11 & 82\% & 0.0301$\pm$0.00003 & 0.1646$\pm$0.00006 & 0.0050$\pm$0.00001 & \textit{OOM} & \textbf{6.05$\times$} & \textbf{5.47$\times$} & \textbf{33.05$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0301 & 0.1646 & 0.0050 & -- & \textbf{6.05$\times$} & \textbf{5.47$\times$} & \textbf{33.05$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{6.05$\times$} & \textbf{5.47$\times$} & \textbf{33.05$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: List --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{List}, ADT has 2 fields, SoA uses 2 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:List}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+add1 List & M & 2/2 & 0\% & 0.2556$\pm$0.00138 & \textit{OOM} & 0.3141$\pm$0.00065 & \textit{OOM} & 0.81$\times$ & -- & -- \\
+sumList & F & 2/2 & 0\% & 0.0417$\pm$0.00002 & \textit{OOM} & 0.0524$\pm$0.00007 & \textit{OOM} & 0.80$\times$ & -- & -- \\
+\midrule
+\textbf{Total} & & & & 0.2973 & -- & 0.3665 & -- & 0.81$\times$ & -- & -- \\
+\textbf{Geomean} & & & & & & & & 0.80$\times$ & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{MonoTree}, ADT has 3 fields, SoA uses 2 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:MonoTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+add1Tree & M & 3/3 & 0\% & 0.0474$\pm$0.00050 & 0.0656$\pm$0.00025 & 0.0436$\pm$0.00068 & 0.1311$\pm$0.00016 & 1.09$\times$ & \textbf{1.39$\times$} & \textbf{1.51$\times$} \\
+sumTree & F & 3/3 & 0\% & 0.0111$\pm$0.00001 & 0.0424$\pm$0.00008 & 0.0114$\pm$0.00005 & 0.0824$\pm$0.00003 & 0.97$\times$ & \textbf{3.82$\times$} & \textbf{3.70$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0585 & 0.1080 & 0.0550 & 0.2135 & 1.06$\times$ & \textbf{1.85$\times$} & \textbf{1.96$\times$} \\
+\textbf{Geomean} & & & & & & & & 1.03$\times$ & \textbf{2.30$\times$} & \textbf{2.36$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{ObjectGraph}, ADT has 5 fields, SoA uses 4 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:ObjectGraph}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+clearMarks & M & 4/5 & 20\% & 0.0095$\pm$0.00003 & 0.0115$\pm$0.00002 & 0.0100$\pm$0.00001 & 0.0264$\pm$0.00004 & 0.95$\times$ & \textbf{1.21$\times$} & \textbf{1.15$\times$} \\
+countLargeItems & F & 3/5 & 40\% & 0.0019$\pm$0.00013 & 0.0055$\pm$0.00001 & 0.0013$\pm$0.00002 & 0.0065$\pm$0.00001 & \textbf{1.51$\times$} & \textbf{2.84$\times$} & \textbf{4.29$\times$} \\
+countMarked & F & 3/5 & 40\% & 0.0061$\pm$0.00069 & 0.0055$\pm$0.00001 & 0.0013$\pm$0.00001 & 0.0062$\pm$0.00002 & \textbf{4.52$\times$} & 0.91$\times$ & \textbf{4.10$\times$} \\
+inflateSizes & M & 5/5 & 0\% & 0.0092$\pm$0.00002 & 0.0114$\pm$0.00001 & 0.0099$\pm$0.00004 & 0.0268$\pm$0.00005 & 0.94$\times$ & \textbf{1.24$\times$} & \textbf{1.16$\times$} \\
+sumObjIds & F & 3/5 & 40\% & 0.0018$\pm$0.00000 & 0.0054$\pm$0.00001 & 0.0013$\pm$0.00001 & 0.0063$\pm$0.00002 & \textbf{1.41$\times$} & \textbf{2.97$\times$} & \textbf{4.19$\times$} \\
+totalHeapSize & F & 3/5 & 40\% & 0.0093$\pm$0.00073 & 0.0153$\pm$0.00317 & 0.0013$\pm$0.00002 & 0.0078$\pm$0.00382 & \textbf{7.21$\times$} & \textbf{1.65$\times$} & \textbf{11.86$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0379 & 0.0546 & 0.0251 & 0.0799 & \textbf{1.51$\times$} & \textbf{1.44$\times$} & \textbf{2.18$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.99$\times$} & \textbf{1.63$\times$} & \textbf{3.24$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{OctTree}, ADT has 16 fields, SoA uses 9 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:OctTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+clearFlags & M & 15/16 & 6\% & 0.0195$\pm$0.00005 & 0.0191$\pm$0.00007 & 0.0241$\pm$0.00006 & 0.0671$\pm$0.00804 & 0.81$\times$ & 0.98$\times$ & 0.79$\times$ \\
+countActive & F & 9/16 & 44\% & 0.0038$\pm$0.00001 & 0.0052$\pm$0.00001 & 0.0033$\pm$0.00002 & 0.0277$\pm$0.00001 & \textbf{1.14$\times$} & \textbf{1.38$\times$} & \textbf{1.57$\times$} \\
+countParticles & F & 8/16 & 50\% & 0.0038$\pm$0.00002 & 0.0050$\pm$0.00003 & 0.0030$\pm$0.00001 & 0.0266$\pm$0.00000 & \textbf{1.26$\times$} & \textbf{1.30$\times$} & \textbf{1.64$\times$} \\
+scaleEnergy & M & 16/16 & 0\% & 0.0194$\pm$0.00006 & 0.0191$\pm$0.00012 & 0.0248$\pm$0.00009 & 0.0704$\pm$0.00027 & 0.78$\times$ & 0.99$\times$ & 0.77$\times$ \\
+sumEnergy & F & 10/16 & 38\% & 0.0047$\pm$0.00135 & 0.0052$\pm$0.00001 & 0.0034$\pm$0.00002 & 0.0281$\pm$0.00004 & \textbf{1.38$\times$} & \textbf{1.10$\times$} & \textbf{1.52$\times$} \\
+sumMass & F & 9/16 & 44\% & 0.0187$\pm$0.00017 & 0.0053$\pm$0.00001 & 0.0113$\pm$0.00195 & 0.0280$\pm$0.00004 & \textbf{1.64$\times$} & 0.28$\times$ & 0.47$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.0699 & 0.0589 & 0.0701 & 0.2480 & 1.00$\times$ & 0.84$\times$ & 0.84$\times$ \\
+\textbf{Geomean} & & & & & & & & \textbf{1.13$\times$} & 0.90$\times$ & 1.02$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{PiecewiseFunctions}, ADT has 8 fields, SoA uses 7 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:PiecewiseFunctions}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+add constant & M & 8/8 & 0\% & 0.0161$\pm$0.00013 & 0.0178$\pm$0.00640 & 0.0171$\pm$0.00017 & 0.0559$\pm$0.00007 & 0.94$\times$ & \textbf{1.11$\times$} & 1.04$\times$ \\
+countSplit & F & 3/8 & 62\% & 0.0024$\pm$0.00001 & 0.0068$\pm$0.00001 & 0.0013$\pm$0.00002 & 0.0330$\pm$0.00003 & \textbf{1.91$\times$} & \textbf{2.79$\times$} & \textbf{5.33$\times$} \\
+differentiate & M & 8/8 & 0\% & 0.0151$\pm$0.00003 & 0.0177$\pm$0.00017 & 0.0172$\pm$0.00007 & 0.0552$\pm$0.00010 & 0.88$\times$ & \textbf{1.17$\times$} & 1.03$\times$ \\
+max degree & F & 3/8 & 62\% & 0.0050$\pm$0.00076 & 0.0058$\pm$0.00001 & 0.0045$\pm$0.00062 & 0.0271$\pm$0.00003 & \textbf{1.11$\times$} & \textbf{1.17$\times$} & \textbf{1.30$\times$} \\
+square & M & 8/8 & 0\% & 0.0148$\pm$0.00013 & 0.0169$\pm$0.00008 & 0.0173$\pm$0.00012 & 0.0574$\pm$0.00016 & 0.85$\times$ & \textbf{1.14$\times$} & 0.97$\times$ \\
+sum co-efficients & F & 3/8 & 62\% & 0.0087$\pm$0.00015 & 0.0059$\pm$0.00002 & 0.0079$\pm$0.00005 & 0.0332$\pm$0.00052 & 1.09$\times$ & 0.68$\times$ & 0.74$\times$ \\
+sumError & F & 3/8 & 62\% & 0.0024$\pm$0.00001 & 0.0058$\pm$0.00001 & 0.0015$\pm$0.00009 & 0.0316$\pm$0.00003 & \textbf{1.59$\times$} & \textbf{2.47$\times$} & \textbf{3.91$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0644 & 0.0767 & 0.0668 & 0.2934 & 0.96$\times$ & \textbf{1.19$\times$} & \textbf{1.15$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.15$\times$} & \textbf{1.35$\times$} & \textbf{1.55$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{TernaryTree}, ADT has 5 fields, SoA uses 3 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:TernaryTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+add 1 tree & M & 5/5 & 0\% & 0.0838$\pm$0.00038 & 0.0983$\pm$0.00028 & 0.0790$\pm$0.01076 & 0.3675$\pm$0.00041 & 1.06$\times$ & \textbf{1.17$\times$} & \textbf{1.24$\times$} \\
+sum tree & F & 5/5 & 0\% & 0.0304$\pm$0.00005 & 0.0530$\pm$0.00003 & 0.0312$\pm$0.00018 & 0.2492$\pm$0.00015 & 0.97$\times$ & \textbf{1.74$\times$} & \textbf{1.70$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.1142 & 0.1513 & 0.1103 & 0.6167 & 1.04$\times$ & \textbf{1.32$\times$} & \textbf{1.37$\times$} \\
+\textbf{Geomean} & & & & & & & & 1.02$\times$ & \textbf{1.43$\times$} & \textbf{1.45$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: Trie --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{Trie}, ADT has 10 fields, SoA uses 9 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:Trie}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS-mut} & \textbf{AoS-imm} & \textbf{SoA-mut} & \textbf{SoA-imm} & \textbf{Spd-mut} & \textbf{AoS-imm/AoS-mut} & \textbf{AoS-imm/SoA-mut} \\
+\midrule
+clear trie flags & M & 9/10 & 10\% & 0.0373$\pm$0.00015 & 0.0426$\pm$0.00010 & 0.0468$\pm$0.00011 & 0.1275$\pm$0.00016 & 0.80$\times$ & \textbf{1.14$\times$} & 0.91$\times$ \\
+count trie flags & F & 3/10 & 70\% & 0.0060$\pm$0.00001 & 0.0127$\pm$0.00002 & 0.0029$\pm$0.00002 & 0.0507$\pm$0.00003 & \textbf{2.11$\times$} & \textbf{2.10$\times$} & \textbf{4.43$\times$} \\
+scale frequency & M & 10/10 & 0\% & 0.0382$\pm$0.00032 & 0.0431$\pm$0.00031 & 0.0481$\pm$0.00126 & 0.1270$\pm$0.00026 & 0.79$\times$ & \textbf{1.13$\times$} & 0.89$\times$ \\
+sum count words & F & 2/10 & 80\% & 0.0059$\pm$0.00002 & 0.0138$\pm$0.00003 & 0.0025$\pm$0.00002 & 0.0584$\pm$0.00001 & \textbf{2.33$\times$} & \textbf{2.34$\times$} & \textbf{5.46$\times$} \\
+sum frequency & F & 3/10 & 70\% & 0.0064$\pm$0.00130 & 0.0125$\pm$0.00196 & 0.0037$\pm$0.00068 & 0.0554$\pm$0.00018 & \textbf{1.73$\times$} & \textbf{1.96$\times$} & \textbf{3.40$\times$} \\
+sum subtrees & F & 3/10 & 70\% & 0.0060$\pm$0.00001 & 0.0125$\pm$0.00001 & 0.0029$\pm$0.00001 & 0.0552$\pm$0.00008 & \textbf{2.08$\times$} & \textbf{2.09$\times$} & \textbf{4.34$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0997 & 0.1371 & 0.1069 & 0.4743 & 0.93$\times$ & \textbf{1.38$\times$} & \textbf{1.28$\times$} \\
+\textbf{Geomean} & & & & & & & & \textbf{1.49$\times$} & \textbf{1.72$\times$} & \textbf{2.57$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+

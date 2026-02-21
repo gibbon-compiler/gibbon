@@ -1,0 +1,48 @@
+VERSION 2.3 - FINAL UPDATE SUMMARY
+==================================
+
+ALL ISSUES FIXED!
+=================
+
+✅ Tables: Per-program with scientific notation
+✅ Fold/Map: Automatic detection from print statements
+✅ Figures: Per-program heatmaps, patterns, horizontal legends
+✅ Output: GC metadata filtering
+✅ Removed: Messy incomprehensible figures
+
+AUTOMATIC FOLD/MAP DETECTION
+=============================
+
+NO MANUAL WORK! Script parses your print statements:
+
+Your code:
+  printsym (quote "Running pass SumArea (fold): ")
+  
+Detected automatically:
+  ✓ SumArea = fold
+
+Just run: ./gibbon_benchmark.py --generate-paper
+
+TABLES GENERATED
+================
+
+Table 1: End-to-End (Fold vs Map)
+  Program | Fold AoS | Fold SoA | Map AoS | Map SoA | Speedup
+  
+Tables 2-N: Per-Program Details
+  Pass     | Type | AoS | SoA | Speedup
+  SumArea  | F    | ... | ... | 1.06×
+
+FIGURES GENERATED
+=================
+
+✓ speedup_comparison.pdf (fold/map separated)
+✓ heatmaps/DomTree_heatmap.pdf (per-program)
+✓ pass_breakdown_all.pdf (patterns + horizontal legend)
+
+QUICK START
+===========
+
+./gibbon_benchmark.py --generate-paper
+
+Done! Publication-ready materials generated automatically! 🎉

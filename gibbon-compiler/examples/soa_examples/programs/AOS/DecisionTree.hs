@@ -148,7 +148,7 @@ type FeatureVec = Vector Int
 
 mkFeatureVec :: Int -> FeatureVec
 mkFeatureVec n =
-  generate n (\i -> mod (i * 7 + n) 100)
+  generate n (\i -> mod (i * 7 + n + sizeParam) 100)
 
 -- Vidush: TODO: We need to fix these classify output
 -- -------------------------------
@@ -186,7 +186,7 @@ classifyBatch t fvSize i =
   if i <= 0
   then 0
   else
-    let fv = generate fvSize (\j -> mod (j * 3 + i) 100) in
+    let fv = generate fvSize (\j -> mod (j * 3 + i + sizeParam) 100) in
     let label = classify t fv in
     label + classifyBatch t fvSize (i - 1)
 
@@ -197,7 +197,7 @@ classifyBatch t fvSize i =
 gibbon_main =
   let _ = printsym (quote "Running program Decision Tree: ") in
   let _ = printsym (quote "NEWLINE") in
-  let tree = buildTree 35 in
+  let tree = buildTree (sizeParam + 35) in
   -- Structural analyses
   let _ = printsym (quote "Running pass countNodes (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in

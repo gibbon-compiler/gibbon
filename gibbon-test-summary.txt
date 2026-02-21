@@ -1,0 +1,15 @@
+Gibbon testsuite summary:  (2025-09-10 14:41:38.604151155 EDT)
+--------------------------------------------------------------------------------
+Time taken: 469s
+
+126 expected passes
+0 unexpected passes
+28 expected failures
+0 unexpected failures
+55 skipped
+
+Skipped: 
+--------------------------------------------------------------------------------
+void_type.hs, void_type.gib, unariser_bug1.hs, test_unpacking.gib, test_sumup_seteven.gib, test_power.hs, test_circsim.hs, test_buildtwotrees.gib, test_168.hs, test29d_list.gib, test29c_list.gib, test29_list.gib, test27b_subst.gib, test27a_subst.gib, test26a_treewalk.gib, test26_treewalk.gib, test25f_countnodes.gib, test25d_racketcore.gib, test25c_racketcore.gib, test25b_racketcore.gib, test25a_withprint.gib, test25_rackcore.gib, test24_defs.gib, test18_badconstraint.gib, test17_forfold.gib, test16_forlist.gib, test15c_printsym.gib, test15b_symappend.gib, test14b_tup.gib, test14b_tup.gib, test14_repair.gib, test12c_traverse.gib, test12b_traverse.gib, test12_skip.gib, test12_skip.gib, test06c_nested.gib, render_tree_two_passes.hs, render_tree_four_passes.hs, render_tree_five_passes.hs, render_tree.hs, pp_projs.gib, bench_tree_insert.gib, bench_compose2.gib, bench_compose1.gib, Vector.hs, TupleTest.hs, Test187.hs, T64_2.gib, SortPrim.hs, Sort.hs, NestedTuples.hs, LC.hs, DataVector.hs, CurriedFns.hs, C1.hs
+
+

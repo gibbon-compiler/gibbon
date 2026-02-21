@@ -1,0 +1,20 @@
+{
+  "compile_cmd": [
+    "gibbon",
+    "--use-mutable-cursors",
+    "--enable-papi-native",
+    "--packed",
+    "--to-exe",
+    "--no-ran",
+    "--cfile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.c",
+    "--exefile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree.hs"
+  ],
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree.hs",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree.hs",
+  "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.c",
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree.soa.exe",
+  "compiled_at": "2026-02-20T14:30:37"
+}

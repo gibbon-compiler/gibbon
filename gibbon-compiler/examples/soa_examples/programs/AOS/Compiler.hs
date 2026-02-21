@@ -200,7 +200,7 @@ verifyPhiPlacement_IO ir seenNonPhi =
 gibbon_main =
   let _ = printsym (quote "Running the Compiler IR Program: ")
       _ = printsym (quote "NEWLINE")
-      ir     = buildIR_validPhi_go 5000000 0
+      ir     = buildIR_validPhi_go (sizeParam + 5000000) 0
       -- we can verify IR here
       _ = printsym (quote "Running pass verifyIR (fold, uses=9): ")
       _ = printsym (quote "NEWLINE")
@@ -258,4 +258,4 @@ gibbon_main =
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
       --_      = printPacked ir''
-  in (insts, blocks, memops, brs, lat, hasCycle, thr)
+  in (insts, blocks, memops, brs, lat, hasCycle, thr, instCountPass ir', instCountPass ir'')

@@ -1,0 +1,6 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/MLTON/GibbonCompat.sml
+  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/MLTON/OctTree_sumMass.sml
+in
+end

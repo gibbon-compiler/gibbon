@@ -639,10 +639,10 @@ def _discover_papi_avail_counters() -> List[str]:
             return _PAPI_AVAIL_COUNTERS_CACHE
         found = sorted(set(re.findall(r"\bPAPI_[A-Z0-9_]+\b", r.stdout)))
         _PAPI_AVAIL_COUNTERS_CACHE = found
-        return _PAPI_AVAIL_COUNTERS_CACHE
+        return found
     except Exception:
         _PAPI_AVAIL_COUNTERS_CACHE = []
-        return _PAPI_AVAIL_COUNTERS_CACHE
+        return []
 
 
 def select_preferred_papi_events() -> List[str]:
@@ -995,6 +995,11 @@ def clean_output(raw: str) -> Optional[str]:
         s = line.strip()
         if not s or _GC_RE.search(s):
             continue
+        # Normalize SML tuple output "#(" to Gibbon-style "'#(".
+        if s.startswith("#("):
+            s = "'" + s
+        # Normalize SML negative literals (~123) to -123.
+        s = re.sub(r'~(\d)', r'-\1', s)
         if re.search(r"0x[0-9a-fA-F]+", s):
             if any(kw in s.lower() for kw in
                    ("footer", "chunk", "region", "refcount", "outset")):
@@ -1079,6 +1084,204 @@ def analyze_outputs_by_variant(named_results: Dict[str, Optional[BenchmarkResult
 # Compiler mtime cache (checked once per script run)
 # ---------------------------------------------------------------------------
 _COMPILER_CACHE: Dict[str, Tuple[Path, float]] = {}
+_GIBBON_EXE_CACHE: Optional[Path] = None
+
+def get_gibbon_exe() -> Optional[Path]:
+    """
+    Prefer a locally built gibbon executable if available.
+    Priority:
+      1) $GIBBON_EXE
+      2) cabal list-bin exe:gibbon (from gibbon-compiler)
+      3) PATH lookup
+    """
+    global _GIBBON_EXE_CACHE
+    if _GIBBON_EXE_CACHE is not None:
+        return _GIBBON_EXE_CACHE
+
+    env_exe = os.environ.get("GIBBON_EXE")
+    if env_exe:
+        p = Path(env_exe).resolve()
+        if p.exists():
+            _GIBBON_EXE_CACHE = p
+            return p
+
+    # Try cabal list-bin from the gibbon-compiler directory
+    try:
+        gc_dir = REPO_ROOT / "gibbon-compiler"
+        r = subprocess.run(
+            ["cabal", "list-bin", "exe:gibbon"],
+            cwd=str(gc_dir),
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode == 0:
+            p = Path(r.stdout.strip()).resolve()
+            if p.exists():
+                _GIBBON_EXE_CACHE = p
+                return p
+    except Exception:
+        pass
+
+    path = shutil.which("gibbon")
+    if path:
+        p = Path(path).resolve()
+        if p.exists():
+            _GIBBON_EXE_CACHE = p
+            return p
+    return None
+
+def postprocess_sml_for_bench(sml_path: Path) -> None:
+    """
+    Patch gibbon-generated SML so benchmark output matches parser expectations.
+    - Use printsym for Running pass/End/NEWLINE
+    - Wrap pass computations with iterate to emit ITER TIMES
+    - Prefix tuple output with "'#(" (matches Gibbon)
+    - Use runtime sizeParam for build sizes to avoid compile-time precompute
+    """
+    if not sml_path.exists():
+        return
+    if sml_path.name == "GibbonCompat.sml":
+        return
+    text = sml_path.read_text()
+
+    if sml_path.name == "Compiler.sml":
+        text = text.replace("Int.toString(x__6)", "showBool(x__6)")
+
+    # Ensure GibbonCompat is in scope for printsym/iterate/salt.
+    if not text.lstrip().startswith("open GibbonCompat;"):
+        text = "open GibbonCompat;\n\n" + text
+
+    # Replace prints for markers.
+    text = re.sub(r'print "NEWLINE"', 'printsym "NEWLINE"', text)
+    text = re.sub(r'print "(Running pass[^\"]*)"', r'printsym "\1"', text)
+    text = re.sub(r'print "(Running program[^\"]*)"', r'printsym "\1"', text)
+    text = re.sub(r'print "End"', 'printsym "End"', text)
+    # Fix SML case pattern arrow emitted by gibbon for tuple print.
+    text = re.sub(r'of\s*\(([^)]*)\)\s*->', r'of (\1) =>', text)
+
+
+    # Normalize any previous salt injection to use full sizeParam.
+    text = re.sub(r'\(\(GibbonCompat\.getSizeParam\(\)\s+mod\s+2\)\s+\+\s+(\d+)\)',
+                  r'((GibbonCompat.getSizeParam()) + \1)', text)
+
+    lines = text.splitlines()
+    out = []
+    in_main = False
+    expect_pass_result = False
+    replaced_size_param = False
+    for i, line in enumerate(lines):
+        if "val _ = (case" in line:
+            in_main = True
+
+        if in_main and "Running pass" in line:
+            expect_pass_result = True
+
+        # Replace the first sizeParam literal in main with runtime sizeParam.
+        if in_main and (not replaced_size_param):
+            m = re.match(r'(\s*let val\s+(fltPrm_\w+)\s*=\s*)1(\s*in\s*)', line)
+            if m:
+                lookahead = "\n".join(lines[i:i + 5])
+                if re.search(r'\b' + re.escape(m.group(2)) + r'\b\s*\+\s*\d+', lookahead):
+                    out.append(m.group(1) + "(GibbonCompat.getSizeParam())" + m.group(3))
+                    replaced_size_param = True
+                    continue
+
+        # Inject runtime sizeParam into any literal top-level build in main.
+        if in_main:
+            m = re.search(r'(let val \w+ = \(build\w+\s+)(\d+)([^)]*\) in)', line)
+            if m:
+                new_line = (m.group(1) +
+                            f"((GibbonCompat.getSizeParam()) + {m.group(2)})" +
+                            m.group(3))
+                out.append(new_line)
+                continue
+
+        # Wrap pass result with iterate.
+        if in_main and expect_pass_result:
+            m = re.match(r'(\s*let val\s+(\w+)\s*=\s*\()(.+)(\)\s*in\s*)', line)
+            if m and "iterate" not in line:
+                var = m.group(2)
+                expr = m.group(3).strip()
+                # Skip wrapping print/printsym wildcards; wait for actual pass result.
+                if var.startswith("wildcard") or "printsym" in expr or "print " in expr:
+                    # Let other normalizations run on this line.
+                    pass
+                else:
+                    out.append(m.group(1) + f"iterate (fn () => {expr})" + m.group(4))
+                    expect_pass_result = False
+                    continue
+                # fall through to append original line
+
+        # Compiler: print bool for hasCycle in tuple output.
+        if in_main and sml_path.name == "Compiler.sml":
+            line = re.sub(r'print\(Int\.toString\(x__6\)\)', 'print(showBool(x__6))', line)
+
+        # Ensure tuple-print let blocks end properly.
+        line = re.sub(r'print "\)" in \(\)\);', 'print ")" in () end);', line)
+        line = re.sub(r'print "\)" in \(\)\)$', 'print ")" in () end)', line)
+
+        # Make feature vector size depend on sizeParam in main.
+        if in_main:
+            line = re.sub(
+                r'mkFeatureVec\s+(\d+)',
+                lambda m: f"mkFeatureVec ((GibbonCompat.getSizeParam()) + {m.group(1)})",
+                line,
+            )
+            line = re.sub(
+                r'classifyBatch\(([^,]*),\s*(\d+)\s*,',
+                lambda m: f"classifyBatch({m.group(1)}, ((GibbonCompat.getSizeParam()) + {m.group(2)}),",
+                line,
+            )
+
+        out.append(line)
+
+    sml_path.write_text("\n".join(out) + "\n")
+
+def ensure_mlton_sml(aos_hs: Path, mlton_sml: Path, force: bool = False) -> Tuple[bool, Optional[str]]:
+    """
+    Ensure MLton SML exists.
+    Regenerate via gibbon if:
+      1) AOS source is newer than MLTON SML, or
+      2) --clean (force) is set, or
+      3) MLTON SML is missing.
+    Otherwise leave MLTON SML untouched.
+    """
+    gibbon_exe = get_gibbon_exe()
+    if gibbon_exe is None:
+        return False, "gibbon executable not found (set GIBBON_EXE or build gibbon)"
+
+    need_regen = force or (not mlton_sml.exists())
+    if (not need_regen) and aos_hs.exists():
+        need_regen = aos_hs.stat().st_mtime > mlton_sml.stat().st_mtime
+    if (not need_regen) and mlton_sml.exists():
+        try:
+            need_regen = gibbon_exe.stat().st_mtime > mlton_sml.stat().st_mtime
+        except Exception:
+            pass
+
+    if need_regen:
+        aos_sml = aos_hs.with_suffix(".sml")
+        env = os.environ.copy()
+        env.setdefault("GIBBONDIR", str(REPO_ROOT))
+        soa_root = REPO_ROOT / "gibbon-compiler" / "examples" / "soa_examples"
+        try:
+            rel = aos_hs.resolve().relative_to(soa_root.resolve())
+        except Exception:
+            rel = aos_hs
+        r = subprocess.run([str(gibbon_exe), "--hs", "--mpl", str(rel)],
+                           cwd=str(soa_root),
+                           capture_output=True, text=True, env=env)
+        if r.returncode != 0:
+            # If we already have an MLTON file, keep it and warn.
+            if mlton_sml.exists():
+                return True, f"gibbon --mpl failed; keeping existing {mlton_sml}"
+            return False, r.stderr.strip() or "gibbon --mpl failed"
+
+        mlton_sml.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(aos_sml, mlton_sml)
+        postprocess_sml_for_bench(mlton_sml)
+
+    return True, None
 
 def get_compiler_info(name: str = "gibbon") -> Optional[Tuple[Path, float]]:
     """
@@ -1179,9 +1382,33 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     c_file = (out_dir / f"{stem}.{variant}.c") if compiler == "gibbon" else None
 
     if compiler == "ghc":
-        cmd = ["ghc", "-O2", "-o", str(exe), str(source)]
+        cmd = [
+            "ghc",
+            "-O2",
+            "-rtsopts",
+            "-fno-full-laziness",
+            "-fno-cse",
+            "-fno-strictness",
+            "-XNoImplicitPrelude",
+            "-XPackageImports",
+            "-i" + str(Path(__file__).resolve().parent / "programs" / "GHC"),
+            f"-i{source.parent}",
+            "-o", str(exe),
+            str(source),
+        ]
     elif compiler == "mlton":
-        cmd = ["mlton", "-output", str(exe), str(source)]
+        # MLton expects a single .sml or .mlb entry. Include GibbonCompat.
+        compat = source.parent / "GibbonCompat.sml"
+        mlb_file = out_dir / f"{stem}.{variant}.mlb"
+        parts = ["local", "  $(SML_LIB)/basis/basis.mlb"]
+        if compat.exists():
+            parts.append(f"  {compat}")
+        parts.append(f"  {source}")
+        parts.append("in")
+        parts.append("end")
+        mlb_file.write_text("\n".join(parts) + "\n")
+        # Use 64-bit ints to avoid overflow in larger synthetic benchmarks.
+        cmd = ["mlton", "-default-type", "int64", "-output", str(exe), str(mlb_file)]
     else:
         cmd = ["gibbon"]
         if use_mutable_cursors:
@@ -1223,7 +1450,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
+        env = os.environ.copy()
+        if compiler == "gibbon":
+            env.setdefault("GIBBONDIR", str(REPO_ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT), env=env)
         elapsed = time.time() - t0
         if r.returncode == 0:
             c_file_str = str(c_file) if c_file else None
@@ -1273,39 +1503,50 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 # Run one executable  (always single-threaded)
 # ---------------------------------------------------------------------------
 def run_exe(exe: Path, iterations: int,
+            timeout: int = 600,
             dump_dir: Optional[Path] = None,
             env_override: Optional[Dict[str, str]] = None
-            ) -> Tuple[bool, float, Optional[str], int]:
+            ) -> Tuple[bool, float, Optional[str], Optional[str], int]:
     """
-    Run executable and return (success, elapsed_time, stdout_or_stderr, returncode).
-    returncode is used to detect OOM (e.g., 137 = killed by OOM, 139 = segfault).
+    Run executable and return (success, elapsed, stdout, stderr, returncode).
     """
     if not exe.exists():
-        return False, 0.0, None, -1
+        return False, 0.0, None, "executable not found", -1
     exe_mtime = datetime.datetime.fromtimestamp(exe.stat().st_mtime).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
     print(f"           running: {exe}")
     print(f"           exe mtime: {exe_mtime}  |  --iterate {iterations}")
-    # Gibbon exes accept --iterate N on the command line, NOT via GIBBON_ITERS
-    cmd = [str(exe), "--iterate", str(iterations)]
+
+    cmd = [str(exe)]
+    # For GHC, pass RTS options to increase heap size. This should prevent OOM crashes.
+    if ".ghc." in exe.name:
+        cmd.extend(["+RTS", "-H4G", "-RTS"])
+    # For all variants, pass a deterministic size-param to prevent compile-time precompute.
+    cmd.extend(["--size-param", "0"])
+    cmd.extend(["--iterate", str(iterations)])
+
     t0  = time.time()
     try:
         env = os.environ.copy()
         if env_override:
             env.update(env_override)
-        r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, env=env, timeout=timeout
+        )
         elapsed = time.time() - t0
-        if r.returncode == 0:
-            if dump_dir is not None:
-                dump_dir.mkdir(parents=True, exist_ok=True)
-                dump_file = dump_dir / f"{exe.stem}.stdout.txt"
-                dump_file.write_text(r.stdout)
-            return True, elapsed, r.stdout, 0
-        # Failed - return stderr and the actual exit code for OOM detection
-        return False, elapsed, r.stderr, r.returncode
+        if dump_dir is not None:
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            (dump_dir / f"{exe.stem}.stdout.txt").write_text(r.stdout or "")
+            (dump_dir / f"{exe.stem}.stderr.txt").write_text(r.stderr or "")
+        
+        success = (r.returncode == 0)
+        return success, elapsed, r.stdout, r.stderr, r.returncode
+    except subprocess.TimeoutExpired:
+        return False, timeout, None, "timeout expired", -1
     except Exception as e:
-        return False, time.time() - t0, str(e), -1
+        return False, time.time() - t0, None, str(e), -1
+
 
 # ---------------------------------------------------------------------------
 # Benchmark one program
@@ -1328,18 +1569,12 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     print(f"\n{'='*70}\nBenchmarking: {prog}\n{'='*70}")
 
     # Determine which variants to compile
+    variants = []
     if benchmark_immutable:
-        variants = [
-            ("aos", True),       # AOS with mutable cursors
-            ("aos_imm", False),  # AOS without mutable cursors
-            ("soa", True),       # SoA with mutable cursors
-            ("soa_imm", False),  # SoA without mutable cursors
-        ]
+        variants.extend([("aos", True), ("aos_imm", False),
+                         ("soa", True), ("soa_imm", False)])
     else:
-        variants = [
-            ("aos", True),
-            ("soa", True),
-        ]
+        variants.extend([("aos", True), ("soa", True)])
 
     if benchmark_ghc:
         variants.append(("ghc", False))
@@ -1353,8 +1588,13 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             src = programs_dir / src_dir / prog
         elif var == "mlton":
             src_dir = "MLTON"
-            # Assume MLton programs have .sml extension
+            # MLton programs live in MLTON/*.sml
             src = programs_dir / src_dir / prog.replace(".hs", ".sml")
+            # Generate/update SML from HiCal and postprocess into MLTON.
+            aos_hs = programs_dir / "AOS" / prog
+            ok, err = ensure_mlton_sml(aos_hs, src, force=force)
+            if not ok:
+                print(f"  Warning: MLton SML generation failed for {prog}: {err}")
         else:
             # Source is always in AOS/ or SOA/ directory, not aos_imm/soa_imm
             src_dir = "AOS" if var.startswith("aos") else "SOA"
@@ -1399,25 +1639,25 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         run_started_at = time.time()
         papi_env = ({"PAPI_EVENTS": ",".join(_PAPI_SELECTED_EVENTS)}
                     if (enable_papi and _PAPI_SELECTED_EVENTS) else None)
-        ok2, rt, stdout_or_stderr, returncode = run_exe(
-            exe, iterations, dump_dir, env_override=papi_env
+        ok2, rt, stdout, stderr, returncode = run_exe(
+            exe, iterations, dump_dir=dump_dir, env_override=papi_env
         )
         if not ok2:
             # Detect OOM from both exit code and stderr content
             # Common OOM exit codes: 137 (killed by OOM), 139 (segfault), -11 (SIGSEGV)
             oom_exit_codes = {137, 139, -11, 134}  # 134 = SIGABRT from stack overflow
-            stderr_text = (stdout_or_stderr or "").lower()
+            err_text = (stderr or stdout or "").lower()
             
-            is_oom = (returncode in oom_exit_codes) or any(keyword in stderr_text for keyword in [
+            is_oom = (returncode in oom_exit_codes) or any(keyword in err_text for keyword in [
                 "stack overflow", "out of memory", "cannot allocate",
                 "segmentation fault", "stack space overflow",
-                "memory exhausted", "bad_alloc", "killed"
+                "memory exhausted", "heap exhausted", "bad_alloc", "killed"
             ])
             
             # Debug output - show what we got
             print(f"           exit code: {returncode}")
-            if stdout_or_stderr:
-                stderr_preview = stdout_or_stderr[:200].replace('\n', ' ')
+            if err_text:
+                stderr_preview = err_text[:200].replace('\n', ' ')
                 print(f"           stderr: {stderr_preview}...")
             
             if is_oom:
@@ -1425,13 +1665,13 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                 res.error_message = "out of memory"
             else:
                 print(f"           FAILED (exit non-zero)")
-                res.error_message = "execution failed"
+                res.error_message = stderr or "execution failed"
             res.run_success = False
         else:
             res.run_success = True
-            if stdout_or_stderr:
-                res.output  = clean_output(stdout_or_stderr)
-                res.passes  = parse_passes(stdout_or_stderr)
+            if stdout:
+                res.output  = clean_output(stdout)
+                res.passes  = parse_passes(stdout)
                 apply_source_classification(res, src_data)
                 if enable_papi:
                     attach_papi_to_passes(
@@ -1442,15 +1682,21 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         run_started_at=run_started_at,
                     )
                 if enable_papi_native:
-                    attach_papi_native_to_passes(res, stdout_or_stderr)
+                    attach_papi_native_to_passes(res, stdout)
                     if not getattr(res, "papi_counters", None):
-                        if stdout_or_stderr and "PAPI_NATIVE" in stdout_or_stderr:
+                        if stdout and "PAPI_NATIVE" in stdout:
                             print("           Native PAPI warning: PAPI_NATIVE lines found but could not attach to passes")
                         else:
                             print("           Native PAPI warning: no PAPI_NATIVE lines found in stdout")
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = sum(p["median_time"] for p in res.passes.values())
+                def _fmt_time(t: float) -> str:
+                    # Avoid rounding microsecond-scale passes to 0.0000.
+                    if t < 1e-3:
+                        return f"{t:.6f}s"
+                    return f"{t:.4f}s"
+
                 print(f"           wall={rt:.2f}s  passes={len(res.passes)}"
                       f"  total_itertime={total_t:.4f}s")
                 for pname, pd in res.passes.items():
@@ -1462,8 +1708,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                     n   = pd.get("n", len(its))
                     t   = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
                     print(f"           [{t}] {pname}: "
-                          f"median={med:.4f} ±{se:.5f}s  "
-                          f"min={mn:.4f}s  max={mx:.4f}s  n={n}")
+                          f"median={_fmt_time(med)} ±{se:.5f}s  "
+                          f"min={_fmt_time(mn)}  max={_fmt_time(mx)}  n={n}")
 
         results[var] = res
 
@@ -1475,7 +1721,6 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     # For backwards compatibility, return (aos, soa) with mutable cursors
     # Also store all results globally if benchmarking immutable variants
     aos, soa = results.get("aos"), results.get("soa")
-    ghc, mlton = results.get("ghc"), results.get("mlton")
     
     # Global storage for extended results (used by new comparison table)
     if hasattr(benchmark_program, '_all_variants_results'):
@@ -1485,31 +1730,29 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             'aos_imm': results.get("aos_imm"),
             'soa': results.get("soa"),
             'soa_imm': results.get("soa_imm"),
-            'ghc': ghc,
-            'mlton': mlton,
+            'ghc': results.get("ghc"),
+            'mlton': results.get("mlton"),
         })
     
-    if benchmark_immutable:
-        aos_imm = results.get("aos_imm")
-        soa_imm = results.get("soa_imm")
-        analysis = analyze_outputs_by_variant({
-            "aos": aos,
-            "aos_imm": aos_imm,
-            "soa": soa,
-            "soa_imm": soa_imm,
-        })
-        if analysis["is_match"] is True:
-            print("\n  Output check (successful cursor variants): ✓ MATCH")
-        elif analysis["is_match"] is False:
-            print("\n  Output check (successful cursor variants): ✗ MISMATCH")
-        else:
-            print("\n  Output check (successful cursor variants): N/A (fewer than 2 successful variants with output)")
-        if analysis["failed"]:
-            failed_s = ", ".join(f"{v} ({err})" for v, err in analysis["failed"])
-            print(f"  Runtime failures excluded from output matching: {failed_s}")
-    elif aos and soa and aos.run_success and soa.run_success:
-        m = outputs_match(aos, soa)
-        print(f"\n  Output check (mutable cursors): {'✓ MATCH' if m else '✗ MISMATCH'}")
+    # Output checks: compare all successful variants with outputs (AoS/SoA/imm/GHC/MLton).
+    outputs_by_variant = {
+        "aos": aos,
+        "soa": soa,
+        "aos_imm": results.get("aos_imm") if benchmark_immutable else None,
+        "soa_imm": results.get("soa_imm") if benchmark_immutable else None,
+        "ghc": results.get("ghc"),
+        "mlton": results.get("mlton"),
+    }
+    analysis = analyze_outputs_by_variant(outputs_by_variant)
+    if analysis["is_match"] is True:
+        print("\n  Output check (successful variants): ✓ MATCH")
+    elif analysis["is_match"] is False:
+        print("\n  Output check (successful variants): ✗ MISMATCH")
+    else:
+        print("\n  Output check (successful variants): N/A (fewer than 2 successful variants with output)")
+    if analysis["failed"]:
+        failed_s = ", ".join(f"{v} ({err})" for v, err in analysis["failed"])
+        print(f"  Runtime failures excluded from output matching: {failed_s}")
 
     if aos and soa and aos.run_success and soa.run_success:
         if aos.passes:
@@ -1614,6 +1857,107 @@ def _short_counter_label(counter: str) -> str:
 # ---------------------------------------------------------------------------
 # LaTeX tables
 # ---------------------------------------------------------------------------
+def _table_comparison_ghc_mlton(f, all_variants_results):
+    f.write("\n\n")
+    f.write("% ============================================================================\n")
+    f.write("% Table 3: Gibbon vs GHC vs MLton Comparison\n")
+    f.write("% ============================================================================\n\n")
+
+    rows = []
+    # Collect data first
+    for entry in all_variants_results:
+        prog = entry['program'].replace(".hs", "").replace("_", "\\_")
+        
+        def get_total_or_oom(res):
+            if res is None: return None, False
+            if res.run_success: return sum(p["median_time"] for p in res.passes.values()), False
+            is_oom = (res.error_message == "out of memory")
+            return None, is_oom
+
+        aos_t, aos_oom = get_total_or_oom(entry.get('aos'))
+        soa_t, soa_oom = get_total_or_oom(entry.get('soa'))
+        ghc_t, ghc_oom = get_total_or_oom(entry.get('ghc'))
+        mlton_t, mlton_oom = get_total_or_oom(entry.get('mlton'))
+
+        row_data = {
+            "prog": prog,
+            "aos": (aos_t, aos_oom),
+            "soa": (soa_t, soa_oom),
+            "ghc": (ghc_t, ghc_oom),
+            "mlton": (mlton_t, mlton_oom),
+        }
+        rows.append(row_data)
+
+    f.write("\\begin{table}[htbp]\n\\centering\n")
+    f.write("\\caption{Runtime comparison of Gibbon (AoS/SoA), GHC, and MLton. "
+            "Times are total median per iteration (s). "
+            "\\textbf{Bold} marks the fastest time for each program.}\n")
+    f.write("\\label{tab:comparison_ghc_mlton}\n\\small\n")
+    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
+    f.write(
+        "\\textbf{Program}"
+        " & \\textbf{Gibbon-AoS} & \\textbf{Gibbon-SoA}"
+        " & \\textbf{GHC} & \\textbf{MLton} \\\\\n"
+    )
+    f.write("\\midrule\n")
+
+    # geomean collectors
+    aos_times, soa_times, ghc_times, mlton_times = [], [], [], []
+
+    for r in rows:
+        cells = {}
+        for variant in ["aos", "soa", "ghc", "mlton"]:
+            t, is_oom = r[variant]
+            if is_oom:
+                cells[variant] = ("\\textit{OOM}", None)
+            elif t is None:
+                cells[variant] = ("--", None)
+            else:
+                cells[variant] = (fmt(t), t)
+
+        valid_times = [v[1] for v in cells.values() if v[1] is not None]
+        if valid_times:
+            min_t = min(valid_times)
+            for k, v in cells.items():
+                if v[1] is not None and v[1] == min_t:
+                    cells[k] = (f"\\textbf{{{v[0]}}}", v[1])
+        
+        # append to geomean lists
+        if r["aos"][0] is not None and not r["aos"][1]: aos_times.append(r["aos"][0])
+        if r["soa"][0] is not None and not r["soa"][1]: soa_times.append(r["soa"][0])
+        if r["ghc"][0] is not None and not r["ghc"][1]: ghc_times.append(r["ghc"][0])
+        if r["mlton"][0] is not None and not r["mlton"][1]: mlton_times.append(r["mlton"][0])
+
+        f.write(f"{r['prog']}"
+                f" & {cells['aos'][0]} & {cells['soa'][0]}"
+                f" & {cells['ghc'][0]} & {cells['mlton'][0]} \\\\\n")
+    
+    # Geomean row
+    f.write("\\midrule\n")
+    gm_aos = statistics.geometric_mean(aos_times) if aos_times else None
+    gm_soa = statistics.geometric_mean(soa_times) if soa_times else None
+    gm_ghc = statistics.geometric_mean(ghc_times) if ghc_times else None
+    gm_mlton = statistics.geometric_mean(mlton_times) if mlton_times else None
+
+    gm_cells = {
+        "aos": (fmt(gm_aos) if gm_aos else "--", gm_aos),
+        "soa": (fmt(gm_soa) if gm_soa else "--", gm_soa),
+        "ghc": (fmt(gm_ghc) if gm_ghc else "--", gm_ghc),
+        "mlton": (fmt(gm_mlton) if gm_mlton else "--", gm_mlton),
+    }
+    gm_valid = [v[1] for v in gm_cells.values() if v[1] is not None]
+    if gm_valid:
+        min_gm = min(gm_valid)
+        for k, v in gm_cells.items():
+            if v[1] is not None and v[1] == min_gm:
+                gm_cells[k] = (f"\\textbf{{{v[0]}}}", v[1])
+
+    f.write(f"\\textbf{{Geomean}}"
+            f" & {gm_cells['aos'][0]} & {gm_cells['soa'][0]}"
+            f" & {gm_cells['ghc'][0]} & {gm_cells['mlton'][0]} \\\\\n")
+
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+
 def _table_cursor_comparison(f, all_variants_results):
     """
     Generates Table 2: Cursor mode comparison showing all 4 variants:
@@ -1632,7 +1976,6 @@ def _table_cursor_comparison(f, all_variants_results):
         soa_mut = entry.get('soa')
         soa_imm = entry.get('soa_imm')
 
-        # Calculate total times (sum of all passes)
         # Calculate total times (sum of all passes)
         def get_total_or_oom(res):
             """Returns (time, is_oom) tuple."""
@@ -1756,6 +2099,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
         _table_papi_summary(f, all_results)
         if all_variants_results:
             _table_cursor_comparison(f, all_variants_results)
+            if any(e.get('ghc') or e.get('mlton') for e in all_variants_results):
+                _table_comparison_ghc_mlton(f, all_variants_results)
         _table_per_program(f, all_results, all_variants_results)
     print(f"  ✓ LaTeX tables → {out_file}")
     if all_variants_results:
@@ -1998,7 +2343,6 @@ def _table_papi_summary(f, all_results):
             else:
                 row += " & --"
         f.write(row + " \\\\\n")
-
     gm_row = "\\textbf{Geomean}"
     for c in counters:
         vals = spd_map.get(c, [])
@@ -2858,6 +3202,8 @@ def write_text_report(all_results: List[Tuple], out_file: Path,
                 "aos_imm": ventry.get("aos_imm"),
                 "soa": ventry.get("soa"),
                 "soa_imm": ventry.get("soa_imm"),
+                "ghc": ventry.get("ghc"),
+                "mlton": ventry.get("mlton"),
             })
             status = analysis["is_match"]
             if status is None:
@@ -2870,7 +3216,12 @@ def write_text_report(all_results: List[Tuple], out_file: Path,
             if status is False:
                 mismatch_details.append((aos.program, analysis))
         else:
-            analysis = analyze_outputs_by_variant({"aos": aos, "soa": soa})
+            analysis = analyze_outputs_by_variant({
+                "aos": aos,
+                "soa": soa,
+                "ghc": None,
+                "mlton": None,
+            })
             status = analysis["is_match"]
             if status is None:
                 lines.append("  Output match: N/A (fewer than 2 successful variants with output)")
@@ -2941,13 +3292,19 @@ def write_json_results(all_results: List[Tuple], out_file: Path,
         if ventry is not None:
             aos_imm = ventry.get("aos_imm")
             soa_imm = ventry.get("soa_imm")
+            ghc_res = ventry.get("ghc")
+            mlton_res = ventry.get("mlton")
             rec["aos_imm"] = ser(aos_imm) if aos_imm else None
             rec["soa_imm"] = ser(soa_imm) if soa_imm else None
+            rec["ghc"] = ser(ghc_res) if ghc_res else None
+            rec["mlton"] = ser(mlton_res) if mlton_res else None
             rec["output_match_all_variants"] = outputs_match_all([
                 ventry.get("aos"),
                 aos_imm,
                 ventry.get("soa"),
                 soa_imm,
+                ghc_res,
+                mlton_res,
             ])
         data.append(rec)
     out_file.write_text(json.dumps(data, indent=2))
@@ -3384,7 +3741,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_cls_all = build_source_classification(args.programs_dir)
 
-    # Initialize global storage for extended results (used by cursor comparison table)
+    # Initialize global storage for extended results (used by new comparison table)
     # Always initialize this to capture GHC/MLton results if requested
     benchmark_program._all_variants_results = []
 
@@ -3402,10 +3759,9 @@ def main():
         )
         all_results.append((aos, soa))
 
-    extended_results = (getattr(benchmark_program, '_all_variants_results', None)
-                        if args.benchmark_immutable else None)
+    extended_results = getattr(benchmark_program, '_all_variants_results', [])
 
-    if args.benchmark_immutable and extended_results is not None:
+    if args.benchmark_immutable:
         ok = sum(
             1 for e in extended_results
             if all(

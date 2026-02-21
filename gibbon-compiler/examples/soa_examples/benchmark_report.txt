@@ -1,0 +1,30 @@
+========================================================================
+GIBBON BENCHMARK REPORT v3.1
+========================================================================
+Generated: 2026-02-21 17:28:31
+
+
+Program: DBQuery.hs  [ADT fields: 15]  [AoS=1 buf, SoA=13 bufs | Query]
+----------------------------------------
+  AOS: 0.2568s total
+    [F] sumCost: 0.0184 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] sumRows: 0.0255 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] countJoins: 0.0186 ±0.00000s  (n=1)  uses=3/15  dead=80%
+    [F] sumMemory: 0.0185 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] hashJoinPressure: 0.0199 ±0.00000s  (n=1)  uses=5/15  dead=67%
+    [F] filterSelectivitySkew: 0.0183 ±0.00000s  (n=1)  uses=5/15  dead=67%
+    [M] scaleCosts: 0.0688 ±0.00000s  (n=1)  uses=15/15  dead=0%
+    [M] clearQueryFlags: 0.0687 ±0.00000s  (n=1)  uses=14/15  dead=7%
+  SOA: 0.2537s total
+    [F] sumCost: 0.0149 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] sumRows: 0.0213 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] countJoins: 0.0112 ±0.00000s  (n=1)  uses=3/15  dead=80%
+    [F] sumMemory: 0.0146 ±0.00000s  (n=1)  uses=6/15  dead=60%
+    [F] hashJoinPressure: 0.0130 ±0.00000s  (n=1)  uses=5/15  dead=67%
+    [F] filterSelectivitySkew: 0.0123 ±0.00000s  (n=1)  uses=5/15  dead=67%
+    [M] scaleCosts: 0.0834 ±0.00000s  (n=1)  uses=15/15  dead=0%
+    [M] clearQueryFlags: 0.0830 ±0.00000s  (n=1)  uses=14/15  dead=7%
+  Speedup: 1.012×
+  Output match (successful variants): YES
+  Runtime failures excluded from output matching: mlton (unhandled exception: Overflow
+)

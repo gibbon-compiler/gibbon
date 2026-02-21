@@ -106,7 +106,7 @@ diffPW p =
 gibbon_main =
             let _ = printsym (quote "Running Program Piecewise Functions (MADNESS style): ")
                 _ = printsym (quote "NEWLINE")
-                pfTree = buildPW 23 17
+                pfTree = buildPW (sizeParam + 23) 17
                 _ = printsym (quote "Running pass norm2Estimate (fold, uses=5): ")
                 _ = printsym (quote "NEWLINE")
                 norm = iterate (norm2Estimate pfTree)
@@ -147,4 +147,6 @@ gibbon_main =
                 _diffed = iterate (diffPW shifted)
                 _ = printsym (quote "End")
                 _ = printsym (quote "NEWLINE")
-            in (norm, refineCnt, mass, maxLvl, pmapCuts, loadW)
+                massShift = compressMass shifted
+                massDiff = compressMass _diffed
+            in (norm, refineCnt, mass, maxLvl, pmapCuts, loadW, massShift, massDiff)

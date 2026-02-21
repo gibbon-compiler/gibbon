@@ -127,8 +127,8 @@ scaleLayout d k =
 gibbon_main =
   let _ = printsym (quote "Running program DomTree: ")
       _ = printsym (quote "NEWLINE")
-      tree   = buildRenderTree 23
-      tree_smaller = buildRenderTree 20
+      tree   = buildRenderTree (23)
+      tree_smaller = buildRenderTree (20)
       _ = printsym (quote "Running pass SumArea (fold, uses=6): ")
       _ = printsym (quote "NEWLINE")
       area   = iterate (sumArea tree)
@@ -159,6 +159,8 @@ gibbon_main =
       tree'' = iterate (scaleLayout tree' 2)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
+      scaledArea' = sumArea tree'
+      scaledArea'' = sumArea tree''
       --_      = printPacked tree''
       --_      = printsym (quote "NEWLINE")
-  in (area, bottom, styled, textW)
+  in (area, bottom, styled, textW, scaledArea', scaledArea'')

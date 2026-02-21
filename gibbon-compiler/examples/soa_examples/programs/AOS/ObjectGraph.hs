@@ -173,7 +173,7 @@ decayColdObjects h k =
 gibbon_main =
             let _ = printsym (quote "Running program ObjectGraph Simulated a GC Program: ")
                 _ = printsym (quote "NEWLINE")
-                heap = buildHeap 23
+                heap = buildHeap (sizeParam + 23)
                 _ = printsym (quote "Running pass totalHeapSize (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 heapSize = iterate (totalHeapSize heap)
@@ -219,4 +219,6 @@ gibbon_main =
                 heapHot = iterate (touchHotObjects heap 4 12)
                 _  = printsym (quote "End")
                 _  = printsym (quote "NEWLINE")
-            in (heapSize, countMarkedItems, countLargeItems, liveSet, reclaimable, survivors, sObjIds)
+                liveSwept = liveBytes heapSwept
+                liveHot = liveBytes heapHot
+            in (heapSize, countMarkedItems, countLargeItems, liveSet, reclaimable, survivors, sObjIds, liveSwept, liveHot)

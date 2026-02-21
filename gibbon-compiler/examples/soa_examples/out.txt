@@ -1,0 +1,217 @@
+
+========================================================================
+GIBBON BENCHMARK SUITE v3.1
+========================================================================
+  Programs dir : programs
+  Output dir   : benchmark_output
+  Iterations   : 1  (passed as --iterate N; use --iterations 1 to match cold manual runs)
+  Programs     : 21
+  Force recomp : YES  (--clean)
+  Paper mode   : no
+  Dump raw     : no
+  Immutable    : no  (2 variants: aos, soa)
+  GHC          : no
+  MLton        : no
+  PAPI mode    : off
+  CPU cores    : 20
+  Compiler     : /workdisk/git/gibbon/dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon (2026-02-21 15:59:03)
+========================================================================
+
+======================================================================
+Scanning source files for field-usage annotations ...
+======================================================================
+  ✓ ColorOctree.hs: adt_fields=25
+  ✓ ColorOctree.hs: ADT 'ColorOctree' → AoS=1 buf, SoA=18 bufs (17 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ ColorOctree.hs: 'paletteEntriesQuantized' → fold, uses=13
+  ✓ ColorOctree.hs: 'quantizationErrorProxy' → fold, uses=10
+  ✓ Compiler.hs: adt_fields=9
+  ✓ Compiler.hs: ADT 'IR' → AoS=1 buf, SoA=8 bufs (7 non-recursive field slots, 2 recursive, 3 constructor(s))
+  ✓ Compiler.hs: 'verifyIR' → fold, uses=9
+  ✓ Compiler.hs: 'instCountPass' → fold, uses=2
+  ✓ Compiler.hs: 'blockCountPass' → fold, uses=2
+  ✓ Compiler.hs: 'memoryOpStatsPass' → fold, uses=3
+  ✓ Compiler.hs: 'castInstCountPass' → fold, uses=3
+  ✓ Compiler.hs: 'branchStatsPass' → fold, uses=2
+  ✓ Compiler.hs: 'latencyModelPass' → fold, uses=3
+  ✓ Compiler.hs: 'has cycle' → fold, uses=4
+  ✓ Compiler.hs: 'throughputModelPass' → fold, uses=3
+  ✓ Compiler.hs: 'targetReturnPass' → map, uses=9
+  ✓ Compiler.hs: 'stripSideEffectsPass' → map, uses=7
+  ✓ DBQuery.hs: adt_fields=15
+  ✓ DBQuery.hs: ADT 'Query' → AoS=1 buf, SoA=13 bufs (12 non-recursive field slots, 3 recursive, 4 constructor(s))
+  ✓ DBQuery.hs: 'sumCost' → fold, uses=6
+  ✓ DBQuery.hs: 'sumRows' → fold, uses=6
+  ✓ DBQuery.hs: 'countJoins' → fold, uses=3
+  ✓ DBQuery.hs: 'sumMemory' → fold, uses=6
+  ✓ DBQuery.hs: 'hashJoinPressure' → fold, uses=5
+  ✓ DBQuery.hs: 'filterSelectivitySkew' → fold, uses=5
+  ✓ DBQuery.hs: 'scaleCosts' → map, uses=15
+  ✓ DBQuery.hs: 'clearQueryFlags' → map, uses=14
+  ✓ DecisionTree.hs: adt_fields=7
+  ✓ DecisionTree.hs: ADT 'DTree' → AoS=1 buf, SoA=6 bufs (5 non-recursive field slots, 2 recursive, 2 constructor(s))
+  ✓ DecisionTree.hs: 'countNodes' → fold, uses=2
+  ✓ DecisionTree.hs: 'countLeaves' → fold, uses=2
+  ✓ DecisionTree.hs: 'treeDepth' → fold, uses=2
+  ✓ DecisionTree.hs: 'sumImpurity' → fold, uses=3
+  ✓ DecisionTree.hs: 'sumSamples' → fold, uses=3
+  ✓ DecisionTree.hs: 'countFeatureUses' → fold, uses=3
+  ✓ DecisionTree.hs: 'countSmallLeaves' → fold, uses=3
+  ✓ DecisionTree.hs: 'inferenceCost' → fold, uses=2
+  ✓ DecisionTree.hs: 'sumPathLengths' → fold, uses=3
+  ✓ DecisionTree.hs: 'classify tree' → fold, uses=5
+  ✓ DecisionTree.hs: 'classify Depth' → fold, uses=4
+  ✓ DecisionTree.hs: 'classify Batch' → fold, uses=5
+  ✓ DomTree.hs: adt_fields=15
+  ✓ DomTree.hs: ADT 'DOM' → AoS=1 buf, SoA=14 bufs (13 non-recursive field slots, 2 recursive, 3 constructor(s))
+  ✓ DomTree.hs: 'SumArea' → fold, uses=6
+  ✓ DomTree.hs: 'find max Bottom' → fold, uses=5
+  ✓ DomTree.hs: 'count styled' → fold, uses=3
+  ✓ DomTree.hs: 'sumTextWidth' → fold, uses=3
+  ✓ DomTree.hs: 'computeWidths' → map, uses=14
+  ✓ DomTree.hs: 'scaleLayout' → map, uses=15
+  ✓ KDTree.hs: adt_fields=17
+  ✓ KDTree.hs: ADT 'KDTree' → AoS=1 buf, SoA=16 bufs (15 non-recursive field slots, 2 recursive, 3 constructor(s))
+  ✓ KDTree.hs: 'Find nearest Neighbour' → fold, uses=13
+  ✓ KDTree.hs: 'countInRange tight_box' → fold, uses=13
+  ✓ KDTree.hs: 'sumMassInRange' → fold, uses=14
+  ✓ KDTree.hs: 'twoPointCorrelation bin_8_16' → fold, uses=11
+  ✓ KDTree.hs: 'pointCloudNeighborhood' → fold, uses=11
+  ✓ KDTree.hs: 'photonMappingBenchmark' → fold, uses=12
+  ✓ LinearListReduction.hs: adt_fields=11
+  ✓ LinearListReduction.hs: ADT 'List' → AoS=1 buf, SoA=11 bufs (10 non-recursive field slots, 1 recursive, 2 constructor(s))
+  ✓ LinearListReduction.hs: 'reduction' → fold, uses=2
+  ✓ List.hs: adt_fields=2
+  ✓ List.hs: ADT 'List' → AoS=1 buf, SoA=2 bufs (1 non-recursive field slots, 1 recursive, 2 constructor(s))
+  ✓ List.hs: 'add1 List' → map, uses=2
+  ✓ List.hs: 'length List' → fold, uses=1
+  ✓ List.hs: 'sumList' → fold, uses=2
+  ✓ List.hs: 'sumList tail recursive' → fold, uses=2
+  ✓ MonoTree.hs: adt_fields=3
+  ✓ MonoTree.hs: ADT 'Tree' → AoS=1 buf, SoA=2 bufs (1 non-recursive field slots, 2 recursive, 2 constructor(s))
+  ✓ MonoTree.hs: 'add1Tree' → map, uses=3
+  ✓ MonoTree.hs: 'sumTree' → fold, uses=3
+  ✓ MonoTree.hs: 'sumTree TailRec' → fold, uses=3
+  ✓ ObjectGraph.hs: adt_fields=5
+  ✓ ObjectGraph.hs: ADT 'Heap' → AoS=1 buf, SoA=4 bufs (3 non-recursive field slots, 2 recursive, 2 constructor(s))
+  ✓ ObjectGraph.hs: 'totalHeapSize' → fold, uses=3
+  ✓ ObjectGraph.hs: 'countMarked' → fold, uses=3
+  ✓ ObjectGraph.hs: 'countLargeItems' → fold, uses=3
+  ✓ ObjectGraph.hs: 'liveBytes' → fold, uses=4
+  ✓ ObjectGraph.hs: 'deadBytes' → fold, uses=4
+  ✓ ObjectGraph.hs: 'countSurvivors' → fold, uses=4
+  ✓ ObjectGraph.hs: 'sumObjIds' → fold, uses=3
+  ✓ ObjectGraph.hs: 'sweepUnmarked' → map, uses=5
+  ✓ ObjectGraph.hs: 'touchHotObjects' → map, uses=5
+  ✓ OctTree.hs: adt_fields=16
+  ✓ OctTree.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree.hs: 'sumMass' → fold, uses=10
+  ✓ OctTree.hs: 'sumEnergy' → fold, uses=12
+  ✓ OctTree.hs: 'countActive' → fold, uses=10
+  ✓ OctTree.hs: 'countParticles' → fold, uses=8
+  ✓ OctTree.hs: 'barnesHutPotential' → fold, uses=11
+  ✓ OctTree.hs: 'fmmPotential' → fold, uses=12
+  ✓ OctTree.hs: 'scaleEnergy' → map, uses=16
+  ✓ OctTree.hs: 'clearFlags' → map, uses=15
+  ✓ OctTreeBase.hs: adt_fields=16
+  ✓ OctTreeBase.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ⚠  OctTreeBase.hs: no pass annotations found
+  ✓ OctTree_barnesHutPotential.hs: adt_fields=16
+  ✓ OctTree_barnesHutPotential.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_barnesHutPotential.hs: 'barnesHutPotential' → fold, uses=11
+  ✓ OctTree_clearFlags.hs: adt_fields=16
+  ✓ OctTree_clearFlags.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_clearFlags.hs: 'clearFlags' → map, uses=15
+  ✓ OctTree_countActive.hs: adt_fields=16
+  ✓ OctTree_countActive.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_countActive.hs: 'countActive' → fold, uses=10
+  ✓ OctTree_countParticles.hs: adt_fields=16
+  ✓ OctTree_countParticles.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_countParticles.hs: 'countParticles' → fold, uses=8
+  ✓ OctTree_fmmPotential.hs: adt_fields=16
+  ✓ OctTree_fmmPotential.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_fmmPotential.hs: 'fmmPotential' → fold, uses=12
+  ✓ OctTree_scaleEnergy.hs: adt_fields=16
+  ✓ OctTree_scaleEnergy.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_scaleEnergy.hs: 'scaleEnergy' → map, uses=16
+  ✓ OctTree_sumEnergy.hs: adt_fields=16
+  ✓ OctTree_sumEnergy.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_sumEnergy.hs: 'sumEnergy' → fold, uses=12
+  ✓ OctTree_sumMass.hs: adt_fields=16
+  ✓ OctTree_sumMass.hs: ADT 'Octree' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 8 recursive, 3 constructor(s))
+  ✓ OctTree_sumMass.hs: 'sumMass' → fold, uses=10
+  ✓ PiecewiseFunctions.hs: adt_fields=8
+  ✓ PiecewiseFunctions.hs: ADT 'PW' → AoS=1 buf, SoA=7 bufs (6 non-recursive field slots, 2 recursive, 2 constructor(s))
+  ✓ PiecewiseFunctions.hs: 'norm2Estimate' → fold, uses=5
+  ✓ PiecewiseFunctions.hs: 'truncateTolViolations' → fold, uses=3
+  ✓ PiecewiseFunctions.hs: 'compressMass' → fold, uses=3
+  ✓ PiecewiseFunctions.hs: 'autorefineMaxLevel' → fold, uses=4
+  ✓ PiecewiseFunctions.hs: 'pmapCutHistogram' → fold, uses=4
+  ✓ PiecewiseFunctions.hs: 'lbDeuxLoadProxy' → fold, uses=5
+  ✓ PiecewiseFunctions.hs: 'addConstPW' → map, uses=8
+  ✓ PiecewiseFunctions.hs: 'diffPW' → map, uses=8
+  ✓ TernaryTree.hs: adt_fields=5
+  ✓ TernaryTree.hs: ADT 'Tree' → AoS=1 buf, SoA=3 bufs (2 non-recursive field slots, 3 recursive, 2 constructor(s))
+  ✓ TernaryTree.hs: 'add 1 tree' → map, uses=5
+  ✓ TernaryTree.hs: 'sum tree' → fold, uses=5
+  ✓ Trie.hs: adt_fields=10
+  ✓ Trie.hs: ADT 'Trie' → AoS=1 buf, SoA=9 bufs (8 non-recursive field slots, 2 recursive, 3 constructor(s))
+  ✓ Trie.hs: 'sumPrefixFreq' → fold, uses=3
+  ✓ Trie.hs: 'countTerminals' → fold, uses=3
+  ✓ Trie.hs: 'sumSubtreeHints' → fold, uses=3
+  ✓ Trie.hs: 'autocompleteTopKProxy' → fold, uses=5
+  ✓ Trie.hs: 'countLazyNodes' → fold, uses=4
+  ✓ Trie.hs: 'decayTrieStats' → map, uses=10
+  ✓ Trie.hs: 'resetTraversalState' → map, uses=10
+
+  23 programs have adt_fields annotation
+  23 programs have parseable ADT definitions (buffer counts)
+  22 programs have pass type annotations
+  22 programs have uses= field-usage annotations
+======================================================================
+
+
+======================================================================
+Benchmarking: Compiler.hs
+======================================================================
+
+Compiling 2 file(s) using 1 thread(s) ...
+  [AOS mut-cursors] Compiler: compiling  (forced recompile)
+           src: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/Compiler.hs  →  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.aos.exe
+           FAILED (0.6s)
+  [SOA mut-cursors] Compiler: compiling  (forced recompile)
+           src: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Compiler.hs  →  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.soa.exe
+Traceback (most recent call last):
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1489, in compile_parallel
+    for fut in as_completed(fmap):
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 243, in as_completed
+    waiter.event.wait(wait_timeout)
+  File "/usr/lib/python3.12/threading.py", line 655, in wait
+    signaled = self._cond.wait(timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/threading.py", line 355, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3809, in <module>
+    main()
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3745, in main
+    aos, soa = benchmark_program(
+               ^^^^^^^^^^^^^^^^^^
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1602, in benchmark_program
+    compile_results = compile_parallel(tasks)
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1484, in compile_parallel
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 238, in shutdown
+    t.join()
+  File "/usr/lib/python3.12/threading.py", line 1147, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib/python3.12/threading.py", line 1167, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

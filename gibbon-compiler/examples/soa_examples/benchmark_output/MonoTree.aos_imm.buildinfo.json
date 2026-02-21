@@ -1,0 +1,19 @@
+{
+  "compile_cmd": [
+    "gibbon",
+    "--enable-papi-native",
+    "--packed",
+    "--to-exe",
+    "--no-ran",
+    "--cfile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.c",
+    "--exefile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs"
+  ],
+  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
+  "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.c",
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos_imm.exe",
+  "compiled_at": "2026-02-20T14:26:19"
+}
