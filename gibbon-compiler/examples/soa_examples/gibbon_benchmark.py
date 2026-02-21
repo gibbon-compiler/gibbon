@@ -1414,6 +1414,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                     )
                 if enable_papi_native:
                     attach_papi_native_to_passes(res, stdout_or_stderr)
+                    if not getattr(res, "papi_counters", None):
+                        if stdout_or_stderr and "PAPI_NATIVE" in stdout_or_stderr:
+                            print("           Native PAPI warning: PAPI_NATIVE lines found but could not attach to passes")
+                        else:
+                            print("           Native PAPI warning: no PAPI_NATIVE lines found in stdout")
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = sum(p["median_time"] for p in res.passes.values())
@@ -1731,6 +1736,77 @@ def _spd_cell(spd: float, bold_threshold: float = 1.1) -> str:
     return r"\textbf{" + s + "}" if spd > bold_threshold else s
 
 
+def _merge_octree_results(all_results: List[Tuple]) -> Tuple[Optional[Tuple[BenchmarkResult, BenchmarkResult]], List[Tuple]]:
+    pair_map: Dict[str, Tuple[BenchmarkResult, BenchmarkResult]] = {}
+    for aos, soa in all_results:
+        if aos and soa:
+            pair_map[aos.program] = (aos, soa)
+
+    oct_split_programs = sorted(
+        p for p in pair_map.keys()
+        if p.startswith("OctTree_") and p.endswith(".hs")
+    )
+    oct_group_members: List[str] = []
+    if oct_split_programs:
+        oct_group_members.extend(oct_split_programs)
+    elif "OctTree.hs" in pair_map:
+        oct_group_members.append("OctTree.hs")
+    if oct_group_members and "ColorOctree.hs" in pair_map:
+        oct_group_members.append("ColorOctree.hs")
+
+    if not oct_group_members:
+        return None, all_results
+
+    def merge_variant(variant: str) -> BenchmarkResult:
+        merged = BenchmarkResult("OctTreeCombined.hs", variant)
+        merged.compile_success = True
+        merged.run_success = True
+        merged.passes = {}
+        merged.adt_fields = None
+        merged.adt_info = None
+
+        # Prefer OctTreeBase for ADT info.
+        base = pair_map.get("OctTreeBase.hs")
+        if base:
+            b = base[0]
+            if b and b.adt_fields is not None:
+                merged.adt_fields = b.adt_fields
+            if b and b.adt_info is not None:
+                merged.adt_info = b.adt_info
+
+        for prog_hs in oct_group_members:
+            pair = pair_map.get(prog_hs)
+            if not pair:
+                continue
+            src = pair[0] if variant.startswith("aos") else pair[1]
+            if not src or not src.run_success:
+                continue
+            if merged.adt_fields is None and src.adt_fields is not None:
+                merged.adt_fields = src.adt_fields
+            if merged.adt_info is None and src.adt_info is not None:
+                merged.adt_info = src.adt_info
+            for pname, pdata in src.passes.items():
+                merged_name = pname
+                if merged_name in merged.passes:
+                    stem = prog_hs.replace(".hs", "")
+                    merged_name = f"{stem}.{pname}"
+                merged.passes[merged_name] = dict(pdata)
+
+        merged.run_success = len(merged.passes) > 0
+        return merged
+
+    combined = (merge_variant("aos"), merge_variant("soa"))
+    if not (combined[0].run_success and combined[1].run_success):
+        combined = None
+
+    skip = set(oct_split_programs)
+    skip.add("OctTree.hs")
+    skip.add("ColorOctree.hs")
+    filtered = [(a, s) for a, s in all_results if a and a.program not in skip]
+
+    return combined, filtered
+
+
 def _table_summary(f, all_results):
     """
     Table 1: one row per program.
@@ -1762,10 +1838,14 @@ def _table_summary(f, all_results):
     )
     f.write("\\midrule\n")
 
-    for aos, soa in all_results:
+    combined, filtered = _merge_octree_results(all_results)
+    summary_results = ([combined] if combined else []) + filtered
+
+    for aos, soa in summary_results:
         if not (aos and soa and aos.run_success and soa.run_success):
             continue
-        prog     = aos.program.replace(".hs", "").replace("_", "\\_")
+        prog_raw = aos.program.replace(".hs", "")
+        prog     = ("OctTree" if prog_raw == "OctTreeCombined" else prog_raw).replace("_", "\\_")
         adt      = getattr(aos, "adt_fields", None)
         adt_str  = str(adt) if adt is not None else "--"
         adt_info = getattr(aos, "adt_info", None)
@@ -1833,7 +1913,10 @@ def _table_papi_summary(f, all_results):
       2) Cache stats as AoS/SoA value pairs
     Totals are sums of per-pass median counter values.
     """
-    counters = _collect_papi_counter_names(all_results)
+    combined, filtered = _merge_octree_results(all_results)
+    summary_results = ([combined] if combined else []) + filtered
+
+    counters = _collect_papi_counter_names(summary_results)
     if not counters:
         return
 
@@ -1858,10 +1941,11 @@ def _table_papi_summary(f, all_results):
     f.write("\\midrule\n")
 
     spd_map: Dict[str, List[float]] = {c: [] for c in counters}
-    for aos, soa in all_results:
+    for aos, soa in summary_results:
         if not (aos and soa and aos.run_success and soa.run_success):
             continue
-        row = aos.program.replace(".hs", "").replace("_", "\\_")
+        prog_raw = aos.program.replace(".hs", "")
+        row = ("OctTree" if prog_raw == "OctTreeCombined" else prog_raw).replace("_", "\\_")
         for c in counters:
             at = _papi_total_for_result(aos, c)
             st = _papi_total_for_result(soa, c)
@@ -1898,10 +1982,11 @@ def _table_papi_summary(f, all_results):
     f.write(hdr + " \\\\\n")
     f.write("\\midrule\n")
 
-    for aos, soa in all_results:
+    for aos, soa in summary_results:
         if not (aos and soa and aos.run_success and soa.run_success):
             continue
-        row = aos.program.replace(".hs", "").replace("_", "\\_")
+        prog_raw = aos.program.replace(".hs", "")
+        row = ("OctTree" if prog_raw == "OctTreeCombined" else prog_raw).replace("_", "\\_")
         for c in counters:
             at = _papi_total_for_result(aos, c)
             st = _papi_total_for_result(soa, c)
@@ -3161,7 +3246,8 @@ def main():
     ap.add_argument("--enable-papi", action="store_true",
                     help="Compile with --enable-papi, export PAPI_EVENTS, parse papi_hl_output JSON, "
                          "and add PAPI columns to tables.")
-    ap.add_argument("--enable-papi-native", action="store_true",
+    ap.add_argument("--enable-papi-native", "--enable-papi_native",
+                    dest="enable_papi_native", action="store_true",
                     help="Compile with --enable-papi-native, parse PAPI_NATIVE stdout lines, "
                          "and add native PAPI columns to tables.")
     args = ap.parse_args()
