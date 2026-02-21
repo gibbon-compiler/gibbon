@@ -13,26 +13,54 @@
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}
  & fields & bufs & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
 \midrule
-Compiler & 9 & 8 & 0.1386 & 0.0533 & \textbf{2.60$\times$} & 0.1626 & 0.1793 & 0.91$\times$ \\
-DBQuery & 15 & 13 & 0.1200 & 0.0889 & \textbf{1.35$\times$} & 0.1352 & 0.1666 & 0.81$\times$ \\
-DomTree & 15 & 14 & 0.1371 & 0.0621 & \textbf{2.21$\times$} & 0.0582 & 0.0818 & 0.71$\times$ \\
-KDTree & 17 & 16 & 0.1915 & 0.1404 & \textbf{1.36$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 0.0296 & 0.0051 & \textbf{5.85$\times$} & -- & -- & -- \\
-List & 2 & 2 & 0.3258 & 0.3034 & 1.07$\times$ & 0.2533 & 0.3414 & 0.74$\times$ \\
-MonoTree & 3 & 2 & 0.0176 & 0.0221 & 0.80$\times$ & 0.0608 & 0.0419 & \textbf{1.45$\times$} \\
-ObjectGraph & 5 & 4 & 0.0933 & 0.0795 & \textbf{1.17$\times$} & 0.1461 & 0.1612 & 0.91$\times$ \\
-OctTree\_sumMass & 16 & -- & 0.0353 & 0.0272 & \textbf{1.30$\times$} & -- & -- & -- \\
-OctTree\_sumEnergy & 16 & -- & 0.0354 & 0.0317 & \textbf{1.12$\times$} & -- & -- & -- \\
-OctTree\_countActive & 16 & -- & 0.0364 & 0.0293 & \textbf{1.25$\times$} & -- & -- & -- \\
-OctTree\_countParticles & 16 & -- & 0.0361 & 0.0273 & \textbf{1.32$\times$} & -- & -- & -- \\
-OctTree\_barnesHutPotential & 16 & -- & 0.0415 & 0.0395 & 1.05$\times$ & -- & -- & -- \\
-OctTree\_fmmPotential & 16 & -- & 0.0963 & 0.0954 & 1.01$\times$ & -- & -- & -- \\
-OctTree\_scaleEnergy & 16 & -- & -- & -- & -- & 0.1471 & 0.1761 & 0.84$\times$ \\
-OctTree\_clearFlags & 16 & -- & -- & -- & -- & 0.1506 & 0.1754 & 0.86$\times$ \\
-PiecewiseFunctions & 8 & 7 & 0.1416 & 0.0915 & \textbf{1.55$\times$} & 0.2407 & 0.2710 & 0.89$\times$ \\
-TernaryTree & 5 & 3 & 0.0296 & 0.0285 & 1.04$\times$ & 0.0839 & 0.0772 & 1.09$\times$ \\
-Trie & 10 & 9 & 0.0638 & 0.0324 & \textbf{1.97$\times$} & 0.1539 & 0.1702 & 0.90$\times$ \\
-ColorOctree & 25 & 18 & 0.0934 & 0.0767 & \textbf{1.22$\times$} & -- & -- & -- \\
+Compiler & 9 & 8 & 0.1460 & 0.0537 & \textbf{2.72$\times$} & 0.1672 & 0.1807 & 0.93$\times$ \\
+DBQuery & 15 & 13 & 0.1312 & 0.0929 & \textbf{1.41$\times$} & 0.1420 & 0.1728 & 0.82$\times$ \\
+DomTree & 15 & 14 & 0.1383 & 0.0640 & \textbf{2.16$\times$} & 0.0590 & 0.0857 & 0.69$\times$ \\
+KDTree & 17 & 16 & 0.1913 & 0.1432 & \textbf{1.34$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.0309 & 0.0051 & \textbf{6.01$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.3261 & 0.3104 & 1.05$\times$ & 0.2576 & 0.3452 & 0.75$\times$ \\
+ObjectGraph & 5 & 4 & 0.0938 & 0.0831 & \textbf{1.13$\times$} & 0.1464 & 0.1674 & 0.87$\times$ \\
+OctTree\_sumMass & 16 & 9 & 0.0356 & 0.0275 & \textbf{1.30$\times$} & -- & -- & -- \\
+OctTree\_sumEnergy & 16 & 9 & 0.0357 & 0.0322 & \textbf{1.11$\times$} & -- & -- & -- \\
+OctTree\_countActive & 16 & 9 & 0.0350 & 0.0295 & \textbf{1.19$\times$} & -- & -- & -- \\
+OctTree\_countParticles & 16 & 9 & 0.0356 & 0.0280 & \textbf{1.27$\times$} & -- & -- & -- \\
+OctTree\_barnesHutPotential & 16 & 9 & 0.0420 & 0.0402 & 1.04$\times$ & -- & -- & -- \\
+OctTree\_fmmPotential & 16 & 9 & 0.0970 & 0.0976 & 0.99$\times$ & -- & -- & -- \\
+OctTree\_scaleEnergy & 16 & 9 & -- & -- & -- & 0.1517 & 0.1827 & 0.83$\times$ \\
+OctTree\_clearFlags & 16 & 9 & -- & -- & -- & 0.2733 & 0.1825 & \textbf{1.50$\times$} \\
+PiecewiseFunctions & 8 & 7 & 0.1425 & 0.0919 & \textbf{1.55$\times$} & 0.2373 & 0.2670 & 0.89$\times$ \\
+TernaryTree & 5 & 3 & 0.0300 & 0.0285 & 1.05$\times$ & 0.0861 & 0.0803 & 1.07$\times$ \\
+Trie & 10 & 9 & 0.0642 & 0.0330 & \textbf{1.95$\times$} & 0.1494 & 0.1721 & 0.87$\times$ \\
+ColorOctree & 25 & 18 & 0.0908 & 0.0772 & \textbf{1.18$\times$} & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{OctTree}, OctTree SoA uses 9 buffers; ColorOctree SoA uses 18 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:OctTree}
+\small
+\begin{tabular}{l c c r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\midrule
+barnesHutPotential & F & 11/16 & 31\% & 0.0420 & 0.0402 & 1.04$\times$ \\
+clearFlags & M & 15/16 & 6\% & 0.2733 & \textbf{0.1825} & \textbf{1.50$\times$} \\
+countActive & F & 10/16 & 38\% & 0.0350 & \textbf{0.0295} & \textbf{1.19$\times$} \\
+countParticles & F & 8/16 & 50\% & 0.0356 & \textbf{0.0280} & \textbf{1.27$\times$} \\
+fmmPotential & F & 12/16 & 25\% & 0.0970 & 0.0976 & 0.99$\times$ \\
+scaleEnergy & M & 16/16 & 0\% & \textbf{0.1517} & 0.1827 & 0.83$\times$ \\
+sumEnergy & F & 12/16 & 25\% & 0.0357 & \textbf{0.0322} & \textbf{1.11$\times$} \\
+sumMass & F & 10/16 & 38\% & 0.0356 & \textbf{0.0275} & \textbf{1.30$\times$} \\
+\midrule
+paletteEntriesQuantized & F & 13/25 & 48\% & 0.0438 & \textbf{0.0343} & \textbf{1.28$\times$} \\
+quantizationErrorProxy & F & 10/25 & 60\% & 0.0470 & 0.0429 & 1.10$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.7968 & 0.6975 & \textbf{1.14$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.15$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -48,20 +76,20 @@ ColorOctree & 25 & 18 & 0.0934 & 0.0767 & \textbf{1.22$\times$} & -- & -- & -- \
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-blockCountPass & F & 2/9 & 78\% & 0.0122 & \textbf{0.0019} & \textbf{6.32$\times$} \\
-branchStatsPass & F & 2/9 & 78\% & 0.0119 & \textbf{0.0034} & \textbf{3.47$\times$} \\
-castInstCountPass & F & 3/9 & 67\% & 0.0184 & \textbf{0.0013} & \textbf{13.67$\times$} \\
-has cycle & F & 4/9 & 56\% & 0.0349 & \textbf{0.0311} & \textbf{1.12$\times$} \\
-instCountPass & F & 2/9 & 78\% & 0.0122 & \textbf{0.0020} & \textbf{6.06$\times$} \\
-latencyModelPass & F & 3/9 & 67\% & 0.0121 & \textbf{0.0030} & \textbf{4.02$\times$} \\
-memoryOpStatsPass & F & 3/9 & 67\% & 0.0120 & \textbf{0.0038} & \textbf{3.14$\times$} \\
-stripSideEffectsPass & M & 7/9 & 22\% & 0.0818 & 0.0903 & 0.91$\times$ \\
-targetReturnPass & M & 9/9 & 0\% & 0.0808 & 0.0890 & 0.91$\times$ \\
-throughputModelPass & F & 3/9 & 67\% & 0.0122 & \textbf{0.0030} & \textbf{4.03$\times$} \\
-verifyIR & F & 9/9 & 0\% & 0.0127 & \textbf{0.0036} & \textbf{3.57$\times$} \\
+blockCountPass & F & 2/9 & 78\% & 0.0130 & \textbf{0.0020} & \textbf{6.61$\times$} \\
+branchStatsPass & F & 2/9 & 78\% & 0.0124 & \textbf{0.0035} & \textbf{3.59$\times$} \\
+castInstCountPass & F & 3/9 & 67\% & 0.0188 & \textbf{0.0014} & \textbf{13.84$\times$} \\
+has cycle & F & 4/9 & 56\% & 0.0364 & \textbf{0.0316} & \textbf{1.15$\times$} \\
+instCountPass & F & 2/9 & 78\% & 0.0127 & \textbf{0.0020} & \textbf{6.29$\times$} \\
+latencyModelPass & F & 3/9 & 67\% & 0.0133 & \textbf{0.0030} & \textbf{4.46$\times$} \\
+memoryOpStatsPass & F & 3/9 & 67\% & 0.0123 & \textbf{0.0038} & \textbf{3.21$\times$} \\
+stripSideEffectsPass & M & 7/9 & 22\% & 0.0839 & 0.0907 & 0.93$\times$ \\
+targetReturnPass & M & 9/9 & 0\% & 0.0833 & 0.0900 & 0.93$\times$ \\
+throughputModelPass & F & 3/9 & 67\% & 0.0137 & \textbf{0.0030} & \textbf{4.57$\times$} \\
+verifyIR & F & 9/9 & 0\% & 0.0136 & \textbf{0.0035} & \textbf{3.86$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.3012 & 0.2326 & \textbf{1.30$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{3.15$\times$} \\
+\textbf{Total} & & & & 0.3132 & 0.2343 & \textbf{1.34$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{3.31$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -77,17 +105,17 @@ verifyIR & F & 9/9 & 0\% & 0.0127 & \textbf{0.0036} & \textbf{3.57$\times$} \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0676} & 0.0828 & 0.82$\times$ \\
-countJoins & F & 3/15 & 80\% & 0.0187 & \textbf{0.0116} & \textbf{1.61$\times$} \\
-filterSelectivitySkew & F & 5/15 & 67\% & 0.0188 & \textbf{0.0123} & \textbf{1.52$\times$} \\
-hashJoinPressure & F & 5/15 & 67\% & 0.0191 & \textbf{0.0129} & \textbf{1.49$\times$} \\
-scaleCosts & M & 15/15 & 0\% & \textbf{0.0677} & 0.0838 & 0.81$\times$ \\
-sumCost & F & 6/15 & 60\% & 0.0188 & \textbf{0.0153} & \textbf{1.23$\times$} \\
-sumMemory & F & 6/15 & 60\% & 0.0185 & \textbf{0.0147} & \textbf{1.25$\times$} \\
-sumRows & F & 6/15 & 60\% & 0.0261 & \textbf{0.0220} & \textbf{1.19$\times$} \\
+clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0713} & 0.0860 & 0.83$\times$ \\
+countJoins & F & 3/15 & 80\% & 0.0206 & \textbf{0.0118} & \textbf{1.75$\times$} \\
+filterSelectivitySkew & F & 5/15 & 67\% & 0.0212 & \textbf{0.0128} & \textbf{1.66$\times$} \\
+hashJoinPressure & F & 5/15 & 67\% & 0.0214 & \textbf{0.0127} & \textbf{1.69$\times$} \\
+scaleCosts & M & 15/15 & 0\% & \textbf{0.0707} & 0.0868 & 0.81$\times$ \\
+sumCost & F & 6/15 & 60\% & 0.0201 & \textbf{0.0168} & \textbf{1.20$\times$} \\
+sumMemory & F & 6/15 & 60\% & 0.0202 & \textbf{0.0153} & \textbf{1.32$\times$} \\
+sumRows & F & 6/15 & 60\% & 0.0276 & \textbf{0.0235} & \textbf{1.17$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.2552 & 0.2555 & 1.00$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.20$\times$} \\
+\textbf{Total} & & & & 0.2731 & 0.2657 & 1.03$\times$ \\
+\textbf{Geomean} & & & & & & \textbf{1.25$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -103,15 +131,15 @@ sumRows & F & 6/15 & 60\% & 0.0261 & \textbf{0.0220} & \textbf{1.19$\times$} \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-SumArea & F & 6/15 & 60\% & 0.0352 & \textbf{0.0197} & \textbf{1.79$\times$} \\
-computeWidths & M & 14/15 & 7\% & \textbf{0.0295} & 0.0457 & 0.65$\times$ \\
-count styled & F & 3/15 & 80\% & 0.0340 & \textbf{0.0117} & \textbf{2.90$\times$} \\
-find max Bottom & F & 5/15 & 67\% & 0.0340 & \textbf{0.0192} & \textbf{1.77$\times$} \\
-scaleLayout & M & 15/15 & 0\% & \textbf{0.0287} & 0.0360 & 0.80$\times$ \\
-sumTextWidth & F & 3/15 & 80\% & 0.0339 & \textbf{0.0115} & \textbf{2.94$\times$} \\
+SumArea & F & 6/15 & 60\% & 0.0356 & \textbf{0.0199} & \textbf{1.78$\times$} \\
+computeWidths & M & 14/15 & 7\% & \textbf{0.0298} & 0.0481 & 0.62$\times$ \\
+count styled & F & 3/15 & 80\% & 0.0343 & \textbf{0.0119} & \textbf{2.88$\times$} \\
+find max Bottom & F & 5/15 & 67\% & 0.0343 & \textbf{0.0201} & \textbf{1.71$\times$} \\
+scaleLayout & M & 15/15 & 0\% & \textbf{0.0292} & 0.0376 & 0.78$\times$ \\
+sumTextWidth & F & 3/15 & 80\% & 0.0342 & \textbf{0.0121} & \textbf{2.83$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.1953 & 0.1439 & \textbf{1.36$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.55$\times$} \\
+\textbf{Total} & & & & 0.1973 & 0.1497 & \textbf{1.32$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.51$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -127,15 +155,15 @@ sumTextWidth & F & 3/15 & 80\% & 0.0339 & \textbf{0.0115} & \textbf{2.94$\times$
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-Find nearest Neighbour & F & 13/17 & 24\% & 0.0299 & \textbf{0.0212} & \textbf{1.41$\times$} \\
-countInRange tight\_box & F & 13/17 & 24\% & 0.0299 & \textbf{0.0202} & \textbf{1.48$\times$} \\
-photonMappingBenchmark & F & 12/17 & 29\% & 0.0441 & 0.0412 & 1.07$\times$ \\
-pointCloudNeighborhood & F & 11/17 & 35\% & 0.0269 & \textbf{0.0167} & \textbf{1.61$\times$} \\
-sumMassInRange & F & 14/17 & 18\% & 0.0295 & \textbf{0.0203} & \textbf{1.45$\times$} \\
-twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0312 & \textbf{0.0208} & \textbf{1.50$\times$} \\
+Find nearest Neighbour & F & 13/17 & 24\% & 0.0298 & \textbf{0.0217} & \textbf{1.37$\times$} \\
+countInRange tight\_box & F & 13/17 & 24\% & 0.0299 & \textbf{0.0205} & \textbf{1.46$\times$} \\
+photonMappingBenchmark & F & 12/17 & 29\% & 0.0445 & 0.0423 & 1.05$\times$ \\
+pointCloudNeighborhood & F & 11/17 & 35\% & 0.0269 & \textbf{0.0169} & \textbf{1.59$\times$} \\
+sumMassInRange & F & 14/17 & 18\% & 0.0294 & \textbf{0.0203} & \textbf{1.45$\times$} \\
+twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0309 & \textbf{0.0215} & \textbf{1.43$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.1915 & 0.1404 & \textbf{1.36$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.41$\times$} \\
+\textbf{Total} & & & & 0.1913 & 0.1432 & \textbf{1.34$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.38$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -151,10 +179,10 @@ twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0312 & \textbf{0.0208} & \
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-reduction & F & 2/11 & 82\% & 0.0296 & \textbf{0.0051} & \textbf{5.85$\times$} \\
+reduction & F & 2/11 & 82\% & 0.0309 & \textbf{0.0051} & \textbf{6.01$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.0296 & 0.0051 & \textbf{5.85$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{5.85$\times$} \\
+\textbf{Total} & & & & 0.0309 & 0.0051 & \textbf{6.01$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{6.01$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -170,34 +198,13 @@ reduction & F & 2/11 & 82\% & 0.0296 & \textbf{0.0051} & \textbf{5.85$\times$} \
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-add1 List & M & 2/2 & 0\% & \textbf{0.2533} & 0.3414 & 0.74$\times$ \\
-length List & F & 1/2 & 50\% & 0.0484 & \textbf{0.0269} & \textbf{1.80$\times$} \\
-sumList & F & 2/2 & 0\% & 0.1384 & 0.1401 & 0.99$\times$ \\
-sumList tail recursive & F & 2/2 & 0\% & 0.1390 & 0.1364 & 1.02$\times$ \\
+add1 List & M & 2/2 & 0\% & \textbf{0.2576} & 0.3452 & 0.75$\times$ \\
+length List & F & 1/2 & 50\% & 0.0456 & \textbf{0.0273} & \textbf{1.67$\times$} \\
+sumList & F & 2/2 & 0\% & 0.1413 & 0.1425 & 0.99$\times$ \\
+sumList tail recursive & F & 2/2 & 0\% & 0.1391 & 0.1407 & 0.99$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.5791 & 0.6448 & 0.90$\times$ \\
-\textbf{Geomean} & & & & & & 1.08$\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-
-% -- Table: MonoTree --
-\begin{table}[t]
-\centering
-\caption{Per-pass performance for \texttt{MonoTree}, ADT has 3 fields, SoA uses 2 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:MonoTree}
-\small
-\begin{tabular}{l c c r r r r}
-\toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
-\midrule
-add1Tree & M & 3/3 & 0\% & 0.0608 & \textbf{0.0419} & \textbf{1.45$\times$} \\
-sumTree & F & 3/3 & 0\% & \textbf{0.0091} & 0.0113 & 0.81$\times$ \\
-sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0084} & 0.0108 & 0.78$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.0784 & 0.0640 & \textbf{1.23$\times$} \\
-\textbf{Geomean} & & & & & & 0.97$\times$ \\
+\textbf{Total} & & & & 0.5837 & 0.6556 & 0.89$\times$ \\
+\textbf{Geomean} & & & & & & 1.05$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -213,18 +220,18 @@ sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0084} & 0.0108 & 0.78$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-countLargeItems & F & 3/5 & 40\% & 0.0131 & \textbf{0.0105} & \textbf{1.24$\times$} \\
-countMarked & F & 3/5 & 40\% & 0.0132 & \textbf{0.0106} & \textbf{1.25$\times$} \\
-countSurvivors & F & 4/5 & 20\% & 0.0140 & 0.0129 & 1.09$\times$ \\
-deadBytes & F & 4/5 & 20\% & 0.0136 & \textbf{0.0123} & \textbf{1.10$\times$} \\
-liveBytes & F & 4/5 & 20\% & 0.0136 & 0.0124 & 1.10$\times$ \\
-sumObjIds & F & 3/5 & 40\% & 0.0125 & \textbf{0.0104} & \textbf{1.21$\times$} \\
-sweepUnmarked & M & 5/5 & 0\% & 0.0730 & 0.0809 & 0.90$\times$ \\
-totalHeapSize & F & 3/5 & 40\% & 0.0133 & \textbf{0.0104} & \textbf{1.27$\times$} \\
-touchHotObjects & M & 5/5 & 0\% & 0.0731 & 0.0803 & 0.91$\times$ \\
+countLargeItems & F & 3/5 & 40\% & 0.0133 & \textbf{0.0111} & \textbf{1.20$\times$} \\
+countMarked & F & 3/5 & 40\% & 0.0132 & \textbf{0.0112} & \textbf{1.18$\times$} \\
+countSurvivors & F & 4/5 & 20\% & 0.0140 & 0.0133 & 1.05$\times$ \\
+deadBytes & F & 4/5 & 20\% & 0.0137 & 0.0128 & 1.07$\times$ \\
+liveBytes & F & 4/5 & 20\% & 0.0138 & 0.0129 & 1.07$\times$ \\
+sumObjIds & F & 3/5 & 40\% & 0.0125 & \textbf{0.0111} & \textbf{1.13$\times$} \\
+sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0721} & 0.0832 & 0.87$\times$ \\
+totalHeapSize & F & 3/5 & 40\% & 0.0133 & \textbf{0.0108} & \textbf{1.23$\times$} \\
+touchHotObjects & M & 5/5 & 0\% & \textbf{0.0743} & 0.0842 & 0.88$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.2394 & 0.2407 & 0.99$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.11$\times$} \\
+\textbf{Total} & & & & 0.2401 & 0.2504 & 0.96$\times$ \\
+\textbf{Geomean} & & & & & & 1.07$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -240,16 +247,16 @@ touchHotObjects & M & 5/5 & 0\% & 0.0731 & 0.0803 & 0.91$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-addConstPW & M & 8/8 & 0\% & \textbf{0.1219} & 0.1383 & 0.88$\times$ \\
-autorefineMaxLevel & F & 4/8 & 50\% & 0.0219 & \textbf{0.0191} & \textbf{1.14$\times$} \\
-compressMass & F & 3/8 & 62\% & 0.0198 & \textbf{0.0117} & \textbf{1.70$\times$} \\
-diffPW & M & 8/8 & 0\% & \textbf{0.1187} & 0.1327 & 0.89$\times$ \\
-lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0218 & \textbf{0.0185} & \textbf{1.18$\times$} \\
-norm2Estimate & F & 5/8 & 38\% & 0.0255 & \textbf{0.0179} & \textbf{1.42$\times$} \\
-pmapCutHistogram & F & 4/8 & 50\% & 0.0323 & \textbf{0.0127} & \textbf{2.55$\times$} \\
-truncateTolViolations & F & 3/8 & 62\% & 0.0202 & \textbf{0.0115} & \textbf{1.75$\times$} \\
+addConstPW & M & 8/8 & 0\% & \textbf{0.1182} & 0.1354 & 0.87$\times$ \\
+autorefineMaxLevel & F & 4/8 & 50\% & 0.0220 & \textbf{0.0193} & \textbf{1.14$\times$} \\
+compressMass & F & 3/8 & 62\% & 0.0200 & \textbf{0.0114} & \textbf{1.75$\times$} \\
+diffPW & M & 8/8 & 0\% & 0.1191 & 0.1316 & 0.91$\times$ \\
+lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0220 & \textbf{0.0189} & \textbf{1.16$\times$} \\
+norm2Estimate & F & 5/8 & 38\% & 0.0256 & \textbf{0.0180} & \textbf{1.42$\times$} \\
+pmapCutHistogram & F & 4/8 & 50\% & 0.0325 & \textbf{0.0127} & \textbf{2.56$\times$} \\
+truncateTolViolations & F & 3/8 & 62\% & 0.0205 & \textbf{0.0117} & \textbf{1.76$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.3823 & 0.3625 & 1.05$\times$ \\
+\textbf{Total} & & & & 0.3798 & 0.3589 & 1.06$\times$ \\
 \textbf{Geomean} & & & & & & \textbf{1.36$\times$} \\
 \bottomrule
 \end{tabular}
@@ -266,10 +273,10 @@ truncateTolViolations & F & 3/8 & 62\% & 0.0202 & \textbf{0.0115} & \textbf{1.75
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-add 1 tree & M & 5/5 & 0\% & 0.0839 & 0.0772 & 1.09$\times$ \\
-sum tree & F & 5/5 & 0\% & 0.0296 & 0.0285 & 1.04$\times$ \\
+add 1 tree & M & 5/5 & 0\% & 0.0861 & 0.0803 & 1.07$\times$ \\
+sum tree & F & 5/5 & 0\% & 0.0300 & 0.0285 & 1.05$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.1135 & 0.1057 & 1.07$\times$ \\
+\textbf{Total} & & & & 0.1161 & 0.1088 & 1.07$\times$ \\
 \textbf{Geomean} & & & & & & 1.06$\times$ \\
 \bottomrule
 \end{tabular}
@@ -286,16 +293,16 @@ sum tree & F & 5/5 & 0\% & 0.0296 & 0.0285 & 1.04$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-autocompleteTopKProxy & F & 5/10 & 50\% & 0.0149 & \textbf{0.0085} & \textbf{1.76$\times$} \\
-countLazyNodes & F & 4/10 & 60\% & 0.0126 & \textbf{0.0066} & \textbf{1.92$\times$} \\
-countTerminals & F & 3/10 & 70\% & 0.0119 & \textbf{0.0058} & \textbf{2.05$\times$} \\
-decayTrieStats & M & 10/10 & 0\% & \textbf{0.0769} & 0.0864 & 0.89$\times$ \\
-resetTraversalState & M & 10/10 & 0\% & 0.0770 & 0.0838 & 0.92$\times$ \\
-sumPrefixFreq & F & 3/10 & 70\% & 0.0123 & \textbf{0.0059} & \textbf{2.10$\times$} \\
-sumSubtreeHints & F & 3/10 & 70\% & 0.0121 & \textbf{0.0057} & \textbf{2.10$\times$} \\
+autocompleteTopKProxy & F & 5/10 & 50\% & 0.0149 & \textbf{0.0086} & \textbf{1.74$\times$} \\
+countLazyNodes & F & 4/10 & 60\% & 0.0129 & \textbf{0.0067} & \textbf{1.91$\times$} \\
+countTerminals & F & 3/10 & 70\% & 0.0121 & \textbf{0.0060} & \textbf{2.02$\times$} \\
+decayTrieStats & M & 10/10 & 0\% & \textbf{0.0744} & 0.0878 & 0.85$\times$ \\
+resetTraversalState & M & 10/10 & 0\% & \textbf{0.0750} & 0.0842 & 0.89$\times$ \\
+sumPrefixFreq & F & 3/10 & 70\% & 0.0121 & \textbf{0.0058} & \textbf{2.09$\times$} \\
+sumSubtreeHints & F & 3/10 & 70\% & 0.0123 & \textbf{0.0059} & \textbf{2.08$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.2177 & 0.2026 & 1.07$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.58$\times$} \\
+\textbf{Total} & & & & 0.2136 & 0.2050 & 1.04$\times$ \\
+\textbf{Geomean} & & & & & & \textbf{1.55$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}

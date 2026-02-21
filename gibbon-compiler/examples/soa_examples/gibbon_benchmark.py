@@ -194,7 +194,7 @@ def _tokenize_fields(text: str) -> List[str]:
     return tokens
 
 
-def parse_adt_buffers(content: str) -> Optional[Dict]:
+def parse_adt_buffers(content: str, search_root: Optional[Path] = None) -> Optional[Dict]:
     """
     Parse all Haskell data declarations in *content* and compute buffer layout.
 
@@ -234,7 +234,8 @@ def parse_adt_buffers(content: str) -> Optional[Dict]:
           }
         ]
       }
-    or None if no data declarations found.
+    or None if no data declarations found (including imported modules if a
+    search_root is provided).
     """
     # Optional explicit type-name hint
     hint_m = re.search(
@@ -251,6 +252,20 @@ def parse_adt_buffers(content: str) -> Optional[Dict]:
     # Find all data declaration start positions
     data_re = re.compile(r'\bdata\s+([A-Z][A-Za-z0-9_\']*)\b')
     starts  = list(data_re.finditer(no_comments))
+    if not starts and search_root is not None:
+        import_re = re.compile(r'^\s*import\s+([A-Z][A-Za-z0-9_\.]*)', re.MULTILINE)
+        for imp in import_re.findall(content):
+            mod_path = search_root / (imp.replace('.', '/') + ".hs")
+            if not mod_path.exists():
+                continue
+            try:
+                imported = mod_path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            found = parse_adt_buffers(imported, None)
+            if found:
+                return found
+        return None
     if not starts:
         return None
 
@@ -403,7 +418,7 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
 
             # Parse ADT structure for buffer counting (once, from AOS)
             if vdir == "AOS" and result[prog]["adt_info"] is None:
-                adt_info = parse_adt_buffers(content)
+                adt_info = parse_adt_buffers(content, search_root=src.parent)
                 if adt_info:
                     result[prog]["adt_info"] = adt_info
                     print(f"  ✓ {prog}: ADT '{adt_info['type_name']}' "
@@ -1940,7 +1955,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 if merged_name in merged.passes:
                     stem = prog_hs.replace(".hs", "")
                     merged_name = f"{stem}.{pname}"
-                merged.passes[merged_name] = dict(pdata)
+                mp = dict(pdata)
+                if src.adt_fields is not None:
+                    mp["adt_total"] = src.adt_fields
+                merged.passes[merged_name] = mp
         merged.run_success = len(merged.passes) > 0
         return merged
 
@@ -1976,8 +1994,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
     combined_entry: Optional[Tuple[BenchmarkResult, BenchmarkResult]] = None
 
     if oct_group_members:
-        oct_aos = _merge_pass_results(oct_group_members, pair_map, "aos", "OctTree.hs")
-        oct_soa = _merge_pass_results(oct_group_members, pair_map, "soa", "OctTree.hs")
+        combined_prog = "OctTreeCombined.hs"
+        oct_aos = _merge_pass_results(oct_group_members, pair_map, "aos", combined_prog)
+        oct_soa = _merge_pass_results(oct_group_members, pair_map, "soa", combined_prog)
         if oct_aos.run_success and oct_soa.run_success:
             combined_entry = (oct_aos, oct_soa)
             program_pairs.append(combined_entry)
@@ -1986,10 +2005,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
             variant_pair_map = {}
             for prog_hs, row in variants_map.items():
                 variant_pair_map[prog_hs] = (row.get("aos_imm"), row.get("soa_imm"))
-            oct_aos_imm = _merge_pass_results(oct_group_members, variant_pair_map, "aos_imm", "OctTree.hs")
-            oct_soa_imm = _merge_pass_results(oct_group_members, variant_pair_map, "soa_imm", "OctTree.hs")
-            variants_map["OctTree.hs"] = {
-                "program": "OctTree.hs",
+            oct_aos_imm = _merge_pass_results(oct_group_members, variant_pair_map, "aos_imm", combined_prog)
+            oct_soa_imm = _merge_pass_results(oct_group_members, variant_pair_map, "soa_imm", combined_prog)
+            variants_map[combined_prog] = {
+                "program": combined_prog,
                 "aos": oct_aos,
                 "aos_imm": oct_aos_imm if oct_aos_imm.run_success else None,
                 "soa": oct_soa,
@@ -2013,7 +2032,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
         prog_hs  = aos.program
         if prog_hs in skip_program_tables:
             continue
-        prog     = prog_hs.replace(".hs", "")
+        prog     = ("OctTree" if prog_hs == "OctTreeCombined.hs"
+                    else prog_hs.replace(".hs", ""))
         pdisplay = prog.replace("_", "\\_")
         
         # Get all 4 variants if available
@@ -2032,16 +2052,34 @@ def _table_per_program(f, all_results, all_variants_results=None):
         adt      = getattr(aos, "adt_fields", None)
         adt_info = getattr(aos, "adt_info", None)
         soa_total_bufs = adt_info["soa_total_buffers"] if adt_info else None
+        # For the synthetic OctTree table, prefer OctTreeBase buffers if present.
+        oct_base = pair_map.get("OctTreeBase.hs")
+        if oct_base:
+            ob = oct_base[0]  # AoS variant
+            if ob and ob.adt_info and ob.adt_info.get("soa_total_buffers") is not None:
+                soa_total_bufs = ob.adt_info["soa_total_buffers"]
+        if prog == "OctTree" and soa_total_bufs is None:
+            for k, (oa, _) in pair_map.items():
+                if k.startswith("OctTree_") and oa and oa.adt_info:
+                    soa_total_bufs = oa.adt_info.get("soa_total_buffers")
+                    break
         passes   = sorted(set(list(aos.passes) + list(soa.passes)))
         if not passes:
             continue
 
         type_name = adt_info["type_name"] if adt_info else None
         adt_note  = ""
-        if adt is not None:
-            adt_note += f", ADT has {adt} fields"
-        if soa_total_bufs is not None:
-            adt_note += f", SoA uses {soa_total_bufs} buffers"
+        if prog == "OctTree":
+            if soa_total_bufs is not None:
+                adt_note += f", OctTree SoA uses {soa_total_bufs} buffers"
+            co = pair_map.get("ColorOctree.hs")
+            if co and co[0] and co[0].adt_info and co[0].adt_info.get("soa_total_buffers") is not None:
+                adt_note += f"; ColorOctree SoA uses {co[0].adt_info['soa_total_buffers']} buffers"
+        else:
+            if adt is not None:
+                adt_note += f", ADT has {adt} fields"
+            if soa_total_bufs is not None:
+                adt_note += f", SoA uses {soa_total_bufs} buffers"
 
         f.write(f"% -- Table: {prog} --\n")
         f.write("\\begin{table}[t]\n\\centering\n")
@@ -2121,7 +2159,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 )
         else:
             # Original 2-variant table
-            if has_uses and adt is not None:
+            if has_uses:
                 f.write("\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
@@ -2143,7 +2181,18 @@ def _table_per_program(f, all_results, all_variants_results=None):
         speedups_imm = []
         speedups_imm_layout = []
         
-        for pname in passes:
+        octree_passes = []
+        color_passes = []
+        if prog == "OctTree":
+            for pname in passes:
+                if pname in ("paletteEntriesQuantized", "quantizationErrorProxy"):
+                    color_passes.append(pname)
+                else:
+                    octree_passes.append(pname)
+        else:
+            octree_passes = passes
+
+        for pname in octree_passes:
             ad   = aos.passes.get(pname, {})
             sd   = soa.passes.get(pname, {})
             
@@ -2228,8 +2277,11 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     speedups_imm_layout.append(spd_imm_layout)
                 
                 # Write row
-                if has_uses and adt is not None:
-                    uses_s = f"{uses}/{adt}" if uses is not None else "--"
+                if has_uses:
+                    adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
+                    if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
+                        adt_total = int(round(uses / (1 - dead_r)))
+                    uses_s = f"{uses}/{adt_total}" if (uses is not None and adt_total is not None) else "--"
                     dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                     f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                             f" & {aost_mut} & {aost_imm}"
@@ -2274,8 +2326,11 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
                 spd_s = _spd_cell(spd) if spd > 0 else "--"
 
-                if has_uses and adt is not None:
-                    uses_s = f"{uses}/{adt}" if uses is not None else "--"
+                if has_uses:
+                    adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
+                    if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
+                        adt_total = int(round(uses / (1 - dead_r)))
+                    uses_s = f"{uses}/{adt_total}" if (uses is not None and adt_total is not None) else "--"
                     dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                     f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                             f" & {at_f_r} & {st_f_r} & {spd_s}"
@@ -2287,6 +2342,143 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
                 if spd > 0:
                     speedups_mut.append(spd)
+
+        if prog == "OctTree" and color_passes:
+            f.write("\\midrule\n")
+            for pname in color_passes:
+                ad   = aos.passes.get(pname, {})
+                sd   = soa.passes.get(pname, {})
+
+                ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
+                tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
+                pdisp = pname.replace("_", "\\_")
+
+                uses   = ad.get("uses") or sd.get("uses")
+                dead_r = ad.get("dead_ratio") or sd.get("dead_ratio")
+                papi_cells_s = "".join(
+                    f" & {_papi_pair_cell(ad, sd, counter)}"
+                    for counter in papi_counter_names
+                )
+
+                if show_4_variants:
+                    def get_time_info(res, pname):
+                        """Get (display, median_time, is_oom) for a pass."""
+                        if res is None:
+                            return "--", None, False
+                        if not res.run_success:
+                            if res.error_message == "out of memory":
+                                return "\\textit{OOM}", None, True
+                            return "--", None, False
+                        pd = res.passes.get(pname, {})
+                        med = pd.get("median_time", 0.0)
+                        err = pd.get("stderr", 0.0)
+                        if med == 0.0:
+                            return "--", None, False
+                        return fmt_pm(med, err), med, False
+
+                    aost_mut, aost_mut_v, aost_mut_oom = get_time_info(aos, pname)
+                    aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
+                    soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
+                    soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
+
+                    cells = {
+                        "aos_mut": [aost_mut, aost_mut_v, aost_mut_oom],
+                        "aos_imm": [aost_imm, aost_imm_v, aost_imm_oom],
+                        "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
+                        "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
+                    }
+                    valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
+                    if valid_times:
+                        min_t = min(valid_times)
+                        for _, v in cells.items():
+                            if v[1] is not None and not v[2] and v[1] == min_t:
+                                v[0] = f"\\textbf{{{v[0]}}}"
+
+                    aost_mut = cells["aos_mut"][0]
+                    aost_imm = cells["aos_imm"][0]
+                    soat_mut = cells["soa_mut"][0]
+                    soat_imm = cells["soa_imm"][0]
+
+                    spd_mut = calc_spd(aos, soa, pname)
+                    spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
+                    spd_imm = calc_spd(aos_imm, soa, pname)
+                    spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
+
+                    spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
+                    spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
+                    spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
+                    spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
+
+                    if spd_mut:
+                        speedups_mut.append(spd_mut)
+                    if spd_aos_imm_over_aos_mut:
+                        speedups_aos_imm_over_aos_mut.append(spd_aos_imm_over_aos_mut)
+                    if spd_imm:
+                        speedups_imm.append(spd_imm)
+                    if spd_imm_layout:
+                        speedups_imm_layout.append(spd_imm_layout)
+
+                    if has_uses:
+                        adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
+                        if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
+                            adt_total = int(round(uses / (1 - dead_r)))
+                        uses_s = f"{uses}/{adt_total}" if (uses is not None and adt_total is not None) else "--"
+                        dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
+                        f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
+                                f" & {aost_mut} & {aost_imm}"
+                                f" & {soat_mut} & {soat_imm}"
+                                f" & {spd_mut_s}"
+                                f" & {spd_aos_imm_over_aos_mut_s}"
+                                f" & {spd_imm_s}"
+                                f" & {spd_imm_layout_s}"
+                                f"{papi_cells_s} \\\\\n")
+                    else:
+                        f.write(f"{pdisp} & {tchar}"
+                                f" & {aost_mut} & {aost_imm}"
+                                f" & {soat_mut} & {soat_imm}"
+                                f" & {spd_mut_s}"
+                                f" & {spd_aos_imm_over_aos_mut_s}"
+                                f" & {spd_imm_s}"
+                                f" & {spd_imm_layout_s}"
+                                f"{papi_cells_s} \\\\\n")
+                else:
+                    at_s = ad.get("median_time", 0.0)
+                    st_s = sd.get("median_time", 0.0)
+                    if at_s == 0.0 and st_s == 0.0:
+                        continue
+
+                    spd   = at_s / st_s if st_s > 0 else 0.0
+
+                    a_err = ad.get("stderr", 0.0)
+                    s_err = sd.get("stderr", 0.0)
+                    at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
+                    st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
+
+                    if spd > 1.1:
+                        at_f_r, st_f_r = at_f, f"\\textbf{{{st_f}}}"
+                    elif 0 < spd < 0.9:
+                        at_f_r, st_f_r = f"\\textbf{{{at_f}}}", st_f
+                    else:
+                        at_f_r, st_f_r = at_f, st_f
+
+                    spd_s = _spd_cell(spd) if spd > 0 else "--"
+
+                    if has_uses:
+                        adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
+                        if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
+                            adt_total = int(round(uses / (1 - dead_r)))
+                        uses_s = f"{uses}/{adt_total}" if (uses is not None and adt_total is not None) else "--"
+                        dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
+                        f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
+                                f" & {at_f_r} & {st_f_r} & {spd_s}"
+                                f"{papi_cells_s} \\\\\n")
+                    else:
+                        f.write(f"{pdisp} & {tchar}"
+                                f" & {at_f_r} & {st_f_r} & {spd_s}"
+                                f"{papi_cells_s} \\\\\n")
+
+                    if spd > 0:
+                        speedups_mut.append(spd)
 
         # Totals row
         def get_total(res):
@@ -2321,7 +2513,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     if v[1] is not None and v[1] == min_tot:
                         v[0] = f"\\textbf{{{v[0]}}}"
 
-            extra_cols = "& & " if (has_uses and adt is not None) else ""
+            extra_cols = "& & " if has_uses else ""
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
                     f"& {total_cells['aos_mut'][0]} & {total_cells['aos_imm'][0]}"
@@ -2349,7 +2541,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'}"
                         f"{papi_empty_suffix} \\\\\n")
         else:
-            extra_cols = "& & " if (has_uses and adt is not None) else ""
+            extra_cols = "& & " if has_uses else ""
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
                     f"& {fmt(aost_mut_tot)} & {fmt(soat_mut_tot)} & {_spd_cell(sp_mut_tot)}"
