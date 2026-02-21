@@ -1967,19 +1967,22 @@ def _table_per_program(f, all_results, all_variants_results=None):
     if oct_group_members and "ColorOctree.hs" in pair_map:
         oct_group_members.append("ColorOctree.hs")
 
-    synthetic_pairs = list(all_results)
-    skip_program_tables = set()
-    if oct_group_members:
-        # Emit exactly one combined OctTree table; suppress all component tables.
-        skip_program_tables.update(oct_split_programs)
-        skip_program_tables.add("OctTree.hs")
+    skip_program_tables = set(oct_split_programs)
+    skip_program_tables.add("OctTree.hs")
+    if "ColorOctree.hs" in pair_map:
         skip_program_tables.add("ColorOctree.hs")
+
+    program_pairs: List[Tuple[BenchmarkResult, BenchmarkResult]] = []
+    combined_entry: Optional[Tuple[BenchmarkResult, BenchmarkResult]] = None
+
+    if oct_group_members:
         oct_aos = _merge_pass_results(oct_group_members, pair_map, "aos", "OctTree.hs")
         oct_soa = _merge_pass_results(oct_group_members, pair_map, "soa", "OctTree.hs")
         if oct_aos.run_success and oct_soa.run_success:
-            synthetic_pairs = [(oct_aos, oct_soa)] + synthetic_pairs
+            combined_entry = (oct_aos, oct_soa)
+            program_pairs.append(combined_entry)
 
-        if all_variants_results:
+        if all_variants_results and combined_entry:
             variant_pair_map = {}
             for prog_hs, row in variants_map.items():
                 variant_pair_map[prog_hs] = (row.get("aos_imm"), row.get("soa_imm"))
@@ -1993,7 +1996,17 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 "soa_imm": oct_soa_imm if oct_soa_imm.run_success else None,
             }
 
-    for aos, soa in synthetic_pairs:
+    for aos, soa in all_results:
+        if not (aos and soa):
+            continue
+
+        prog_hs = aos.program
+        if prog_hs in skip_program_tables:
+            continue
+
+        program_pairs.append((aos, soa))
+
+    for aos, soa in program_pairs:
         if not (aos and soa):
             continue
 
