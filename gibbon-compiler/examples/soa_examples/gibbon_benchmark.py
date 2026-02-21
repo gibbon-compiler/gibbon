@@ -1934,9 +1934,12 @@ def _table_per_program(f, all_results, all_variants_results=None):
             src = pair[0] if variant.startswith("aos") else pair[1]
             if not src or not src.run_success:
                 continue
-            stem = prog_hs.replace(".hs", "")
             for pname, pdata in src.passes.items():
-                merged_name = f"{stem}.{pname}"
+                merged_name = pname
+                # If a name collision ever appears, keep both by prefixing source stem.
+                if merged_name in merged.passes:
+                    stem = prog_hs.replace(".hs", "")
+                    merged_name = f"{stem}.{pname}"
                 merged.passes[merged_name] = dict(pdata)
         merged.run_success = len(merged.passes) > 0
         return merged
@@ -1956,16 +1959,21 @@ def _table_per_program(f, all_results, all_variants_results=None):
         p for p in pair_map.keys()
         if p.startswith("OctTree_") and p.endswith(".hs")
     )
-    oct_group_members = list(oct_split_programs)
-    if oct_split_programs and "ColorOctree.hs" in pair_map:
+    oct_group_members: List[str] = []
+    if oct_split_programs:
+        oct_group_members.extend(oct_split_programs)
+    elif "OctTree.hs" in pair_map:
+        oct_group_members.append("OctTree.hs")
+    if oct_group_members and "ColorOctree.hs" in pair_map:
         oct_group_members.append("ColorOctree.hs")
 
     synthetic_pairs = list(all_results)
-    skip_program_tables = set(oct_split_programs)
+    skip_program_tables = set()
     if oct_group_members:
-        # Avoid duplicate OctTree table if legacy monolithic OctTree.hs is also present.
+        # Emit exactly one combined OctTree table; suppress all component tables.
+        skip_program_tables.update(oct_split_programs)
         skip_program_tables.add("OctTree.hs")
-    if oct_group_members:
+        skip_program_tables.add("ColorOctree.hs")
         oct_aos = _merge_pass_results(oct_group_members, pair_map, "aos", "OctTree.hs")
         oct_soa = _merge_pass_results(oct_group_members, pair_map, "soa", "OctTree.hs")
         if oct_aos.run_success and oct_soa.run_success:
