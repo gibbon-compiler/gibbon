@@ -1078,34 +1078,34 @@ def analyze_outputs_by_variant(named_results: Dict[str, Optional[BenchmarkResult
 # ---------------------------------------------------------------------------
 # Compiler mtime cache (checked once per script run)
 # ---------------------------------------------------------------------------
-_GIBBON_COMPILER_CACHE: Optional[Tuple[Path, float]] = None  # (path, mtime)
+_COMPILER_CACHE: Dict[str, Tuple[Path, float]] = {}
 
-def get_gibbon_compiler_info() -> Optional[Tuple[Path, float]]:
+def get_compiler_info(name: str = "gibbon") -> Optional[Tuple[Path, float]]:
     """
-    Returns (compiler_path, mtime) for the gibbon executable.
+    Returns (compiler_path, mtime) for the specified compiler executable.
     Cached globally so we only look it up once per run.
-    Returns None if gibbon is not in PATH.
+    Returns None if compiler is not in PATH.
     """
-    global _GIBBON_COMPILER_CACHE
-    if _GIBBON_COMPILER_CACHE is not None:
-        return _GIBBON_COMPILER_CACHE
+    if name in _COMPILER_CACHE:
+        return _COMPILER_CACHE[name]
     
-    gibbon_path = shutil.which("gibbon")
-    if gibbon_path is None:
+    path = shutil.which(name)
+    if path is None:
         return None
     
-    p = Path(gibbon_path).resolve()
+    p = Path(path).resolve()
     if not p.exists():
         return None
     
     mtime = p.stat().st_mtime
-    _GIBBON_COMPILER_CACHE = (p, mtime)
-    return _GIBBON_COMPILER_CACHE
+    _COMPILER_CACHE[name] = (p, mtime)
+    return _COMPILER_CACHE[name]
 
 
-def needs_recompilation(source: Path, exe: Path, c_file: Path
+def needs_recompilation(source: Path, exe: Path, c_file: Optional[Path]
                         , expected_cmd_sig: Optional[str] = None
                         , buildinfo_file: Optional[Path] = None
+                        , compiler_name: str = "gibbon"
                         ) -> Tuple[bool, str]:
     """
     Returns (needs_recompile: bool, reason: str).
@@ -1113,14 +1113,14 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
     
     Checks:
       1. exe or c_file missing → recompile
-      2. source newer than exe → recompile
-      3. gibbon compiler newer than exe → recompile (common sense: if the
+      2. source newer than exe → recompile (common sense: if the
          compiler was updated, old exes are stale)
+      3. compiler newer than exe → recompile
       4. compile command signature changed (stored in buildinfo sidecar) → recompile
     """
     if not exe.exists():
         return True, "exe missing"
-    if not c_file.exists():
+    if c_file is not None and not c_file.exists():
         return True, "c file missing"
     
     exe_t = exe.stat().st_mtime
@@ -1132,7 +1132,7 @@ def needs_recompilation(source: Path, exe: Path, c_file: Path
         return True, f"source ({src_dt}) newer than exe ({exe_dt})"
     
     # Check if the compiler itself is newer than the exe
-    compiler_info = get_gibbon_compiler_info()
+    compiler_info = get_compiler_info(compiler_name)
     if compiler_info is not None:
         compiler_path, compiler_t = compiler_info
         if compiler_t > exe_t:
@@ -1166,31 +1166,44 @@ def compile_one(source: Path, variant: str, out_dir: Path,
     source = source.resolve()
     out_dir = out_dir.resolve()
     stem   = source.stem
-    c_file = out_dir / f"{stem}.{variant}.c"
     exe    = out_dir / f"{stem}.{variant}.exe"
     buildinfo_file = out_dir / f"{stem}.{variant}.buildinfo.json"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = ["gibbon"]
-    if use_mutable_cursors:
-        cmd.append("--use-mutable-cursors")
-    if enable_papi_native:
-        cmd.append("--enable-papi-native")
-    if enable_papi:
-        cmd.append("--enable-papi")
-    cmd.extend([
-        "--packed", "--to-exe",
-        "--no-ran",
-        "--cfile",   str(c_file),
-        "--exefile", str(exe),
-        str(source),
-    ])
+    compiler = "gibbon"
+    if variant == "ghc":
+        compiler = "ghc"
+    elif variant == "mlton":
+        compiler = "mlton"
+
+    c_file = (out_dir / f"{stem}.{variant}.c") if compiler == "gibbon" else None
+
+    if compiler == "ghc":
+        cmd = ["ghc", "-O2", "-o", str(exe), str(source)]
+    elif compiler == "mlton":
+        cmd = ["mlton", "-output", str(exe), str(source)]
+    else:
+        cmd = ["gibbon"]
+        if use_mutable_cursors:
+            cmd.append("--use-mutable-cursors")
+        if enable_papi_native:
+            cmd.append("--enable-papi-native")
+        if enable_papi:
+            cmd.append("--enable-papi")
+        cmd.extend([
+            "--packed", "--to-exe",
+            "--no-ran",
+            "--cfile",   str(c_file),
+            "--exefile", str(exe),
+            str(source),
+        ])
     cmd_sig = " ".join(cmd)
 
     recompile, reason = needs_recompilation(
         source, exe, c_file,
         expected_cmd_sig=cmd_sig,
         buildinfo_file=buildinfo_file,
+        compiler_name=compiler
     )
     if not force and not recompile:
         print(f"  [{variant.upper()}] {stem}: skipping  ({reason})")
@@ -1213,11 +1226,12 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
         elapsed = time.time() - t0
         if r.returncode == 0:
+            c_file_str = str(c_file) if c_file else None
             meta = {
                 "compile_cmd": cmd,
                 "compile_cmd_signature": cmd_sig,
                 "source": str(source),
-                "c_file": str(c_file),
+                "c_file": c_file_str,
                 "exe": str(exe),
                 "compiled_at": datetime.datetime.now().isoformat(timespec="seconds"),
             }
@@ -1228,8 +1242,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         return False, elapsed, r.stderr.strip()
     except FileNotFoundError:
         elapsed = time.time() - t0
-        print("           FAILED (gibbon not in PATH)")
-        return False, elapsed, "gibbon not found"
+        print(f"           FAILED ({compiler} not in PATH)")
+        return False, elapsed, f"{compiler} not found"
 
 # ---------------------------------------------------------------------------
 # Parallel compilation dispatcher
@@ -1303,6 +1317,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       benchmark_immutable: bool = False,
                       enable_papi: bool = False,
                       enable_papi_native: bool = False,
+                      benchmark_ghc: bool = False,
+                      benchmark_mlton: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
     """
     Benchmark one program. Returns (aos_result, soa_result) for backwards compatibility.
@@ -1325,11 +1341,24 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             ("soa", True),
         ]
 
+    if benchmark_ghc:
+        variants.append(("ghc", False))
+    if benchmark_mlton:
+        variants.append(("mlton", False))
+
     tasks = []
     for var, use_mut in variants:
-        # Source is always in AOS/ or SOA/ directory, not aos_imm/soa_imm
-        src_dir = "AOS" if var.startswith("aos") else "SOA"
-        src = programs_dir / src_dir / prog
+        if var == "ghc":
+            src_dir = "GHC"
+            src = programs_dir / src_dir / prog
+        elif var == "mlton":
+            src_dir = "MLTON"
+            # Assume MLton programs have .sml extension
+            src = programs_dir / src_dir / prog.replace(".hs", ".sml")
+        else:
+            # Source is always in AOS/ or SOA/ directory, not aos_imm/soa_imm
+            src_dir = "AOS" if var.startswith("aos") else "SOA"
+            src = programs_dir / src_dir / prog
         if src.exists():
             tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi, enable_papi_native))
         else:
@@ -1446,15 +1475,18 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     # For backwards compatibility, return (aos, soa) with mutable cursors
     # Also store all results globally if benchmarking immutable variants
     aos, soa = results.get("aos"), results.get("soa")
+    ghc, mlton = results.get("ghc"), results.get("mlton")
     
     # Global storage for extended results (used by new comparison table)
-    if benchmark_immutable and hasattr(benchmark_program, '_all_variants_results'):
+    if hasattr(benchmark_program, '_all_variants_results'):
         benchmark_program._all_variants_results.append({
             'program': prog,
             'aos': results.get("aos"),
             'aos_imm': results.get("aos_imm"),
             'soa': results.get("soa"),
             'soa_imm': results.get("soa_imm"),
+            'ghc': ghc,
+            'mlton': mlton,
         })
     
     if benchmark_immutable:
@@ -2227,7 +2259,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
         # Table header depends on whether we show 2 or 4 variants
         if show_4_variants:
-            if has_uses and adt is not None:
+            if has_uses:
                 f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
@@ -3283,6 +3315,11 @@ def main():
                     help="Also compile and benchmark immutable cursor variants "
                          "(aos_imm, soa_imm) in addition to mutable cursor variants. "
                          "Generates Table 2 showing 4-way comparison.")
+    ap.add_argument("--benchmark-ghc", action="store_true",
+                    help="Also compile and benchmark GHC variant (programs/GHC/*.hs).")
+    ap.add_argument("--benchmark-mlton", action="store_true",
+                    help="Also compile and benchmark MLton variant (programs/MLTON/*.sml).")
+
     ap.add_argument("--enable-papi", action="store_true",
                     help="Compile with --enable-papi, export PAPI_EVENTS, parse papi_hl_output JSON, "
                          "and add PAPI columns to tables.")
@@ -3309,19 +3346,23 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Immutable    : {'YES  (4 variants: aos, aos_imm, soa, soa_imm)' if args.benchmark_immutable else 'no  (2 variants: aos, soa)'}")
+    print(f"  GHC          : {'YES' if args.benchmark_ghc else 'no'}")
+    print(f"  MLton        : {'YES' if args.benchmark_mlton else 'no'}")
     papi_mode = ("native" if args.enable_papi_native else ("high-level" if args.enable_papi else "off"))
     print(f"  PAPI mode    : {papi_mode}")
     print(f"  CPU cores    : {multiprocessing.cpu_count()}")
     
     # Show which gibbon compiler will be used and its mtime
-    compiler_info = get_gibbon_compiler_info()
-    if compiler_info:
-        compiler_path, compiler_t = compiler_info
-        compiler_dt = datetime.datetime.fromtimestamp(compiler_t).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"  Compiler     : {compiler_path}")
-        print(f"  Compiler mtime: {compiler_dt}  (exes older than this will be rebuilt)")
-    else:
-        print(f"  Compiler     : gibbon NOT FOUND in PATH")
+    for comp in ["gibbon", "ghc", "mlton"]:
+        if comp == "ghc" and not args.benchmark_ghc: continue
+        if comp == "mlton" and not args.benchmark_mlton: continue
+        info = get_compiler_info(comp)
+        if info:
+            path, t = info
+            dt = datetime.datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"  Compiler     : {path} ({dt})")
+        else:
+            print(f"  Compiler     : {comp} NOT FOUND in PATH")
 
     global _PAPI_SELECTED_EVENTS, _PAPI_COUNTER_ORDER
     if args.enable_papi:
@@ -3344,8 +3385,8 @@ def main():
     source_cls_all = build_source_classification(args.programs_dir)
 
     # Initialize global storage for extended results (used by cursor comparison table)
-    if args.benchmark_immutable:
-        benchmark_program._all_variants_results = []
+    # Always initialize this to capture GHC/MLton results if requested
+    benchmark_program._all_variants_results = []
 
     all_results: List[Tuple] = []
     for prog in programs_to_run:
@@ -3354,6 +3395,8 @@ def main():
             args.iterations, args.clean, source_cls_all,
             dump_raw=args.dump_raw,
             benchmark_immutable=args.benchmark_immutable,
+            benchmark_ghc=args.benchmark_ghc,
+            benchmark_mlton=args.benchmark_mlton,
             enable_papi=args.enable_papi,
             enable_papi_native=args.enable_papi_native,
         )
