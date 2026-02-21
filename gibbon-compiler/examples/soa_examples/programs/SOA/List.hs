@@ -48,7 +48,7 @@ gibbon_main = let
 				  lst' = iterate (add1 lst)
 				  _ = printsym (quote "End")
 				  _ = printsym (quote "NEWLINE")
-				  _ = printsym (quote "Running pass length List (map, uses=1): ")
+				  _ = printsym (quote "Running pass length List (fold, uses=1): ")
                                   _ = printsym (quote "NEWLINE")
                                   len = iterate (length lst)
                                   _ = printsym (quote "End")

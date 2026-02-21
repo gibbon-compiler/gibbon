@@ -87,8 +87,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PROGRAMS = [
     "Compiler.hs", "DBQuery.hs", "DecisionTree.hs", "DomTree.hs",
     "KDTree.hs", "LinearListReduction.hs", "List.hs", "MonoTree.hs",
-    "ObjectGraph.hs", "OctTree.hs", "PiecewiseFunctions.hs",
-    "TernaryTree.hs", "Trie.hs", "ColorOctree.hs"
+    "ObjectGraph.hs",
+    "OctTree_sumMass.hs", "OctTree_sumEnergy.hs",
+    "OctTree_countActive.hs", "OctTree_countParticles.hs",
+    "OctTree_barnesHutPotential.hs", "OctTree_fmmPotential.hs",
+    "OctTree_scaleEnergy.hs", "OctTree_clearFlags.hs",
+    "PiecewiseFunctions.hs", "TernaryTree.hs", "Trie.hs", "ColorOctree.hs"
 ]
 
 # ---------------------------------------------------------------------------
@@ -1911,17 +1915,83 @@ def _table_per_program(f, all_results, all_variants_results=None):
     If all_variants_results is provided:
         Shows 4 variants: AoS-mut, AoS-imm, SoA-mut, SoA-imm
     """
+    def _merge_pass_results(
+        members: List[str],
+        pair_map: Dict[str, Tuple[BenchmarkResult, BenchmarkResult]],
+        variant: str,
+        merged_program_name: str,
+    ) -> BenchmarkResult:
+        merged = BenchmarkResult(merged_program_name, variant)
+        merged.compile_success = True
+        merged.run_success = True
+        merged.adt_fields = None   # Mixed ADTs (Octree + ColorOctree); suppress Uses/Dead% columns.
+        merged.adt_info = None
+        merged.passes = {}
+        for prog_hs in members:
+            pair = pair_map.get(prog_hs)
+            if not pair:
+                continue
+            src = pair[0] if variant.startswith("aos") else pair[1]
+            if not src or not src.run_success:
+                continue
+            stem = prog_hs.replace(".hs", "")
+            for pname, pdata in src.passes.items():
+                merged_name = f"{stem}.{pname}"
+                merged.passes[merged_name] = dict(pdata)
+        merged.run_success = len(merged.passes) > 0
+        return merged
+
     # Build a mapping from program name to variant results
     variants_map = {}
     if all_variants_results:
         for entry in all_variants_results:
             variants_map[entry['program']] = entry
-    
+
+    pair_map = {}
     for aos, soa in all_results:
+        if aos and soa:
+            pair_map[aos.program] = (aos, soa)
+
+    oct_split_programs = sorted(
+        p for p in pair_map.keys()
+        if p.startswith("OctTree_") and p.endswith(".hs")
+    )
+    oct_group_members = list(oct_split_programs)
+    if oct_split_programs and "ColorOctree.hs" in pair_map:
+        oct_group_members.append("ColorOctree.hs")
+
+    synthetic_pairs = list(all_results)
+    skip_program_tables = set(oct_split_programs)
+    if oct_group_members:
+        # Avoid duplicate OctTree table if legacy monolithic OctTree.hs is also present.
+        skip_program_tables.add("OctTree.hs")
+    if oct_group_members:
+        oct_aos = _merge_pass_results(oct_group_members, pair_map, "aos", "OctTree.hs")
+        oct_soa = _merge_pass_results(oct_group_members, pair_map, "soa", "OctTree.hs")
+        if oct_aos.run_success and oct_soa.run_success:
+            synthetic_pairs = [(oct_aos, oct_soa)] + synthetic_pairs
+
+        if all_variants_results:
+            variant_pair_map = {}
+            for prog_hs, row in variants_map.items():
+                variant_pair_map[prog_hs] = (row.get("aos_imm"), row.get("soa_imm"))
+            oct_aos_imm = _merge_pass_results(oct_group_members, variant_pair_map, "aos_imm", "OctTree.hs")
+            oct_soa_imm = _merge_pass_results(oct_group_members, variant_pair_map, "soa_imm", "OctTree.hs")
+            variants_map["OctTree.hs"] = {
+                "program": "OctTree.hs",
+                "aos": oct_aos,
+                "aos_imm": oct_aos_imm if oct_aos_imm.run_success else None,
+                "soa": oct_soa,
+                "soa_imm": oct_soa_imm if oct_soa_imm.run_success else None,
+            }
+
+    for aos, soa in synthetic_pairs:
         if not (aos and soa):
             continue
 
         prog_hs  = aos.program
+        if prog_hs in skip_program_tables:
+            continue
         prog     = prog_hs.replace(".hs", "")
         pdisplay = prog.replace("_", "\\_")
         
