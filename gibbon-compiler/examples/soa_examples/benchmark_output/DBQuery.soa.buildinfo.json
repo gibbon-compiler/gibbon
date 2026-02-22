@@ -3,6 +3,7 @@
     "gibbon",
     "--use-mutable-cursors",
     "--enable-papi-native",
+    "--no-ran",
     "--packed",
     "--to-exe",
     "--cfile",
@@ -11,9 +12,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/DBQuery.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/DBQuery.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/DBQuery.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/DBQuery.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.soa.exe",
-  "compiled_at": "2026-02-21T20:22:49"
+  "compiled_at": "2026-02-22T10:06:36"
 }

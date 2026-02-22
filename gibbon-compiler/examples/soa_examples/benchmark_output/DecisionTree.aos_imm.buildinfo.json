@@ -2,6 +2,7 @@
   "compile_cmd": [
     "gibbon",
     "--enable-papi-native",
+    "--no-ran",
     "--packed",
     "--to-exe",
     "--cfile",
@@ -10,9 +11,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DecisionTree.hs"
   ],
-  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DecisionTree.hs",
+  "compile_cmd_signature": "gibbon --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DecisionTree.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DecisionTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DecisionTree.aos_imm.exe",
-  "compiled_at": "2026-02-21T20:26:32"
+  "compiled_at": "2026-02-22T10:06:54"
 }

@@ -1595,6 +1595,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       source_cls_all: Dict,
                       dump_raw: bool = False,
                       benchmark_immutable: bool = False,
+                      benchmark_baseline_gibbon: bool = False,
                       enable_papi: bool = False,
                       enable_papi_native: bool = False,
                       benchmark_ghc: bool = False,
@@ -1612,6 +1613,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     if benchmark_immutable:
         variants.extend([("aos", True), ("aos_imm", False),
                          ("soa", True), ("soa_imm", False)])
+    elif benchmark_baseline_gibbon:
+        variants.extend([("aos", True), ("aos_imm", False), ("soa", True)])
     else:
         variants.extend([("aos", True), ("soa", True)])
 
@@ -1779,7 +1782,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     outputs_by_variant = {
         "aos": aos,
         "soa": soa,
-        "aos_imm": results.get("aos_imm") if benchmark_immutable else None,
+        "aos_imm": results.get("aos_imm") if (benchmark_immutable or benchmark_baseline_gibbon) else None,
         "soa_imm": results.get("soa_imm") if benchmark_immutable else None,
         "ghc": results.get("ghc"),
         "mlton": results.get("mlton"),
@@ -2097,6 +2100,7 @@ def _table_cursor_comparison(f, all_variants_results):
     f.write("% Table 2: Mutable vs Immutable Cursor Comparison\n")
     f.write("% ============================================================================\n\n")
 
+    has_soa_imm = any(entry.get("soa_imm") is not None for entry in all_variants_results)
     rows = []
     for entry in all_variants_results:
         prog = _program_label_compact(entry['program'])
@@ -2134,8 +2138,9 @@ def _table_cursor_comparison(f, all_variants_results):
             "aos_mut": [fmt_cell(aost_mut, aost_mut_oom), aost_mut, aost_mut_oom],
             "aos_imm": [fmt_cell(aost_imm, aost_imm_oom), aost_imm, aost_imm_oom],
             "soa_mut": [fmt_cell(soat_mut, soat_mut_oom), soat_mut, soat_mut_oom],
-            "soa_imm": [fmt_cell(soat_imm, soat_imm_oom), soat_imm, soat_imm_oom],
         }
+        if has_soa_imm:
+            cells["soa_imm"] = [fmt_cell(soat_imm, soat_imm_oom), soat_imm, soat_imm_oom]
         valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
         if valid_times:
             min_t = min(valid_times)
@@ -2146,7 +2151,7 @@ def _table_cursor_comparison(f, all_variants_results):
         aos_mut_f = cells["aos_mut"][0]
         aos_imm_f = cells["aos_imm"][0]
         soa_mut_f = cells["soa_mut"][0]
-        soa_imm_f = cells["soa_imm"][0]
+        soa_imm_f = cells["soa_imm"][0] if has_soa_imm else None
 
         # Calculate speedups
         def speedup(a, s):
@@ -2157,7 +2162,7 @@ def _table_cursor_comparison(f, all_variants_results):
         spd_mut = speedup(aost_mut, soat_mut)
         spd_aos_imm_over_aos_mut = speedup(aost_imm, aost_mut)
         spd_imm = speedup(aost_imm, soat_mut)
-        spd_imm_layout = speedup(aost_imm, soat_imm)
+        spd_imm_layout = speedup(aost_imm, soat_imm) if has_soa_imm else None
 
         spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
         spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
@@ -2178,44 +2183,61 @@ def _table_cursor_comparison(f, all_variants_results):
 
     # 2A: raw times
     f.write("\\begin{table}[htbp]\n\\centering\n")
-    f.write("\\caption{Mutable vs immutable cursor comparison (times only). "
-            "Times are median per iteration (s). "
-            "\\textbf{Bold} marks the fastest time across all four variants.}\n")
+    if has_soa_imm:
+        f.write("\\caption{Mutable vs immutable cursor comparison (times only). "
+                "Times are median per iteration (s). "
+                "\\textbf{Bold} marks the fastest time across all four variants.}\n")
+    else:
+        f.write("\\caption{Baseline Gibbon comparison (times only). "
+                "Shown variants: AoS-mut, AoS-imm, SoA-mut. "
+                "Times are median per iteration (s). "
+                "\\textbf{Bold} marks the fastest time across shown variants.}\n")
     f.write("\\label{tab:cursor_comparison_times}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r r r}\n\\toprule\n")
-    f.write(
-        "\\textbf{Program}"
-        " & \\textbf{Am} & \\textbf{Ai}"
-        " & \\textbf{Sm} & \\textbf{Si} \\\\\n"
-    )
+    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
+    header = ("\\textbf{Program}"
+              " & \\textbf{Am} & \\textbf{Ai}"
+              " & \\textbf{Sm}")
+    if has_soa_imm:
+        header += " & \\textbf{Si}"
+    f.write(header + " \\\\\n")
     f.write("\\midrule\n")
     for r in rows:
-        f.write(f"{r['prog']}"
-                f" & {r['aos_mut']} & {r['aos_imm']}"
-                f" & {r['soa_mut']} & {r['soa_imm']} \\\\\n")
+        row = (f"{r['prog']}"
+               f" & {r['aos_mut']} & {r['aos_imm']}"
+               f" & {r['soa_mut']}")
+        if has_soa_imm:
+            row += f" & {r['soa_imm']}"
+        f.write(row + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
     # 2B: speedups
     f.write("\\begin{table}[htbp]\n\\centering\n")
-    f.write("\\caption{Mutable vs immutable cursor comparison (speedups). "
-            "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. "
-            "${>}1{\\times}$ means the denominator is faster.}\n")
+    if has_soa_imm:
+        f.write("\\caption{Mutable vs immutable cursor comparison (speedups). "
+                "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. "
+                "${>}1{\\times}$ means the denominator is faster.}\n")
+    else:
+        f.write("\\caption{Baseline Gibbon comparison (speedups). "
+                "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut. "
+                "${>}1{\\times}$ means the denominator is faster.}\n")
     f.write("\\label{tab:cursor_comparison_speedups}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r r r}\n\\toprule\n")
-    f.write(
-        "\\textbf{Program}"
-        " & \\textbf{Am/Sm}"
-        " & \\textbf{Ai/Am}"
-        " & \\textbf{Ai/Sm}"
-        " & \\textbf{Ai/Si} \\\\\n"
-    )
+    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
+    header = ("\\textbf{Program}"
+              " & \\textbf{Am/Sm}"
+              " & \\textbf{Ai/Am}"
+              " & \\textbf{Ai/Sm}")
+    if has_soa_imm:
+        header += " & \\textbf{Ai/Si}"
+    f.write(header + " \\\\\n")
     f.write("\\midrule\n")
     for r in rows:
-        f.write(f"{r['prog']}"
-                f" & {r['spd_mut']}"
-                f" & {r['spd_aos_imm_over_aos_mut']}"
-                f" & {r['spd_imm']}"
-                f" & {r['spd_imm_layout']} \\\\\n")
+        row = (f"{r['prog']}"
+               f" & {r['spd_mut']}"
+               f" & {r['spd_aos_imm_over_aos_mut']}"
+               f" & {r['spd_imm']}")
+        if has_soa_imm:
+            row += f" & {r['spd_imm_layout']}"
+        f.write(row + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
 
@@ -2238,7 +2260,11 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
     print(f"  ✓ LaTeX tables → {out_file}")
     if all_variants_results:
         print(f"    (includes Table 2: cursor mode comparison with {len(all_variants_results)} programs)")
-        print(f"    (per-program tables show 4 variants: mut + imm cursors)")
+        has_soa_imm = any(e.get("soa_imm") is not None for e in all_variants_results)
+        if has_soa_imm:
+            print(f"    (per-program tables show 4 variants: mut + imm cursors)")
+        else:
+            print(f"    (per-program tables show baseline variants: aos, aos_imm, soa)")
 
 
 def _spd_cell(spd: float, bold_threshold: float = 1.1) -> str:
@@ -2649,6 +2675,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
             soa_imm = variants_map[prog_hs].get('soa_imm')
         
         show_4_variants = (aos_imm is not None or soa_imm is not None)
+        include_soa_imm = (soa_imm is not None)
         show_ghc = False
         
         # Skip if mutable cursors didn't run successfully
@@ -2739,35 +2766,51 @@ def _table_per_program(f, all_results, all_variants_results=None):
         # Table header depends on whether we show 2 or 4 variants
         if show_4_variants:
             if has_uses:
-                if show_ghc:
-                    f.write("\\begin{tabular}{l c c r r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                if include_soa_imm:
+                    if show_ghc:
+                        f.write("\\begin{tabular}{l c c r r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    else:
+                        f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
-                    f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    if show_ghc:
+                        f.write("\\begin{tabular}{l c c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    else:
+                        f.write("\\begin{tabular}{l c c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
                     " & \\textbf{Am} & \\textbf{Ai}"
-                    " & \\textbf{Sm} & \\textbf{Si}"
+                    " & \\textbf{Sm}"
+                    + (" & \\textbf{Si}" if include_soa_imm else "")
+                    +
                     " & \\textbf{Am/Sm}"
                     " & \\textbf{Ai/Am}"
                     " & \\textbf{Ai/Sm}"
-                    " & \\textbf{Ai/Si}"
+                    + (" & \\textbf{Ai/Si}" if include_soa_imm else "")
                     + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
                     + f"{papi_header_suffix} \\\\\n"
                 )
             else:
-                if show_ghc:
-                    f.write("\\begin{tabular}{l c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                if include_soa_imm:
+                    if show_ghc:
+                        f.write("\\begin{tabular}{l c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    else:
+                        f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
-                    f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    if show_ghc:
+                        f.write("\\begin{tabular}{l c r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    else:
+                        f.write("\\begin{tabular}{l c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Am} & \\textbf{Ai}"
-                    " & \\textbf{Sm} & \\textbf{Si}"
+                    " & \\textbf{Sm}"
+                    + (" & \\textbf{Si}" if include_soa_imm else "")
+                    +
                     " & \\textbf{Am/Sm}"
                     " & \\textbf{Ai/Am}"
                     " & \\textbf{Ai/Sm}"
-                    " & \\textbf{Ai/Si}"
+                    + (" & \\textbf{Ai/Si}" if include_soa_imm else "")
                     + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
                     + f"{papi_header_suffix} \\\\\n"
                 )
@@ -2851,7 +2894,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 aost_mut, aost_mut_v, aost_mut_oom = get_time_info(aos, pname)
                 aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
                 soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
-                soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
+                soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname) if include_soa_imm else ("--", None, False)
                 ghct, ghct_v, ghct_oom = get_time_info(ghc, pname) if show_ghc else ("--", None, False)
 
                 # Bold only the fastest available time across all 4 variants.
@@ -2859,8 +2902,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     "aos_mut": [aost_mut, aost_mut_v, aost_mut_oom],
                     "aos_imm": [aost_imm, aost_imm_v, aost_imm_oom],
                     "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
-                    "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
                 }
+                if include_soa_imm:
+                    cells["soa_imm"] = [soat_imm, soat_imm_v, soat_imm_oom]
                 if show_ghc:
                     cells["ghc"] = [ghct, ghct_v, ghct_oom]
                 valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
@@ -2873,7 +2917,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 aost_mut = cells["aos_mut"][0]
                 aost_imm = cells["aos_imm"][0]
                 soat_mut = cells["soa_mut"][0]
-                soat_imm = cells["soa_imm"][0]
+                soat_imm = cells["soa_imm"][0] if include_soa_imm else "--"
                 if show_ghc:
                     ghct = cells["ghc"][0]
                 
@@ -2889,7 +2933,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 spd_mut = calc_spd(aos, soa, pname)
                 spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
                 spd_imm = calc_spd(aos_imm, soa, pname)
-                spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
+                spd_imm_layout = calc_spd(aos_imm, soa_imm, pname) if include_soa_imm else None
                 spd_ghc_over_aos_mut = calc_spd(ghc, aos, pname) if show_ghc else None
                 spd_ghc_over_soa_mut = calc_spd(ghc, soa, pname) if show_ghc else None
                 
@@ -2914,6 +2958,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
                 
                 # Write row
+                imm_layout_cols = (
+                    f" & {soat_imm} & {spd_imm_layout_s}" if include_soa_imm else ""
+                )
                 if has_uses:
                     adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
                     if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
@@ -2922,21 +2969,21 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                     f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                             f" & {aost_mut} & {aost_imm}"
-                            f" & {soat_mut} & {soat_imm}"
+                            f" & {soat_mut}"
+                            f"{imm_layout_cols}"
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
-                            f" & {spd_imm_layout_s}"
                             f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
                             f" & {aost_mut} & {aost_imm}"
-                            f" & {soat_mut} & {soat_imm}"
+                            f" & {soat_mut}"
+                            f"{imm_layout_cols}"
                             f" & {spd_mut_s}"
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
-                            f" & {spd_imm_layout_s}"
                             f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
             
@@ -3032,15 +3079,16 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     aost_mut, aost_mut_v, aost_mut_oom = get_time_info(aos, pname)
                     aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
                     soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
-                    soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
+                    soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname) if include_soa_imm else ("--", None, False)
                     ghct, ghct_v, ghct_oom = get_time_info(ghc, pname) if show_ghc else ("--", None, False)
 
                     cells = {
                         "aos_mut": [aost_mut, aost_mut_v, aost_mut_oom],
                         "aos_imm": [aost_imm, aost_imm_v, aost_imm_oom],
                         "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
-                        "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
                     }
+                    if include_soa_imm:
+                        cells["soa_imm"] = [soat_imm, soat_imm_v, soat_imm_oom]
                     if show_ghc:
                         cells["ghc"] = [ghct, ghct_v, ghct_oom]
                     valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
@@ -3053,14 +3101,14 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     aost_mut = cells["aos_mut"][0]
                     aost_imm = cells["aos_imm"][0]
                     soat_mut = cells["soa_mut"][0]
-                    soat_imm = cells["soa_imm"][0]
+                    soat_imm = cells["soa_imm"][0] if include_soa_imm else "--"
                     if show_ghc:
                         ghct = cells["ghc"][0]
 
                     spd_mut = calc_spd(aos, soa, pname)
                     spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
                     spd_imm = calc_spd(aos_imm, soa, pname)
-                    spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
+                    spd_imm_layout = calc_spd(aos_imm, soa_imm, pname) if include_soa_imm else None
                     spd_ghc_over_aos_mut = calc_spd(ghc, aos, pname) if show_ghc else None
                     spd_ghc_over_soa_mut = calc_spd(ghc, soa, pname) if show_ghc else None
 
@@ -3084,6 +3132,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     if spd_ghc_over_soa_mut:
                         speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
 
+                    imm_layout_cols = (
+                        f" & {soat_imm} & {spd_imm_layout_s}" if include_soa_imm else ""
+                    )
                     if has_uses:
                         adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
                         if adt_total is None and uses is not None and dead_r is not None and (1 - dead_r) > 0:
@@ -3092,21 +3143,21 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                         f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                                 f" & {aost_mut} & {aost_imm}"
-                                f" & {soat_mut} & {soat_imm}"
+                                f" & {soat_mut}"
+                                f"{imm_layout_cols}"
                                 f" & {spd_mut_s}"
                                 f" & {spd_aos_imm_over_aos_mut_s}"
                                 f" & {spd_imm_s}"
-                                f" & {spd_imm_layout_s}"
                                 f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
                     else:
                         f.write(f"{pdisp} & {tchar}"
                                 f" & {aost_mut} & {aost_imm}"
-                                f" & {soat_mut} & {soat_imm}"
+                                f" & {soat_mut}"
+                                f"{imm_layout_cols}"
                                 f" & {spd_mut_s}"
                                 f" & {spd_aos_imm_over_aos_mut_s}"
                                 f" & {spd_imm_s}"
-                                f" & {spd_imm_layout_s}"
                                 f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
                 else:
@@ -3189,8 +3240,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 "aos_mut": [fmt_total(aost_mut_tot), aost_mut_tot],
                 "aos_imm": [fmt_total(aost_imm_tot), aost_imm_tot],
                 "soa_mut": [fmt_total(soat_mut_tot), soat_mut_tot],
-                "soa_imm": [fmt_total(soat_imm_tot), soat_imm_tot],
             }
+            if include_soa_imm:
+                total_cells["soa_imm"] = [fmt_total(soat_imm_tot), soat_imm_tot]
             if show_ghc:
                 total_cells["ghc"] = [fmt_total(ghc_tot), ghc_tot]
             total_valid = [v[1] for v in total_cells.values() if v[1] is not None]
@@ -3208,14 +3260,20 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     f" & {_spd_cell(sp_ghc_over_aos_mut_tot) if sp_ghc_over_aos_mut_tot else '--'}"
                     f" & {_spd_cell(sp_ghc_over_soa_mut_tot) if sp_ghc_over_soa_mut_tot else '--'}"
                 )
+            soa_imm_total_suffix = f" & {total_cells['soa_imm'][0]}" if include_soa_imm else ""
+            imm_layout_total_suffix = (
+                f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'}"
+                if include_soa_imm else ""
+            )
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
                     f"& {total_cells['aos_mut'][0]} & {total_cells['aos_imm'][0]}"
-                    f" & {total_cells['soa_mut'][0]} & {total_cells['soa_imm'][0]}"
+                    f" & {total_cells['soa_mut'][0]}"
+                    f"{soa_imm_total_suffix}"
                     f" & {_spd_cell(sp_mut_tot) if sp_mut_tot else '--'}"
                     f" & {_spd_cell(sp_aos_imm_over_aos_mut_tot) if sp_aos_imm_over_aos_mut_tot else '--'}"
                     f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'}"
-                    f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'}"
+                    f"{imm_layout_total_suffix}"
                     f"{ghc_total_suffix}"
                     f"{papi_empty_suffix} \\\\\n")
             if speedups_mut:
@@ -3243,11 +3301,16 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         f" & & {_spd_cell(gm_ghc_over_aos_mut) if gm_ghc_over_aos_mut else '--'}"
                         f" & {_spd_cell(gm_ghc_over_soa_mut) if gm_ghc_over_soa_mut else '--'}"
                     )
+                imm_layout_gm_suffix = (
+                    f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'}"
+                    if include_soa_imm else ""
+                )
+                pre_speed_cells = "& & & &" if include_soa_imm else "& & &"
                 f.write(f"\\textbf{{Geomean}} & {extra_cols}"
-                        f"& & & & & {_spd_cell(gm_mut)}"
+                        f"{pre_speed_cells} {_spd_cell(gm_mut)}"
                         f" & {_spd_cell(gm_aos_imm_over_aos_mut) if gm_aos_imm_over_aos_mut else '--'}"
                         f" & {_spd_cell(gm_imm) if gm_imm else '--'}"
-                        f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'}"
+                        f"{imm_layout_gm_suffix}"
                         f"{ghc_gm_suffix}"
                         f"{papi_empty_suffix} \\\\\n")
         else:
@@ -4092,6 +4155,10 @@ def main():
                     help="Also compile and benchmark immutable cursor variants "
                          "(aos_imm, soa_imm) in addition to mutable cursor variants. "
                          "Generates Table 2 showing 4-way comparison.")
+    ap.add_argument("--bencmark-baseline-gibbon", "--benchmark-baseline-gibbon",
+                    dest="benchmark_baseline_gibbon", action="store_true",
+                    help="Baseline Gibbon mode: compile/benchmark aos, soa, aos_imm "
+                         "(excludes soa_imm). Generates comparison tables without SoA-imm columns.")
     ap.add_argument("--benchmark-ghc", action="store_true",
                     help="Also compile and benchmark GHC variant (programs/GHC/*.hs).")
     ap.add_argument("--benchmark-mlton", action="store_true",
@@ -4108,6 +4175,8 @@ def main():
 
     if args.enable_papi and args.enable_papi_native:
         ap.error("Choose only one mode: --enable-papi OR --enable-papi-native")
+    if args.benchmark_immutable and args.benchmark_baseline_gibbon:
+        ap.error("Choose only one mode: --benchmark-imm OR --bencmark-baseline-gibbon")
 
     programs_to_run = args.programs or DEFAULT_PROGRAMS
 
@@ -4122,7 +4191,13 @@ def main():
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
-    print(f"  Immutable    : {'YES  (4 variants: aos, aos_imm, soa, soa_imm)' if args.benchmark_immutable else 'no  (2 variants: aos, soa)'}")
+    if args.benchmark_immutable:
+        imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
+    elif args.benchmark_baseline_gibbon:
+        imm_s = "YES  (baseline: aos, aos_imm, soa)"
+    else:
+        imm_s = "no  (2 variants: aos, soa)"
+    print(f"  Immutable    : {imm_s}")
     print(f"  GHC          : {'YES' if args.benchmark_ghc else 'no'}")
     print(f"  MLton        : {'YES' if args.benchmark_mlton else 'no'}")
     papi_mode = ("native" if args.enable_papi_native else ("high-level" if args.enable_papi else "off"))
@@ -4172,6 +4247,7 @@ def main():
             args.iterations, args.clean, source_cls_all,
             dump_raw=args.dump_raw,
             benchmark_immutable=args.benchmark_immutable,
+            benchmark_baseline_gibbon=args.benchmark_baseline_gibbon,
             benchmark_ghc=args.benchmark_ghc,
             benchmark_mlton=args.benchmark_mlton,
             enable_papi=args.enable_papi,
@@ -4191,11 +4267,33 @@ def main():
         )
         match = sum(
             1 for e in extended_results
-            if analyze_outputs_by_variant({
+            if all(
+                r is not None and r.run_success
+                for r in [e.get("aos"), e.get("aos_imm"), e.get("soa"), e.get("soa_imm")]
+            ) and analyze_outputs_by_variant({
                 "aos": e.get("aos"),
                 "aos_imm": e.get("aos_imm"),
                 "soa": e.get("soa"),
                 "soa_imm": e.get("soa_imm"),
+            })["is_match"] is True
+        )
+    elif args.benchmark_baseline_gibbon:
+        ok = sum(
+            1 for e in extended_results
+            if all(
+                r is not None and r.run_success
+                for r in [e.get("aos"), e.get("aos_imm"), e.get("soa")]
+            )
+        )
+        match = sum(
+            1 for e in extended_results
+            if all(
+                r is not None and r.run_success
+                for r in [e.get("aos"), e.get("aos_imm"), e.get("soa")]
+            ) and analyze_outputs_by_variant({
+                "aos": e.get("aos"),
+                "aos_imm": e.get("aos_imm"),
+                "soa": e.get("soa"),
             })["is_match"] is True
         )
     else:
@@ -4204,10 +4302,13 @@ def main():
                     if a and s and a.run_success and s.run_success and outputs_match(a, s))
 
     print(f"\n\n{'='*72}")
+    match_den = ok if ok > 0 else 0
     if args.benchmark_immutable:
-        print(f"DONE  –  {ok}/{len(all_results)} succeeded (all 4 variants)  |  {match}/{ok} output matches (successful variants)")
+        print(f"DONE  –  {ok}/{len(all_results)} succeeded (all 4 variants)  |  {match}/{match_den} output matches (successful variants)")
+    elif args.benchmark_baseline_gibbon:
+        print(f"DONE  –  {ok}/{len(all_results)} succeeded (baseline variants)  |  {match}/{match_den} output matches (successful variants)")
     else:
-        print(f"DONE  –  {ok}/{len(all_results)} succeeded  |  {match}/{ok} output matches")
+        print(f"DONE  –  {ok}/{len(all_results)} succeeded  |  {match}/{match_den} output matches")
     print(f"{'='*72}")
 
     print("\nWriting reports ...")
