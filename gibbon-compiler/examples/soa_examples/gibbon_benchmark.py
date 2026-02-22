@@ -1929,17 +1929,20 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
         }
         rows.append(row_data)
 
+    has_mlton = any(entry.get("mlton") is not None for entry in all_variants_results)
     f.write("\\begin{table}[htbp]\n\\centering\n")
-    f.write("\\caption{Runtime comparison of Gibbon (AoS/SoA), GHC, and MLton. "
-            "Times are total median per iteration (s). "
+    f.write("\\caption{Runtime comparison of Gibbon (AoS/SoA), GHC"
+            + (", and MLton. " if has_mlton else ". ")
+            + "Times are total median per iteration (s). "
             "\\textbf{Bold} marks the fastest time for each program.}\n")
     f.write("\\label{tab:comparison_ghc_mlton}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
-    f.write(
-        "\\textbf{Program}"
-        " & \\textbf{Gibbon-AoS} & \\textbf{Gibbon-SoA}"
-        " & \\textbf{GHC} & \\textbf{MLton} \\\\\n"
-    )
+    f.write("\\begin{tabular}{l r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
+    header = ("\\textbf{Program}"
+              " & \\textbf{Gibbon-AoS} & \\textbf{Gibbon-SoA}"
+              " & \\textbf{GHC}")
+    if has_mlton:
+        header += " & \\textbf{MLton}"
+    f.write(header + " \\\\\n")
     f.write("\\midrule\n")
 
     # geomean collectors
@@ -1969,9 +1972,12 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
         if r["ghc"][0] is not None and not r["ghc"][1]: ghc_times.append(r["ghc"][0])
         if r["mlton"][0] is not None and not r["mlton"][1]: mlton_times.append(r["mlton"][0])
 
-        f.write(f"{r['prog']}"
-                f" & {cells['aos'][0]} & {cells['soa'][0]}"
-                f" & {cells['ghc'][0]} & {cells['mlton'][0]} \\\\\n")
+        row = (f"{r['prog']}"
+               f" & {cells['aos'][0]} & {cells['soa'][0]}"
+               f" & {cells['ghc'][0]}")
+        if has_mlton:
+            row += f" & {cells['mlton'][0]}"
+        f.write(row + " \\\\\n")
     
     # Geomean row
     f.write("\\midrule\n")
@@ -1993,9 +1999,12 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
             if v[1] is not None and v[1] == min_gm:
                 gm_cells[k] = (f"\\textbf{{{v[0]}}}", v[1])
 
-    f.write(f"\\textbf{{Geomean}}"
-            f" & {gm_cells['aos'][0]} & {gm_cells['soa'][0]}"
-            f" & {gm_cells['ghc'][0]} & {gm_cells['mlton'][0]} \\\\\n")
+    gm_row = (f"\\textbf{{Geomean}}"
+              f" & {gm_cells['aos'][0]} & {gm_cells['soa'][0]}"
+              f" & {gm_cells['ghc'][0]}")
+    if has_mlton:
+        gm_row += f" & {gm_cells['mlton'][0]}"
+    f.write(gm_row + " \\\\\n")
 
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
@@ -2018,54 +2027,54 @@ def _table_speedup_vs_ghc(f, all_variants_results):
         return f"{v:.2f}" + r"$\times$"
 
     rows = []
-    aos_over_ghc_vals = []
-    soa_over_ghc_vals = []
+    ghc_over_aos_vals = []
+    ghc_over_soa_vals = []
     for entry in all_variants_results:
         prog = entry["program"].replace(".hs", "").replace("_", "\\_")
         aos_t, aos_oom = get_total_or_oom(entry.get("aos"))
         soa_t, soa_oom = get_total_or_oom(entry.get("soa"))
         ghc_t, ghc_oom = get_total_or_oom(entry.get("ghc"))
 
-        def speedup(base, comp):
-            if base is None or comp is None or base <= 0.0:
+        def speedup(num, den):
+            if num is None or den is None or den <= 0.0:
                 return None
-            return base / comp
+            return num / den
 
-        aos_over_ghc = speedup(aos_t, ghc_t)
-        soa_over_ghc = speedup(soa_t, ghc_t)
-        if aos_over_ghc is not None:
-            aos_over_ghc_vals.append(aos_over_ghc)
-        if soa_over_ghc is not None:
-            soa_over_ghc_vals.append(soa_over_ghc)
+        ghc_over_aos = speedup(ghc_t, aos_t)
+        ghc_over_soa = speedup(ghc_t, soa_t)
+        if ghc_over_aos is not None:
+            ghc_over_aos_vals.append(ghc_over_aos)
+        if ghc_over_soa is not None:
+            ghc_over_soa_vals.append(ghc_over_soa)
 
         rows.append({
             "prog": prog,
-            "aos_over_ghc": aos_over_ghc,
-            "soa_over_ghc": soa_over_ghc,
+            "ghc_over_aos": ghc_over_aos,
+            "ghc_over_soa": ghc_over_soa,
             "aos_oom": aos_oom,
             "soa_oom": soa_oom,
             "ghc_oom": ghc_oom,
         })
 
     f.write("\\begin{table}[htbp]\n\\centering\n")
-    f.write("\\caption{Gibbon mutable speedups vs GHC. "
+    f.write("\\caption{GHC speedups vs Gibbon mutable variants. "
             "Each entry is total median runtime speedup over all passes for one iteration. "
-            "$\\text{AoS}/\\text{GHC}$ and $\\text{SoA}/\\text{GHC}$ are reported.}\n")
+            "$\\text{GHC}/\\text{AoS}$ and $\\text{GHC}/\\text{SoA}$ are reported.}\n")
     f.write("\\label{tab:speedup_vs_ghc}\n\\small\n")
     f.write("\\begin{tabular}{l r r}\n\\toprule\n")
-    f.write("\\textbf{Program} & $\\mathbf{\\text{AoS}/\\text{GHC}}$ & $\\mathbf{\\text{SoA}/\\text{GHC}}$ \\\\\n")
+    f.write("\\textbf{Program} & $\\mathbf{\\text{GHC}/\\text{AoS}}$ & $\\mathbf{\\text{GHC}/\\text{SoA}}$ \\\\\n")
     f.write("\\midrule\n")
 
     for r in rows:
         if r["ghc_oom"]:
             a_cell, s_cell = "\\textit{OOM}", "\\textit{OOM}"
         else:
-            a_cell = "\\textit{OOM}" if r["aos_oom"] else fmt_spd(r["aos_over_ghc"])
-            s_cell = "\\textit{OOM}" if r["soa_oom"] else fmt_spd(r["soa_over_ghc"])
+            a_cell = "\\textit{OOM}" if r["aos_oom"] else fmt_spd(r["ghc_over_aos"])
+            s_cell = "\\textit{OOM}" if r["soa_oom"] else fmt_spd(r["ghc_over_soa"])
         f.write(f"{r['prog']} & {a_cell} & {s_cell} \\\\\n")
 
-    gm_a = statistics.geometric_mean(aos_over_ghc_vals) if aos_over_ghc_vals else None
-    gm_s = statistics.geometric_mean(soa_over_ghc_vals) if soa_over_ghc_vals else None
+    gm_a = statistics.geometric_mean(ghc_over_aos_vals) if ghc_over_aos_vals else None
+    gm_s = statistics.geometric_mean(ghc_over_soa_vals) if ghc_over_soa_vals else None
     f.write("\\midrule\n")
     f.write(f"\\textbf{{Geomean}} & {fmt_spd(gm_a)} & {fmt_spd(gm_s)} \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
@@ -2216,6 +2225,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
             if any(e.get('ghc') for e in all_variants_results):
                 _table_speedup_vs_ghc(f, all_variants_results)
         _table_per_program(f, all_results, all_variants_results)
+        if all_variants_results and any(e.get('ghc') for e in all_variants_results):
+            _table_per_program_ghc(f, all_results, all_variants_results)
     print(f"  ✓ LaTeX tables → {out_file}")
     if all_variants_results:
         print(f"    (includes Table 2: cursor mode comparison with {len(all_variants_results)} programs)")
@@ -2628,10 +2639,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
         if prog_hs in variants_map:
             aos_imm = variants_map[prog_hs].get('aos_imm')
             soa_imm = variants_map[prog_hs].get('soa_imm')
-            ghc = variants_map[prog_hs].get('ghc')
         
         show_4_variants = (aos_imm is not None or soa_imm is not None)
-        show_ghc = (ghc is not None)
+        show_ghc = False
         
         # Skip if mutable cursors didn't run successfully
         if not (aos.run_success and soa.run_success):
@@ -2673,10 +2683,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
         f.write("\\begin{table}[t]\n\\centering\n")
         
         cursor_note = " (mutable + immutable cursors)" if show_4_variants else ""
-        ghc_note = ", with GHC speedups (GHC/Am, GHC/Sm)" if show_ghc else ""
         f.write(
             f"\\caption{{Per-pass performance for \\texttt{{{pdisplay}}}"
-            f"{adt_note}{cursor_note}{ghc_note}. "
+            f"{adt_note}{cursor_note}. "
             "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
             "across --iterate runs. "
             "T: F=fold, M=map. "
@@ -3361,6 +3370,164 @@ def _table_per_program_papi_one_pair(
         total_row += f" & {_fmt_counter(at)}/{_fmt_counter(st)}"
     f.write(total_row + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+
+
+def _table_per_program_ghc(f, all_results, all_variants_results):
+    """
+    One additional table per program for GHC comparison only.
+    Columns: GHC runtime, GHC/Am, GHC/Sm.
+    """
+    variants_map = {entry["program"]: entry for entry in all_variants_results}
+    pair_map = {}
+    for aos, soa in all_results:
+        if aos and soa:
+            pair_map[aos.program] = (aos, soa)
+
+    def _merge_passes(member_programs: List[str], merged_name: str):
+        aos_m = BenchmarkResult(merged_name, "aos")
+        soa_m = BenchmarkResult(merged_name, "soa")
+        ghc_m = BenchmarkResult(merged_name, "ghc")
+        for res in (aos_m, soa_m, ghc_m):
+            res.compile_success = True
+            res.run_success = True
+            res.passes = {}
+
+        for prog_hs in member_programs:
+            pair = pair_map.get(prog_hs)
+            row = variants_map.get(prog_hs, {})
+            if not pair:
+                continue
+            for variant_name, src in (("aos", pair[0]), ("soa", pair[1]), ("ghc", row.get("ghc"))):
+                if not src or not src.run_success:
+                    continue
+                dst = aos_m if variant_name == "aos" else (soa_m if variant_name == "soa" else ghc_m)
+                for pname, pdata in src.passes.items():
+                    out_name = pname
+                    if out_name in dst.passes:
+                        out_name = f"{prog_hs.replace('.hs', '')}.{pname}"
+                    dst.passes[out_name] = dict(pdata)
+
+        aos_m.run_success = len(aos_m.passes) > 0
+        soa_m.run_success = len(soa_m.passes) > 0
+        ghc_m.run_success = len(ghc_m.passes) > 0
+        return aos_m, soa_m, ghc_m
+
+    oct_split_programs = sorted(
+        p for p in pair_map.keys()
+        if p.startswith("OctTree_") and p.endswith(".hs")
+    )
+    oct_group_members: List[str] = []
+    if oct_split_programs:
+        oct_group_members.extend(oct_split_programs)
+    elif "OctTree.hs" in pair_map:
+        oct_group_members.append("OctTree.hs")
+    if oct_group_members and "ColorOctree.hs" in pair_map:
+        oct_group_members.append("ColorOctree.hs")
+
+    skip_program_tables = set(oct_split_programs)
+    skip_program_tables.add("OctTree.hs")
+    if "ColorOctree.hs" in pair_map:
+        skip_program_tables.add("ColorOctree.hs")
+
+    grouped_rows: List[Tuple[str, BenchmarkResult, BenchmarkResult, BenchmarkResult]] = []
+    if oct_group_members:
+        aos_m, soa_m, ghc_m = _merge_passes(oct_group_members, "OctTreeCombined.hs")
+        if aos_m.run_success and soa_m.run_success and ghc_m.run_success:
+            grouped_rows.append(("OctTree", aos_m, soa_m, ghc_m))
+
+    for aos, soa in all_results:
+        if not aos or not soa:
+            continue
+        prog_hs = aos.program
+        if prog_hs in skip_program_tables:
+            continue
+        ghc = variants_map.get(prog_hs, {}).get("ghc")
+        if not (aos.run_success and soa.run_success and ghc and ghc.run_success):
+            continue
+        grouped_rows.append((prog_hs.replace(".hs", ""), aos, soa, ghc))
+
+    for prog, aos, soa, ghc in grouped_rows:
+        pdisplay = prog.replace("_", "\\_")
+        passes = sorted(set(list(aos.passes.keys()) + list(soa.passes.keys()) + list(ghc.passes.keys())))
+        if not passes:
+            continue
+
+        f.write(f"% -- Table: {prog} GHC Comparison --\n")
+        f.write("\\begin{table}[t]\n\\centering\n")
+        f.write(
+            f"\\caption{{Per-pass GHC comparison for \\texttt{{{pdisplay}}}. "
+            "Times are median per iteration (s); $\\pm$ shows standard error. "
+            "$\\text{GHC}/\\text{Am}$ and $\\text{GHC}/\\text{Sm}$ are speedups.}}\n"
+        )
+        f.write(f"\\label{{tab:{prog}_ghc}}\n\\small\n")
+        f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
+        f.write("\\textbf{Pass} & \\textbf{T} & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm} \\\\\n")
+        f.write("\\midrule\n")
+
+        ghc_over_am_vals = []
+        ghc_over_sm_vals = []
+        octree_passes = []
+        color_passes = []
+        if prog == "OctTree":
+            for pname in passes:
+                if pname in ("paletteEntriesQuantized", "quantizationErrorProxy"):
+                    color_passes.append(pname)
+                else:
+                    octree_passes.append(pname)
+        else:
+            octree_passes = passes
+
+        for pname in octree_passes + (color_passes if prog == "OctTree" else []):
+            if prog == "OctTree" and color_passes and pname == color_passes[0]:
+                f.write("\\midrule\n")
+            ad = aos.passes.get(pname, {})
+            sd = soa.passes.get(pname, {})
+            gd = ghc.passes.get(pname, {})
+            ptype = ad.get("pass_type") or sd.get("pass_type") or gd.get("pass_type") or "unknown"
+            tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
+
+            at = ad.get("median_time", 0.0)
+            st = sd.get("median_time", 0.0)
+            gt = gd.get("median_time", 0.0)
+            ge = gd.get("stderr", 0.0)
+            ghc_cell = fmt_pm(gt, ge) if gt > 0 else "--"
+
+            g_over_a = (gt / at) if (gt > 0 and at > 0) else None
+            g_over_s = (gt / st) if (gt > 0 and st > 0) else None
+            if g_over_a is not None:
+                ghc_over_am_vals.append(g_over_a)
+            if g_over_s is not None:
+                ghc_over_sm_vals.append(g_over_s)
+
+            f.write(
+                f"{pname.replace('_', '\\_')} & {tchar}"
+                f" & {ghc_cell}"
+                f" & {(_spd_cell(g_over_a) if g_over_a else '--')}"
+                f" & {(_spd_cell(g_over_s) if g_over_s else '--')} \\\\\n"
+            )
+
+        a_tot = sum(p.get("median_time", 0.0) for p in aos.passes.values())
+        s_tot = sum(p.get("median_time", 0.0) for p in soa.passes.values())
+        g_tot = sum(p.get("median_time", 0.0) for p in ghc.passes.values())
+        g_over_a_tot = (g_tot / a_tot) if (g_tot > 0 and a_tot > 0) else None
+        g_over_s_tot = (g_tot / s_tot) if (g_tot > 0 and s_tot > 0) else None
+        gm_g_over_a = statistics.geometric_mean(ghc_over_am_vals) if ghc_over_am_vals else None
+        gm_g_over_s = statistics.geometric_mean(ghc_over_sm_vals) if ghc_over_sm_vals else None
+
+        f.write("\\midrule\n")
+        f.write(
+            f"\\textbf{{Total}} &"
+            f" & {fmt(g_tot)}"
+            f" & {(_spd_cell(g_over_a_tot) if g_over_a_tot else '--')}"
+            f" & {(_spd_cell(g_over_s_tot) if g_over_s_tot else '--')} \\\\\n"
+        )
+        f.write(
+            f"\\textbf{{Geomean}} &"
+            f" & --"
+            f" & {(_spd_cell(gm_g_over_a) if gm_g_over_a else '--')}"
+            f" & {(_spd_cell(gm_g_over_s) if gm_g_over_s else '--')} \\\\\n"
+        )
+        f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
 
 def compile_latex_preview(tex_file: Path, out_dir: Path):
