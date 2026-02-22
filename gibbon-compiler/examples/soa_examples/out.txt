@@ -6,15 +6,16 @@ GIBBON BENCHMARK SUITE v3.1
   Output dir   : benchmark_output
   Iterations   : 1  (passed as --iterate N; use --iterations 1 to match cold manual runs)
   Programs     : 21
-  Force recomp : YES  (--clean)
+  Force recomp : no  (smart mtime check)
   Paper mode   : no
-  Dump raw     : no
+  Dump raw     : YES → benchmark_output/raw_output/
   Immutable    : no  (2 variants: aos, soa)
-  GHC          : no
+  GHC          : YES
   MLton        : no
   PAPI mode    : off
   CPU cores    : 20
-  Compiler     : /workdisk/git/gibbon/dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon (2026-02-21 15:59:03)
+  Compiler     : /workdisk/git/gibbon/dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon (2026-02-21 16:15:50)
+  Compiler     : /home/vidush-singhal/.ghcup/ghc/9.10.1/bin/ghc-9.10.1 (2024-11-14 10:53:06)
 ========================================================================
 
 ======================================================================
@@ -174,14 +175,26 @@ Scanning source files for field-usage annotations ...
 Benchmarking: Compiler.hs
 ======================================================================
 
-Compiling 2 file(s) using 1 thread(s) ...
-  [AOS mut-cursors] Compiler: compiling  (forced recompile)
+Compiling 3 file(s) using 1 thread(s) ...
+  [AOS mut-cursors] Compiler: compiling  (compile command changed)
            src: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/Compiler.hs  →  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.aos.exe
-           FAILED (0.6s)
-  [SOA mut-cursors] Compiler: compiling  (forced recompile)
+           ok (1.2s)
+  [SOA mut-cursors] Compiler: compiling  (compile command changed)
            src: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Compiler.hs  →  /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.soa.exe
+           FAILED (0.6s)
+  [GHC] Compiler: skipping  (exe up-to-date (compiled 2026-02-21 19:09:15))
+           exe: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.ghc.exe
+           src: /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC/Compiler.hs
 Traceback (most recent call last):
-  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1489, in compile_parallel
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3855, in <module>
+    main()
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3791, in main
+    aos, soa = benchmark_program(
+               ^^^^^^^^^^^^^^^^^^
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1648, in benchmark_program
+    compile_results = compile_parallel(tasks)
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1533, in compile_parallel
     for fut in as_completed(fmap):
   File "/usr/lib/python3.12/concurrent/futures/_base.py", line 243, in as_completed
     waiter.event.wait(wait_timeout)
@@ -190,28 +203,4 @@ Traceback (most recent call last):
                ^^^^^^^^^^^^^^^^^^^^^^^^
   File "/usr/lib/python3.12/threading.py", line 355, in wait
     waiter.acquire()
-KeyboardInterrupt
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3809, in <module>
-    main()
-  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 3745, in main
-    aos, soa = benchmark_program(
-               ^^^^^^^^^^^^^^^^^^
-  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1602, in benchmark_program
-    compile_results = compile_parallel(tasks)
-                      ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1484, in compile_parallel
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 647, in __exit__
-    self.shutdown(wait=True)
-  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 238, in shutdown
-    t.join()
-  File "/usr/lib/python3.12/threading.py", line 1147, in join
-    self._wait_for_tstate_lock()
-  File "/usr/lib/python3.12/threading.py", line 1167, in _wait_for_tstate_lock
-    if lock.acquire(block, timeout):
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 KeyboardInterrupt

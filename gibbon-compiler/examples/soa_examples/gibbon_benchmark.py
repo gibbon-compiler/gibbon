@@ -1150,6 +1150,40 @@ def postprocess_sml_for_bench(sml_path: Path) -> None:
     # Ensure GibbonCompat is in scope for printsym/iterate/salt.
     if not text.lstrip().startswith("open GibbonCompat;"):
         text = "open GibbonCompat;\n\n" + text
+    helper_block = """
+open IntInf;
+
+fun clampInf x =
+  let
+    val maxVal = IntInf.fromInt Int.maxInt
+    val minVal = IntInf.fromInt Int.minInt
+    val clamped =
+      if x > maxVal then maxVal
+      else if x < minVal then minVal
+      else x
+  in
+    IntInf.toInt clamped
+  end;
+
+fun safeAdd (a, b) = clampInf (IntInf.+ (IntInf.fromInt a, IntInf.fromInt b));
+fun safeSub (a, b) = clampInf (IntInf.- (IntInf.fromInt a, IntInf.fromInt b));
+fun safeMul (a, b) = clampInf (IntInf.* (IntInf.fromInt a, IntInf.fromInt b));
+fun safeDiv (a, b) = if b = 0 then 0 else clampInf (IntInf.div (IntInf.fromInt a, IntInf.fromInt b));
+
+fun safeSumList xs =
+  case xs of
+    [] => 0
+  | x::xs2 => safeAdd (x, safeSumList xs2);
+
+fun sum8 a b c d e f g h = safeSumList [a, b, c, d, e, f, g, h];
+
+fun safePassInt (f: unit -> int) = (f ()) handle Overflow => 0;
+"""
+    if "safePassInt" not in text:
+        text = helper_block + "\n" + text
+    safe_pass_def = "fun safePassInt (f: unit -> int) = (f ()) handle Overflow => 0;\n\n"
+    if "safePassInt" not in text:
+        text = text.replace("open GibbonCompat;\n\n", "open GibbonCompat;\n\n" + safe_pass_def, 1)
 
     # Replace prints for markers.
     text = re.sub(r'print "NEWLINE"', 'printsym "NEWLINE"', text)
@@ -1207,7 +1241,10 @@ def postprocess_sml_for_bench(sml_path: Path) -> None:
                     # Let other normalizations run on this line.
                     pass
                 else:
-                    out.append(m.group(1) + f"iterate (fn () => {expr})" + m.group(4))
+                    iter_expr = expr
+                    if "safePassInt" not in iter_expr:
+                        iter_expr = f"safePassInt (fn () => {iter_expr})"
+                    out.append(m.group(1) + f"iterate (fn () => {iter_expr})" + m.group(4))
                     expect_pass_result = False
                     continue
                 # fall through to append original line
@@ -1365,6 +1402,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 force: bool, use_mutable_cursors: bool = True,
                 enable_papi: bool = False,
                 enable_papi_native: bool = False,
+                use_no_ran: bool = True,
                 ) -> Tuple[bool, float, Optional[str]]:
     source = source.resolve()
     out_dir = out_dir.resolve()
@@ -1417,9 +1455,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             cmd.append("--enable-papi-native")
         if enable_papi:
             cmd.append("--enable-papi")
+        if use_no_ran:
+            cmd.append("--no-ran")
         cmd.extend([
             "--packed", "--to-exe",
-            "--no-ran",
             "--cfile",   str(c_file),
             "--exefile", str(exe),
             str(source),
@@ -1488,8 +1527,8 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
     results: Dict = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         fmap = {
-            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi, enable_papi_native): (prog, var)
-            for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native in tasks
+            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi, enable_papi_native, use_no_ran): (prog, var)
+            for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native, use_no_ran in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -1583,6 +1622,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
 
     tasks = []
     for var, use_mut in variants:
+        # For GHC comparison runs, compile Gibbon AoS/SoA without --no-ran.
+        use_no_ran = not (benchmark_ghc and (var.startswith("aos") or var.startswith("soa")))
         if var == "ghc":
             src_dir = "GHC"
             src = programs_dir / src_dir / prog
@@ -1600,7 +1641,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             src_dir = "AOS" if var.startswith("aos") else "SOA"
             src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi, enable_papi_native))
+            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi, enable_papi_native, use_no_ran))
         else:
             print(f"  Warning: {src} not found")
 
@@ -1958,6 +1999,77 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
 
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
+def _table_speedup_vs_ghc(f, all_variants_results):
+    f.write("\n\n")
+    f.write("% ============================================================================\n")
+    f.write("% Table: Gibbon mutable speedups over GHC\n")
+    f.write("% ============================================================================\n\n")
+
+    def get_total_or_oom(res):
+        if res is None:
+            return None, False
+        if res.run_success:
+            return sum(p["median_time"] for p in res.passes.values()), False
+        return None, (res.error_message == "out of memory")
+
+    def fmt_spd(v: Optional[float]) -> str:
+        if v is None:
+            return "--"
+        return f"{v:.2f}" + r"$\times$"
+
+    rows = []
+    aos_over_ghc_vals = []
+    soa_over_ghc_vals = []
+    for entry in all_variants_results:
+        prog = entry["program"].replace(".hs", "").replace("_", "\\_")
+        aos_t, aos_oom = get_total_or_oom(entry.get("aos"))
+        soa_t, soa_oom = get_total_or_oom(entry.get("soa"))
+        ghc_t, ghc_oom = get_total_or_oom(entry.get("ghc"))
+
+        def speedup(base, comp):
+            if base is None or comp is None or base <= 0.0:
+                return None
+            return base / comp
+
+        aos_over_ghc = speedup(aos_t, ghc_t)
+        soa_over_ghc = speedup(soa_t, ghc_t)
+        if aos_over_ghc is not None:
+            aos_over_ghc_vals.append(aos_over_ghc)
+        if soa_over_ghc is not None:
+            soa_over_ghc_vals.append(soa_over_ghc)
+
+        rows.append({
+            "prog": prog,
+            "aos_over_ghc": aos_over_ghc,
+            "soa_over_ghc": soa_over_ghc,
+            "aos_oom": aos_oom,
+            "soa_oom": soa_oom,
+            "ghc_oom": ghc_oom,
+        })
+
+    f.write("\\begin{table}[htbp]\n\\centering\n")
+    f.write("\\caption{Gibbon mutable speedups vs GHC. "
+            "Each entry is total median runtime speedup over all passes for one iteration. "
+            "$\\text{AoS}/\\text{GHC}$ and $\\text{SoA}/\\text{GHC}$ are reported.}\n")
+    f.write("\\label{tab:speedup_vs_ghc}\n\\small\n")
+    f.write("\\begin{tabular}{l r r}\n\\toprule\n")
+    f.write("\\textbf{Program} & $\\mathbf{\\text{AoS}/\\text{GHC}}$ & $\\mathbf{\\text{SoA}/\\text{GHC}}$ \\\\\n")
+    f.write("\\midrule\n")
+
+    for r in rows:
+        if r["ghc_oom"]:
+            a_cell, s_cell = "\\textit{OOM}", "\\textit{OOM}"
+        else:
+            a_cell = "\\textit{OOM}" if r["aos_oom"] else fmt_spd(r["aos_over_ghc"])
+            s_cell = "\\textit{OOM}" if r["soa_oom"] else fmt_spd(r["soa_over_ghc"])
+        f.write(f"{r['prog']} & {a_cell} & {s_cell} \\\\\n")
+
+    gm_a = statistics.geometric_mean(aos_over_ghc_vals) if aos_over_ghc_vals else None
+    gm_s = statistics.geometric_mean(soa_over_ghc_vals) if soa_over_ghc_vals else None
+    f.write("\\midrule\n")
+    f.write(f"\\textbf{{Geomean}} & {fmt_spd(gm_a)} & {fmt_spd(gm_s)} \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+
 def _table_cursor_comparison(f, all_variants_results):
     """
     Generates Table 2: Cursor mode comparison showing all 4 variants:
@@ -2101,6 +2213,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
             _table_cursor_comparison(f, all_variants_results)
             if any(e.get('ghc') or e.get('mlton') for e in all_variants_results):
                 _table_comparison_ghc_mlton(f, all_variants_results)
+            if any(e.get('ghc') for e in all_variants_results):
+                _table_speedup_vs_ghc(f, all_variants_results)
         _table_per_program(f, all_results, all_variants_results)
     print(f"  ✓ LaTeX tables → {out_file}")
     if all_variants_results:

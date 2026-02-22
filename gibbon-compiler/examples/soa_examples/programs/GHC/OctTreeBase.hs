@@ -2,6 +2,7 @@
 module OctTreeBase where
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
+import Prelude hiding (iterate)
 
 
 -- @BENCH adt_fields=16

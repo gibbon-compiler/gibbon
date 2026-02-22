@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  21 FEB 2026 17:28
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  21 FEB 2026 19:44
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -178,10 +178,274 @@ LaTeX Font Info:    External font `cmex10' loaded for size
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <6> on input line 10.
 
+! Undefined control sequence.
+<argument> ...ll passes for one iteration. $\text 
+                                                  {AoS}/\text {GHC}$ and $\t...
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...r one iteration. $\text {AoS}/\text 
+                                                  {GHC}$ and $\text {SoA}/\t...
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...\text {AoS}/\text {GHC}$ and $\text 
+                                                  {SoA}/\text {GHC}$ are rep...
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...\text {GHC}$ and $\text {SoA}/\text 
+                                                  {GHC}$ are reported.}}{\th...
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<recently read> \text 
+                      
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...r one iteration. $\text {AoS}/\text 
+                                                  {GHC}$ and $\text {SoA}/\t...
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<recently read> \text 
+                      
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...\text {GHC}$ and $\text {SoA}/\text 
+                                                  {GHC}$ are reported.
+l.159 ...nd $\text{SoA}/\text{GHC}$ are reported.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> \text 
+                 {AoS}/\text {GHC}
+l.164 ...rogram} & $\mathbf{\text{AoS}/\text{GHC}}
+                                                  $ & $\mathbf{\text{SoA}/\t...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> \text {AoS}/\text 
+                             {GHC}
+l.164 ...rogram} & $\mathbf{\text{AoS}/\text{GHC}}
+                                                  $ & $\mathbf{\text{SoA}/\t...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> \text 
+                 {SoA}/\text {GHC}
+l.164 ...{GHC}}$ & $\mathbf{\text{SoA}/\text{GHC}}
+                                                  $ \\
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> \text {SoA}/\text 
+                             {GHC}
+l.164 ...{GHC}}$ & $\mathbf{\text{SoA}/\text{GHC}}
+                                                  $ \\
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
 ! Extra }, or forgotten \endgroup.
 \@endfloatbox ...pagefalse \outer@nobreak \egroup 
                                                   \color@endbox 
-l.101 \end{table}
+l.219 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.248 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.274 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.303 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.327 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.351 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.370 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.392 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.413 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.440 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.466 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.486 \end{table}
+                 
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Extra }, or forgotten \endgroup.
+\@endfloatbox ...pagefalse \outer@nobreak \egroup 
+                                                  \color@endbox 
+l.511 \end{table}
                  
 I've deleted a group-closing symbol because it seems to be
 spurious, as in `$x}$'. But perhaps the } is legitimate and
@@ -191,33 +455,38 @@ deleted material, e.g., by typing `I$}'.
 
 ) [1{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}
 
-] [2]
+] [2] [3] [4] [5]
 (figures/table_preview.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
  ) 
 Here is how much of TeX's memory you used:
- 1928 strings out of 474222
- 30992 string characters out of 5748733
- 1936975 words of memory out of 5000000
- 24202 multiletter control sequences out of 15000+600000
- 560676 words of font info for 45 fonts, out of 8000000 for 9000
+ 1947 strings out of 474222
+ 31256 string characters out of 5748733
+ 2022975 words of memory out of 5000000
+ 24218 multiletter control sequences out of 15000+600000
+ 561607 words of font info for 48 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,9n,65p,640b,281s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 57i,12n,65p,640b,281s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/share
 /texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texli
-ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texm
-f-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/f
-onts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/t
-ype1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/pu
-blic/amsfonts/cm/cmtt10.pfb>
-Output written on figures/table_preview.pdf (2 pages, 106042 bytes).
+ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></usr/share/texlive/texm
+f-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/
+fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/fonts/ty
+pe1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/pu
+blic/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/am
+sfonts/cm/cmtt10.pfb>
+Output written on figures/table_preview.pdf (5 pages, 134757 bytes).
 PDF statistics:
- 51 PDF objects out of 1000 (max. 8388607)
- 30 compressed objects within 1 object stream
+ 65 PDF objects out of 1000 (max. 8388607)
+ 39 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

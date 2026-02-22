@@ -43,7 +43,7 @@ buildQuery d seed =
   then
     let tableId = mod (absI seed) 17
         rows = 2000 + mod (absI (mixSeed seed 3)) 6000
-        cost = 20 + rows / 16
+        cost = 20 + rows `div` 16
         width = 24 + mod (absI (mixSeed seed 7)) 120
     in Scan tableId rows cost width
   else
@@ -57,15 +57,15 @@ buildQuery d seed =
              lRows = 1200 + d * 220 + mod (absI (mixSeed seed 17)) 2000
              rRows = 1000 + d * 170 + mod (absI (mixSeed seed 19)) 1700
              sel = 60 + mod (absI (mixSeed seed 23)) 260
-             outRows = maxI 1 ((lRows * rRows) / (sel * 10 + 1))
+             outRows = maxI 1 ((lRows * rRows) `div` (sel * 10 + 1))
              joinCpu =
                if joinTy == 0
-               then (lRows * rRows) / 2400
+               then (lRows * rRows) `div` 2400
                else if joinTy == 1
-                    then (lRows + rRows) / 7
-                    else (lRows + rRows) / 9
-             total = 30 + joinCpu + outRows / 20
-             mem = if joinTy == 1 then (rRows / 2) else (outRows / 8)
+                    then (lRows + rRows) `div` 7
+                    else (lRows + rRows) `div` 9
+             total = 30 + joinCpu + outRows `div` 20
+             mem = if joinTy == 1 then (rRows `div` 2) else (outRows `div` 8)
          in Join joinTy outRows total mem l r
        else
          let s = buildQuery (d - 1) (mixSeed seed 3)
@@ -91,7 +91,7 @@ sumRows q =
     Join _ r _ _ l s -> r + sumRows l + sumRows s
     Filter _ sel _ _ s ->
       let childRows = sumRows s
-          outRows = maxI 1 ((childRows * sel) / 1000)
+          outRows = maxI 1 ((childRows * sel) `div` 1000)
       in outRows + childRows
     Scan _ r _ _ -> r
     QEmpty -> 0

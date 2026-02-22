@@ -23,7 +23,7 @@ mkList len = if len < 0
 reduce :: List -> Int
 reduce lst = case lst of
                     Nil -> 0
-                    Cons a b c d e f g h e f rst -> let sumRst = reduce rst
+                    Cons a b c d e f g h i j rst -> let sumRst = reduce rst
                                                         in a + sumRst
 
 

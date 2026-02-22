@@ -4,16 +4,15 @@
     "--use-mutable-cursors",
     "--packed",
     "--to-exe",
-    "--no-ran",
     "--cfile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.c",
     "--exefile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.exe",
-  "compiled_at": "2026-02-21T17:15:25"
+  "compiled_at": "2026-02-21T19:34:17"
 }

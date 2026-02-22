@@ -3,7 +3,7 @@
 module Main where
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
-import Prelude hiding (iterate)
+import Prelude hiding (iterate, length, id)
 import GibbonCompat
 
 -- @BENCH adt_fields=2
@@ -40,13 +40,13 @@ sumListAcc lst acc = case lst of
 			   Nil -> acc
 			   Cons i rst -> sumListAcc rst (acc + i)
 
-length :: List -> Int 
-length lst = case lst of
+lengthList :: List -> Int
+lengthList lst = case lst of
 		   Nil -> 0
-                   Cons i rst -> 1 + (length rst)
+                   Cons i rst -> 1 + (lengthList rst)
 
-id :: List -> List 
-id lst = lst
+idList :: List -> List
+idList lst = lst
 
 
 gibbon_main = do
@@ -60,7 +60,7 @@ gibbon_main = do
   _ <- printsymIO (quote "NEWLINE")
   _ <- printsymIO (quote "Running pass length List (fold, uses=1): ")
   _ <- printsymIO (quote "NEWLINE")
-  len <- iterateIO (\() -> length lst)
+  len <- iterateIO (\() -> lengthList lst)
   _ <- printsymIO (quote "End")
   _ <- printsymIO (quote "NEWLINE")
   _ <- printsymIO (quote "Running pass sumList (fold, uses=2): ")

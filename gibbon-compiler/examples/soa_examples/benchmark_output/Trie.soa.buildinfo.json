@@ -4,16 +4,15 @@
     "--use-mutable-cursors",
     "--packed",
     "--to-exe",
-    "--no-ran",
     "--cfile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.c",
     "--exefile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Trie.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Trie.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Trie.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Trie.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.exe",
-  "compiled_at": "2026-02-21T16:58:00"
+  "compiled_at": "2026-02-21T19:44:25"
 }

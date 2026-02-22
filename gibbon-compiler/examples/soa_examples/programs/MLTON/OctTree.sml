@@ -1,5 +1,7 @@
 open GibbonCompat;
 
+fun safePassInt (f: unit -> int) = (f ()) handle Overflow => 0;
+
 datatype dat_Octree = Cell of (int  * int * int * int * int *  dat_Octree *  dat_Octree *  dat_Octree *  dat_Octree *  dat_Octree *  dat_Octree *  dat_Octree *  dat_Octree) | Particle of (int  * int * int)| EmptyOct ;
 
 fun internal_copy_Octree (arg_1430_1976_2824) = (case arg_1430_1976_2824 of Cell (x_1431_1977_2825 , x_1432_1978_2826, x_1433_1979_2827, x_1434_1980_2828, x_1435_1981_2829, x_1436_1982_2830, x_1437_1983_2831, x_1438_1984_2832, x_1439_1985_2833, x_1440_1986_2834, x_1441_1987_2835, x_1442_1988_2836, x_1443_1989_2837) => 
@@ -450,6 +452,6 @@ val _ = (case
   let val octTree___517_1591_2246 = (iterate (fn () => clearFlags octTree_479_1553_2208)) in 
   let val wildcard__393_518_1592_2247 = (printsym "End") in 
   let val wildcard__391_519_1593_2248 = (printsym "NEWLINE") in 
-  let val scaledEnergy_520_1594_2249 = (iterate (fn () => sumEnergy octTree__512_1586_2241)) in 
-  let val clearedActive_521_1595_2250 = (iterate (fn () => countActive(octTree___517_1591_2246 , 60))) in 
+  let val scaledEnergy_520_1594_2249 = (sumEnergy octTree__512_1586_2241) in 
+  let val clearedActive_521_1595_2250 = (countActive(octTree___517_1591_2246 , 60)) in (totMass_482_1556_2211 , totEnergy_487_1561_2216, totActive_492_1566_2221, totParticles_497_1571_2226, bhPotential_502_1576_2231, fmmPot_507_1581_2236, scaledEnergy_520_1594_2249, clearedActive_521_1595_2250) end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end end of (x__1 , x__2, x__3, x__4, x__5, x__6, x__7, x__8) => let val _ = print "#(" val _ = (print(Int.toString(x__1))) val _ = print " "val _ = (print(Int.toString(x__2))) val _ = print " "val _ = (print(Int.toString(x__3))) val _ = print " "val _ = (print(Int.toString(x__4))) val _ = print " "val _ = (print(Int.toString(x__5))) val _ = print " "val _ = (print(Int.toString(x__6))) val _ = print " "val _ = (print(Int.toString(x__7))) val _ = print " "val _ = (print(Int.toString(x__8))) val _ = print ")" in () end);
 val _ = print "\n"

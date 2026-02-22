@@ -3,7 +3,7 @@
 module Main where
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
-import Prelude hiding (iterate)
+import Prelude hiding (iterate, max)
 import GibbonCompat
 
 -- @BENCH adt_fields=15
@@ -169,8 +169,9 @@ gibbon_main = do
   tree'' <- iterateIO (\() -> scaleLayout tree' 2)
   _ <- printsymIO (quote "End")
   _ <- printsymIO (quote "NEWLINE")
-  let scaledArea = sumArea tree''
-  return ((area, bottom, styled, textW, scaledArea))
+  let scaledArea' = sumArea tree'
+  let scaledArea'' = sumArea tree''
+  return ((area, bottom, styled, textW, scaledArea', scaledArea''))
 
 main = runGibbonMainIO gibbon_main
 

@@ -1,7 +1,4 @@
 -- @BENCH adt_fields=15
-import Data.Word
-import Data.Int
-import Data.Bits
 
 data Query
   = Join Int  -- join type (0=nested-loop,1=hash,2=merge)
@@ -28,20 +25,12 @@ absI x = if x < 0 then 0 - x else x
 maxI :: Int -> Int -> Int
 maxI a b = if a > b then a else b
 
--- Multiplication with wrapping to avoid overflow
+-- Lightweight arithmetic in plain Gibbon style.
 wrappingMul :: Int -> Int -> Int
-wrappingMul a b =
-  let wa = fromIntegral a :: Word32
-      wb = fromIntegral b :: Word32
-      w = wa * wb :: Word32
-  in fromIntegral (fromIntegral w :: Int32)
+wrappingMul a b = a * b
 
 mixSeed :: Int -> Int -> Int
-mixSeed s salt =
-  let ws = fromIntegral s :: Word32
-      wsalt = fromIntegral salt :: Word32
-      w = (ws * 1103 + wsalt * 97 + 13) :: Word32
-  in fromIntegral (fromIntegral w :: Int32)
+mixSeed s salt = s * 1103 + salt * 97 + 13
 
 -- Build a synthetic query plan tree with join/filter/scan operators.
 buildQuery :: Int -> Int -> Query
