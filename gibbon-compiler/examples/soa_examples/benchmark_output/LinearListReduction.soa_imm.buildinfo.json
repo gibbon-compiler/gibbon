@@ -4,16 +4,15 @@
     "--enable-papi-native",
     "--packed",
     "--to-exe",
-    "--no-ran",
     "--cfile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.c",
     "--exefile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/LinearListReduction.hs"
   ],
-  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/LinearListReduction.hs",
+  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/LinearListReduction.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/LinearListReduction.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.soa_imm.exe",
-  "compiled_at": "2026-02-20T14:23:58"
+  "compiled_at": "2026-02-21T20:40:05"
 }

@@ -2621,14 +2621,17 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     else prog_hs.replace(".hs", ""))
         pdisplay = prog.replace("_", "\\_")
         
-        # Get all 4 variants if available
+        # Get optional extra variants if available
         aos_imm = None
         soa_imm = None
+        ghc = None
         if prog_hs in variants_map:
             aos_imm = variants_map[prog_hs].get('aos_imm')
             soa_imm = variants_map[prog_hs].get('soa_imm')
+            ghc = variants_map[prog_hs].get('ghc')
         
         show_4_variants = (aos_imm is not None or soa_imm is not None)
+        show_ghc = (ghc is not None)
         
         # Skip if mutable cursors didn't run successfully
         if not (aos.run_success and soa.run_success):
@@ -2670,9 +2673,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
         f.write("\\begin{table}[t]\n\\centering\n")
         
         cursor_note = " (mutable + immutable cursors)" if show_4_variants else ""
+        ghc_note = ", with GHC speedups (GHC/Am, GHC/Sm)" if show_ghc else ""
         f.write(
             f"\\caption{{Per-pass performance for \\texttt{{{pdisplay}}}"
-            f"{adt_note}{cursor_note}. "
+            f"{adt_note}{cursor_note}{ghc_note}. "
             "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
             "across --iterate runs. "
             "T: F=fold, M=map. "
@@ -2718,7 +2722,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
         # Table header depends on whether we show 2 or 4 variants
         if show_4_variants:
             if has_uses:
-                f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                if show_ghc:
+                    f.write("\\begin{tabular}{l c c r r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                else:
+                    f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
@@ -2728,10 +2735,14 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     " & \\textbf{Ai/Am}"
                     " & \\textbf{Ai/Sm}"
                     " & \\textbf{Ai/Si}"
-                    f"{papi_header_suffix} \\\\\n"
+                    + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
+                    + f"{papi_header_suffix} \\\\\n"
                 )
             else:
-                f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                if show_ghc:
+                    f.write("\\begin{tabular}{l c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                else:
+                    f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Am} & \\textbf{Ai}"
@@ -2740,24 +2751,33 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     " & \\textbf{Ai/Am}"
                     " & \\textbf{Ai/Sm}"
                     " & \\textbf{Ai/Si}"
-                    f"{papi_header_suffix} \\\\\n"
+                    + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
+                    + f"{papi_header_suffix} \\\\\n"
                 )
         else:
             # Original 2-variant table
             if has_uses:
-                f.write("\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
+                if show_ghc:
+                    f.write("\\begin{tabular}{l c c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                else:
+                    f.write("\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
                     " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup}"
-                    f"{papi_header_suffix} \\\\\n"
+                    + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
+                    + f"{papi_header_suffix} \\\\\n"
                 )
             else:
-                f.write("\\begin{tabular}{l c r r r" + papi_colspec + "}\n\\toprule\n")
+                if show_ghc:
+                    f.write("\\begin{tabular}{l c r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                else:
+                    f.write("\\begin{tabular}{l c r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup}"
-                    f"{papi_header_suffix} \\\\\n"
+                    + (" & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm}" if show_ghc else "")
+                    + f"{papi_header_suffix} \\\\\n"
                 )
         f.write("\\midrule\n")
 
@@ -2765,6 +2785,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
         speedups_aos_imm_over_aos_mut = []
         speedups_imm = []
         speedups_imm_layout = []
+        speedups_ghc_over_aos_mut = []
+        speedups_ghc_over_soa_mut = []
         
         octree_passes = []
         color_passes = []
@@ -2813,6 +2835,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
                 soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
                 soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
+                ghct, ghct_v, ghct_oom = get_time_info(ghc, pname) if show_ghc else ("--", None, False)
 
                 # Bold only the fastest available time across all 4 variants.
                 cells = {
@@ -2821,6 +2844,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
                     "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
                 }
+                if show_ghc:
+                    cells["ghc"] = [ghct, ghct_v, ghct_oom]
                 valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
                 if valid_times:
                     min_t = min(valid_times)
@@ -2832,6 +2857,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 aost_imm = cells["aos_imm"][0]
                 soat_mut = cells["soa_mut"][0]
                 soat_imm = cells["soa_imm"][0]
+                if show_ghc:
+                    ghct = cells["ghc"][0]
                 
                 # Calculate speedups
                 def calc_spd(a_res, s_res, pname):
@@ -2846,11 +2873,15 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
                 spd_imm = calc_spd(aos_imm, soa, pname)
                 spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
+                spd_ghc_over_aos_mut = calc_spd(ghc, aos, pname) if show_ghc else None
+                spd_ghc_over_soa_mut = calc_spd(ghc, soa, pname) if show_ghc else None
                 
                 spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
                 spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
                 spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
                 spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
+                spd_ghc_over_aos_mut_s = _spd_cell(spd_ghc_over_aos_mut) if spd_ghc_over_aos_mut else "--"
+                spd_ghc_over_soa_mut_s = _spd_cell(spd_ghc_over_soa_mut) if spd_ghc_over_soa_mut else "--"
                 
                 if spd_mut:
                     speedups_mut.append(spd_mut)
@@ -2860,6 +2891,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     speedups_imm.append(spd_imm)
                 if spd_imm_layout:
                     speedups_imm_layout.append(spd_imm_layout)
+                if spd_ghc_over_aos_mut:
+                    speedups_ghc_over_aos_mut.append(spd_ghc_over_aos_mut)
+                if spd_ghc_over_soa_mut:
+                    speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
                 
                 # Write row
                 if has_uses:
@@ -2875,6 +2910,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
                             f" & {spd_imm_layout_s}"
+                            f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
@@ -2884,6 +2920,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             f" & {spd_aos_imm_over_aos_mut_s}"
                             f" & {spd_imm_s}"
                             f" & {spd_imm_layout_s}"
+                            f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
             
             else:
@@ -2894,6 +2931,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     continue
 
                 spd   = at_s / st_s if st_s > 0 else 0.0
+                ghd   = ghc.passes.get(pname, {}) if (show_ghc and ghc and ghc.run_success) else {}
 
                 # median ± stderr cells
                 a_err = ad.get("stderr", 0.0)
@@ -2910,6 +2948,13 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     at_f_r, st_f_r = at_f, st_f
 
                 spd_s = _spd_cell(spd) if spd > 0 else "--"
+                gh_t  = ghd.get("median_time", 0.0) if ghd else 0.0
+                gh_e  = ghd.get("stderr", 0.0) if ghd else 0.0
+                gh_f  = fmt_pm(gh_t, gh_e) if gh_t > 0 else "--"
+                spd_ghc_over_aos_mut = (gh_t / at_s) if (show_ghc and gh_t > 0 and at_s > 0) else None
+                spd_ghc_over_soa_mut = (gh_t / st_s) if (show_ghc and gh_t > 0 and st_s > 0) else None
+                spd_ghc_over_aos_mut_s = _spd_cell(spd_ghc_over_aos_mut) if spd_ghc_over_aos_mut else "--"
+                spd_ghc_over_soa_mut_s = _spd_cell(spd_ghc_over_soa_mut) if spd_ghc_over_soa_mut else "--"
 
                 if has_uses:
                     adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
@@ -2919,14 +2964,20 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                     f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                             f" & {at_f_r} & {st_f_r} & {spd_s}"
+                            f"{f' & {gh_f} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
                 else:
                     f.write(f"{pdisp} & {tchar}"
                             f" & {at_f_r} & {st_f_r} & {spd_s}"
+                            f"{f' & {gh_f} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                             f"{papi_cells_s} \\\\\n")
 
                 if spd > 0:
                     speedups_mut.append(spd)
+                if spd_ghc_over_aos_mut:
+                    speedups_ghc_over_aos_mut.append(spd_ghc_over_aos_mut)
+                if spd_ghc_over_soa_mut:
+                    speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
 
         if prog == "OctTree" and color_passes:
             f.write("\\midrule\n")
@@ -2965,6 +3016,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     aost_imm, aost_imm_v, aost_imm_oom = get_time_info(aos_imm, pname)
                     soat_mut, soat_mut_v, soat_mut_oom = get_time_info(soa, pname)
                     soat_imm, soat_imm_v, soat_imm_oom = get_time_info(soa_imm, pname)
+                    ghct, ghct_v, ghct_oom = get_time_info(ghc, pname) if show_ghc else ("--", None, False)
 
                     cells = {
                         "aos_mut": [aost_mut, aost_mut_v, aost_mut_oom],
@@ -2972,6 +3024,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         "soa_mut": [soat_mut, soat_mut_v, soat_mut_oom],
                         "soa_imm": [soat_imm, soat_imm_v, soat_imm_oom],
                     }
+                    if show_ghc:
+                        cells["ghc"] = [ghct, ghct_v, ghct_oom]
                     valid_times = [v[1] for v in cells.values() if v[1] is not None and not v[2]]
                     if valid_times:
                         min_t = min(valid_times)
@@ -2983,16 +3037,22 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     aost_imm = cells["aos_imm"][0]
                     soat_mut = cells["soa_mut"][0]
                     soat_imm = cells["soa_imm"][0]
+                    if show_ghc:
+                        ghct = cells["ghc"][0]
 
                     spd_mut = calc_spd(aos, soa, pname)
                     spd_aos_imm_over_aos_mut = calc_spd(aos_imm, aos, pname)
                     spd_imm = calc_spd(aos_imm, soa, pname)
                     spd_imm_layout = calc_spd(aos_imm, soa_imm, pname)
+                    spd_ghc_over_aos_mut = calc_spd(ghc, aos, pname) if show_ghc else None
+                    spd_ghc_over_soa_mut = calc_spd(ghc, soa, pname) if show_ghc else None
 
                     spd_mut_s = _spd_cell(spd_mut) if spd_mut else "--"
                     spd_aos_imm_over_aos_mut_s = _spd_cell(spd_aos_imm_over_aos_mut) if spd_aos_imm_over_aos_mut else "--"
                     spd_imm_s = _spd_cell(spd_imm) if spd_imm else "--"
                     spd_imm_layout_s = _spd_cell(spd_imm_layout) if spd_imm_layout else "--"
+                    spd_ghc_over_aos_mut_s = _spd_cell(spd_ghc_over_aos_mut) if spd_ghc_over_aos_mut else "--"
+                    spd_ghc_over_soa_mut_s = _spd_cell(spd_ghc_over_soa_mut) if spd_ghc_over_soa_mut else "--"
 
                     if spd_mut:
                         speedups_mut.append(spd_mut)
@@ -3002,6 +3062,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         speedups_imm.append(spd_imm)
                     if spd_imm_layout:
                         speedups_imm_layout.append(spd_imm_layout)
+                    if spd_ghc_over_aos_mut:
+                        speedups_ghc_over_aos_mut.append(spd_ghc_over_aos_mut)
+                    if spd_ghc_over_soa_mut:
+                        speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
 
                     if has_uses:
                         adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
@@ -3016,6 +3080,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                                 f" & {spd_aos_imm_over_aos_mut_s}"
                                 f" & {spd_imm_s}"
                                 f" & {spd_imm_layout_s}"
+                                f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
                     else:
                         f.write(f"{pdisp} & {tchar}"
@@ -3025,6 +3090,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                                 f" & {spd_aos_imm_over_aos_mut_s}"
                                 f" & {spd_imm_s}"
                                 f" & {spd_imm_layout_s}"
+                                f"{f' & {ghct} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
                 else:
                     at_s = ad.get("median_time", 0.0)
@@ -3033,6 +3099,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         continue
 
                     spd   = at_s / st_s if st_s > 0 else 0.0
+                    ghd   = ghc.passes.get(pname, {}) if (show_ghc and ghc and ghc.run_success) else {}
 
                     a_err = ad.get("stderr", 0.0)
                     s_err = sd.get("stderr", 0.0)
@@ -3047,6 +3114,13 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         at_f_r, st_f_r = at_f, st_f
 
                     spd_s = _spd_cell(spd) if spd > 0 else "--"
+                    gh_t  = ghd.get("median_time", 0.0) if ghd else 0.0
+                    gh_e  = ghd.get("stderr", 0.0) if ghd else 0.0
+                    gh_f  = fmt_pm(gh_t, gh_e) if gh_t > 0 else "--"
+                    spd_ghc_over_aos_mut = (gh_t / at_s) if (show_ghc and gh_t > 0 and at_s > 0) else None
+                    spd_ghc_over_soa_mut = (gh_t / st_s) if (show_ghc and gh_t > 0 and st_s > 0) else None
+                    spd_ghc_over_aos_mut_s = _spd_cell(spd_ghc_over_aos_mut) if spd_ghc_over_aos_mut else "--"
+                    spd_ghc_over_soa_mut_s = _spd_cell(spd_ghc_over_soa_mut) if spd_ghc_over_soa_mut else "--"
 
                     if has_uses:
                         adt_total = ad.get("adt_total") or sd.get("adt_total") or adt
@@ -3056,14 +3130,20 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         dead_s = f"{dead_r*100:.0f}\\%" if dead_r is not None else "--"
                         f.write(f"{pdisp} & {tchar} & {uses_s} & {dead_s}"
                                 f" & {at_f_r} & {st_f_r} & {spd_s}"
+                                f"{f' & {gh_f} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
                     else:
                         f.write(f"{pdisp} & {tchar}"
                                 f" & {at_f_r} & {st_f_r} & {spd_s}"
+                                f"{f' & {gh_f} & {spd_ghc_over_aos_mut_s} & {spd_ghc_over_soa_mut_s}' if show_ghc else ''}"
                                 f"{papi_cells_s} \\\\\n")
 
                     if spd > 0:
                         speedups_mut.append(spd)
+                    if spd_ghc_over_aos_mut:
+                        speedups_ghc_over_aos_mut.append(spd_ghc_over_aos_mut)
+                    if spd_ghc_over_soa_mut:
+                        speedups_ghc_over_soa_mut.append(spd_ghc_over_soa_mut)
 
         # Totals row
         def get_total(res):
@@ -3075,6 +3155,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
         aost_imm_tot = get_total(aos_imm) if aos_imm else None
         soat_mut_tot = get_total(soa)
         soat_imm_tot = get_total(soa_imm) if soa_imm else None
+        ghc_tot = get_total(ghc) if show_ghc else None
         
         def fmt_total(t):
             return fmt(t) if t is not None else "--"
@@ -3083,6 +3164,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
         sp_aos_imm_over_aos_mut_tot = aost_imm_tot / aost_mut_tot if (aost_imm_tot and aost_mut_tot) else None
         sp_imm_tot = aost_imm_tot / soat_mut_tot if (aost_imm_tot and soat_mut_tot) else None
         sp_imm_layout_tot = aost_imm_tot / soat_imm_tot if (aost_imm_tot and soat_imm_tot) else None
+        sp_ghc_over_aos_mut_tot = ghc_tot / aost_mut_tot if (ghc_tot and aost_mut_tot) else None
+        sp_ghc_over_soa_mut_tot = ghc_tot / soat_mut_tot if (ghc_tot and soat_mut_tot) else None
         
         if show_4_variants:
             total_cells = {
@@ -3091,6 +3174,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 "soa_mut": [fmt_total(soat_mut_tot), soat_mut_tot],
                 "soa_imm": [fmt_total(soat_imm_tot), soat_imm_tot],
             }
+            if show_ghc:
+                total_cells["ghc"] = [fmt_total(ghc_tot), ghc_tot]
             total_valid = [v[1] for v in total_cells.values() if v[1] is not None]
             if total_valid:
                 min_tot = min(total_valid)
@@ -3099,6 +3184,13 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         v[0] = f"\\textbf{{{v[0]}}}"
 
             extra_cols = "& & " if has_uses else ""
+            ghc_total_suffix = ""
+            if show_ghc:
+                ghc_total_suffix = (
+                    f" & {total_cells['ghc'][0]}"
+                    f" & {_spd_cell(sp_ghc_over_aos_mut_tot) if sp_ghc_over_aos_mut_tot else '--'}"
+                    f" & {_spd_cell(sp_ghc_over_soa_mut_tot) if sp_ghc_over_soa_mut_tot else '--'}"
+                )
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
                     f"& {total_cells['aos_mut'][0]} & {total_cells['aos_imm'][0]}"
@@ -3107,6 +3199,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     f" & {_spd_cell(sp_aos_imm_over_aos_mut_tot) if sp_aos_imm_over_aos_mut_tot else '--'}"
                     f" & {_spd_cell(sp_imm_tot) if sp_imm_tot else '--'}"
                     f" & {_spd_cell(sp_imm_layout_tot) if sp_imm_layout_tot else '--'}"
+                    f"{ghc_total_suffix}"
                     f"{papi_empty_suffix} \\\\\n")
             if speedups_mut:
                 gm_mut = statistics.geometric_mean(speedups_mut)
@@ -3119,22 +3212,60 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     statistics.geometric_mean(speedups_imm_layout)
                     if speedups_imm_layout else None
                 )
+                gm_ghc_over_aos_mut = (
+                    statistics.geometric_mean(speedups_ghc_over_aos_mut)
+                    if speedups_ghc_over_aos_mut else None
+                )
+                gm_ghc_over_soa_mut = (
+                    statistics.geometric_mean(speedups_ghc_over_soa_mut)
+                    if speedups_ghc_over_soa_mut else None
+                )
+                ghc_gm_suffix = ""
+                if show_ghc:
+                    ghc_gm_suffix = (
+                        f" & & {_spd_cell(gm_ghc_over_aos_mut) if gm_ghc_over_aos_mut else '--'}"
+                        f" & {_spd_cell(gm_ghc_over_soa_mut) if gm_ghc_over_soa_mut else '--'}"
+                    )
                 f.write(f"\\textbf{{Geomean}} & {extra_cols}"
                         f"& & & & & {_spd_cell(gm_mut)}"
                         f" & {_spd_cell(gm_aos_imm_over_aos_mut) if gm_aos_imm_over_aos_mut else '--'}"
                         f" & {_spd_cell(gm_imm) if gm_imm else '--'}"
                         f" & {_spd_cell(gm_imm_layout) if gm_imm_layout else '--'}"
+                        f"{ghc_gm_suffix}"
                         f"{papi_empty_suffix} \\\\\n")
         else:
             extra_cols = "& & " if has_uses else ""
+            ghc_total_suffix = ""
+            if show_ghc:
+                ghc_total_suffix = (
+                    f" & {fmt(ghc_tot)}"
+                    f" & {_spd_cell(sp_ghc_over_aos_mut_tot) if sp_ghc_over_aos_mut_tot else '--'}"
+                    f" & {_spd_cell(sp_ghc_over_soa_mut_tot) if sp_ghc_over_soa_mut_tot else '--'}"
+                )
             f.write("\\midrule\n")
             f.write(f"\\textbf{{Total}} & {extra_cols}"
                     f"& {fmt(aost_mut_tot)} & {fmt(soat_mut_tot)} & {_spd_cell(sp_mut_tot)}"
+                    f"{ghc_total_suffix}"
                     f"{papi_empty_suffix} \\\\\n")
             if speedups_mut:
                 gm = statistics.geometric_mean(speedups_mut)
+                gm_ghc_over_aos_mut = (
+                    statistics.geometric_mean(speedups_ghc_over_aos_mut)
+                    if speedups_ghc_over_aos_mut else None
+                )
+                gm_ghc_over_soa_mut = (
+                    statistics.geometric_mean(speedups_ghc_over_soa_mut)
+                    if speedups_ghc_over_soa_mut else None
+                )
+                ghc_gm_suffix = ""
+                if show_ghc:
+                    ghc_gm_suffix = (
+                        f" & & {_spd_cell(gm_ghc_over_aos_mut) if gm_ghc_over_aos_mut else '--'}"
+                        f" & {_spd_cell(gm_ghc_over_soa_mut) if gm_ghc_over_soa_mut else '--'}"
+                    )
                 f.write(f"\\textbf{{Geomean}} & {extra_cols}"
                         f"& & & {_spd_cell(gm)}"
+                        f"{ghc_gm_suffix}"
                         f"{papi_empty_suffix} \\\\\n")
 
         f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")

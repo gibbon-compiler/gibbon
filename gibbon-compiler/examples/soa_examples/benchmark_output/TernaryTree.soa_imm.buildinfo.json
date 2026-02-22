@@ -4,16 +4,15 @@
     "--enable-papi-native",
     "--packed",
     "--to-exe",
-    "--no-ran",
     "--cfile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.c",
     "--exefile",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/TernaryTree.hs"
   ],
-  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --no-ran --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/TernaryTree.hs",
+  "compile_cmd_signature": "gibbon --enable-papi-native --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/TernaryTree.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/TernaryTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.soa_imm.exe",
-  "compiled_at": "2026-02-20T14:37:25"
+  "compiled_at": "2026-02-21T21:01:37"
 }

@@ -2,6 +2,7 @@
   "compile_cmd": [
     "gibbon",
     "--use-mutable-cursors",
+    "--enable-papi-native",
     "--packed",
     "--to-exe",
     "--cfile",
@@ -10,9 +11,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/ObjectGraph.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/ObjectGraph.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/ObjectGraph.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/ObjectGraph.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos.exe",
-  "compiled_at": "2026-02-21T19:35:34"
+  "compiled_at": "2026-02-21T20:44:19"
 }
