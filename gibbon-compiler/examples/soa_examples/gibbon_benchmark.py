@@ -2466,7 +2466,7 @@ def _table_papi_summary(f, all_results):
     if not counters:
         return
 
-    short = [_short_counter_label(c) for c in counters]
+    short = [f"{_short_counter_label(c)} (Am/Sm)" for c in counters]
 
     # ------------------------------------------------------------------
     # Table A: speedup only
@@ -2516,14 +2516,14 @@ def _table_papi_summary(f, all_results):
     f.write("% -- Table: PAPI Cache Stats Summary --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
-        "\\caption{PAPI counter totals across all passes (AoS/SoA). "
-        "Each entry is the sum of per-pass median counter values.}\n"
+        "\\caption{PAPI counter totals across all passes (baseline variants). "
+        "Each entry is the sum of per-pass median counter values (Am/Sm).}\n"
     )
     f.write("\\label{tab:papi_summary_values}\n\\small\n")
     f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
     hdr = "\\textbf{Program}"
     for c in short:
-        hdr += f" & \\textbf{{{_tex_escape(c)} (A/S)}}"
+        hdr += f" & \\textbf{{{_tex_escape(c)}}}"
     f.write(hdr + " \\\\\n")
     f.write("\\midrule\n")
 
@@ -3352,7 +3352,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
         _table_per_program_papi_one_pair(
             f, prog, pdisplay, passes,
             aos, soa, papi_counter_names_all,
-            pair_label="A/S", label_suffix="mut"
+            pair_label="Am/Sm", label_suffix="mut"
         )
         if aos_imm is not None and soa_imm is not None:
             _table_per_program_papi_one_pair(
