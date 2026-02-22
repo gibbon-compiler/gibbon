@@ -70,7 +70,7 @@ Trie & \textbf{1.13$\times$} & 0.56$\times$ & \textbf{3.82$\times$} & 0.67$\time
 \small
 \begin{tabular}{l r r r r r r r}
 \toprule
-\textbf{Program} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Program} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 OctTree & 2.6e+09/\textbf{2.5e+09} & \textbf{8.2e+09}/1.1e+10 & 1.5e+07/\textbf{1.0e+07} & \textbf{3.7e+05}/8.8e+05 & \textbf{6.1e+04}/2.5e+05 & \textbf{1.2e+04}/2.4e+04 & 6.4e+07/\textbf{1.8e+07} \\
 Compiler & 9.8e+08/\textbf{5.8e+08} & \textbf{9.9e+08}/1.9e+09 & 1.3e+07/\textbf{3.4e+06} & \textbf{2.2e+05}/3.4e+05 & 1.3e+06/\textbf{8.7e+04} & \textbf{1.1e+04}/3.5e+04 & 5.0e+07/\textbf{7.7e+06} \\
@@ -196,13 +196,13 @@ quantizationErrorProxy & F & 10/25 & 60\% & 0.0477$\pm$0.00001 & 0.0648$\pm$0.00
 % -- Table: OctTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{OctTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{OctTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:OctTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 barnesHutPotential & F & 2.2e+08/\textbf{2.0e+08} & \textbf{8.2e+08}/1.0e+09 & \textbf{7.1e+04}/5.9e+05 & 1.1e+02/\textbf{6.5e+01} & \textbf{2.0e+03}/2.3e+04 & 1.1e+02/\textbf{6.7e+01} & 6.2e+06/\textbf{2.3e+06} \\
 clearFlags & M & \textbf{3.7e+08}/4.4e+08 & \textbf{8.0e+08}/1.7e+09 & \textbf{8.6e+05}/2.6e+06 & \textbf{1.6e+05}/4.5e+05 & \textbf{9.2e+03}/3.8e+04 & \textbf{5.6e+03}/1.1e+04 & 5.4e+06/\textbf{2.5e+06} \\
@@ -254,13 +254,13 @@ verifyIR & F & 9/9 & 0\% & 0.0131$\pm$0.00003 & 0.0706$\pm$0.00007 & \textbf{0.0
 % -- Table: Compiler PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{Compiler} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{Compiler} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:Compiler_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 blockCountPass & F & 6.5e+07/\textbf{9.7e+06} & 5.1e+07/\textbf{4.5e+07} & 1.3e+06/\textbf{6.4e+03} & 1.6e+02/\textbf{2.4e+01} & 2.3e+05/\textbf{1.1e+03} & 1.6e+02/\textbf{2.5e+01} & 4.6e+06/\textbf{9.8e+02} \\
 branchStatsPass & F & 6.2e+07/\textbf{1.8e+07} & \textbf{7.9e+07}/8.6e+07 & 8.5e+05/\textbf{2.1e+04} & 3.5e+02/\textbf{4.5e+01} & 5.2e+04/\textbf{3.2e+03} & 3.5e+02/\textbf{4.6e+01} & 4.6e+06/\textbf{4.2e+05} \\
@@ -309,13 +309,13 @@ sumRows & F & 6/15 & 60\% & 0.0269$\pm$0.00001 & 0.0305$\pm$0.00002 & \textbf{0.
 % -- Table: DBQuery PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{DBQuery} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{DBQuery} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:DBQuery_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 clearQueryFlags & M & \textbf{1.7e+08}/2.1e+08 & \textbf{1.9e+08}/7.2e+08 & \textbf{2.6e+05}/1.2e+06 & \textbf{8.0e+04}/2.5e+05 & 3.8e+04/\textbf{2.4e+04} & \textbf{2.5e+03}/1.3e+04 & 2.4e+06/\textbf{9.3e+05} \\
 countJoins & F & 1.0e+08/\textbf{5.5e+07} & 7.4e+07/\textbf{7.1e+07} & 7.1e+05/\textbf{2.6e+04} & 4.7e+02/\textbf{6.1e+01} & 1.7e+05/\textbf{2.1e+03} & 4.8e+02/\textbf{5.3e+01} & 2.7e+06/\textbf{1.7e+03} \\
@@ -365,13 +365,13 @@ treeDepth & F & 2/7 & 71\% & 0.0514$\pm$0.00001 & 0.1388$\pm$0.00198 & \textbf{0
 % -- Table: DecisionTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{DecisionTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{DecisionTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:DecisionTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 classify Batch & F & 1.7e+10/\textbf{1.3e+10} & \textbf{3.3e+10}/5.9e+10 & 4.6e+08/\textbf{2.7e+07} & 9.4e+04/\textbf{4.0e+04} & \textbf{1.8e+06}/1.9e+06 & 9.1e+04/\textbf{3.7e+04} & 9.2e+08/\textbf{1.7e+07} \\
 classify Depth & F & 2.4e+08/\textbf{1.9e+08} & \textbf{4.7e+08}/8.5e+08 & 6.5e+06/\textbf{3.7e+05} & 1.5e+03/\textbf{6.4e+02} & \textbf{2.0e+04}/2.8e+04 & 1.5e+03/\textbf{6.1e+02} & 1.3e+07/\textbf{2.8e+05} \\
@@ -419,13 +419,13 @@ sumTextWidth & F & 3/15 & 80\% & 0.0358$\pm$0.00001 & 0.0716$\pm$0.00019 & \text
 % -- Table: DomTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{DomTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{DomTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:DomTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 SumArea & F & 1.9e+08/\textbf{9.7e+07} & \textbf{2.9e+08}/4.9e+08 & 2.9e+06/\textbf{5.7e+05} & 4.3e+02/\textbf{5.0e+01} & 1.7e+05/\textbf{1.2e+04} & 4.4e+02/\textbf{5.1e+01} & 1.3e+07/\textbf{2.0e+06} \\
 computeWidths & M & \textbf{6.5e+07}/1.4e+08 & \textbf{1.4e+08}/4.6e+08 & \textbf{1.2e+06}/1.5e+06 & 4.9e+04/\textbf{4.5e+04} & \textbf{5.8e+03}/1.2e+04 & \textbf{1.2e+03}/1.5e+04 & 1.2e+06/\textbf{4.3e+05} \\
@@ -467,13 +467,13 @@ twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0304$\pm$0.00002 & 0.0390$
 % -- Table: KDTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{KDTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{KDTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:KDTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 Find nearest Neighbour & F & 1.5e+08/\textbf{1.1e+08} & \textbf{4.7e+08}/6.3e+08 & 2.9e+06/\textbf{1.8e+06} & 8.6e+01/\textbf{7.9e+01} & \textbf{4.5e+03}/1.7e+04 & 8.7e+01/\textbf{7.9e+01} & 7.6e+06/\textbf{1.6e+06} \\
 countInRange tight\_box & F & 1.5e+08/\textbf{1.0e+08} & \textbf{4.0e+08}/5.5e+08 & 2.1e+06/\textbf{2.0e+06} & \textbf{1.7e+02}/1.8e+02 & \textbf{3.0e+03}/1.6e+04 & \textbf{1.7e+02}/1.8e+02 & 7.6e+06/\textbf{1.6e+06} \\
@@ -510,13 +510,13 @@ reduction & F & 2/11 & 82\% & 0.0296$\pm$0.00012 & 0.1330$\pm$0.00021 & \textbf{
 % -- Table: LinearListReduction PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{LinearListReduction} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{LinearListReduction} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:LinearListReduction_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 reduction & F & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 1.5e+06/\textbf{4.6e+04} & 2.3e+02/\textbf{4.3e+01} & 2.8e+05/\textbf{7.0e+03} & 2.3e+02/\textbf{4.3e+01} & 1.2e+07/\textbf{1.1e+06} \\
 \midrule
@@ -551,13 +551,13 @@ sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0444$\pm$0.00002} & \textit{O
 % -- Table: List PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{List} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{List} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:List_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 add1 List & M & \textbf{5.9e+08}/9.7e+08 & \textbf{1.9e+09}/2.8e+09 & 7.9e+06/\textbf{1.5e+06} & \textbf{4.2e+05}/6.0e+05 & \textbf{1.3e+04}/5.5e+04 & \textbf{5.9e+03}/9.9e+03 & 9.2e+06/\textbf{7.7e+06} \\
 length List & F & 2.1e+08/\textbf{1.1e+08} & 8.0e+08/\textbf{8.0e+08} & 1.3e+05/\textbf{9.8e+04} & 1.1e+02/\textbf{7.5e+01} & \textbf{2.6e+03}/1.4e+04 & 1.1e+02/\textbf{7.5e+01} & 1.3e+07/\textbf{1.1e+06} \\
@@ -594,13 +594,13 @@ sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0086$\pm$0.00001} & 0.0402$\pm$0.000
 % -- Table: MonoTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{MonoTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{MonoTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:MonoTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 add1Tree & M & 1.6e+08/\textbf{1.5e+08} & \textbf{5.0e+08}/5.9e+08 & \textbf{2.2e+05}/4.0e+05 & \textbf{3.2e+04}/4.4e+04 & \textbf{2.0e+03}/5.1e+03 & \textbf{1.4e+03}/1.9e+03 & 5.1e+05/\textbf{4.6e+05} \\
 sumTree & F & \textbf{4.6e+07}/5.8e+07 & \textbf{2.2e+08}/2.6e+08 & \textbf{1.1e+04}/3.4e+04 & 1.6e+02/\textbf{1.4e+02} & \textbf{6.9e+02}/4.0e+03 & 1.5e+02/\textbf{1.5e+02} & 7.6e+05/\textbf{6.1e+05} \\
@@ -642,13 +642,13 @@ touchHotObjects & M & 5/5 & 0\% & \textbf{0.0718$\pm$0.00005} & 0.0875$\pm$0.000
 % -- Table: ObjectGraph PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{ObjectGraph} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{ObjectGraph} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:ObjectGraph_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 countLargeItems & F & 7.0e+07/\textbf{5.5e+07} & \textbf{2.6e+08}/2.8e+08 & 1.1e+06/\textbf{5.1e+04} & 3.6e+02/\textbf{1.5e+02} & \textbf{3.0e+03}/3.7e+03 & 3.7e+02/\textbf{1.6e+02} & 2.8e+06/\textbf{6.3e+05} \\
 countMarked & F & 6.9e+07/\textbf{5.5e+07} & \textbf{2.6e+08}/2.8e+08 & 1.2e+06/\textbf{5.1e+04} & 1.5e+02/\textbf{1.3e+02} & \textbf{3.3e+03}/4.0e+03 & 1.6e+02/\textbf{1.4e+02} & 2.8e+06/\textbf{6.4e+05} \\
@@ -695,13 +695,13 @@ truncateTolViolations & F & 3/8 & 62\% & 0.0207$\pm$0.00001 & 0.0474$\pm$0.00001
 % -- Table: PiecewiseFunctions PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{PiecewiseFunctions} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{PiecewiseFunctions} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:PiecewiseFunctions_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 addConstPW & M & \textbf{2.8e+08}/3.3e+08 & \textbf{5.7e+08}/1.2e+09 & \textbf{1.2e+06}/2.4e+06 & 3.3e+05/\textbf{2.0e+05} & \textbf{9.6e+03}/2.5e+04 & \textbf{6.8e+03}/2.2e+04 & 4.5e+06/\textbf{1.8e+06} \\
 autorefineMaxLevel & F & \textbf{1.1e+08}/1.1e+08 & \textbf{2.5e+08}/3.7e+08 & 2.5e+06/\textbf{2.0e+05} & 4.9e+02/\textbf{8.6e+01} & 9.0e+03/\textbf{6.3e+03} & 4.9e+02/\textbf{8.9e+01} & 6.1e+06/\textbf{9.0e+05} \\
@@ -741,13 +741,13 @@ sum tree & F & 5/5 & 0\% & 0.0277$\pm$0.00009 & 0.0501$\pm$0.00002 & \textbf{0.0
 % -- Table: TernaryTree PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{TernaryTree} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{TernaryTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:TernaryTree_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 add 1 tree & M & 2.7e+08/\textbf{2.3e+08} & \textbf{7.5e+08}/9.8e+08 & \textbf{4.6e+05}/1.3e+06 & \textbf{6.0e+04}/1.5e+05 & \textbf{3.6e+03}/1.1e+04 & \textbf{2.2e+03}/2.6e+03 & 1.5e+06/\textbf{1.1e+06} \\
 sum tree & F & 1.4e+08/\textbf{1.3e+08} & \textbf{4.6e+08}/5.4e+08 & \textbf{9.0e+04}/3.6e+05 & \textbf{5.9e+01}/9.1e+01 & \textbf{8.2e+02}/9.2e+03 & \textbf{6.2e+01}/9.1e+01 & 1.8e+06/\textbf{1.3e+06} \\
@@ -786,13 +786,13 @@ sumSubtreeHints & F & 3/10 & 70\% & 0.0128$\pm$0.00001 & 0.0258$\pm$0.00001 & \t
 % -- Table: Trie PAPI A/S --
 \begin{table}[t]
 \centering
-\caption{Per-pass PAPI counters for \texttt{Trie} (A/S). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\caption{Per-pass PAPI counters for \texttt{Trie} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
 \label{tab:Trie_papi_mut}
 \small
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{l c r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{CYC (A/S)} & \textbf{INS (A/S)} & \textbf{L1D (A/S)} & \textbf{L1I (A/S)} & \textbf{L2D (A/S)} & \textbf{L2I (A/S)} & \textbf{LLC (A/S)} \\
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
 autocompleteTopKProxy & F & 7.5e+07/\textbf{4.3e+07} & \textbf{1.3e+08}/2.1e+08 & 1.5e+06/\textbf{3.8e+05} & 6.2e+01/\textbf{5.0e+01} & 4.2e+04/\textbf{4.6e+03} & 6.9e+01/\textbf{5.0e+01} & 3.7e+06/\textbf{7.5e+05} \\
 countLazyNodes & F & 6.7e+07/\textbf{3.4e+07} & \textbf{1.3e+08}/1.6e+08 & 1.4e+06/\textbf{2.1e+04} & \textbf{7.8e+01}/8.0e+01 & 1.6e+04/\textbf{3.3e+03} & 8.6e+01/\textbf{8.0e+01} & 4.0e+06/\textbf{5.6e+05} \\
