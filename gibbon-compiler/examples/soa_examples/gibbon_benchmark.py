@@ -1895,6 +1895,14 @@ def _short_counter_label(counter: str) -> str:
         return counter.replace("PAPI_", "")
     return counter
 
+
+def _program_label_compact(program_hs: str) -> str:
+    """Compact program label for wide summary tables."""
+    base = program_hs.replace(".hs", "")
+    if base.startswith("OctTree_"):
+        base = "Oct:" + base[len("OctTree_"):]
+    return base.replace("_", "\\_")
+
 # ---------------------------------------------------------------------------
 # LaTeX tables
 # ---------------------------------------------------------------------------
@@ -1907,7 +1915,7 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
     rows = []
     # Collect data first
     for entry in all_variants_results:
-        prog = entry['program'].replace(".hs", "").replace("_", "\\_")
+        prog = _program_label_compact(entry['program'])
         
         def get_total_or_oom(res):
             if res is None: return None, False
@@ -1936,7 +1944,7 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
             + "Times are total median per iteration (s). "
             "\\textbf{Bold} marks the fastest time for each program.}\n")
     f.write("\\label{tab:comparison_ghc_mlton}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
+    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
     header = ("\\textbf{Program}"
               " & \\textbf{Gibbon-AoS} & \\textbf{Gibbon-SoA}"
               " & \\textbf{GHC}")
@@ -2030,7 +2038,7 @@ def _table_speedup_vs_ghc(f, all_variants_results):
     ghc_over_aos_vals = []
     ghc_over_soa_vals = []
     for entry in all_variants_results:
-        prog = entry["program"].replace(".hs", "").replace("_", "\\_")
+        prog = _program_label_compact(entry["program"])
         aos_t, aos_oom = get_total_or_oom(entry.get("aos"))
         soa_t, soa_oom = get_total_or_oom(entry.get("soa"))
         ghc_t, ghc_oom = get_total_or_oom(entry.get("ghc"))
@@ -2061,7 +2069,7 @@ def _table_speedup_vs_ghc(f, all_variants_results):
             "Each entry is total median runtime speedup over all passes for one iteration. "
             "$\\text{GHC}/\\text{AoS}$ and $\\text{GHC}/\\text{SoA}$ are reported.}\n")
     f.write("\\label{tab:speedup_vs_ghc}\n\\small\n")
-    f.write("\\begin{tabular}{l r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{p{3.2cm} r r}\n\\toprule\n")
     f.write("\\textbf{Program} & $\\mathbf{\\text{GHC}/\\text{AoS}}$ & $\\mathbf{\\text{GHC}/\\text{SoA}}$ \\\\\n")
     f.write("\\midrule\n")
 
@@ -2091,7 +2099,7 @@ def _table_cursor_comparison(f, all_variants_results):
 
     rows = []
     for entry in all_variants_results:
-        prog = entry['program'].replace(".hs", "").replace("_", "\\_")
+        prog = _program_label_compact(entry['program'])
         aos_mut = entry.get('aos')
         aos_imm = entry.get('aos_imm')
         soa_mut = entry.get('soa')
@@ -2174,7 +2182,7 @@ def _table_cursor_comparison(f, all_variants_results):
             "Times are median per iteration (s). "
             "\\textbf{Bold} marks the fastest time across all four variants.}\n")
     f.write("\\label{tab:cursor_comparison_times}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{p{3.2cm} r r r r}\n\\toprule\n")
     f.write(
         "\\textbf{Program}"
         " & \\textbf{Am} & \\textbf{Ai}"
@@ -2193,7 +2201,7 @@ def _table_cursor_comparison(f, all_variants_results):
             "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. "
             "${>}1{\\times}$ means the denominator is faster.}\n")
     f.write("\\label{tab:cursor_comparison_speedups}\n\\small\n")
-    f.write("\\begin{tabular}{l r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{p{3.2cm} r r r r}\n\\toprule\n")
     f.write(
         "\\textbf{Program}"
         " & \\textbf{Am/Sm}"
