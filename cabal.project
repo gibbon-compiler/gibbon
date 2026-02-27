@@ -1,4 +1,8 @@
 packages: gibbon-compiler
 
 program-options
-    ghc-options: -Werror -Wno-error=incomplete-uni-patterns -Wno-error=unused-packages
+    ghc-options:
+        -Werror
+        -Wno-error=unused-imports
+        -Wno-error=incomplete-uni-patterns
+        -Wno-error=unused-packages
