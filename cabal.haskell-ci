@@ -3,4 +3,5 @@ unconstrained:              False
 cabal-check:                False
 haddock:                    False
 error-incomplete-patterns:  False
+error-unused-packages:      False
 branches:                   main
