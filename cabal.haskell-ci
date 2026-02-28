@@ -1,5 +1,6 @@
-no-tests-no-benchmarks: False
-unconstrained:          False
-cabal-check:            False
-haddock:                False
-branches:               main
+no-tests-no-benchmarks:     False
+unconstrained:              False
+cabal-check:                False
+haddock:                    False
+error-incomplete-patterns:  False
+branches:                   main
