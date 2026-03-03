@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_scaleEnergy.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_scaleEnergy.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_scaleEnergy.aos.exe",
-  "compiled_at": "2026-02-22T10:12:12"
+  "compiled_at": "2026-03-02T23:33:16"
 }

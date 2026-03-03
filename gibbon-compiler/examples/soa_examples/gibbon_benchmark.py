@@ -105,6 +105,8 @@ class BenchmarkResult:
         self.passes: Dict             = {}
         self.output: Optional[str]    = None
         self.compile_time             = 0.0
+        self.exec_wall_time           = 0.0   # full executable runtime for this run (seconds)
+        self.exec_time_per_iter       = 0.0   # full executable runtime normalized by --iterations
         self.compile_success          = False
         self.run_success              = False
         self.error_message: Optional[str] = None
@@ -1686,6 +1688,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         ok2, rt, stdout, stderr, returncode = run_exe(
             exe, iterations, dump_dir=dump_dir, env_override=papi_env
         )
+        # Full executable end-to-end time for this run.
+        res.exec_wall_time = rt
+        res.exec_time_per_iter = (rt / iterations) if iterations > 0 else rt
         if not ok2:
             # Detect OOM from both exit code and stderr content
             # Common OOM exit codes: 137 (killed by OOM), 139 (segfault), -11 (SIGSEGV)
@@ -1734,7 +1739,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                             print("           Native PAPI warning: no PAPI_NATIVE lines found in stdout")
 
                 # ── Print per-pass timing digest ──────────────────────────
-                total_t = sum(p["median_time"] for p in res.passes.values())
+                total_t = total_pass_time(res) or 0.0
                 def _fmt_time(t: float) -> str:
                     # Avoid rounding microsecond-scale passes to 0.0000.
                     if t < 1e-3:
@@ -1799,6 +1804,13 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         print(f"  Runtime failures excluded from output matching: {failed_s}")
 
     if aos and soa and aos.run_success and soa.run_success:
+        aos_total = total_pass_time(aos)
+        soa_total = total_pass_time(soa)
+        if aos_total is not None and soa_total is not None:
+            speedup = (aos_total / soa_total) if soa_total > 0 else None
+            speedup_s = (f"{speedup:.3f}x" if speedup is not None else "N/A")
+            print(f"  End-to-end (sum of pass medians): AoS={fmt(aos_total)}s, "
+                  f"SoA={fmt(soa_total)}s, AoS/SoA={speedup_s}")
         if aos.passes:
             classified = [(p, d) for p, d in aos.passes.items()
                           if d["pass_type"] != "unknown"]
@@ -1845,6 +1857,21 @@ def fmt_pm(median: float, stderr: float) -> str:
     return f"{median:.{dp}f}$\\pm${stderr:.{err_dp}f}"
 
 
+def total_pass_time(res: Optional[BenchmarkResult], pass_type: Optional[str] = None) -> Optional[float]:
+    """
+    End-to-end compiler time = sum of median pass times.
+    Optionally restrict to a pass type ("fold"/"map"/...).
+    """
+    if res is None or not res.run_success or not res.passes:
+        return None
+    total = 0.0
+    for pdata in res.passes.values():
+        if pass_type is not None and pdata.get("pass_type") != pass_type:
+            continue
+        total += pdata.get("median_time", 0.0)
+    return total
+
+
 def _tex_escape(text: str) -> str:
     return text.replace("_", "\\_")
 
@@ -1870,6 +1897,25 @@ def _papi_pair_cell(ad: Dict, sd: Dict, counter: str) -> str:
         elif s < a:
             s_s = f"\\textbf{{{s_s}}}"
     return f"{a_s}/{s_s}"
+
+
+def _pass_sort_key(pname: str, *results: Optional[BenchmarkResult]) -> Tuple[int, str]:
+    """
+    Sort passes as: fold first, then map, then unknown; name as tiebreaker.
+    """
+    ptype = "unknown"
+    for res in results:
+        if not res:
+            continue
+        pd = res.passes.get(pname, {})
+        t = pd.get("pass_type", "unknown")
+        if t in ("fold", "map"):
+            ptype = t
+            break
+        if ptype == "unknown" and t:
+            ptype = t
+    pri = 0 if ptype == "fold" else (1 if ptype == "map" else 2)
+    return (pri, pname.lower())
 
 
 def _short_counter_label(counter: str) -> str:
@@ -2092,7 +2138,8 @@ def _table_speedup_vs_ghc(f, all_variants_results):
 
 def _table_cursor_comparison(f, all_variants_results):
     """
-    Generates Table 2: Cursor mode comparison showing all 4 variants:
+    Generates Table 2: Cursor mode comparison showing all 4 variants.
+    Table 2 uses full executable end-to-end wall time (NOT pass-sum time).
     AOS-mut, AOS-imm, SoA-mut, SoA-imm for each program.
     """
     f.write("\n\n")
@@ -2109,13 +2156,13 @@ def _table_cursor_comparison(f, all_variants_results):
         soa_mut = entry.get('soa')
         soa_imm = entry.get('soa_imm')
 
-        # Calculate total times (sum of all passes)
+        # Use full executable end-to-end runtime captured around run_exe().
         def get_total_or_oom(res):
-            """Returns (time, is_oom) tuple."""
+            """Returns (time, is_oom) tuple; time is full executable wall time."""
             if res is None:
                 return None, False
             if res.run_success:
-                return sum(p["median_time"] for p in res.passes.values()), False
+                return res.exec_wall_time, False
             # Failed - check if it was OOM
             is_oom = (res.error_message == "out of memory")
             return None, is_oom
@@ -2185,12 +2232,12 @@ def _table_cursor_comparison(f, all_variants_results):
     f.write("\\begin{table}[htbp]\n\\centering\n")
     if has_soa_imm:
         f.write("\\caption{Mutable vs immutable cursor comparison (times only). "
-                "Times are median per iteration (s). "
+                "Times are full executable end-to-end wall time per run (s), not pass-sum time. "
                 "\\textbf{Bold} marks the fastest time across all four variants.}\n")
     else:
         f.write("\\caption{Baseline Gibbon comparison (times only). "
                 "Shown variants: AoS-mut, AoS-imm, SoA-mut. "
-                "Times are median per iteration (s). "
+                "Times are full executable end-to-end wall time per run (s), not pass-sum time. "
                 "\\textbf{Bold} marks the fastest time across shown variants.}\n")
     f.write("\\label{tab:cursor_comparison_times}\n\\small\n")
     f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
@@ -2215,10 +2262,12 @@ def _table_cursor_comparison(f, all_variants_results):
     if has_soa_imm:
         f.write("\\caption{Mutable vs immutable cursor comparison (speedups). "
                 "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. "
+                "Speedups are computed from full executable end-to-end wall time per run. "
                 "${>}1{\\times}$ means the denominator is faster.}\n")
     else:
         f.write("\\caption{Baseline Gibbon comparison (speedups). "
                 "Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut. "
+                "Speedups are computed from full executable end-to-end wall time per run. "
                 "${>}1{\\times}$ means the denominator is faster.}\n")
     f.write("\\label{tab:cursor_comparison_speedups}\n\\small\n")
     f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
@@ -2346,12 +2395,13 @@ def _merge_octree_results(all_results: List[Tuple]) -> Tuple[Optional[Tuple[Benc
 def _table_summary(f, all_results):
     """
     Table 1: one row per program.
-    Program | ADT fields | SoA bufs | Fold AoS | Fold SoA | Fold Speedup | Map AoS | Map SoA | Map Speedup
+    Program | ADT fields | SoA bufs | End-to-end AoS/SoA/Speedup
+            | Fold AoS/SoA/Speedup | Map AoS/SoA/Speedup
     """
     f.write("% -- Table 1: Summary by pass type --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
-        "\\caption{End-to-end execution time (s, median per iteration) "
+        "\\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) "
         "and speedup split by pass type. "
         "When present, the OctTree row includes ColorOctree passes; a separate "
         "ColorOctree row reports only those passes. "
@@ -2362,15 +2412,17 @@ def _table_summary(f, all_results):
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
     f.write("\\label{tab:summary}\n\\small\n")
-    f.write("\\begin{tabular}{l c c r r r r r r}\n\\toprule\n")
+    f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
     f.write(
         "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
+        " & \\multicolumn{3}{c}{\\textbf{End-to-end}}"
         " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
         " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
     )
-    f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\n")
+    f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}\n")
     f.write(
         " & fields & bufs"
+        " & AoS (s) & SoA (s) & Speedup"
         " & AoS (s) & SoA (s) & Speedup"
         " & AoS (s) & SoA (s) & Speedup \\\\\n"
     )
@@ -2397,20 +2449,22 @@ def _table_summary(f, all_results):
         adt_info = getattr(aos, "adt_info", None)
         bufs_str = str(adt_info["soa_total_buffers"]) if adt_info else "--"
 
-        af = sum(p["median_time"] for p in aos.passes.values()
-                 if p["pass_type"] == "fold")
-        sf = sum(p["median_time"] for p in soa.passes.values()
-                 if p["pass_type"] == "fold")
-        am = sum(p["median_time"] for p in aos.passes.values()
-                 if p["pass_type"] == "map")
-        sm = sum(p["median_time"] for p in soa.passes.values()
-                 if p["pass_type"] == "map")
+        at = total_pass_time(aos)
+        st = total_pass_time(soa)
+        af = total_pass_time(aos, "fold")
+        sf = total_pass_time(soa, "fold")
+        am = total_pass_time(aos, "map")
+        sm = total_pass_time(soa, "map")
 
+        tspd_s = _spd_cell(at / st) if at and st and st > 0 else "--"
         fspd_s = _spd_cell(af / sf) if af > 0 and sf > 0 else "--"
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
 
         f.write(
             f"{prog} & {adt_str} & {bufs_str}"
+            f" & {fmt(at) if at and at > 0 else '--'}"
+            f" & {fmt(st) if st and st > 0 else '--'}"
+            f" & {tspd_s}"
             f" & {fmt(af) if af > 0 else '--'}"
             f" & {fmt(sf) if sf > 0 else '--'}"
             f" & {fspd_s}"
@@ -2454,9 +2508,9 @@ def _papi_total_for_result(res: Optional[BenchmarkResult], counter: str) -> Opti
 
 def _table_papi_summary(f, all_results):
     """
-    PAPI summary split into two compact tables:
+    Counter summary split into two compact tables:
       1) Speedups only (AoS/SoA)
-      2) Cache stats as AoS/SoA value pairs
+      2) Counter totals as AoS/SoA value pairs
     Totals are sums of per-pass median counter values.
     """
     combined, filtered = _merge_octree_results(all_results)
@@ -2466,17 +2520,21 @@ def _table_papi_summary(f, all_results):
     if not counters:
         return
 
+    is_native = any(not str(c).startswith("PAPI_") for c in counters)
+    counter_kind = "Native PAPI metrics" if is_native else "PAPI counters"
+
     short = [f"{_short_counter_label(c)} (Am/Sm)" for c in counters]
 
     # ------------------------------------------------------------------
     # Table A: speedup only
     # ------------------------------------------------------------------
-    f.write("% -- Table: PAPI Speedup Summary --\n")
+    f.write("% -- Table: Counter Speedup Summary --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
-        "\\caption{PAPI speedup summary across all passes. "
-        "For each program and counter, speedup is AoS/SoA using summed per-pass median counters. "
-        "${>}1{\\times}$ means SoA has fewer events.}\n"
+        f"\\caption{{{counter_kind} speedup summary across all passes. "
+        "For each program and metric, speedup is AoS/SoA where each side is the sum "
+        "of per-pass median counter values. "
+        "${>}1{\\times}$ means SoA reports fewer events.}}\n"
     )
     f.write("\\label{tab:papi_summary_speedup}\n\\small\n")
     f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
@@ -2511,13 +2569,13 @@ def _table_papi_summary(f, all_results):
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 
     # ------------------------------------------------------------------
-    # Table B: raw cache stats (AoS/SoA in one cell)
+    # Table B: raw counter totals (AoS/SoA in one cell)
     # ------------------------------------------------------------------
-    f.write("% -- Table: PAPI Cache Stats Summary --\n")
+    f.write("% -- Table: Counter Totals Summary --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
     f.write(
-        "\\caption{PAPI counter totals across all passes (baseline variants). "
-        "Each entry is the sum of per-pass median counter values (Am/Sm).}\n"
+        f"\\caption{{{counter_kind} totals across all passes (baseline variants). "
+        "Each entry is (Am/Sm), where Am and Sm are sums of per-pass median counter values.}}\n"
     )
     f.write("\\label{tab:papi_summary_values}\n\\small\n")
     f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
@@ -2696,7 +2754,10 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 if k.startswith("OctTree_") and oa and oa.adt_info:
                     soa_total_bufs = oa.adt_info.get("soa_total_buffers")
                     break
-        passes   = sorted(set(list(aos.passes) + list(soa.passes)))
+        passes   = sorted(
+            set(list(aos.passes) + list(soa.passes)),
+            key=lambda p: _pass_sort_key(p, aos, soa, aos_imm, soa_imm, ghc),
+        )
         if not passes:
             continue
 
@@ -3519,7 +3580,10 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
 
     for prog, aos, soa, ghc in grouped_rows:
         pdisplay = prog.replace("_", "\\_")
-        passes = sorted(set(list(aos.passes.keys()) + list(soa.passes.keys()) + list(ghc.passes.keys())))
+        passes = sorted(
+            set(list(aos.passes.keys()) + list(soa.passes.keys()) + list(ghc.passes.keys())),
+            key=lambda p: _pass_sort_key(p, aos, soa, ghc),
+        )
         if not passes:
             continue
 

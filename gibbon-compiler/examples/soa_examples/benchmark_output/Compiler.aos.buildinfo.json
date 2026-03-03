@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/Compiler.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Compiler.aos.exe",
-  "compiled_at": "2026-02-22T10:06:13"
+  "compiled_at": "2026-03-02T22:56:44"
 }
