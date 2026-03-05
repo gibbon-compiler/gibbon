@@ -2412,23 +2412,24 @@ def _table_cursor_comparison(f, all_variants_results):
 
 def write_latex_tables(all_results: List[Tuple], out_file: Path,
                        all_variants_results: Optional[List[Dict]] = None,
-                       include_build_pass: bool = False):
+                       include_build_pass: bool = False,
+                       show_cursor_table: bool = False):
     with open(out_file, "w") as f:
         f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
         f.write("% Requires: \\usepackage{booktabs} in preamble\n\n")
         _table_summary(f, all_results, all_variants_results, include_build_pass=include_build_pass)
         _table_papi_summary(f, all_results)
-        if all_variants_results:
+        if all_variants_results and show_cursor_table:
             _table_cursor_comparison(f, all_variants_results)
-            if any(e.get('ghc') or e.get('mlton') for e in all_variants_results):
-                _table_comparison_ghc_mlton(f, all_variants_results)
-            if any(e.get('ghc') for e in all_variants_results):
-                _table_speedup_vs_ghc(f, all_variants_results)
+        if all_variants_results and any(e.get('ghc') or e.get('mlton') for e in all_variants_results):
+            _table_comparison_ghc_mlton(f, all_variants_results)
+        if all_variants_results and any(e.get('ghc') for e in all_variants_results):
+            _table_speedup_vs_ghc(f, all_variants_results)
         _table_per_program(f, all_results, all_variants_results)
         if all_variants_results and any(e.get('ghc') for e in all_variants_results):
             _table_per_program_ghc(f, all_results, all_variants_results)
     print(f"  ✓ LaTeX tables → {out_file}")
-    if all_variants_results:
+    if all_variants_results and show_cursor_table:
         print(f"    (includes Table 2: cursor mode comparison with {len(all_variants_results)} programs)")
         has_soa_imm = any(e.get("soa_imm") is not None for e in all_variants_results)
         if has_soa_imm:
@@ -2532,8 +2533,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 aos_imm_map[entry.get("program", "")] = ai
 
     build_sentence = ("End-to-end includes the build pass. "
-                      if include_build_pass else
-                      "End-to-end excludes build timing. ")
+                      if include_build_pass else "")
     f.write(
         "\\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) "
         "and speedup split by pass type. "
@@ -4426,7 +4426,7 @@ def main():
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
-    print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no (excluded everywhere)'}")
+    print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no'}")
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:
@@ -4562,6 +4562,7 @@ def main():
             args.latex_table,
             extended_results,
             include_build_pass=args.include_build_pass,
+            show_cursor_table=(args.benchmark_immutable or args.benchmark_baseline_gibbon),
         )
         compile_latex_preview(args.latex_table, args.figures_dir)
         if HAS_PLOT_LIBS:

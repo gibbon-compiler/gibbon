@@ -1,7 +1,6 @@
 {
   "compile_cmd": [
     "gibbon",
-    "--enable-papi-native",
     "--no-ran",
     "--packed",
     "--to-exe",
@@ -11,9 +10,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs"
   ],
-  "compile_cmd_signature": "gibbon --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs",
+  "compile_cmd_signature": "gibbon --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.aos_imm.exe",
-  "compiled_at": "2026-02-22T10:07:50"
+  "compiled_at": "2026-03-04T20:13:09"
 }
