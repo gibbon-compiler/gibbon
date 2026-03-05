@@ -1,26 +1,24 @@
 ========================================================================
 GIBBON BENCHMARK REPORT v3.1
 ========================================================================
-Generated: 2026-03-04 19:46:43
+Generated: 2026-03-04 20:04:01
 
 
 Program: Compiler.hs  [ADT fields: 9]  [AoS=1 buf, SoA=8 bufs | IR]
 ----------------------------------------
-  AOS: 0.4941s total
-    [B] build: 0.2062 ±0.01172s  (n=11)
-    [F] verifyIR: 0.0126 ±0.00002s  (n=11)  uses=9/9  dead=0%
-    [F] instCountPass: 0.0123 ±0.00006s  (n=11)  uses=2/9  dead=78%
-    [F] blockCountPass: 0.0123 ±0.00002s  (n=11)  uses=2/9  dead=78%
-    [F] memoryOpStatsPass: 0.0120 ±0.00002s  (n=11)  uses=3/9  dead=67%
-    [F] castInstCountPass: 0.0184 ±0.00002s  (n=11)  uses=3/9  dead=67%
-    [F] branchStatsPass: 0.0119 ±0.00002s  (n=11)  uses=2/9  dead=78%
-    [F] latencyModelPass: 0.0121 ±0.00002s  (n=11)  uses=3/9  dead=67%
-    [F] has cycle: 0.0247 ±0.00094s  (n=11)  uses=4/9  dead=56%
-    [F] throughputModelPass: 0.0122 ±0.00002s  (n=11)  uses=3/9  dead=67%
-    [M] targetReturnPass: 0.0796 ±0.00044s  (n=11)  uses=9/9  dead=0%
-    [M] stripSideEffectsPass: 0.0799 ±0.00048s  (n=11)  uses=7/9  dead=22%
-  SOA: 0.4275s total
-    [B] build: 0.2082 ±0.02484s  (n=11)
+  AOS: 0.2848s total
+    [F] verifyIR: 0.0123 ±0.00002s  (n=11)  uses=9/9  dead=0%
+    [F] instCountPass: 0.0119 ±0.00002s  (n=11)  uses=2/9  dead=78%
+    [F] blockCountPass: 0.0119 ±0.00001s  (n=11)  uses=2/9  dead=78%
+    [F] memoryOpStatsPass: 0.0117 ±0.00002s  (n=11)  uses=3/9  dead=67%
+    [F] castInstCountPass: 0.0183 ±0.00460s  (n=11)  uses=3/9  dead=67%
+    [F] branchStatsPass: 0.0115 ±0.00001s  (n=11)  uses=2/9  dead=78%
+    [F] latencyModelPass: 0.0118 ±0.00001s  (n=11)  uses=3/9  dead=67%
+    [F] has cycle: 0.0241 ±0.00095s  (n=11)  uses=4/9  dead=56%
+    [F] throughputModelPass: 0.0118 ±0.00001s  (n=11)  uses=3/9  dead=67%
+    [M] targetReturnPass: 0.0797 ±0.00054s  (n=11)  uses=9/9  dead=0%
+    [M] stripSideEffectsPass: 0.0798 ±0.00051s  (n=11)  uses=7/9  dead=22%
+  SOA: 0.2188s total
     [F] verifyIR: 0.0034 ±0.00001s  (n=11)  uses=9/9  dead=0%
     [F] instCountPass: 0.0019 ±0.00001s  (n=11)  uses=2/9  dead=78%
     [F] blockCountPass: 0.0019 ±0.00000s  (n=11)  uses=2/9  dead=78%
@@ -28,341 +26,301 @@ Program: Compiler.hs  [ADT fields: 9]  [AoS=1 buf, SoA=8 bufs | IR]
     [F] castInstCountPass: 0.0013 ±0.00001s  (n=11)  uses=3/9  dead=67%
     [F] branchStatsPass: 0.0033 ±0.00001s  (n=11)  uses=2/9  dead=78%
     [F] latencyModelPass: 0.0029 ±0.00001s  (n=11)  uses=3/9  dead=67%
-    [F] has cycle: 0.0176 ±0.00133s  (n=11)  uses=4/9  dead=56%
-    [F] throughputModelPass: 0.0029 ±0.00001s  (n=11)  uses=3/9  dead=67%
-    [M] targetReturnPass: 0.0905 ±0.00944s  (n=11)  uses=9/9  dead=0%
-    [M] stripSideEffectsPass: 0.0897 ±0.00016s  (n=11)  uses=7/9  dead=22%
-  Speedup: 1.156×
+    [F] has cycle: 0.0176 ±0.00132s  (n=11)  uses=4/9  dead=56%
+    [F] throughputModelPass: 0.0029 ±0.00000s  (n=11)  uses=3/9  dead=67%
+    [M] targetReturnPass: 0.0898 ±0.00034s  (n=11)  uses=9/9  dead=0%
+    [M] stripSideEffectsPass: 0.0900 ±0.00014s  (n=11)  uses=7/9  dead=22%
+  Speedup: 1.302×
   Output match (successful variants): YES
 
 Program: DBQuery.hs  [ADT fields: 15]  [AoS=1 buf, SoA=13 bufs | Query]
 ----------------------------------------
-  AOS: 0.4769s total
-    [B] build: 0.2179 ±0.02085s  (n=11)
-    [F] sumCost: 0.0188 ±0.00003s  (n=11)  uses=6/15  dead=60%
-    [F] sumRows: 0.0250 ±0.00017s  (n=11)  uses=6/15  dead=60%
-    [F] countJoins: 0.0190 ±0.00666s  (n=11)  uses=3/15  dead=80%
-    [F] sumMemory: 0.0189 ±0.00002s  (n=11)  uses=6/15  dead=60%
-    [F] hashJoinPressure: 0.0204 ±0.00001s  (n=11)  uses=5/15  dead=67%
-    [F] filterSelectivitySkew: 0.0188 ±0.00002s  (n=11)  uses=5/15  dead=67%
-    [M] scaleCosts: 0.0685 ±0.00021s  (n=11)  uses=15/15  dead=0%
-    [M] clearQueryFlags: 0.0695 ±0.00027s  (n=11)  uses=14/15  dead=7%
-  SOA: 0.4882s total
-    [B] build: 0.2349 ±0.01594s  (n=11)
-    [F] sumCost: 0.0149 ±0.00005s  (n=11)  uses=6/15  dead=60%
-    [F] sumRows: 0.0216 ±0.00010s  (n=11)  uses=6/15  dead=60%
-    [F] countJoins: 0.0109 ±0.00003s  (n=11)  uses=3/15  dead=80%
-    [F] sumMemory: 0.0145 ±0.00009s  (n=11)  uses=6/15  dead=60%
-    [F] hashJoinPressure: 0.0129 ±0.00005s  (n=11)  uses=5/15  dead=67%
+  AOS: 0.2563s total
+    [F] sumCost: 0.0184 ±0.00002s  (n=11)  uses=6/15  dead=60%
+    [F] sumRows: 0.0246 ±0.00012s  (n=11)  uses=6/15  dead=60%
+    [F] countJoins: 0.0185 ±0.00002s  (n=11)  uses=3/15  dead=80%
+    [F] sumMemory: 0.0185 ±0.00002s  (n=11)  uses=6/15  dead=60%
+    [F] hashJoinPressure: 0.0199 ±0.00003s  (n=11)  uses=5/15  dead=67%
+    [F] filterSelectivitySkew: 0.0183 ±0.00002s  (n=11)  uses=5/15  dead=67%
+    [M] scaleCosts: 0.0686 ±0.00022s  (n=11)  uses=15/15  dead=0%
+    [M] clearQueryFlags: 0.0694 ±0.00808s  (n=11)  uses=14/15  dead=7%
+  SOA: 0.2535s total
+    [F] sumCost: 0.0149 ±0.00004s  (n=11)  uses=6/15  dead=60%
+    [F] sumRows: 0.0216 ±0.00012s  (n=11)  uses=6/15  dead=60%
+    [F] countJoins: 0.0109 ±0.00004s  (n=11)  uses=3/15  dead=80%
+    [F] sumMemory: 0.0145 ±0.00007s  (n=11)  uses=6/15  dead=60%
+    [F] hashJoinPressure: 0.0130 ±0.00003s  (n=11)  uses=5/15  dead=67%
     [F] filterSelectivitySkew: 0.0124 ±0.00003s  (n=11)  uses=5/15  dead=67%
-    [M] scaleCosts: 0.0835 ±0.00010s  (n=11)  uses=15/15  dead=0%
-    [M] clearQueryFlags: 0.0827 ±0.00007s  (n=11)  uses=14/15  dead=7%
-  Speedup: 0.977×
+    [M] scaleCosts: 0.0835 ±0.00008s  (n=11)  uses=15/15  dead=0%
+    [M] clearQueryFlags: 0.0828 ±0.00008s  (n=11)  uses=14/15  dead=7%
+  Speedup: 1.011×
   Output match (successful variants): YES
 
 Program: DecisionTree.hs  [ADT fields: 7]  [AoS=1 buf, SoA=6 bufs | DTree]
 ----------------------------------------
-  AOS: 4.2703s total
-    [B] build: 0.4205 ±0.01295s  (n=11)
-    [F] countNodes: 0.0476 ±0.00002s  (n=11)  uses=2/7  dead=71%
-    [F] countLeaves: 0.0475 ±0.00741s  (n=11)  uses=2/7  dead=71%
-    [F] treeDepth: 0.0511 ±0.00002s  (n=11)  uses=2/7  dead=71%
-    [F] sumImpurity: 0.0505 ±0.00003s  (n=11)  uses=3/7  dead=57%
-    [F] sumSamples: 0.0483 ±0.00010s  (n=11)  uses=3/7  dead=57%
-    [F] countFeatureUses: 0.0505 ±0.00003s  (n=11)  uses=3/7  dead=57%
-    [F] countSmallLeaves: 0.0510 ±0.00004s  (n=11)  uses=3/7  dead=57%
-    [F] inferenceCost: 0.0507 ±0.00004s  (n=11)  uses=2/7  dead=71%
-    [F] sumPathLengths: 0.0527 ±0.00002s  (n=11)  uses=3/7  dead=57%
-    [F] classify tree: 0.0469 ±0.00897s  (n=11)  uses=5/7  dead=29%
-    [F] classify Depth: 0.0470 ±0.00005s  (n=11)  uses=4/7  dead=43%
-    [F] classify Batch: 3.3061 ±0.02072s  (n=11)  uses=5/7  dead=29%
-  SOA: 3.9866s total
-    [B] build: 0.4392 ±0.01342s  (n=11)
-    [F] countNodes: 0.0264 ±0.00006s  (n=11)  uses=2/7  dead=71%
-    [F] countLeaves: 0.0249 ±0.00863s  (n=11)  uses=2/7  dead=71%
-    [F] treeDepth: 0.0283 ±0.00005s  (n=11)  uses=2/7  dead=71%
-    [F] sumImpurity: 0.0320 ±0.00005s  (n=11)  uses=3/7  dead=57%
-    [F] sumSamples: 0.0319 ±0.00005s  (n=11)  uses=3/7  dead=57%
-    [F] countFeatureUses: 0.0319 ±0.00005s  (n=11)  uses=3/7  dead=57%
-    [F] countSmallLeaves: 0.0318 ±0.00008s  (n=11)  uses=3/7  dead=57%
-    [F] inferenceCost: 0.0290 ±0.00002s  (n=11)  uses=2/7  dead=71%
-    [F] sumPathLengths: 0.0335 ±0.00008s  (n=11)  uses=3/7  dead=57%
-    [F] classify tree: 0.0368 ±0.00016s  (n=11)  uses=5/7  dead=29%
-    [F] classify Depth: 0.0366 ±0.00019s  (n=11)  uses=4/7  dead=43%
-    [F] classify Batch: 3.2045 ±0.03353s  (n=11)  uses=5/7  dead=29%
-  Speedup: 1.071×
+  AOS: 3.8210s total
+    [F] countNodes: 0.0475 ±0.00003s  (n=11)  uses=2/7  dead=71%
+    [F] countLeaves: 0.0475 ±0.00009s  (n=11)  uses=2/7  dead=71%
+    [F] treeDepth: 0.0509 ±0.00004s  (n=11)  uses=2/7  dead=71%
+    [F] sumImpurity: 0.0501 ±0.00003s  (n=11)  uses=3/7  dead=57%
+    [F] sumSamples: 0.0482 ±0.00170s  (n=11)  uses=3/7  dead=57%
+    [F] countFeatureUses: 0.0501 ±0.00002s  (n=11)  uses=3/7  dead=57%
+    [F] countSmallLeaves: 0.0510 ±0.00002s  (n=11)  uses=3/7  dead=57%
+    [F] inferenceCost: 0.0504 ±0.00002s  (n=11)  uses=2/7  dead=71%
+    [F] sumPathLengths: 0.0524 ±0.00002s  (n=11)  uses=3/7  dead=57%
+    [F] classify tree: 0.0469 ±0.00002s  (n=11)  uses=5/7  dead=29%
+    [F] classify Depth: 0.0469 ±0.00002s  (n=11)  uses=4/7  dead=43%
+    [F] classify Batch: 3.2792 ±0.03051s  (n=11)  uses=5/7  dead=29%
+  SOA: 3.0578s total
+    [F] countNodes: 0.0263 ±0.00007s  (n=11)  uses=2/7  dead=71%
+    [F] countLeaves: 0.0248 ±0.00004s  (n=11)  uses=2/7  dead=71%
+    [F] treeDepth: 0.0281 ±0.00002s  (n=11)  uses=2/7  dead=71%
+    [F] sumImpurity: 0.0326 ±0.00122s  (n=11)  uses=3/7  dead=57%
+    [F] sumSamples: 0.0321 ±0.00005s  (n=11)  uses=3/7  dead=57%
+    [F] countFeatureUses: 0.0324 ±0.00005s  (n=11)  uses=3/7  dead=57%
+    [F] countSmallLeaves: 0.0322 ±0.00007s  (n=11)  uses=3/7  dead=57%
+    [F] inferenceCost: 0.0290 ±0.00004s  (n=11)  uses=2/7  dead=71%
+    [F] sumPathLengths: 0.0340 ±0.00004s  (n=11)  uses=3/7  dead=57%
+    [F] classify tree: 0.0370 ±0.00786s  (n=11)  uses=5/7  dead=29%
+    [F] classify Depth: 0.0369 ±0.00009s  (n=11)  uses=4/7  dead=43%
+    [F] classify Batch: 2.7125 ±0.02405s  (n=11)  uses=5/7  dead=29%
+  Speedup: 1.250×
   Output match (successful variants): YES
 
 Program: DomTree.hs  [ADT fields: 15]  [AoS=1 buf, SoA=14 bufs | DOM]
 ----------------------------------------
-  AOS: 0.4330s total
-    [B] build: 0.2357 ±0.01937s  (n=11)
-    [F] SumArea: 0.0357 ±0.00002s  (n=11)  uses=6/15  dead=60%
-    [F] find max Bottom: 0.0344 ±0.00635s  (n=11)  uses=5/15  dead=67%
-    [F] count styled: 0.0345 ±0.00002s  (n=11)  uses=3/15  dead=80%
-    [F] sumTextWidth: 0.0343 ±0.00003s  (n=11)  uses=3/15  dead=80%
-    [M] computeWidths: 0.0296 ±0.00007s  (n=11)  uses=14/15  dead=7%
-    [M] scaleLayout: 0.0289 ±0.00009s  (n=11)  uses=15/15  dead=0%
-  SOA: 0.5235s total
-    [B] build: 0.3814 ±0.01841s  (n=11)
-    [F] SumArea: 0.0180 ±0.00010s  (n=11)  uses=6/15  dead=60%
-    [F] find max Bottom: 0.0226 ±0.00007s  (n=11)  uses=5/15  dead=67%
-    [F] count styled: 0.0114 ±0.00005s  (n=11)  uses=3/15  dead=80%
-    [F] sumTextWidth: 0.0116 ±0.00006s  (n=11)  uses=3/15  dead=80%
-    [M] computeWidths: 0.0438 ±0.00015s  (n=11)  uses=14/15  dead=7%
-    [M] scaleLayout: 0.0348 ±0.00009s  (n=11)  uses=15/15  dead=0%
-  Speedup: 0.827×
+  AOS: 0.1945s total
+    [F] SumArea: 0.0349 ±0.00003s  (n=11)  uses=6/15  dead=60%
+    [F] find max Bottom: 0.0337 ±0.00002s  (n=11)  uses=5/15  dead=67%
+    [F] count styled: 0.0337 ±0.00002s  (n=11)  uses=3/15  dead=80%
+    [F] sumTextWidth: 0.0337 ±0.00003s  (n=11)  uses=3/15  dead=80%
+    [M] computeWidths: 0.0296 ±0.00008s  (n=11)  uses=14/15  dead=7%
+    [M] scaleLayout: 0.0288 ±0.00011s  (n=11)  uses=15/15  dead=0%
+  SOA: 0.1428s total
+    [F] SumArea: 0.0183 ±0.00012s  (n=11)  uses=6/15  dead=60%
+    [F] find max Bottom: 0.0226 ±0.00006s  (n=11)  uses=5/15  dead=67%
+    [F] count styled: 0.0115 ±0.00004s  (n=11)  uses=3/15  dead=80%
+    [F] sumTextWidth: 0.0116 ±0.00005s  (n=11)  uses=3/15  dead=80%
+    [M] computeWidths: 0.0442 ±0.00012s  (n=11)  uses=14/15  dead=7%
+    [M] scaleLayout: 0.0346 ±0.00010s  (n=11)  uses=15/15  dead=0%
+  Speedup: 1.362×
   Output match (successful variants): YES
 
 Program: KDTree.hs  [ADT fields: 17]  [AoS=1 buf, SoA=16 bufs | KDTree]
 ----------------------------------------
-  AOS: 0.4344s total
-    [B] build: 0.2551 ±0.02842s  (n=11)
-    [F] Find nearest Neighbour: 0.0278 ±0.00005s  (n=11)  uses=13/17  dead=24%
-    [F] countInRange tight_box: 0.0280 ±0.00002s  (n=11)  uses=13/17  dead=24%
-    [F] sumMassInRange: 0.0272 ±0.00003s  (n=11)  uses=14/17  dead=18%
-    [F] twoPointCorrelation bin_8_16: 0.0287 ±0.00002s  (n=11)  uses=11/17  dead=35%
-    [F] pointCloudNeighborhood: 0.0248 ±0.00003s  (n=11)  uses=11/17  dead=35%
-    [F] photonMappingBenchmark: 0.0427 ±0.00041s  (n=11)  uses=12/17  dead=29%
-  SOA: 0.3107s total
-    [B] build: 0.1713 ±0.01999s  (n=11)
-    [F] Find nearest Neighbour: 0.0214 ±0.00002s  (n=11)  uses=13/17  dead=24%
-    [F] countInRange tight_box: 0.0201 ±0.00003s  (n=11)  uses=13/17  dead=24%
-    [F] sumMassInRange: 0.0201 ±0.00002s  (n=11)  uses=14/17  dead=18%
-    [F] twoPointCorrelation bin_8_16: 0.0207 ±0.00001s  (n=11)  uses=11/17  dead=35%
-    [F] pointCloudNeighborhood: 0.0165 ±0.00002s  (n=11)  uses=11/17  dead=35%
-    [F] photonMappingBenchmark: 0.0406 ±0.00003s  (n=11)  uses=12/17  dead=29%
-  Speedup: 1.398×
+  AOS: 0.1765s total
+    [F] Find nearest Neighbour: 0.0274 ±0.00002s  (n=11)  uses=13/17  dead=24%
+    [F] countInRange tight_box: 0.0276 ±0.00002s  (n=11)  uses=13/17  dead=24%
+    [F] sumMassInRange: 0.0271 ±0.00002s  (n=11)  uses=14/17  dead=18%
+    [F] twoPointCorrelation bin_8_16: 0.0283 ±0.00002s  (n=11)  uses=11/17  dead=35%
+    [F] pointCloudNeighborhood: 0.0245 ±0.00003s  (n=11)  uses=11/17  dead=35%
+    [F] photonMappingBenchmark: 0.0418 ±0.00008s  (n=11)  uses=12/17  dead=29%
+  SOA: 0.1386s total
+    [F] Find nearest Neighbour: 0.0214 ±0.00003s  (n=11)  uses=13/17  dead=24%
+    [F] countInRange tight_box: 0.0198 ±0.00784s  (n=11)  uses=13/17  dead=24%
+    [F] sumMassInRange: 0.0198 ±0.00002s  (n=11)  uses=14/17  dead=18%
+    [F] twoPointCorrelation bin_8_16: 0.0208 ±0.00001s  (n=11)  uses=11/17  dead=35%
+    [F] pointCloudNeighborhood: 0.0164 ±0.00002s  (n=11)  uses=11/17  dead=35%
+    [F] photonMappingBenchmark: 0.0403 ±0.00003s  (n=11)  uses=12/17  dead=29%
+  Speedup: 1.274×
   Output match (successful variants): YES
 
 Program: LinearListReduction.hs  [ADT fields: 11]  [AoS=1 buf, SoA=11 bufs | List]
 ----------------------------------------
-  AOS: 0.3461s total
-    [B] build: 0.3144 ±0.02348s  (n=11)
-    [F] reduction: 0.0316 ±0.00003s  (n=11)  uses=2/11  dead=82%
-  SOA: 0.3371s total
-    [B] build: 0.3321 ±0.02388s  (n=11)
+  AOS: 0.0291s total
+    [F] reduction: 0.0291 ±0.00002s  (n=11)  uses=2/11  dead=82%
+  SOA: 0.0050s total
     [F] reduction: 0.0050 ±0.00001s  (n=11)  uses=2/11  dead=82%
-  Speedup: 1.027×
+  Speedup: 5.786×
   Output match (successful variants): YES
 
 Program: List.hs  [ADT fields: 2]  [AoS=1 buf, SoA=2 bufs | List]
 ----------------------------------------
-  AOS: 0.9402s total
-    [B] build: 0.3615 ±0.01854s  (n=11)
-    [M] add1 List: 0.2516 ±0.00106s  (n=11)  uses=2/2  dead=0%
-    [F] length List: 0.0484 ±0.00003s  (n=11)  uses=1/2  dead=50%
-    [F] sumList: 0.1393 ±0.00010s  (n=11)  uses=2/2  dead=0%
-    [F] sumList tail recursive: 0.1394 ±0.01055s  (n=11)  uses=2/2  dead=0%
-  SOA: 1.1081s total
-    [B] build: 0.4618 ±0.01965s  (n=11)
-    [M] add1 List: 0.3393 ±0.01084s  (n=11)  uses=2/2  dead=0%
-    [F] length List: 0.0261 ±0.00007s  (n=11)  uses=1/2  dead=50%
-    [F] sumList: 0.1388 ±0.00115s  (n=11)  uses=2/2  dead=0%
-    [F] sumList tail recursive: 0.1421 ±0.00094s  (n=11)  uses=2/2  dead=0%
-  Speedup: 0.848×
+  AOS: 0.5765s total
+    [M] add1 List: 0.2513 ±0.00105s  (n=11)  uses=2/2  dead=0%
+    [F] length List: 0.0492 ±0.00004s  (n=11)  uses=1/2  dead=50%
+    [F] sumList: 0.1380 ±0.00005s  (n=11)  uses=2/2  dead=0%
+    [F] sumList tail recursive: 0.1380 ±0.00025s  (n=11)  uses=2/2  dead=0%
+  SOA: 0.6368s total
+    [M] add1 List: 0.3370 ±0.01628s  (n=11)  uses=2/2  dead=0%
+    [F] length List: 0.0262 ±0.00569s  (n=11)  uses=1/2  dead=50%
+    [F] sumList: 0.1376 ±0.01045s  (n=11)  uses=2/2  dead=0%
+    [F] sumList tail recursive: 0.1360 ±0.00032s  (n=11)  uses=2/2  dead=0%
+  Speedup: 0.905×
   Output match (successful variants): YES
 
 Program: MonoTree.hs  [ADT fields: 3]  [AoS=1 buf, SoA=2 bufs | Tree]
 ----------------------------------------
-  AOS: 0.2451s total
-    [B] build: 0.1818 ±0.01984s  (n=11)
-    [M] add1Tree: 0.0457 ±0.01134s  (n=11)  uses=3/3  dead=0%
-    [F] sumTree: 0.0091 ±0.00003s  (n=11)  uses=3/3  dead=0%
-    [F] sumTree TailRec: 0.0084 ±0.00001s  (n=11)  uses=3/3  dead=0%
-  SOA: 0.1219s total
-    [B] build: 0.0573 ±0.01994s  (n=11)
-    [M] add1Tree: 0.0422 ±0.00007s  (n=11)  uses=3/3  dead=0%
-    [F] sumTree: 0.0114 ±0.00003s  (n=11)  uses=3/3  dead=0%
-    [F] sumTree TailRec: 0.0110 ±0.00006s  (n=11)  uses=3/3  dead=0%
-  Speedup: 2.011×
+  AOS: 0.0629s total
+    [M] add1Tree: 0.0458 ±0.00104s  (n=11)  uses=3/3  dead=0%
+    [F] sumTree: 0.0089 ±0.00002s  (n=11)  uses=3/3  dead=0%
+    [F] sumTree TailRec: 0.0082 ±0.00002s  (n=11)  uses=3/3  dead=0%
+  SOA: 0.0645s total
+    [M] add1Tree: 0.0423 ±0.00005s  (n=11)  uses=3/3  dead=0%
+    [F] sumTree: 0.0113 ±0.00003s  (n=11)  uses=3/3  dead=0%
+    [F] sumTree TailRec: 0.0109 ±0.00007s  (n=11)  uses=3/3  dead=0%
+  Speedup: 0.976×
   Output match (successful variants): YES
 
 Program: ObjectGraph.hs  [ADT fields: 5]  [AoS=1 buf, SoA=4 bufs | Heap]
 ----------------------------------------
-  AOS: 0.3092s total
-    [B] build: 0.0751 ±0.01984s  (n=11)
-    [F] totalHeapSize: 0.0129 ±0.00002s  (n=11)  uses=3/5  dead=40%
-    [F] countMarked: 0.0129 ±0.00001s  (n=11)  uses=3/5  dead=40%
-    [F] countLargeItems: 0.0126 ±0.00001s  (n=11)  uses=3/5  dead=40%
-    [F] liveBytes: 0.0133 ±0.00002s  (n=11)  uses=4/5  dead=20%
-    [F] deadBytes: 0.0136 ±0.00001s  (n=11)  uses=4/5  dead=20%
-    [F] countSurvivors: 0.0137 ±0.00002s  (n=11)  uses=4/5  dead=20%
-    [F] sumObjIds: 0.0122 ±0.00002s  (n=11)  uses=3/5  dead=40%
-    [M] sweepUnmarked: 0.0711 ±0.00023s  (n=11)  uses=5/5  dead=0%
-    [M] touchHotObjects: 0.0717 ±0.00009s  (n=11)  uses=5/5  dead=0%
-  SOA: 0.4636s total
-    [B] build: 0.2191 ±0.01964s  (n=11)
-    [F] totalHeapSize: 0.0136 ±0.00670s  (n=11)  uses=3/5  dead=40%
-    [F] countMarked: 0.0105 ±0.00088s  (n=11)  uses=3/5  dead=40%
-    [F] countLargeItems: 0.0105 ±0.00006s  (n=11)  uses=3/5  dead=40%
-    [F] liveBytes: 0.0124 ±0.00003s  (n=11)  uses=4/5  dead=20%
-    [F] deadBytes: 0.0123 ±0.00003s  (n=11)  uses=4/5  dead=20%
-    [F] countSurvivors: 0.0129 ±0.00001s  (n=11)  uses=4/5  dead=20%
-    [F] sumObjIds: 0.0104 ±0.00005s  (n=11)  uses=3/5  dead=40%
-    [M] sweepUnmarked: 0.0811 ±0.00011s  (n=11)  uses=5/5  dead=0%
-    [M] touchHotObjects: 0.0809 ±0.00007s  (n=11)  uses=5/5  dead=0%
-  Speedup: 0.667×
+  AOS: 0.2339s total
+    [F] totalHeapSize: 0.0129 ±0.00021s  (n=11)  uses=3/5  dead=40%
+    [F] countMarked: 0.0132 ±0.00528s  (n=11)  uses=3/5  dead=40%
+    [F] countLargeItems: 0.0126 ±0.00535s  (n=11)  uses=3/5  dead=40%
+    [F] liveBytes: 0.0132 ±0.00003s  (n=11)  uses=4/5  dead=20%
+    [F] deadBytes: 0.0134 ±0.00002s  (n=11)  uses=4/5  dead=20%
+    [F] countSurvivors: 0.0135 ±0.00001s  (n=11)  uses=4/5  dead=20%
+    [F] sumObjIds: 0.0122 ±0.00001s  (n=11)  uses=3/5  dead=40%
+    [M] sweepUnmarked: 0.0711 ±0.00019s  (n=11)  uses=5/5  dead=0%
+    [M] touchHotObjects: 0.0718 ±0.00010s  (n=11)  uses=5/5  dead=0%
+  SOA: 0.2391s total
+    [F] totalHeapSize: 0.0105 ±0.00006s  (n=11)  uses=3/5  dead=40%
+    [F] countMarked: 0.0102 ±0.00004s  (n=11)  uses=3/5  dead=40%
+    [F] countLargeItems: 0.0104 ±0.00005s  (n=11)  uses=3/5  dead=40%
+    [F] liveBytes: 0.0123 ±0.00002s  (n=11)  uses=4/5  dead=20%
+    [F] deadBytes: 0.0123 ±0.00001s  (n=11)  uses=4/5  dead=20%
+    [F] countSurvivors: 0.0128 ±0.00001s  (n=11)  uses=4/5  dead=20%
+    [F] sumObjIds: 0.0104 ±0.00006s  (n=11)  uses=3/5  dead=40%
+    [M] sweepUnmarked: 0.0801 ±0.00005s  (n=11)  uses=5/5  dead=0%
+    [M] touchHotObjects: 0.0801 ±0.00989s  (n=11)  uses=5/5  dead=0%
+  Speedup: 0.978×
   Output match (successful variants): YES
 
 Program: OctTree_sumMass.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.3787s total
-    [B] build: 0.3436 ±0.01490s  (n=11)
-    [F] sumMass: 0.0351 ±0.00004s  (n=11)  uses=10/16  dead=38%
-  SOA: 0.8663s total
-    [B] build: 0.8391 ±0.01603s  (n=11)
-    [F] sumMass: 0.0271 ±0.00004s  (n=11)  uses=10/16  dead=38%
-  Speedup: 0.437×
+  AOS: 0.0348s total
+    [F] sumMass: 0.0348 ±0.00002s  (n=11)  uses=10/16  dead=38%
+  SOA: 0.0291s total
+    [F] sumMass: 0.0291 ±0.00004s  (n=11)  uses=10/16  dead=38%
+  Speedup: 1.196×
   Output match (successful variants): YES
 
 Program: OctTree_sumEnergy.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.3796s total
-    [B] build: 0.3425 ±0.01141s  (n=11)
-    [F] sumEnergy: 0.0372 ±0.00002s  (n=11)  uses=12/16  dead=25%
-  SOA: 0.8711s total
-    [B] build: 0.8379 ±0.02745s  (n=11)
-    [F] sumEnergy: 0.0333 ±0.00010s  (n=11)  uses=12/16  dead=25%
-  Speedup: 0.436×
+  AOS: 0.0351s total
+    [F] sumEnergy: 0.0351 ±0.00002s  (n=11)  uses=12/16  dead=25%
+  SOA: 0.0329s total
+    [F] sumEnergy: 0.0329 ±0.00010s  (n=11)  uses=12/16  dead=25%
+  Speedup: 1.068×
   Output match (successful variants): YES
 
 Program: OctTree_countActive.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.3804s total
-    [B] build: 0.3428 ±0.01271s  (n=11)
-    [F] countActive: 0.0376 ±0.00004s  (n=11)  uses=10/16  dead=38%
-  SOA: 0.8718s total
-    [B] build: 0.8427 ±0.01868s  (n=11)
+  AOS: 0.0368s total
+    [F] countActive: 0.0368 ±0.00003s  (n=11)  uses=10/16  dead=38%
+  SOA: 0.0291s total
     [F] countActive: 0.0291 ±0.00001s  (n=11)  uses=10/16  dead=38%
-  Speedup: 0.436×
+  Speedup: 1.266×
   Output match (successful variants): YES
 
 Program: OctTree_countParticles.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.3806s total
-    [B] build: 0.3433 ±0.01746s  (n=11)
-    [F] countParticles: 0.0373 ±0.00731s  (n=11)  uses=8/16  dead=50%
-  SOA: 0.8644s total
-    [B] build: 0.8378 ±0.02868s  (n=11)
-    [F] countParticles: 0.0266 ±0.00008s  (n=11)  uses=8/16  dead=50%
-  Speedup: 0.440×
+  AOS: 0.0355s total
+    [F] countParticles: 0.0355 ±0.00004s  (n=11)  uses=8/16  dead=50%
+  SOA: 0.0269s total
+    [F] countParticles: 0.0269 ±0.00017s  (n=11)  uses=8/16  dead=50%
+  Speedup: 1.320×
   Output match (successful variants): YES
 
 Program: OctTree_barnesHutPotential.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.3852s total
-    [B] build: 0.3425 ±0.01864s  (n=11)
-    [F] barnesHutPotential: 0.0427 ±0.00006s  (n=11)  uses=11/16  dead=31%
-  SOA: 0.8782s total
-    [B] build: 0.8390 ±0.03814s  (n=11)
-    [F] barnesHutPotential: 0.0392 ±0.00002s  (n=11)  uses=11/16  dead=31%
-  Speedup: 0.439×
+  AOS: 0.0407s total
+    [F] barnesHutPotential: 0.0407 ±0.00002s  (n=11)  uses=11/16  dead=31%
+  SOA: 0.0391s total
+    [F] barnesHutPotential: 0.0391 ±0.00006s  (n=11)  uses=11/16  dead=31%
+  Speedup: 1.039×
   Output match (successful variants): YES
 
 Program: OctTree_fmmPotential.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.4402s total
-    [B] build: 0.3425 ±0.02528s  (n=11)
-    [F] fmmPotential: 0.0977 ±0.00004s  (n=11)  uses=12/16  dead=25%
-  SOA: 0.9329s total
-    [B] build: 0.8373 ±0.01643s  (n=11)
-    [F] fmmPotential: 0.0956 ±0.00003s  (n=11)  uses=12/16  dead=25%
-  Speedup: 0.472×
+  AOS: 0.0974s total
+    [F] fmmPotential: 0.0974 ±0.00006s  (n=11)  uses=12/16  dead=25%
+  SOA: 0.0954s total
+    [F] fmmPotential: 0.0954 ±0.00002s  (n=11)  uses=12/16  dead=25%
+  Speedup: 1.021×
   Output match (successful variants): YES
 
 Program: OctTree_scaleEnergy.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.5029s total
-    [B] build: 0.3531 ±0.01726s  (n=11)
-    [M] scaleEnergy: 0.1499 ±0.00028s  (n=11)  uses=16/16  dead=0%
-  SOA: 1.0085s total
-    [B] build: 0.8338 ±0.01811s  (n=11)
-    [M] scaleEnergy: 0.1747 ±0.01118s  (n=11)  uses=16/16  dead=0%
-  Speedup: 0.499×
+  AOS: 0.1493s total
+    [M] scaleEnergy: 0.1493 ±0.00027s  (n=11)  uses=16/16  dead=0%
+  SOA: 0.1752s total
+    [M] scaleEnergy: 0.1752 ±0.00021s  (n=11)  uses=16/16  dead=0%
+  Speedup: 0.852×
   Output match (successful variants): YES
 
 Program: OctTree_clearFlags.hs  [ADT fields: 16]  [AoS=1 buf, SoA=9 bufs | Octree]
 ----------------------------------------
-  AOS: 0.5064s total
-    [B] build: 0.3525 ±0.01524s  (n=11)
-    [M] clearFlags: 0.1539 ±0.00021s  (n=11)  uses=15/16  dead=6%
-  SOA: 1.0129s total
-    [B] build: 0.8393 ±0.02144s  (n=11)
-    [M] clearFlags: 0.1736 ±0.00015s  (n=11)  uses=15/16  dead=6%
-  Speedup: 0.500×
+  AOS: 0.1530s total
+    [M] clearFlags: 0.1530 ±0.00041s  (n=11)  uses=15/16  dead=6%
+  SOA: 0.1740s total
+    [M] clearFlags: 0.1740 ±0.00016s  (n=11)  uses=15/16  dead=6%
+  Speedup: 0.879×
   Output match (successful variants): YES
 
 Program: PiecewiseFunctions.hs  [ADT fields: 8]  [AoS=1 buf, SoA=7 bufs | PW]
 ----------------------------------------
-  AOS: 0.6211s total
-    [B] build: 0.2490 ±0.02076s  (n=11)
-    [F] norm2Estimate: 0.0242 ±0.00003s  (n=11)  uses=5/8  dead=38%
-    [F] truncateTolViolations: 0.0192 ±0.00001s  (n=11)  uses=3/8  dead=62%
-    [F] compressMass: 0.0190 ±0.00001s  (n=11)  uses=3/8  dead=62%
-    [F] autorefineMaxLevel: 0.0209 ±0.00001s  (n=11)  uses=4/8  dead=50%
-    [F] pmapCutHistogram: 0.0317 ±0.00003s  (n=11)  uses=4/8  dead=50%
-    [F] lbDeuxLoadProxy: 0.0208 ±0.00004s  (n=11)  uses=5/8  dead=38%
-    [M] addConstPW: 0.1170 ±0.00054s  (n=11)  uses=8/8  dead=0%
-    [M] diffPW: 0.1194 ±0.00042s  (n=11)  uses=8/8  dead=0%
-  SOA: 0.6073s total
-    [B] build: 0.2596 ±0.01534s  (n=11)
-    [F] norm2Estimate: 0.0178 ±0.00001s  (n=11)  uses=5/8  dead=38%
-    [F] truncateTolViolations: 0.0115 ±0.00091s  (n=11)  uses=3/8  dead=62%
-    [F] compressMass: 0.0117 ±0.00544s  (n=11)  uses=3/8  dead=62%
-    [F] autorefineMaxLevel: 0.0195 ±0.00005s  (n=11)  uses=4/8  dead=50%
-    [F] pmapCutHistogram: 0.0126 ±0.00001s  (n=11)  uses=4/8  dead=50%
-    [F] lbDeuxLoadProxy: 0.0180 ±0.00735s  (n=11)  uses=5/8  dead=38%
-    [M] addConstPW: 0.1286 ±0.00035s  (n=11)  uses=8/8  dead=0%
-    [M] diffPW: 0.1280 ±0.00035s  (n=11)  uses=8/8  dead=0%
-  Speedup: 1.023×
+  AOS: 0.3773s total
+    [F] norm2Estimate: 0.0251 ±0.00004s  (n=11)  uses=5/8  dead=38%
+    [F] truncateTolViolations: 0.0200 ±0.00001s  (n=11)  uses=3/8  dead=62%
+    [F] compressMass: 0.0197 ±0.00005s  (n=11)  uses=3/8  dead=62%
+    [F] autorefineMaxLevel: 0.0219 ±0.00003s  (n=11)  uses=4/8  dead=50%
+    [F] pmapCutHistogram: 0.0325 ±0.00003s  (n=11)  uses=4/8  dead=50%
+    [F] lbDeuxLoadProxy: 0.0215 ±0.00002s  (n=11)  uses=5/8  dead=38%
+    [M] addConstPW: 0.1176 ±0.01005s  (n=11)  uses=8/8  dead=0%
+    [M] diffPW: 0.1190 ±0.00037s  (n=11)  uses=8/8  dead=0%
+  SOA: 0.3493s total
+    [F] norm2Estimate: 0.0176 ±0.00001s  (n=11)  uses=5/8  dead=38%
+    [F] truncateTolViolations: 0.0113 ±0.00008s  (n=11)  uses=3/8  dead=62%
+    [F] compressMass: 0.0115 ±0.00004s  (n=11)  uses=3/8  dead=62%
+    [F] autorefineMaxLevel: 0.0194 ±0.00007s  (n=11)  uses=4/8  dead=50%
+    [F] pmapCutHistogram: 0.0124 ±0.00001s  (n=11)  uses=4/8  dead=50%
+    [F] lbDeuxLoadProxy: 0.0177 ±0.00004s  (n=11)  uses=5/8  dead=38%
+    [M] addConstPW: 0.1308 ±0.00025s  (n=11)  uses=8/8  dead=0%
+    [M] diffPW: 0.1284 ±0.00030s  (n=11)  uses=8/8  dead=0%
+  Speedup: 1.080×
   Output match (successful variants): YES
 
 Program: TernaryTree.hs  [ADT fields: 5]  [AoS=1 buf, SoA=3 bufs | Tree]
 ----------------------------------------
-  AOS: 0.3270s total
-    [B] build: 0.2126 ±0.00094s  (n=11)
-    [M] add 1 tree: 0.0840 ±0.00013s  (n=11)  uses=5/5  dead=0%
-    [F] sum tree: 0.0304 ±0.00011s  (n=11)  uses=5/5  dead=0%
-  SOA: 0.3283s total
-    [B] build: 0.2219 ±0.02075s  (n=11)
-    [M] add 1 tree: 0.0775 ±0.00020s  (n=11)  uses=5/5  dead=0%
-    [F] sum tree: 0.0289 ±0.00011s  (n=11)  uses=5/5  dead=0%
-  Speedup: 0.996×
+  AOS: 0.1134s total
+    [M] add 1 tree: 0.0839 ±0.01115s  (n=11)  uses=5/5  dead=0%
+    [F] sum tree: 0.0294 ±0.00963s  (n=11)  uses=5/5  dead=0%
+  SOA: 0.1062s total
+    [M] add 1 tree: 0.0773 ±0.00012s  (n=11)  uses=5/5  dead=0%
+    [F] sum tree: 0.0289 ±0.00002s  (n=11)  uses=5/5  dead=0%
+  Speedup: 1.067×
   Output match (successful variants): YES
 
 Program: Trie.hs  [ADT fields: 10]  [AoS=1 buf, SoA=9 bufs | Trie]
 ----------------------------------------
-  AOS: 0.4213s total
-    [B] build: 0.2074 ±0.01512s  (n=11)
-    [F] sumPrefixFreq: 0.0124 ±0.00003s  (n=11)  uses=3/10  dead=70%
-    [F] countTerminals: 0.0122 ±0.00002s  (n=11)  uses=3/10  dead=70%
-    [F] sumSubtreeHints: 0.0123 ±0.00002s  (n=11)  uses=3/10  dead=70%
-    [F] autocompleteTopKProxy: 0.0145 ±0.00002s  (n=11)  uses=5/10  dead=50%
-    [F] countLazyNodes: 0.0130 ±0.00002s  (n=11)  uses=4/10  dead=60%
-    [M] decayTrieStats: 0.0745 ±0.00035s  (n=11)  uses=10/10  dead=0%
-    [M] resetTraversalState: 0.0751 ±0.00038s  (n=11)  uses=10/10  dead=0%
-  SOA: 0.4108s total
-    [B] build: 0.2111 ±0.02128s  (n=11)
+  AOS: 0.2111s total
+    [F] sumPrefixFreq: 0.0119 ±0.00002s  (n=11)  uses=3/10  dead=70%
+    [F] countTerminals: 0.0118 ±0.00001s  (n=11)  uses=3/10  dead=70%
+    [F] sumSubtreeHints: 0.0119 ±0.00001s  (n=11)  uses=3/10  dead=70%
+    [F] autocompleteTopKProxy: 0.0139 ±0.00002s  (n=11)  uses=5/10  dead=50%
+    [F] countLazyNodes: 0.0125 ±0.00003s  (n=11)  uses=4/10  dead=60%
+    [M] decayTrieStats: 0.0745 ±0.00039s  (n=11)  uses=10/10  dead=0%
+    [M] resetTraversalState: 0.0746 ±0.00038s  (n=11)  uses=10/10  dead=0%
+  SOA: 0.1992s total
     [F] sumPrefixFreq: 0.0058 ±0.00002s  (n=11)  uses=3/10  dead=70%
     [F] countTerminals: 0.0058 ±0.00004s  (n=11)  uses=3/10  dead=70%
-    [F] sumSubtreeHints: 0.0057 ±0.00001s  (n=11)  uses=3/10  dead=70%
-    [F] autocompleteTopKProxy: 0.0079 ±0.00014s  (n=11)  uses=5/10  dead=50%
-    [F] countLazyNodes: 0.0067 ±0.00001s  (n=11)  uses=4/10  dead=60%
-    [M] decayTrieStats: 0.0850 ±0.00949s  (n=11)  uses=10/10  dead=0%
-    [M] resetTraversalState: 0.0827 ±0.00023s  (n=11)  uses=10/10  dead=0%
-  Speedup: 1.026×
+    [F] sumSubtreeHints: 0.0058 ±0.00002s  (n=11)  uses=3/10  dead=70%
+    [F] autocompleteTopKProxy: 0.0080 ±0.00009s  (n=11)  uses=5/10  dead=50%
+    [F] countLazyNodes: 0.0067 ±0.00002s  (n=11)  uses=4/10  dead=60%
+    [M] decayTrieStats: 0.0846 ±0.00035s  (n=11)  uses=10/10  dead=0%
+    [M] resetTraversalState: 0.0825 ±0.00016s  (n=11)  uses=10/10  dead=0%
+  Speedup: 1.060×
   Output match (successful variants): YES
 
 Program: ColorOctree.hs  [ADT fields: 25]  [AoS=1 buf, SoA=18 bufs | ColorOctree]
 ----------------------------------------
-  AOS: 0.4706s total
-    [B] build: 0.3788 ±0.02517s  (n=11)
-    [F] paletteEntriesQuantized: 0.0443 ±0.00004s  (n=11)  uses=13/25  dead=48%
-    [F] quantizationErrorProxy: 0.0476 ±0.00003s  (n=11)  uses=10/25  dead=60%
-  SOA: 0.7767s total
-    [B] build: 0.7001 ±0.02336s  (n=11)
-    [F] paletteEntriesQuantized: 0.0335 ±0.00007s  (n=11)  uses=13/25  dead=48%
-    [F] quantizationErrorProxy: 0.0431 ±0.00002s  (n=11)  uses=10/25  dead=60%
-  Speedup: 0.606×
+  AOS: 0.0881s total
+    [F] paletteEntriesQuantized: 0.0423 ±0.00004s  (n=11)  uses=13/25  dead=48%
+    [F] quantizationErrorProxy: 0.0458 ±0.00008s  (n=11)  uses=10/25  dead=60%
+  SOA: 0.0762s total
+    [F] paletteEntriesQuantized: 0.0335 ±0.00010s  (n=11)  uses=13/25  dead=48%
+    [F] quantizationErrorProxy: 0.0428 ±0.00002s  (n=11)  uses=10/25  dead=60%
+  Speedup: 1.156×
   Output match (successful variants): YES

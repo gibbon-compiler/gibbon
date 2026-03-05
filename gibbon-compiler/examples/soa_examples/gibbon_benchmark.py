@@ -1689,6 +1689,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       iterations: int, force: bool,
                       source_cls_all: Dict,
                       dump_raw: bool = False,
+                      include_build_pass: bool = False,
                       benchmark_immutable: bool = False,
                       benchmark_baseline_gibbon: bool = False,
                       enable_papi: bool = False,
@@ -1831,30 +1832,31 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         else:
                             print("           Native PAPI warning: no PAPI_NATIVE lines found in stdout")
 
-                build_stats, build_err = benchmark_build_pass(
-                    program=prog,
-                    variant=var,
-                    use_mutable_cursors=use_mut,
-                    programs_dir=programs_dir,
-                    out_dir=out_dir,
-                    iterations=iterations,
-                    force=force,
-                    dump_raw=dump_raw,
-                )
-                if build_stats is not None:
-                    merged_passes = {"build": build_stats}
-                    merged_passes.update(res.passes)
-                    res.passes = merged_passes
-                    print(
-                        "           [B] build: "
-                        f"median={build_stats['median_time']:.4f}s "
-                        f"±{build_stats['stderr']:.5f}s  "
-                        f"min={build_stats['min_time']:.4f}s  "
-                        f"max={build_stats['max_time']:.4f}s  "
-                        f"n={build_stats['n']}"
+                if include_build_pass:
+                    build_stats, build_err = benchmark_build_pass(
+                        program=prog,
+                        variant=var,
+                        use_mutable_cursors=use_mut,
+                        programs_dir=programs_dir,
+                        out_dir=out_dir,
+                        iterations=iterations,
+                        force=force,
+                        dump_raw=dump_raw,
                     )
-                elif build_err:
-                    print(f"           Build benchmark warning: {build_err}")
+                    if build_stats is not None:
+                        merged_passes = {"build": build_stats}
+                        merged_passes.update(res.passes)
+                        res.passes = merged_passes
+                        print(
+                            "           [B] build: "
+                            f"median={build_stats['median_time']:.4f}s "
+                            f"±{build_stats['stderr']:.5f}s  "
+                            f"min={build_stats['min_time']:.4f}s  "
+                            f"max={build_stats['max_time']:.4f}s  "
+                            f"n={build_stats['n']}"
+                        )
+                    elif build_err:
+                        print(f"           Build benchmark warning: {build_err}")
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = total_pass_time(res) or 0.0
@@ -2409,11 +2411,12 @@ def _table_cursor_comparison(f, all_variants_results):
 
 
 def write_latex_tables(all_results: List[Tuple], out_file: Path,
-                       all_variants_results: Optional[List[Dict]] = None):
+                       all_variants_results: Optional[List[Dict]] = None,
+                       include_build_pass: bool = False):
     with open(out_file, "w") as f:
         f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
         f.write("% Requires: \\usepackage{booktabs} in preamble\n\n")
-        _table_summary(f, all_results, all_variants_results)
+        _table_summary(f, all_results, all_variants_results, include_build_pass=include_build_pass)
         _table_papi_summary(f, all_results)
         if all_variants_results:
             _table_cursor_comparison(f, all_variants_results)
@@ -2510,7 +2513,8 @@ def _merge_octree_results(all_results: List[Tuple]) -> Tuple[Optional[Tuple[Benc
     return combined, filtered
 
 
-def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = None):
+def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = None,
+                   include_build_pass: bool = False):
     """
     Table 1: one row per program.
     Program | ADT fields | SoA bufs | End-to-end AoS/SoA/Speedup
@@ -2527,10 +2531,13 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 include_aos_imm = True
                 aos_imm_map[entry.get("program", "")] = ai
 
+    build_sentence = ("End-to-end includes the build pass. "
+                      if include_build_pass else
+                      "End-to-end excludes build timing. ")
     f.write(
         "\\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) "
         "and speedup split by pass type. "
-        "End-to-end includes the build pass when instrumented. "
+        + build_sentence +
         "When present, the OctTree row includes ColorOctree passes; a separate "
         "ColorOctree row reports only those passes. "
         "ADT fields = non-recursive fields annotated with {\\tt @BENCH adt\\_fields}; "
@@ -4376,6 +4383,9 @@ def main():
                     help="Save full exe stdout to benchmark_output/raw_output/. "
                          "Each file is <stem>.<variant>.stdout.txt and contains "
                          "the ITER TIMES list for every pass for manual inspection.")
+    ap.add_argument("--include-build-pass", action="store_true",
+                    help="Also benchmark build-only executables and include build timing "
+                         "in end-to-end totals and paper tables. Default: off.")
     ap.add_argument("--benchmark-immutable", "--benchmark-imm", action="store_true",
                     help="Also compile and benchmark immutable cursor variants "
                          "(aos_imm, soa_imm) in addition to mutable cursor variants. "
@@ -4416,6 +4426,7 @@ def main():
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
+    print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no (excluded everywhere)'}")
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:
@@ -4471,6 +4482,7 @@ def main():
             prog, args.programs_dir, args.output_dir,
             args.iterations, args.clean, source_cls_all,
             dump_raw=args.dump_raw,
+            include_build_pass=args.include_build_pass,
             benchmark_immutable=args.benchmark_immutable,
             benchmark_baseline_gibbon=args.benchmark_baseline_gibbon,
             benchmark_ghc=args.benchmark_ghc,
@@ -4545,7 +4557,12 @@ def main():
         print("Generating conference paper materials ...")
         print(f"{'='*72}")
         # Get extended results if they were collected
-        write_latex_tables(all_results, args.latex_table, extended_results)
+        write_latex_tables(
+            all_results,
+            args.latex_table,
+            extended_results,
+            include_build_pass=args.include_build_pass,
+        )
         compile_latex_preview(args.latex_table, args.figures_dir)
         if HAS_PLOT_LIBS:
             generate_all_figures(all_results, args.figures_dir)

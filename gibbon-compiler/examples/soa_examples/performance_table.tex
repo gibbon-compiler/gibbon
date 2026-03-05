@@ -4,7 +4,7 @@
 % -- Table 1: Summary by pass type --
 \begin{table}[t]
 \centering
-\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. End-to-end includes the build pass when instrumented. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means SoA is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. End-to-end excludes build timing. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means SoA is faster; \textbf{bold} marks ${>}1.1{\times}$.}
 \label{tab:summary}
 \small
 \begin{tabular}{l c c r r r r r r r r r}
@@ -13,20 +13,20 @@
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
  & fields & bufs & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
 \midrule
-OctTree & 16 & 9 & 3.825 & 8.083 & 0.47$\times$ & 0.3794 & 0.3275 & \textbf{1.16$\times$} & 0.3038 & 0.3483 & 0.87$\times$ \\
-Compiler & 9 & 8 & 0.4941 & 0.4275 & \textbf{1.16$\times$} & 0.1284 & 0.0391 & \textbf{3.29$\times$} & 0.1595 & 0.1802 & 0.89$\times$ \\
-DBQuery & 15 & 13 & 0.4769 & 0.4882 & 0.98$\times$ & 0.1210 & 0.0872 & \textbf{1.39$\times$} & 0.1380 & 0.1662 & 0.83$\times$ \\
-DecisionTree & 7 & 6 & 4.270 & 3.987 & 1.07$\times$ & 3.850 & 3.547 & 1.09$\times$ & -- & -- & -- \\
-DomTree & 15 & 14 & 0.4330 & 0.5235 & 0.83$\times$ & 0.1389 & 0.0636 & \textbf{2.18$\times$} & 0.0585 & 0.0786 & 0.74$\times$ \\
-KDTree & 17 & 16 & 0.4344 & 0.3107 & \textbf{1.40$\times$} & 0.1793 & 0.1394 & \textbf{1.29$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 0.3461 & 0.3371 & 1.03$\times$ & 0.0316 & 0.0050 & \textbf{6.34$\times$} & -- & -- & -- \\
-List & 2 & 2 & 0.9402 & 1.108 & 0.85$\times$ & 0.3272 & 0.3070 & 1.07$\times$ & 0.2516 & 0.3393 & 0.74$\times$ \\
-MonoTree & 3 & 2 & 0.2451 & 0.1219 & \textbf{2.01$\times$} & 0.0175 & 0.0223 & 0.78$\times$ & 0.0457 & 0.0422 & 1.08$\times$ \\
-ObjectGraph & 5 & 4 & 0.3092 & 0.4636 & 0.67$\times$ & 0.0913 & 0.0825 & \textbf{1.11$\times$} & 0.1428 & 0.1620 & 0.88$\times$ \\
-PiecewiseFunctions & 8 & 7 & 0.6211 & 0.6073 & 1.02$\times$ & 0.1357 & 0.0911 & \textbf{1.49$\times$} & 0.2364 & 0.2566 & 0.92$\times$ \\
-TernaryTree & 5 & 3 & 0.3270 & 0.3283 & 1.00$\times$ & 0.0304 & 0.0289 & 1.05$\times$ & 0.0840 & 0.0775 & 1.08$\times$ \\
-Trie & 10 & 9 & 0.4213 & 0.4108 & 1.03$\times$ & 0.0644 & 0.0319 & \textbf{2.02$\times$} & 0.1496 & 0.1678 & 0.89$\times$ \\
-ColorOctree & 25 & 18 & 0.4706 & 0.7767 & 0.61$\times$ & 0.0918 & 0.0766 & \textbf{1.20$\times$} & -- & -- & -- \\
+OctTree & 16 & 9 & 0.6708 & 0.6780 & 0.99$\times$ & 0.3685 & 0.3288 & \textbf{1.12$\times$} & 0.3023 & 0.3492 & 0.87$\times$ \\
+Compiler & 9 & 8 & 0.2848 & 0.2188 & \textbf{1.30$\times$} & 0.1253 & 0.0390 & \textbf{3.21$\times$} & 0.1595 & 0.1798 & 0.89$\times$ \\
+DBQuery & 15 & 13 & 0.2563 & 0.2535 & 1.01$\times$ & 0.1183 & 0.0873 & \textbf{1.36$\times$} & 0.1380 & 0.1663 & 0.83$\times$ \\
+DecisionTree & 7 & 6 & 3.821 & 3.058 & \textbf{1.25$\times$} & 3.821 & 3.058 & \textbf{1.25$\times$} & -- & -- & -- \\
+DomTree & 15 & 14 & 0.1945 & 0.1428 & \textbf{1.36$\times$} & 0.1361 & 0.0640 & \textbf{2.13$\times$} & 0.0584 & 0.0788 & 0.74$\times$ \\
+KDTree & 17 & 16 & 0.1765 & 0.1386 & \textbf{1.27$\times$} & 0.1765 & 0.1386 & \textbf{1.27$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.0291 & 0.0050 & \textbf{5.79$\times$} & 0.0291 & 0.0050 & \textbf{5.79$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.5765 & 0.6368 & 0.91$\times$ & 0.3252 & 0.2997 & 1.08$\times$ & 0.2513 & 0.3370 & 0.75$\times$ \\
+MonoTree & 3 & 2 & 0.0629 & 0.0645 & 0.98$\times$ & 0.0171 & 0.0222 & 0.77$\times$ & 0.0458 & 0.0423 & 1.08$\times$ \\
+ObjectGraph & 5 & 4 & 0.2339 & 0.2391 & 0.98$\times$ & 0.0910 & 0.0789 & \textbf{1.15$\times$} & 0.1429 & 0.1602 & 0.89$\times$ \\
+PiecewiseFunctions & 8 & 7 & 0.3773 & 0.3493 & 1.08$\times$ & 0.1407 & 0.0900 & \textbf{1.56$\times$} & 0.2366 & 0.2593 & 0.91$\times$ \\
+TernaryTree & 5 & 3 & 0.1134 & 0.1062 & 1.07$\times$ & 0.0294 & 0.0289 & 1.02$\times$ & 0.0839 & 0.0773 & 1.09$\times$ \\
+Trie & 10 & 9 & 0.2111 & 0.1992 & 1.06$\times$ & 0.0620 & 0.0320 & \textbf{1.94$\times$} & 0.1491 & 0.1672 & 0.89$\times$ \\
+ColorOctree & 25 & 18 & 0.0881 & 0.0762 & \textbf{1.16$\times$} & 0.0881 & 0.0762 & \textbf{1.16$\times$} & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -47,27 +47,27 @@ ColorOctree & 25 & 18 & 0.4706 & 0.7767 & 0.61$\times$ & 0.0918 & 0.0766 & \text
 \toprule
 \textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} \\
 \midrule
-Compiler & 3.544 & -- & \textbf{2.996} \\
-DBQuery & 3.321 & -- & \textbf{3.200} \\
-DecisionTree & 43.42 & -- & \textbf{39.46} \\
-DomTree & 2.702 & -- & \textbf{2.183} \\
-KDTree & 2.232 & -- & \textbf{1.867} \\
-LinearListReduction & 0.6698 & -- & \textbf{0.5109} \\
-List & \textbf{7.022} & -- & 7.950 \\
-MonoTree & 1.023 & -- & \textbf{0.9381} \\
-ObjectGraph & \textbf{2.918} & -- & 3.294 \\
-Oct:sumMass & \textbf{0.7548} & -- & 1.170 \\
-Oct:sumEnergy & \textbf{0.8106} & -- & 1.216 \\
-Oct:countActive & \textbf{0.7891} & -- & 1.186 \\
-Oct:countParticles & \textbf{0.9111} & -- & 1.147 \\
-Oct:barnesHutPotential & \textbf{0.8620} & -- & 1.409 \\
-Oct:fmmPotential & \textbf{1.445} & -- & 1.906 \\
-Oct:scaleEnergy & \textbf{2.154} & -- & 3.066 \\
-Oct:clearFlags & \textbf{2.190} & -- & 2.936 \\
-PiecewiseFunctions & 4.561 & -- & \textbf{4.558} \\
-TernaryTree & \textbf{1.397} & -- & 1.471 \\
-Trie & \textbf{2.576} & -- & 2.700 \\
-ColorOctree & \textbf{1.314} & -- & 1.563 \\
+Compiler & 3.620 & -- & \textbf{2.835} \\
+DBQuery & 3.358 & -- & \textbf{3.204} \\
+DecisionTree & 42.81 & -- & \textbf{34.61} \\
+DomTree & 2.486 & -- & \textbf{2.071} \\
+KDTree & \textbf{2.114} & -- & 2.142 \\
+LinearListReduction & 0.6345 & -- & \textbf{0.4064} \\
+List & \textbf{6.819} & -- & 8.054 \\
+MonoTree & \textbf{0.8829} & -- & 1.004 \\
+ObjectGraph & 3.164 & -- & \textbf{3.124} \\
+Oct:sumMass & \textbf{0.6184} & -- & 1.175 \\
+Oct:sumEnergy & \textbf{0.7539} & -- & 1.238 \\
+Oct:countActive & \textbf{0.7952} & -- & 1.176 \\
+Oct:countParticles & \textbf{0.7462} & -- & 1.153 \\
+Oct:barnesHutPotential & \textbf{0.8036} & -- & 1.413 \\
+Oct:fmmPotential & \textbf{1.482} & -- & 2.035 \\
+Oct:scaleEnergy & \textbf{2.158} & -- & 2.955 \\
+Oct:clearFlags & \textbf{2.187} & -- & 2.949 \\
+PiecewiseFunctions & 4.762 & -- & \textbf{4.341} \\
+TernaryTree & 1.749 & -- & \textbf{1.470} \\
+Trie & \textbf{2.549} & -- & 2.656 \\
+ColorOctree & \textbf{1.354} & -- & 1.558 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -81,27 +81,27 @@ ColorOctree & \textbf{1.314} & -- & 1.563 \\
 \toprule
 \textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
 \midrule
-Compiler & \textbf{1.18$\times$} & -- & -- \\
-DBQuery & 1.04$\times$ & -- & -- \\
-DecisionTree & \textbf{1.10$\times$} & -- & -- \\
-DomTree & \textbf{1.24$\times$} & -- & -- \\
-KDTree & \textbf{1.20$\times$} & -- & -- \\
-LinearListReduction & \textbf{1.31$\times$} & -- & -- \\
-List & 0.88$\times$ & -- & -- \\
-MonoTree & 1.09$\times$ & -- & -- \\
-ObjectGraph & 0.89$\times$ & -- & -- \\
-Oct:sumMass & 0.65$\times$ & -- & -- \\
-Oct:sumEnergy & 0.67$\times$ & -- & -- \\
-Oct:countActive & 0.67$\times$ & -- & -- \\
-Oct:countParticles & 0.79$\times$ & -- & -- \\
-Oct:barnesHutPotential & 0.61$\times$ & -- & -- \\
-Oct:fmmPotential & 0.76$\times$ & -- & -- \\
-Oct:scaleEnergy & 0.70$\times$ & -- & -- \\
-Oct:clearFlags & 0.75$\times$ & -- & -- \\
-PiecewiseFunctions & 1.00$\times$ & -- & -- \\
-TernaryTree & 0.95$\times$ & -- & -- \\
-Trie & 0.95$\times$ & -- & -- \\
-ColorOctree & 0.84$\times$ & -- & -- \\
+Compiler & \textbf{1.28$\times$} & -- & -- \\
+DBQuery & 1.05$\times$ & -- & -- \\
+DecisionTree & \textbf{1.24$\times$} & -- & -- \\
+DomTree & \textbf{1.20$\times$} & -- & -- \\
+KDTree & 0.99$\times$ & -- & -- \\
+LinearListReduction & \textbf{1.56$\times$} & -- & -- \\
+List & 0.85$\times$ & -- & -- \\
+MonoTree & 0.88$\times$ & -- & -- \\
+ObjectGraph & 1.01$\times$ & -- & -- \\
+Oct:sumMass & 0.53$\times$ & -- & -- \\
+Oct:sumEnergy & 0.61$\times$ & -- & -- \\
+Oct:countActive & 0.68$\times$ & -- & -- \\
+Oct:countParticles & 0.65$\times$ & -- & -- \\
+Oct:barnesHutPotential & 0.57$\times$ & -- & -- \\
+Oct:fmmPotential & 0.73$\times$ & -- & -- \\
+Oct:scaleEnergy & 0.73$\times$ & -- & -- \\
+Oct:clearFlags & 0.74$\times$ & -- & -- \\
+PiecewiseFunctions & 1.10$\times$ & -- & -- \\
+TernaryTree & \textbf{1.19$\times$} & -- & -- \\
+Trie & 0.96$\times$ & -- & -- \\
+ColorOctree & 0.87$\times$ & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -116,29 +116,20 @@ ColorOctree & 0.84$\times$ & -- & -- \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-barnesHutPotential & F & 11/16 & 31\% & 0.0427$\pm$0.00006 & 0.0392$\pm$0.00002 & 1.09$\times$ \\
-countActive & F & 10/16 & 38\% & 0.0376$\pm$0.00004 & \textbf{0.0291$\pm$0.00001} & \textbf{1.29$\times$} \\
-countParticles & F & 8/16 & 50\% & 0.0373$\pm$0.00731 & \textbf{0.0266$\pm$0.00008} & \textbf{1.40$\times$} \\
-fmmPotential & F & 12/16 & 25\% & 0.0977$\pm$0.00004 & 0.0956$\pm$0.00003 & 1.02$\times$ \\
-sumEnergy & F & 12/16 & 25\% & 0.0372$\pm$0.00002 & \textbf{0.0333$\pm$0.00010} & \textbf{1.12$\times$} \\
-sumMass & F & 10/16 & 38\% & 0.0351$\pm$0.00004 & \textbf{0.0271$\pm$0.00004} & \textbf{1.29$\times$} \\
-clearFlags & M & 15/16 & 6\% & \textbf{0.1539$\pm$0.00021} & 0.1736$\pm$0.00015 & 0.89$\times$ \\
-scaleEnergy & M & 16/16 & 0\% & \textbf{0.1499$\pm$0.00028} & 0.1747$\pm$0.01118 & 0.86$\times$ \\
-build & ? & -- & -- & \textbf{0.3425$\pm$0.01864} & 0.8390$\pm$0.03814 & 0.41$\times$ \\
-ColorOctree.build & ? & -- & -- & \textbf{0.3788$\pm$0.02517} & 0.7001$\pm$0.02336 & 0.54$\times$ \\
-OctTree\_clearFlags.build & ? & -- & -- & \textbf{0.3525$\pm$0.01524} & 0.8393$\pm$0.02144 & 0.42$\times$ \\
-OctTree\_countActive.build & ? & -- & -- & \textbf{0.3428$\pm$0.01271} & 0.8427$\pm$0.01868 & 0.41$\times$ \\
-OctTree\_countParticles.build & ? & -- & -- & \textbf{0.3433$\pm$0.01746} & 0.8378$\pm$0.02868 & 0.41$\times$ \\
-OctTree\_fmmPotential.build & ? & -- & -- & \textbf{0.3425$\pm$0.02528} & 0.8373$\pm$0.01643 & 0.41$\times$ \\
-OctTree\_scaleEnergy.build & ? & -- & -- & \textbf{0.3531$\pm$0.01726} & 0.8338$\pm$0.01811 & 0.42$\times$ \\
-OctTree\_sumEnergy.build & ? & -- & -- & \textbf{0.3425$\pm$0.01141} & 0.8379$\pm$0.02745 & 0.41$\times$ \\
-OctTree\_sumMass.build & ? & -- & -- & \textbf{0.3436$\pm$0.01490} & 0.8391$\pm$0.01603 & 0.41$\times$ \\
+barnesHutPotential & F & 11/16 & 31\% & 0.0407$\pm$0.00002 & 0.0391$\pm$0.00006 & 1.04$\times$ \\
+countActive & F & 10/16 & 38\% & 0.0368$\pm$0.00003 & \textbf{0.0291$\pm$0.00001} & \textbf{1.27$\times$} \\
+countParticles & F & 8/16 & 50\% & 0.0355$\pm$0.00004 & \textbf{0.0269$\pm$0.00017} & \textbf{1.32$\times$} \\
+fmmPotential & F & 12/16 & 25\% & 0.0974$\pm$0.00006 & 0.0954$\pm$0.00002 & 1.02$\times$ \\
+sumEnergy & F & 12/16 & 25\% & 0.0351$\pm$0.00002 & 0.0329$\pm$0.00010 & 1.07$\times$ \\
+sumMass & F & 10/16 & 38\% & 0.0348$\pm$0.00002 & \textbf{0.0291$\pm$0.00004} & \textbf{1.20$\times$} \\
+clearFlags & M & 15/16 & 6\% & \textbf{0.1530$\pm$0.00041} & 0.1740$\pm$0.00016 & 0.88$\times$ \\
+scaleEnergy & M & 16/16 & 0\% & \textbf{0.1493$\pm$0.00027} & 0.1752$\pm$0.00021 & 0.85$\times$ \\
 \midrule
-paletteEntriesQuantized & F & 13/25 & 48\% & 0.0443$\pm$0.00004 & \textbf{0.0335$\pm$0.00007} & \textbf{1.32$\times$} \\
-quantizationErrorProxy & F & 10/25 & 60\% & 0.0476$\pm$0.00003 & \textbf{0.0431$\pm$0.00002} & \textbf{1.10$\times$} \\
+paletteEntriesQuantized & F & 13/25 & 48\% & 0.0423$\pm$0.00004 & \textbf{0.0335$\pm$0.00010} & \textbf{1.26$\times$} \\
+quantizationErrorProxy & F & 10/25 & 60\% & 0.0458$\pm$0.00008 & 0.0428$\pm$0.00002 & 1.07$\times$ \\
 \midrule
-\textbf{Total} & & & & 3.825 & 8.083 & 0.47$\times$ \\
-\textbf{Geomean} & & & & & & 0.71$\times$ \\
+\textbf{Total} & & & & 0.6708 & 0.6780 & 0.99$\times$ \\
+\textbf{Geomean} & & & & & & 1.09$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -154,21 +145,20 @@ quantizationErrorProxy & F & 10/25 & 60\% & 0.0476$\pm$0.00003 & \textbf{0.0431$
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-blockCountPass & F & 2/9 & 78\% & 0.0123$\pm$0.00002 & \textbf{0.0019$\pm$0.00000} & \textbf{6.39$\times$} \\
-branchStatsPass & F & 2/9 & 78\% & 0.0119$\pm$0.00002 & \textbf{0.0033$\pm$0.00001} & \textbf{3.55$\times$} \\
-castInstCountPass & F & 3/9 & 67\% & 0.0184$\pm$0.00002 & \textbf{0.0013$\pm$0.00001} & \textbf{14.21$\times$} \\
-has cycle & F & 4/9 & 56\% & 0.0247$\pm$0.00094 & \textbf{0.0176$\pm$0.00133} & \textbf{1.40$\times$} \\
-instCountPass & F & 2/9 & 78\% & 0.0123$\pm$0.00006 & \textbf{0.0019$\pm$0.00001} & \textbf{6.39$\times$} \\
-latencyModelPass & F & 3/9 & 67\% & 0.0121$\pm$0.00002 & \textbf{0.0029$\pm$0.00001} & \textbf{4.21$\times$} \\
-memoryOpStatsPass & F & 3/9 & 67\% & 0.0120$\pm$0.00002 & \textbf{0.0037$\pm$0.00001} & \textbf{3.19$\times$} \\
-throughputModelPass & F & 3/9 & 67\% & 0.0122$\pm$0.00002 & \textbf{0.0029$\pm$0.00001} & \textbf{4.16$\times$} \\
-verifyIR & F & 9/9 & 0\% & 0.0126$\pm$0.00002 & \textbf{0.0034$\pm$0.00001} & \textbf{3.70$\times$} \\
-stripSideEffectsPass & M & 7/9 & 22\% & \textbf{0.0799$\pm$0.00048} & 0.0897$\pm$0.00016 & 0.89$\times$ \\
-targetReturnPass & M & 9/9 & 0\% & \textbf{0.0796$\pm$0.00044} & 0.0905$\pm$0.00944 & 0.88$\times$ \\
-build & ? & -- & -- & 0.2062$\pm$0.01172 & 0.2082$\pm$0.02484 & 0.99$\times$ \\
+blockCountPass & F & 2/9 & 78\% & 0.0119$\pm$0.00001 & \textbf{0.0019$\pm$0.00000} & \textbf{6.20$\times$} \\
+branchStatsPass & F & 2/9 & 78\% & 0.0115$\pm$0.00001 & \textbf{0.0033$\pm$0.00001} & \textbf{3.48$\times$} \\
+castInstCountPass & F & 3/9 & 67\% & 0.0183$\pm$0.00460 & \textbf{0.0013$\pm$0.00001} & \textbf{13.90$\times$} \\
+has cycle & F & 4/9 & 56\% & 0.0241$\pm$0.00095 & \textbf{0.0176$\pm$0.00132} & \textbf{1.37$\times$} \\
+instCountPass & F & 2/9 & 78\% & 0.0119$\pm$0.00002 & \textbf{0.0019$\pm$0.00001} & \textbf{6.21$\times$} \\
+latencyModelPass & F & 3/9 & 67\% & 0.0118$\pm$0.00001 & \textbf{0.0029$\pm$0.00001} & \textbf{4.12$\times$} \\
+memoryOpStatsPass & F & 3/9 & 67\% & 0.0117$\pm$0.00002 & \textbf{0.0037$\pm$0.00001} & \textbf{3.13$\times$} \\
+throughputModelPass & F & 3/9 & 67\% & 0.0118$\pm$0.00001 & \textbf{0.0029$\pm$0.00000} & \textbf{4.06$\times$} \\
+verifyIR & F & 9/9 & 0\% & 0.0123$\pm$0.00002 & \textbf{0.0034$\pm$0.00001} & \textbf{3.62$\times$} \\
+stripSideEffectsPass & M & 7/9 & 22\% & \textbf{0.0798$\pm$0.00051} & 0.0900$\pm$0.00014 & 0.89$\times$ \\
+targetReturnPass & M & 9/9 & 0\% & \textbf{0.0797$\pm$0.00054} & 0.0898$\pm$0.00034 & 0.89$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.4941 & 0.4275 & \textbf{1.16$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{2.97$\times$} \\
+\textbf{Total} & & & & 0.2848 & 0.2188 & \textbf{1.30$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{3.22$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -184,18 +174,17 @@ build & ? & -- & -- & 0.2062$\pm$0.01172 & 0.2082$\pm$0.02484 & 0.99$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-countJoins & F & 3/15 & 80\% & 0.0190$\pm$0.00666 & \textbf{0.0109$\pm$0.00003} & \textbf{1.75$\times$} \\
-filterSelectivitySkew & F & 5/15 & 67\% & 0.0188$\pm$0.00002 & \textbf{0.0124$\pm$0.00003} & \textbf{1.52$\times$} \\
-hashJoinPressure & F & 5/15 & 67\% & 0.0204$\pm$0.00001 & \textbf{0.0129$\pm$0.00005} & \textbf{1.58$\times$} \\
-sumCost & F & 6/15 & 60\% & 0.0188$\pm$0.00003 & \textbf{0.0149$\pm$0.00005} & \textbf{1.27$\times$} \\
-sumMemory & F & 6/15 & 60\% & 0.0189$\pm$0.00002 & \textbf{0.0145$\pm$0.00009} & \textbf{1.30$\times$} \\
-sumRows & F & 6/15 & 60\% & 0.0250$\pm$0.00017 & \textbf{0.0216$\pm$0.00010} & \textbf{1.16$\times$} \\
-clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0695$\pm$0.00027} & 0.0827$\pm$0.00007 & 0.84$\times$ \\
-scaleCosts & M & 15/15 & 0\% & \textbf{0.0685$\pm$0.00021} & 0.0835$\pm$0.00010 & 0.82$\times$ \\
-build & ? & -- & -- & 0.2179$\pm$0.02085 & 0.2349$\pm$0.01594 & 0.93$\times$ \\
+countJoins & F & 3/15 & 80\% & 0.0185$\pm$0.00002 & \textbf{0.0109$\pm$0.00004} & \textbf{1.70$\times$} \\
+filterSelectivitySkew & F & 5/15 & 67\% & 0.0183$\pm$0.00002 & \textbf{0.0124$\pm$0.00003} & \textbf{1.48$\times$} \\
+hashJoinPressure & F & 5/15 & 67\% & 0.0199$\pm$0.00003 & \textbf{0.0130$\pm$0.00003} & \textbf{1.53$\times$} \\
+sumCost & F & 6/15 & 60\% & 0.0184$\pm$0.00002 & \textbf{0.0149$\pm$0.00004} & \textbf{1.23$\times$} \\
+sumMemory & F & 6/15 & 60\% & 0.0185$\pm$0.00002 & \textbf{0.0145$\pm$0.00007} & \textbf{1.28$\times$} \\
+sumRows & F & 6/15 & 60\% & 0.0246$\pm$0.00012 & \textbf{0.0216$\pm$0.00012} & \textbf{1.14$\times$} \\
+clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0694$\pm$0.00808} & 0.0828$\pm$0.00008 & 0.84$\times$ \\
+scaleCosts & M & 15/15 & 0\% & \textbf{0.0686$\pm$0.00022} & 0.0835$\pm$0.00008 & 0.82$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.4769 & 0.4882 & 0.98$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.20$\times$} \\
+\textbf{Total} & & & & 0.2563 & 0.2535 & 1.01$\times$ \\
+\textbf{Geomean} & & & & & & \textbf{1.22$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -211,22 +200,21 @@ build & ? & -- & -- & 0.2179$\pm$0.02085 & 0.2349$\pm$0.01594 & 0.93$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-classify Batch & F & 5/7 & 29\% & 3.306$\pm$0.0207 & 3.204$\pm$0.0335 & 1.03$\times$ \\
-classify Depth & F & 4/7 & 43\% & 0.0470$\pm$0.00005 & \textbf{0.0366$\pm$0.00019} & \textbf{1.28$\times$} \\
-classify tree & F & 5/7 & 29\% & 0.0469$\pm$0.00897 & \textbf{0.0368$\pm$0.00016} & \textbf{1.27$\times$} \\
-countFeatureUses & F & 3/7 & 57\% & 0.0505$\pm$0.00003 & \textbf{0.0319$\pm$0.00005} & \textbf{1.58$\times$} \\
-countLeaves & F & 2/7 & 71\% & 0.0475$\pm$0.00741 & \textbf{0.0249$\pm$0.00863} & \textbf{1.91$\times$} \\
-countNodes & F & 2/7 & 71\% & 0.0476$\pm$0.00002 & \textbf{0.0264$\pm$0.00006} & \textbf{1.81$\times$} \\
-countSmallLeaves & F & 3/7 & 57\% & 0.0510$\pm$0.00004 & \textbf{0.0318$\pm$0.00008} & \textbf{1.61$\times$} \\
-inferenceCost & F & 2/7 & 71\% & 0.0507$\pm$0.00004 & \textbf{0.0290$\pm$0.00002} & \textbf{1.75$\times$} \\
-sumImpurity & F & 3/7 & 57\% & 0.0505$\pm$0.00003 & \textbf{0.0320$\pm$0.00005} & \textbf{1.58$\times$} \\
-sumPathLengths & F & 3/7 & 57\% & 0.0527$\pm$0.00002 & \textbf{0.0335$\pm$0.00008} & \textbf{1.57$\times$} \\
-sumSamples & F & 3/7 & 57\% & 0.0483$\pm$0.00010 & \textbf{0.0319$\pm$0.00005} & \textbf{1.51$\times$} \\
-treeDepth & F & 2/7 & 71\% & 0.0511$\pm$0.00002 & \textbf{0.0283$\pm$0.00005} & \textbf{1.81$\times$} \\
-build & ? & -- & -- & 0.4205$\pm$0.01295 & 0.4392$\pm$0.01342 & 0.96$\times$ \\
+classify Batch & F & 5/7 & 29\% & 3.279$\pm$0.0305 & \textbf{2.712$\pm$0.0241} & \textbf{1.21$\times$} \\
+classify Depth & F & 4/7 & 43\% & 0.0469$\pm$0.00002 & \textbf{0.0369$\pm$0.00009} & \textbf{1.27$\times$} \\
+classify tree & F & 5/7 & 29\% & 0.0469$\pm$0.00002 & \textbf{0.0370$\pm$0.00786} & \textbf{1.27$\times$} \\
+countFeatureUses & F & 3/7 & 57\% & 0.0501$\pm$0.00002 & \textbf{0.0324$\pm$0.00005} & \textbf{1.55$\times$} \\
+countLeaves & F & 2/7 & 71\% & 0.0475$\pm$0.00009 & \textbf{0.0248$\pm$0.00004} & \textbf{1.91$\times$} \\
+countNodes & F & 2/7 & 71\% & 0.0475$\pm$0.00003 & \textbf{0.0263$\pm$0.00007} & \textbf{1.80$\times$} \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0510$\pm$0.00002 & \textbf{0.0322$\pm$0.00007} & \textbf{1.58$\times$} \\
+inferenceCost & F & 2/7 & 71\% & 0.0504$\pm$0.00002 & \textbf{0.0290$\pm$0.00004} & \textbf{1.73$\times$} \\
+sumImpurity & F & 3/7 & 57\% & 0.0501$\pm$0.00003 & \textbf{0.0326$\pm$0.00122} & \textbf{1.54$\times$} \\
+sumPathLengths & F & 3/7 & 57\% & 0.0524$\pm$0.00002 & \textbf{0.0340$\pm$0.00004} & \textbf{1.54$\times$} \\
+sumSamples & F & 3/7 & 57\% & 0.0482$\pm$0.00170 & \textbf{0.0321$\pm$0.00005} & \textbf{1.50$\times$} \\
+treeDepth & F & 2/7 & 71\% & 0.0509$\pm$0.00004 & \textbf{0.0281$\pm$0.00002} & \textbf{1.81$\times$} \\
 \midrule
-\textbf{Total} & & & & 4.270 & 3.987 & 1.07$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.48$\times$} \\
+\textbf{Total} & & & & 3.821 & 3.058 & \textbf{1.25$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.54$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -242,16 +230,15 @@ build & ? & -- & -- & 0.4205$\pm$0.01295 & 0.4392$\pm$0.01342 & 0.96$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-count styled & F & 3/15 & 80\% & 0.0345$\pm$0.00002 & \textbf{0.0114$\pm$0.00005} & \textbf{3.03$\times$} \\
-find max Bottom & F & 5/15 & 67\% & 0.0344$\pm$0.00635 & \textbf{0.0226$\pm$0.00007} & \textbf{1.53$\times$} \\
-SumArea & F & 6/15 & 60\% & 0.0357$\pm$0.00002 & \textbf{0.0180$\pm$0.00010} & \textbf{1.98$\times$} \\
-sumTextWidth & F & 3/15 & 80\% & 0.0343$\pm$0.00003 & \textbf{0.0116$\pm$0.00006} & \textbf{2.95$\times$} \\
-computeWidths & M & 14/15 & 7\% & \textbf{0.0296$\pm$0.00007} & 0.0438$\pm$0.00015 & 0.68$\times$ \\
-scaleLayout & M & 15/15 & 0\% & \textbf{0.0289$\pm$0.00009} & 0.0348$\pm$0.00009 & 0.83$\times$ \\
-build & ? & -- & -- & \textbf{0.2357$\pm$0.01937} & 0.3814$\pm$0.01841 & 0.62$\times$ \\
+count styled & F & 3/15 & 80\% & 0.0337$\pm$0.00002 & \textbf{0.0115$\pm$0.00004} & \textbf{2.94$\times$} \\
+find max Bottom & F & 5/15 & 67\% & 0.0337$\pm$0.00002 & \textbf{0.0226$\pm$0.00006} & \textbf{1.49$\times$} \\
+SumArea & F & 6/15 & 60\% & 0.0349$\pm$0.00003 & \textbf{0.0183$\pm$0.00012} & \textbf{1.91$\times$} \\
+sumTextWidth & F & 3/15 & 80\% & 0.0337$\pm$0.00003 & \textbf{0.0116$\pm$0.00005} & \textbf{2.90$\times$} \\
+computeWidths & M & 14/15 & 7\% & \textbf{0.0296$\pm$0.00008} & 0.0442$\pm$0.00012 & 0.67$\times$ \\
+scaleLayout & M & 15/15 & 0\% & \textbf{0.0288$\pm$0.00011} & 0.0346$\pm$0.00010 & 0.83$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.4330 & 0.5235 & 0.83$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.38$\times$} \\
+\textbf{Total} & & & & 0.1945 & 0.1428 & \textbf{1.36$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.54$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -267,16 +254,15 @@ build & ? & -- & -- & \textbf{0.2357$\pm$0.01937} & 0.3814$\pm$0.01841 & 0.62$\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-countInRange tight\_box & F & 13/17 & 24\% & 0.0280$\pm$0.00002 & \textbf{0.0201$\pm$0.00003} & \textbf{1.40$\times$} \\
-Find nearest Neighbour & F & 13/17 & 24\% & 0.0278$\pm$0.00005 & \textbf{0.0214$\pm$0.00002} & \textbf{1.30$\times$} \\
-photonMappingBenchmark & F & 12/17 & 29\% & 0.0427$\pm$0.00041 & 0.0406$\pm$0.00003 & 1.05$\times$ \\
-pointCloudNeighborhood & F & 11/17 & 35\% & 0.0248$\pm$0.00003 & \textbf{0.0165$\pm$0.00002} & \textbf{1.50$\times$} \\
-sumMassInRange & F & 14/17 & 18\% & 0.0272$\pm$0.00003 & \textbf{0.0201$\pm$0.00002} & \textbf{1.35$\times$} \\
-twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0287$\pm$0.00002 & \textbf{0.0207$\pm$0.00001} & \textbf{1.39$\times$} \\
-build & ? & -- & -- & 0.2551$\pm$0.02842 & \textbf{0.1713$\pm$0.01999} & \textbf{1.49$\times$} \\
+countInRange tight\_box & F & 13/17 & 24\% & 0.0276$\pm$0.00002 & \textbf{0.0198$\pm$0.00784} & \textbf{1.39$\times$} \\
+Find nearest Neighbour & F & 13/17 & 24\% & 0.0274$\pm$0.00002 & \textbf{0.0214$\pm$0.00003} & \textbf{1.28$\times$} \\
+photonMappingBenchmark & F & 12/17 & 29\% & 0.0418$\pm$0.00008 & 0.0403$\pm$0.00003 & 1.04$\times$ \\
+pointCloudNeighborhood & F & 11/17 & 35\% & 0.0245$\pm$0.00003 & \textbf{0.0164$\pm$0.00002} & \textbf{1.50$\times$} \\
+sumMassInRange & F & 14/17 & 18\% & 0.0271$\pm$0.00002 & \textbf{0.0198$\pm$0.00002} & \textbf{1.36$\times$} \\
+twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0283$\pm$0.00002 & \textbf{0.0208$\pm$0.00001} & \textbf{1.36$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.4344 & 0.3107 & \textbf{1.40$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.35$\times$} \\
+\textbf{Total} & & & & 0.1765 & 0.1386 & \textbf{1.27$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.31$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -292,11 +278,10 @@ build & ? & -- & -- & 0.2551$\pm$0.02842 & \textbf{0.1713$\pm$0.01999} & \textbf
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-reduction & F & 2/11 & 82\% & 0.0316$\pm$0.00003 & \textbf{0.0050$\pm$0.00001} & \textbf{6.34$\times$} \\
-build & ? & -- & -- & 0.3144$\pm$0.02348 & 0.3321$\pm$0.02388 & 0.95$\times$ \\
+reduction & F & 2/11 & 82\% & 0.0291$\pm$0.00002 & \textbf{0.0050$\pm$0.00001} & \textbf{5.79$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.3461 & 0.3371 & 1.03$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{2.45$\times$} \\
+\textbf{Total} & & & & 0.0291 & 0.0050 & \textbf{5.79$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{5.79$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -312,14 +297,13 @@ build & ? & -- & -- & 0.3144$\pm$0.02348 & 0.3321$\pm$0.02388 & 0.95$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-length List & F & 1/2 & 50\% & 0.0484$\pm$0.00003 & \textbf{0.0261$\pm$0.00007} & \textbf{1.85$\times$} \\
-sumList & F & 2/2 & 0\% & 0.1393$\pm$0.00010 & 0.1388$\pm$0.00115 & 1.00$\times$ \\
-sumList tail recursive & F & 2/2 & 0\% & 0.1394$\pm$0.01055 & 0.1421$\pm$0.00094 & 0.98$\times$ \\
-add1 List & M & 2/2 & 0\% & \textbf{0.2516$\pm$0.00106} & 0.3393$\pm$0.01084 & 0.74$\times$ \\
-build & ? & -- & -- & \textbf{0.3615$\pm$0.01854} & 0.4618$\pm$0.01965 & 0.78$\times$ \\
+length List & F & 1/2 & 50\% & 0.0492$\pm$0.00004 & \textbf{0.0262$\pm$0.00569} & \textbf{1.88$\times$} \\
+sumList & F & 2/2 & 0\% & 0.1380$\pm$0.00005 & 0.1376$\pm$0.01045 & 1.00$\times$ \\
+sumList tail recursive & F & 2/2 & 0\% & 0.1380$\pm$0.00025 & 0.1360$\pm$0.00032 & 1.01$\times$ \\
+add1 List & M & 2/2 & 0\% & \textbf{0.2513$\pm$0.00105} & 0.3370$\pm$0.01628 & 0.75$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.9402 & 1.108 & 0.85$\times$ \\
-\textbf{Geomean} & & & & & & 1.01$\times$ \\
+\textbf{Total} & & & & 0.5765 & 0.6368 & 0.91$\times$ \\
+\textbf{Geomean} & & & & & & 1.09$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -335,13 +319,12 @@ build & ? & -- & -- & \textbf{0.3615$\pm$0.01854} & 0.4618$\pm$0.01965 & 0.78$\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-sumTree & F & 3/3 & 0\% & \textbf{0.0091$\pm$0.00003} & 0.0114$\pm$0.00003 & 0.80$\times$ \\
-sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0084$\pm$0.00001} & 0.0110$\pm$0.00006 & 0.77$\times$ \\
-add1Tree & M & 3/3 & 0\% & 0.0457$\pm$0.01134 & 0.0422$\pm$0.00007 & 1.08$\times$ \\
-build & ? & -- & -- & 0.1818$\pm$0.01984 & \textbf{0.0573$\pm$0.01994} & \textbf{3.17$\times$} \\
+sumTree & F & 3/3 & 0\% & \textbf{0.0089$\pm$0.00002} & 0.0113$\pm$0.00003 & 0.79$\times$ \\
+sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0082$\pm$0.00002} & 0.0109$\pm$0.00007 & 0.76$\times$ \\
+add1Tree & M & 3/3 & 0\% & 0.0458$\pm$0.00104 & 0.0423$\pm$0.00005 & 1.08$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.2451 & 0.1219 & \textbf{2.01$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.20$\times$} \\
+\textbf{Total} & & & & 0.0629 & 0.0645 & 0.98$\times$ \\
+\textbf{Geomean} & & & & & & 0.86$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -357,19 +340,18 @@ build & ? & -- & -- & 0.1818$\pm$0.01984 & \textbf{0.0573$\pm$0.01994} & \textbf
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-countLargeItems & F & 3/5 & 40\% & 0.0126$\pm$0.00001 & \textbf{0.0105$\pm$0.00006} & \textbf{1.20$\times$} \\
-countMarked & F & 3/5 & 40\% & 0.0129$\pm$0.00001 & \textbf{0.0105$\pm$0.00088} & \textbf{1.23$\times$} \\
-countSurvivors & F & 4/5 & 20\% & 0.0137$\pm$0.00002 & 0.0129$\pm$0.00001 & 1.06$\times$ \\
-deadBytes & F & 4/5 & 20\% & 0.0136$\pm$0.00001 & \textbf{0.0123$\pm$0.00003} & \textbf{1.10$\times$} \\
-liveBytes & F & 4/5 & 20\% & 0.0133$\pm$0.00002 & 0.0124$\pm$0.00003 & 1.07$\times$ \\
-sumObjIds & F & 3/5 & 40\% & 0.0122$\pm$0.00002 & \textbf{0.0104$\pm$0.00005} & \textbf{1.18$\times$} \\
-totalHeapSize & F & 3/5 & 40\% & 0.0129$\pm$0.00002 & 0.0136$\pm$0.00670 & 0.95$\times$ \\
-sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0711$\pm$0.00023} & 0.0811$\pm$0.00011 & 0.88$\times$ \\
-touchHotObjects & M & 5/5 & 0\% & \textbf{0.0717$\pm$0.00009} & 0.0809$\pm$0.00007 & 0.89$\times$ \\
-build & ? & -- & -- & \textbf{0.0751$\pm$0.01984} & 0.2191$\pm$0.01964 & 0.34$\times$ \\
+countLargeItems & F & 3/5 & 40\% & 0.0126$\pm$0.00535 & \textbf{0.0104$\pm$0.00005} & \textbf{1.21$\times$} \\
+countMarked & F & 3/5 & 40\% & 0.0132$\pm$0.00528 & \textbf{0.0102$\pm$0.00004} & \textbf{1.29$\times$} \\
+countSurvivors & F & 4/5 & 20\% & 0.0135$\pm$0.00001 & 0.0128$\pm$0.00001 & 1.06$\times$ \\
+deadBytes & F & 4/5 & 20\% & 0.0134$\pm$0.00002 & 0.0123$\pm$0.00001 & 1.09$\times$ \\
+liveBytes & F & 4/5 & 20\% & 0.0132$\pm$0.00003 & 0.0123$\pm$0.00002 & 1.07$\times$ \\
+sumObjIds & F & 3/5 & 40\% & 0.0122$\pm$0.00001 & \textbf{0.0104$\pm$0.00006} & \textbf{1.18$\times$} \\
+totalHeapSize & F & 3/5 & 40\% & 0.0129$\pm$0.00021 & \textbf{0.0105$\pm$0.00006} & \textbf{1.23$\times$} \\
+sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0711$\pm$0.00019} & 0.0801$\pm$0.00005 & 0.89$\times$ \\
+touchHotObjects & M & 5/5 & 0\% & \textbf{0.0718$\pm$0.00010} & 0.0801$\pm$0.00989 & 0.90$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.3092 & 0.4636 & 0.67$\times$ \\
-\textbf{Geomean} & & & & & & 0.94$\times$ \\
+\textbf{Total} & & & & 0.2339 & 0.2391 & 0.98$\times$ \\
+\textbf{Geomean} & & & & & & 1.09$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -385,18 +367,17 @@ build & ? & -- & -- & \textbf{0.0751$\pm$0.01984} & 0.2191$\pm$0.01964 & 0.34$\t
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-autorefineMaxLevel & F & 4/8 & 50\% & 0.0209$\pm$0.00001 & 0.0195$\pm$0.00005 & 1.07$\times$ \\
-compressMass & F & 3/8 & 62\% & 0.0190$\pm$0.00001 & \textbf{0.0117$\pm$0.00544} & \textbf{1.62$\times$} \\
-lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0208$\pm$0.00004 & \textbf{0.0180$\pm$0.00735} & \textbf{1.16$\times$} \\
-norm2Estimate & F & 5/8 & 38\% & 0.0242$\pm$0.00003 & \textbf{0.0178$\pm$0.00001} & \textbf{1.36$\times$} \\
-pmapCutHistogram & F & 4/8 & 50\% & 0.0317$\pm$0.00003 & \textbf{0.0126$\pm$0.00001} & \textbf{2.51$\times$} \\
-truncateTolViolations & F & 3/8 & 62\% & 0.0192$\pm$0.00001 & \textbf{0.0115$\pm$0.00091} & \textbf{1.67$\times$} \\
-addConstPW & M & 8/8 & 0\% & 0.1170$\pm$0.00054 & 0.1286$\pm$0.00035 & 0.91$\times$ \\
-diffPW & M & 8/8 & 0\% & 0.1194$\pm$0.00042 & 0.1280$\pm$0.00035 & 0.93$\times$ \\
-build & ? & -- & -- & 0.2490$\pm$0.02076 & 0.2596$\pm$0.01534 & 0.96$\times$ \\
+autorefineMaxLevel & F & 4/8 & 50\% & 0.0219$\pm$0.00003 & \textbf{0.0194$\pm$0.00007} & \textbf{1.13$\times$} \\
+compressMass & F & 3/8 & 62\% & 0.0197$\pm$0.00005 & \textbf{0.0115$\pm$0.00004} & \textbf{1.71$\times$} \\
+lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0215$\pm$0.00002 & \textbf{0.0177$\pm$0.00004} & \textbf{1.21$\times$} \\
+norm2Estimate & F & 5/8 & 38\% & 0.0251$\pm$0.00004 & \textbf{0.0176$\pm$0.00001} & \textbf{1.43$\times$} \\
+pmapCutHistogram & F & 4/8 & 50\% & 0.0325$\pm$0.00003 & \textbf{0.0124$\pm$0.00001} & \textbf{2.61$\times$} \\
+truncateTolViolations & F & 3/8 & 62\% & 0.0200$\pm$0.00001 & \textbf{0.0113$\pm$0.00008} & \textbf{1.77$\times$} \\
+addConstPW & M & 8/8 & 0\% & \textbf{0.1176$\pm$0.01005} & 0.1308$\pm$0.00025 & 0.90$\times$ \\
+diffPW & M & 8/8 & 0\% & 0.1190$\pm$0.00037 & 0.1284$\pm$0.00030 & 0.93$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.6211 & 0.6073 & 1.02$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.28$\times$} \\
+\textbf{Total} & & & & 0.3773 & 0.3493 & 1.08$\times$ \\
+\textbf{Geomean} & & & & & & \textbf{1.38$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -412,12 +393,11 @@ build & ? & -- & -- & 0.2490$\pm$0.02076 & 0.2596$\pm$0.01534 & 0.96$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-sum tree & F & 5/5 & 0\% & 0.0304$\pm$0.00011 & 0.0289$\pm$0.00011 & 1.05$\times$ \\
-add 1 tree & M & 5/5 & 0\% & 0.0840$\pm$0.00013 & 0.0775$\pm$0.00020 & 1.08$\times$ \\
-build & ? & -- & -- & 0.2126$\pm$0.00094 & 0.2219$\pm$0.02075 & 0.96$\times$ \\
+sum tree & F & 5/5 & 0\% & 0.0294$\pm$0.00963 & 0.0289$\pm$0.00002 & 1.02$\times$ \\
+add 1 tree & M & 5/5 & 0\% & 0.0839$\pm$0.01115 & 0.0773$\pm$0.00012 & 1.09$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.3270 & 0.3283 & 1.00$\times$ \\
-\textbf{Geomean} & & & & & & 1.03$\times$ \\
+\textbf{Total} & & & & 0.1134 & 0.1062 & 1.07$\times$ \\
+\textbf{Geomean} & & & & & & 1.05$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -433,17 +413,16 @@ build & ? & -- & -- & 0.2126$\pm$0.00094 & 0.2219$\pm$0.02075 & 0.96$\times$ \\
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
 \midrule
-autocompleteTopKProxy & F & 5/10 & 50\% & 0.0145$\pm$0.00002 & \textbf{0.0079$\pm$0.00014} & \textbf{1.82$\times$} \\
-countLazyNodes & F & 4/10 & 60\% & 0.0130$\pm$0.00002 & \textbf{0.0067$\pm$0.00001} & \textbf{1.95$\times$} \\
-countTerminals & F & 3/10 & 70\% & 0.0122$\pm$0.00002 & \textbf{0.0058$\pm$0.00004} & \textbf{2.09$\times$} \\
-sumPrefixFreq & F & 3/10 & 70\% & 0.0124$\pm$0.00003 & \textbf{0.0058$\pm$0.00002} & \textbf{2.16$\times$} \\
-sumSubtreeHints & F & 3/10 & 70\% & 0.0123$\pm$0.00002 & \textbf{0.0057$\pm$0.00001} & \textbf{2.15$\times$} \\
-decayTrieStats & M & 10/10 & 0\% & \textbf{0.0745$\pm$0.00035} & 0.0850$\pm$0.00949 & 0.88$\times$ \\
-resetTraversalState & M & 10/10 & 0\% & 0.0751$\pm$0.00038 & 0.0827$\pm$0.00023 & 0.91$\times$ \\
-build & ? & -- & -- & 0.2074$\pm$0.01512 & 0.2111$\pm$0.02128 & 0.98$\times$ \\
+autocompleteTopKProxy & F & 5/10 & 50\% & 0.0139$\pm$0.00002 & \textbf{0.0080$\pm$0.00009} & \textbf{1.74$\times$} \\
+countLazyNodes & F & 4/10 & 60\% & 0.0125$\pm$0.00003 & \textbf{0.0067$\pm$0.00002} & \textbf{1.87$\times$} \\
+countTerminals & F & 3/10 & 70\% & 0.0118$\pm$0.00001 & \textbf{0.0058$\pm$0.00004} & \textbf{2.03$\times$} \\
+sumPrefixFreq & F & 3/10 & 70\% & 0.0119$\pm$0.00002 & \textbf{0.0058$\pm$0.00002} & \textbf{2.07$\times$} \\
+sumSubtreeHints & F & 3/10 & 70\% & 0.0119$\pm$0.00001 & \textbf{0.0058$\pm$0.00002} & \textbf{2.06$\times$} \\
+decayTrieStats & M & 10/10 & 0\% & \textbf{0.0745$\pm$0.00039} & 0.0846$\pm$0.00035 & 0.88$\times$ \\
+resetTraversalState & M & 10/10 & 0\% & 0.0746$\pm$0.00038 & 0.0825$\pm$0.00016 & 0.90$\times$ \\
 \midrule
-\textbf{Total} & & & & 0.4213 & 0.4108 & 1.03$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.51$\times$} \\
+\textbf{Total} & & & & 0.2111 & 0.1992 & 1.06$\times$ \\
+\textbf{Geomean} & & & & & & \textbf{1.56$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
