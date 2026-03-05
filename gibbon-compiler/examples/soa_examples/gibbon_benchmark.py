@@ -2269,28 +2269,72 @@ def _table_cursor_comparison(f, all_variants_results):
 
     has_soa_imm = any(entry.get("soa_imm") is not None for entry in all_variants_results)
     rows = []
-    for entry in all_variants_results:
-        prog = _program_label_compact(entry['program'])
-        aos_mut = entry.get('aos')
-        aos_imm = entry.get('aos_imm')
-        soa_mut = entry.get('soa')
-        soa_imm = entry.get('soa_imm')
 
-        # Use full executable end-to-end runtime captured around run_exe().
-        def get_total_or_oom(res):
-            """Returns (time, is_oom) tuple; time is full executable wall time."""
+    # Use full executable end-to-end runtime captured around run_exe().
+    def get_total_or_oom(res):
+        """Returns (time, is_oom) tuple; time is full executable wall time."""
+        if res is None:
+            return None, False
+        if res.run_success:
+            return res.exec_wall_time, False
+        # Failed - check if it was OOM
+        is_oom = (res.error_message == "out of memory")
+        return None, is_oom
+
+    # Collapse split OctTree programs (OctTree_*.hs) into one row by summing.
+    oct_entries = [e for e in all_variants_results
+                   if str(e.get("program", "")).startswith("OctTree_")]
+
+    def _agg_oct_variant(vname: str) -> Tuple[Optional[float], bool]:
+        saw_variant = False
+        any_oom = False
+        total = 0.0
+        saw_success = False
+        for e in oct_entries:
+            res = e.get(vname)
             if res is None:
-                return None, False
-            if res.run_success:
-                return res.exec_wall_time, False
-            # Failed - check if it was OOM
-            is_oom = (res.error_message == "out of memory")
-            return None, is_oom
+                continue
+            saw_variant = True
+            t, oom = get_total_or_oom(res)
+            if oom:
+                any_oom = True
+            elif t is not None:
+                total += t
+                saw_success = True
+        if any_oom:
+            return None, True
+        if saw_success:
+            return total, False
+        return (None, False) if saw_variant else (None, False)
 
-        aost_mut, aost_mut_oom = get_total_or_oom(aos_mut)
-        aost_imm, aost_imm_oom = get_total_or_oom(aos_imm)
-        soat_mut, soat_mut_oom = get_total_or_oom(soa_mut)
-        soat_imm, soat_imm_oom = get_total_or_oom(soa_imm)
+    oct_agg = None
+    if oct_entries:
+        oct_agg = {
+            "program": "OctTree.hs",
+            "aos": _agg_oct_variant("aos"),
+            "aos_imm": _agg_oct_variant("aos_imm"),
+            "soa": _agg_oct_variant("soa"),
+            "soa_imm": _agg_oct_variant("soa_imm"),
+        }
+
+    oct_added = False
+    for entry in all_variants_results:
+        prog_name = str(entry.get("program", ""))
+        if prog_name.startswith("OctTree_"):
+            if oct_agg is None or oct_added:
+                continue
+            oct_added = True
+            prog = "OctTree"
+            aost_mut, aost_mut_oom = oct_agg["aos"]
+            aost_imm, aost_imm_oom = oct_agg["aos_imm"]
+            soat_mut, soat_mut_oom = oct_agg["soa"]
+            soat_imm, soat_imm_oom = oct_agg["soa_imm"]
+        else:
+            prog = _program_label_compact(prog_name)
+            aost_mut, aost_mut_oom = get_total_or_oom(entry.get('aos'))
+            aost_imm, aost_imm_oom = get_total_or_oom(entry.get('aos_imm'))
+            soat_mut, soat_mut_oom = get_total_or_oom(entry.get('soa'))
+            soat_imm, soat_imm_oom = get_total_or_oom(entry.get('soa_imm'))
 
         # Format times and bold the overall fastest across all four variants.
         def fmt_cell(t, is_oom):
@@ -2543,24 +2587,24 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         "ADT fields = non-recursive fields annotated with {\\tt @BENCH adt\\_fields}; "
         "SoA bufs = $1 + $ non-recursive field slots across all constructors "
         "(recursive children are stored in the tag buffer). "
-        "Speedup ${>}1{\\times}$ means SoA is faster; "
+        "Speedup ${>}1{\\times}$ means the denominator is faster; "
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
     f.write("\\label{tab:summary}\n\\small\n")
     if include_aos_imm:
-        f.write("\\begin{tabular}{l c c r r r r r r r r r r}\n\\toprule\n")
+        f.write("\\begin{tabular}{l c c r r r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
-            " & \\multicolumn{4}{c}{\\textbf{End-to-end}}"
+            " & \\multicolumn{5}{c}{\\textbf{End-to-end}}"
             " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
             " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
         )
-        f.write("\\cmidrule(lr){4-7}\\cmidrule(lr){8-10}\\cmidrule(lr){11-13}\n")
+        f.write("\\cmidrule(lr){4-8}\\cmidrule(lr){9-11}\\cmidrule(lr){12-14}\n")
         f.write(
             " & fields & bufs"
-            " & AoS (s) & AoS-imm (s) & SoA (s) & Speedup"
-            " & AoS (s) & SoA (s) & Speedup"
-            " & AoS (s) & SoA (s) & Speedup \\\\\n"
+            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm"
+            " & Am (s) & Sm (s) & Am/Sm"
+            " & Am (s) & Sm (s) & Am/Sm \\\\\n"
         )
     else:
         f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
@@ -2573,9 +2617,9 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}\n")
         f.write(
             " & fields & bufs"
-            " & AoS (s) & SoA (s) & Speedup"
-            " & AoS (s) & SoA (s) & Speedup"
-            " & AoS (s) & SoA (s) & Speedup \\\\\n"
+            " & Am (s) & Sm (s) & Am/Sm"
+            " & Am (s) & Sm (s) & Am/Sm"
+            " & Am (s) & Sm (s) & Am/Sm \\\\\n"
         )
     f.write("\\midrule\n")
 
@@ -2610,6 +2654,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         sm = total_pass_time(soa, "map")
 
         tspd_s = _spd_cell(at / st) if at and st and st > 0 else "--"
+        t_ai_sm_s = _spd_cell(ait / st) if ait and st and st > 0 else "--"
         fspd_s = _spd_cell(af / sf) if af > 0 and sf > 0 else "--"
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
 
@@ -2620,6 +2665,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 f" & {fmt(ait) if ait and ait > 0 else '--'}"
                 f" & {fmt(st) if st and st > 0 else '--'}"
                 f" & {tspd_s}"
+                f" & {t_ai_sm_s}"
                 f" & {fmt(af) if af > 0 else '--'}"
                 f" & {fmt(sf) if sf > 0 else '--'}"
                 f" & {fspd_s}"
