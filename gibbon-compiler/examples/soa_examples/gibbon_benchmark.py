@@ -2592,19 +2592,19 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
     )
     f.write("\\label{tab:summary}\n\\small\n")
     if include_aos_imm:
-        f.write("\\begin{tabular}{l c c r r r r r r r r r r r}\n\\toprule\n")
+        f.write("\\begin{tabular}{l c c r r r r r r r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
             " & \\multicolumn{5}{c}{\\textbf{End-to-end}}"
-            " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
-            " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
+            " & \\multicolumn{5}{c}{\\textbf{Fold passes}}"
+            " & \\multicolumn{5}{c}{\\textbf{Map passes}} \\\\\n"
         )
-        f.write("\\cmidrule(lr){4-8}\\cmidrule(lr){9-11}\\cmidrule(lr){12-14}\n")
+        f.write("\\cmidrule(lr){4-8}\\cmidrule(lr){9-13}\\cmidrule(lr){14-18}\n")
         f.write(
             " & fields & bufs"
             " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm"
-            " & Am (s) & Sm (s) & Am/Sm"
-            " & Am (s) & Sm (s) & Am/Sm \\\\\n"
+            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm"
+            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm \\\\\n"
         )
     else:
         f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
@@ -2649,14 +2649,18 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         ai_res = aos_imm_map.get(aos.program)
         ait = total_pass_time(ai_res) if (ai_res and ai_res.run_success) else None
         af = total_pass_time(aos, "fold")
+        aif = total_pass_time(ai_res, "fold") if (ai_res and ai_res.run_success) else None
         sf = total_pass_time(soa, "fold")
         am = total_pass_time(aos, "map")
+        aim = total_pass_time(ai_res, "map") if (ai_res and ai_res.run_success) else None
         sm = total_pass_time(soa, "map")
 
         tspd_s = _spd_cell(at / st) if at and st and st > 0 else "--"
         t_ai_sm_s = _spd_cell(ait / st) if ait and st and st > 0 else "--"
         fspd_s = _spd_cell(af / sf) if af > 0 and sf > 0 else "--"
+        f_ai_sm_s = _spd_cell(aif / sf) if aif and sf and sf > 0 else "--"
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
+        m_ai_sm_s = _spd_cell(aim / sm) if aim and sm and sm > 0 else "--"
 
         if include_aos_imm:
             f.write(
@@ -2667,11 +2671,15 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 f" & {tspd_s}"
                 f" & {t_ai_sm_s}"
                 f" & {fmt(af) if af > 0 else '--'}"
+                f" & {fmt(aif) if aif and aif > 0 else '--'}"
                 f" & {fmt(sf) if sf > 0 else '--'}"
                 f" & {fspd_s}"
+                f" & {f_ai_sm_s}"
                 f" & {fmt(am) if am > 0 else '--'}"
+                f" & {fmt(aim) if aim and aim > 0 else '--'}"
                 f" & {fmt(sm) if sm > 0 else '--'}"
-                f" & {mspd_s} \\\\\n"
+                f" & {mspd_s}"
+                f" & {m_ai_sm_s} \\\\\n"
             )
         else:
             f.write(
