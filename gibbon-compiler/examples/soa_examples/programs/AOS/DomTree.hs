@@ -128,6 +128,7 @@ gibbon_main =
   let _ = printsym (quote "Running program DomTree: ")
       _ = printsym (quote "NEWLINE")
       tree   = buildRenderTree (23)
+
       tree_smaller = buildRenderTree (20)
       _ = printsym (quote "Running pass SumArea (fold, uses=6): ")
       _ = printsym (quote "NEWLINE")

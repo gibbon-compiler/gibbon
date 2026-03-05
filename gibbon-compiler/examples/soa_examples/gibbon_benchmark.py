@@ -1546,7 +1546,8 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 def run_exe(exe: Path, iterations: int,
             timeout: int = 600,
             dump_dir: Optional[Path] = None,
-            env_override: Optional[Dict[str, str]] = None
+            env_override: Optional[Dict[str, str]] = None,
+            use_iterate_flag: bool = True,
             ) -> Tuple[bool, float, Optional[str], Optional[str], int]:
     """
     Run executable and return (success, elapsed, stdout, stderr, returncode).
@@ -1557,7 +1558,11 @@ def run_exe(exe: Path, iterations: int,
         "%Y-%m-%d %H:%M:%S"
     )
     print(f"           running: {exe}")
-    print(f"           exe mtime: {exe_mtime}  |  --iterate {iterations}")
+    if use_iterate_flag:
+        run_mode = f"--iterate {iterations}"
+    else:
+        run_mode = "single-run (no --iterate)"
+    print(f"           exe mtime: {exe_mtime}  |  {run_mode}")
 
     cmd = [str(exe)]
     # For GHC, pass RTS options to increase heap size. This should prevent OOM crashes.
@@ -1565,7 +1570,8 @@ def run_exe(exe: Path, iterations: int,
         cmd.extend(["+RTS", "-H4G", "-RTS"])
     # For all variants, pass a deterministic size-param to prevent compile-time precompute.
     cmd.extend(["--size-param", "0"])
-    cmd.extend(["--iterate", str(iterations)])
+    if use_iterate_flag:
+        cmd.extend(["--iterate", str(iterations)])
 
     t0  = time.time()
     try:
@@ -1587,6 +1593,93 @@ def run_exe(exe: Path, iterations: int,
         return False, timeout, None, "timeout expired", -1
     except Exception as e:
         return False, time.time() - t0, None, str(e), -1
+
+
+def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
+                         programs_dir: Path, out_dir: Path, iterations: int, force: bool,
+                         dump_raw: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
+    """
+    Benchmark build-only executable by launching it repeatedly (no --iterate).
+    Returns (_stats dict tagged as pass_type='build', error_message).
+    """
+    if not (variant.startswith("aos") or variant.startswith("soa")):
+        return None, None
+
+    build_src_dir = "AOS_BUILD" if variant.startswith("aos") else "SOA_BUILD"
+    src_dir = "AOS" if variant.startswith("aos") else "SOA"
+    build_src = programs_dir / build_src_dir / program
+    if not build_src.exists():
+        return None, f"build-only source not found: {build_src}"
+
+    # Build-only files may import sibling modules (e.g. OctTreeBase). Ensure
+    # missing imports are available in *_BUILD by copying from AOS/SOA.
+    def _ensure_build_imports(entry_src: Path, build_root: Path, variant_root: Path,
+                              seen: Optional[set] = None) -> None:
+        if seen is None:
+            seen = set()
+        if entry_src in seen or not entry_src.exists():
+            return
+        seen.add(entry_src)
+
+        try:
+            txt = entry_src.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return
+
+        imp_re = re.compile(
+            r'^\s*import\s+(?:qualified\s+)?([A-Z][A-Za-z0-9_\.]*)',
+            re.MULTILINE
+        )
+        for mod in imp_re.findall(txt):
+            rel = Path(*mod.split(".")).with_suffix(".hs")
+            # Skip external libraries; keep only local module dependencies.
+            if rel.parts and rel.parts[0] in ("Gibbon", "Prelude"):
+                continue
+            dst = build_root / rel
+            if dst.exists():
+                _ensure_build_imports(dst, build_root, variant_root, seen)
+                continue
+            src = variant_root / rel
+            if src.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                _ensure_build_imports(dst, build_root, variant_root, seen)
+
+    _ensure_build_imports(
+        build_src,
+        programs_dir / build_src_dir,
+        programs_dir / src_dir,
+    )
+
+    build_out_dir = out_dir / "build_only"
+    ok, _ct, err = compile_one(
+        build_src, variant, build_out_dir, force,
+        use_mutable_cursors=use_mutable_cursors,
+        enable_papi=False,
+        enable_papi_native=False,
+        use_no_ran=True,
+    )
+    if not ok:
+        return None, err or "build-only compile failed"
+
+    exe = build_out_dir / f"{build_src.stem}.{variant}.exe"
+    dump_dir = (out_dir / "raw_output") if dump_raw else None
+
+    run_times: List[float] = []
+    for i in range(iterations):
+        print(f"           [build] run {i + 1}/{iterations}")
+        ok2, rt, _stdout, stderr, returncode = run_exe(
+            exe, 1, dump_dir=dump_dir, use_iterate_flag=False
+        )
+        if not ok2:
+            err_txt = stderr or f"build-only execution failed (exit {returncode})"
+            return None, err_txt
+        run_times.append(rt)
+
+    if not run_times:
+        return None, "no build-only runtimes collected"
+
+    return _stats(run_times, pass_type="build", uses=None), None
 
 
 # ---------------------------------------------------------------------------
@@ -1737,6 +1830,31 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                             print("           Native PAPI warning: PAPI_NATIVE lines found but could not attach to passes")
                         else:
                             print("           Native PAPI warning: no PAPI_NATIVE lines found in stdout")
+
+                build_stats, build_err = benchmark_build_pass(
+                    program=prog,
+                    variant=var,
+                    use_mutable_cursors=use_mut,
+                    programs_dir=programs_dir,
+                    out_dir=out_dir,
+                    iterations=iterations,
+                    force=force,
+                    dump_raw=dump_raw,
+                )
+                if build_stats is not None:
+                    merged_passes = {"build": build_stats}
+                    merged_passes.update(res.passes)
+                    res.passes = merged_passes
+                    print(
+                        "           [B] build: "
+                        f"median={build_stats['median_time']:.4f}s "
+                        f"±{build_stats['stderr']:.5f}s  "
+                        f"min={build_stats['min_time']:.4f}s  "
+                        f"max={build_stats['max_time']:.4f}s  "
+                        f"n={build_stats['n']}"
+                    )
+                elif build_err:
+                    print(f"           Build benchmark warning: {build_err}")
 
                 # ── Print per-pass timing digest ──────────────────────────
                 total_t = total_pass_time(res) or 0.0
@@ -2295,7 +2413,7 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
     with open(out_file, "w") as f:
         f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
         f.write("% Requires: \\usepackage{booktabs} in preamble\n\n")
-        _table_summary(f, all_results)
+        _table_summary(f, all_results, all_variants_results)
         _table_papi_summary(f, all_results)
         if all_variants_results:
             _table_cursor_comparison(f, all_variants_results)
@@ -2392,7 +2510,7 @@ def _merge_octree_results(all_results: List[Tuple]) -> Tuple[Optional[Tuple[Benc
     return combined, filtered
 
 
-def _table_summary(f, all_results):
+def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = None):
     """
     Table 1: one row per program.
     Program | ADT fields | SoA bufs | End-to-end AoS/SoA/Speedup
@@ -2400,9 +2518,19 @@ def _table_summary(f, all_results):
     """
     f.write("% -- Table 1: Summary by pass type --\n")
     f.write("\\begin{table}[t]\n\\centering\n")
+    include_aos_imm = False
+    aos_imm_map: Dict[str, BenchmarkResult] = {}
+    if all_variants_results:
+        for entry in all_variants_results:
+            ai = entry.get("aos_imm")
+            if ai is not None:
+                include_aos_imm = True
+                aos_imm_map[entry.get("program", "")] = ai
+
     f.write(
         "\\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) "
         "and speedup split by pass type. "
+        "End-to-end includes the build pass when instrumented. "
         "When present, the OctTree row includes ColorOctree passes; a separate "
         "ColorOctree row reports only those passes. "
         "ADT fields = non-recursive fields annotated with {\\tt @BENCH adt\\_fields}; "
@@ -2412,20 +2540,36 @@ def _table_summary(f, all_results):
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )
     f.write("\\label{tab:summary}\n\\small\n")
-    f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
-    f.write(
-        "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
-        " & \\multicolumn{3}{c}{\\textbf{End-to-end}}"
-        " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
-        " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
-    )
-    f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}\n")
-    f.write(
-        " & fields & bufs"
-        " & AoS (s) & SoA (s) & Speedup"
-        " & AoS (s) & SoA (s) & Speedup"
-        " & AoS (s) & SoA (s) & Speedup \\\\\n"
-    )
+    if include_aos_imm:
+        f.write("\\begin{tabular}{l c c r r r r r r r r r r}\n\\toprule\n")
+        f.write(
+            "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
+            " & \\multicolumn{4}{c}{\\textbf{End-to-end}}"
+            " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
+            " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
+        )
+        f.write("\\cmidrule(lr){4-7}\\cmidrule(lr){8-10}\\cmidrule(lr){11-13}\n")
+        f.write(
+            " & fields & bufs"
+            " & AoS (s) & AoS-imm (s) & SoA (s) & Speedup"
+            " & AoS (s) & SoA (s) & Speedup"
+            " & AoS (s) & SoA (s) & Speedup \\\\\n"
+        )
+    else:
+        f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
+        f.write(
+            "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
+            " & \\multicolumn{3}{c}{\\textbf{End-to-end}}"
+            " & \\multicolumn{3}{c}{\\textbf{Fold passes}}"
+            " & \\multicolumn{3}{c}{\\textbf{Map passes}} \\\\\n"
+        )
+        f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}\n")
+        f.write(
+            " & fields & bufs"
+            " & AoS (s) & SoA (s) & Speedup"
+            " & AoS (s) & SoA (s) & Speedup"
+            " & AoS (s) & SoA (s) & Speedup \\\\\n"
+        )
     f.write("\\midrule\n")
 
     combined, filtered = _merge_octree_results(all_results)
@@ -2451,6 +2595,8 @@ def _table_summary(f, all_results):
 
         at = total_pass_time(aos)
         st = total_pass_time(soa)
+        ai_res = aos_imm_map.get(aos.program)
+        ait = total_pass_time(ai_res) if (ai_res and ai_res.run_success) else None
         af = total_pass_time(aos, "fold")
         sf = total_pass_time(soa, "fold")
         am = total_pass_time(aos, "map")
@@ -2460,18 +2606,33 @@ def _table_summary(f, all_results):
         fspd_s = _spd_cell(af / sf) if af > 0 and sf > 0 else "--"
         mspd_s = _spd_cell(am / sm) if am > 0 and sm > 0 else "--"
 
-        f.write(
-            f"{prog} & {adt_str} & {bufs_str}"
-            f" & {fmt(at) if at and at > 0 else '--'}"
-            f" & {fmt(st) if st and st > 0 else '--'}"
-            f" & {tspd_s}"
-            f" & {fmt(af) if af > 0 else '--'}"
-            f" & {fmt(sf) if sf > 0 else '--'}"
-            f" & {fspd_s}"
-            f" & {fmt(am) if am > 0 else '--'}"
-            f" & {fmt(sm) if sm > 0 else '--'}"
-            f" & {mspd_s} \\\\\n"
-        )
+        if include_aos_imm:
+            f.write(
+                f"{prog} & {adt_str} & {bufs_str}"
+                f" & {fmt(at) if at and at > 0 else '--'}"
+                f" & {fmt(ait) if ait and ait > 0 else '--'}"
+                f" & {fmt(st) if st and st > 0 else '--'}"
+                f" & {tspd_s}"
+                f" & {fmt(af) if af > 0 else '--'}"
+                f" & {fmt(sf) if sf > 0 else '--'}"
+                f" & {fspd_s}"
+                f" & {fmt(am) if am > 0 else '--'}"
+                f" & {fmt(sm) if sm > 0 else '--'}"
+                f" & {mspd_s} \\\\\n"
+            )
+        else:
+            f.write(
+                f"{prog} & {adt_str} & {bufs_str}"
+                f" & {fmt(at) if at and at > 0 else '--'}"
+                f" & {fmt(st) if st and st > 0 else '--'}"
+                f" & {tspd_s}"
+                f" & {fmt(af) if af > 0 else '--'}"
+                f" & {fmt(sf) if sf > 0 else '--'}"
+                f" & {fspd_s}"
+                f" & {fmt(am) if am > 0 else '--'}"
+                f" & {fmt(sm) if sm > 0 else '--'}"
+                f" & {mspd_s} \\\\\n"
+            )
 
     f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
 

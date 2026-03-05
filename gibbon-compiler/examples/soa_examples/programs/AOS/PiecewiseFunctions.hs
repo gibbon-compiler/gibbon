@@ -107,6 +107,7 @@ gibbon_main =
             let _ = printsym (quote "Running Program Piecewise Functions (MADNESS style): ")
                 _ = printsym (quote "NEWLINE")
                 pfTree = buildPW (sizeParam + 23) 17
+
                 _ = printsym (quote "Running pass norm2Estimate (fold, uses=5): ")
                 _ = printsym (quote "NEWLINE")
                 norm = iterate (norm2Estimate pfTree)

@@ -179,6 +179,7 @@ gibbon_main =
   let _ = printsym (quote "Running program ColorOctree Quantization: ")
       _ = printsym (quote "NEWLINE")
       colorTree = buildColorOctree (sizeParam + 8) 0 31
+
       _ = printsym (quote "Running pass paletteEntriesQuantized (fold, uses=13): ")
       _ = printsym (quote "NEWLINE")
       paletteEntries = iterate (paletteEntriesQuantized colorTree 4 12)

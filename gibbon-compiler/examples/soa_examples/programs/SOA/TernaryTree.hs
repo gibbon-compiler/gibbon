@@ -38,6 +38,7 @@ gibbon_main =
    let _ = printsym (quote "Running program Ternary Heap: ")
        _ = printsym (quote "NEWLINE")
        tree = mkTree 15
+
        _ = printsym (quote "Running pass add 1 tree (map, uses=5): ")
        _ = printsym (quote "NEWLINE")
        tree' = iterate(add1Tree tree)

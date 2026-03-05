@@ -42,6 +42,7 @@ gibbon_main = let
                 _ = printsym (quote "Running program MonoTree: ")
                 _ = printsym (quote "NEWLINE")
                 tree = (mkTree 23 0)
+
                 _ = printsym (quote "Running pass add1Tree (map, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 tree' =  iterate (add1Tree tree)

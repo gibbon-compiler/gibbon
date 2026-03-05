@@ -160,6 +160,7 @@ gibbon_main =
             let _ = printsym (quote "Running Data base Query Pass: ")
                 _ = printsym (quote "NEWLINE")
                 queryTree = buildQuery (sizeParam + 75) 17
+
                 _ = printsym (quote "Running pass sumCost (fold, uses=6): ")
                 _ = printsym (quote "NEWLINE")
                 totCost = iterate (sumCost queryTree)

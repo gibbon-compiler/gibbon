@@ -127,6 +127,7 @@ gibbon_main =
    let _ = printsym (quote "Running program Trie: ")
        _ = printsym (quote "NEWLINE")
        trie = buildTrie (sizeParam + 22) 17
+
        _ = printsym (quote "Running pass sumPrefixFreq (fold, uses=3): ")
        _ = printsym (quote "NEWLINE")
        totFreq = iterate (sumPrefixFreq trie)

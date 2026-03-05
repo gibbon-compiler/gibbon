@@ -174,6 +174,7 @@ gibbon_main =
             let _ = printsym (quote "Running program ObjectGraph Simulated a GC Program: ")
                 _ = printsym (quote "NEWLINE")
                 heap = buildHeap (sizeParam + 23)
+
                 _ = printsym (quote "Running pass totalHeapSize (fold, uses=3): ")
                 _ = printsym (quote "NEWLINE")
                 heapSize = iterate (totalHeapSize heap)

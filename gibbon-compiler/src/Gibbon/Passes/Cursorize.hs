@@ -4506,7 +4506,18 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                                   ) res lst
                                           ) Nothing (M.toList m1')
                     case mut_loc of 
-                              Nothing -> pure ([], m1', m2') --error "Expected a mutable location!"
+                              -- Preserve the packed let binding even if we cannot
+                              -- recover a mutable-location edge.
+                              Nothing ->
+                                let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
+                                    start_rhs =
+                                      case (type_l2, M.lookup start_var tenv) of
+                                        (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
+                                        _ -> VarE start_var
+                                 in pure ([ (fresh, [], ty'', rhs')
+                                          , (v, [], type_l2, start_rhs)
+                                          , (toEndV v, [], type_l2, start_rhs)
+                                          ], m1', m2')
                               Just (l, endreg) -> do
                                         let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
                                         let varName = (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l))
@@ -4681,7 +4692,17 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                 ) res lst 
                                           ) Nothing (M.toList m1')
                     in case mut_loc of
-                            Nothing -> pure ([], m1', m2') --error "Expected a mutable location!"
+                            -- Same fallback as locs=[] above.
+                            Nothing ->
+                              let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
+                                  start_rhs =
+                                    case (type_l2, M.lookup start_var tenv) of
+                                      (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
+                                      _ -> VarE start_var
+                               in pure ([ (fresh, [], ty'', rhs')
+                                        , (v, [], type_l2, start_rhs)
+                                        , (toEndV v, [], type_l2, start_rhs)
+                                        ], m1', m2')
                   -- let nLocs = length locs
                   --     locBnds = map
                   --                 (\(loc, n) -> let loc_var = fromLocArgToFreeVarsTy loc

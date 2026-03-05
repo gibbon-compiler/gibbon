@@ -2,7 +2,6 @@
   "compile_cmd": [
     "gibbon",
     "--use-mutable-cursors",
-    "--enable-papi-native",
     "--no-ran",
     "--packed",
     "--to-exe",
@@ -12,9 +11,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa.exe",
-  "compiled_at": "2026-03-02T23:31:05"
+  "compiled_at": "2026-03-04T19:05:55"
 }

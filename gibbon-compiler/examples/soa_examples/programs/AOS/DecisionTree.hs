@@ -198,6 +198,7 @@ gibbon_main =
   let _ = printsym (quote "Running program Decision Tree: ") in
   let _ = printsym (quote "NEWLINE") in
   let tree = buildTree (sizeParam + 35) in
+
   -- Structural analyses
   let _ = printsym (quote "Running pass countNodes (fold, uses=2): ") in
   let _ = printsym (quote "NEWLINE") in

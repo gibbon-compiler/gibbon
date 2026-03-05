@@ -207,6 +207,7 @@ gibbon_main =
       _  = iterate (verifyPhiPlacement_IO ir 0)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
+
       _ = printsym (quote "Running pass instCountPass (fold, uses=2): ")
       _ = printsym (quote "NEWLINE")
       insts  = iterate (instCountPass ir)
