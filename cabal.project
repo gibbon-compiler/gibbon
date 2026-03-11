@@ -1,8 +1,4 @@
 packages: gibbon-compiler
 
 program-options
-<<<<<<< HEAD
-    ghc-options: -Werror 
-=======
     ghc-options: -Werror -Wno-error=unused-imports
->>>>>>> origin/main
