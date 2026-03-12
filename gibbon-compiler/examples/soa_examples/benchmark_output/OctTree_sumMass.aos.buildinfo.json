@@ -2,6 +2,7 @@
   "compile_cmd": [
     "gibbon",
     "--use-mutable-cursors",
+    "--enable-papi-native",
     "--no-ran",
     "--packed",
     "--to-exe",
@@ -11,9 +12,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_sumMass.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_sumMass.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_sumMass.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_sumMass.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.exe",
-  "compiled_at": "2026-03-12T14:11:51"
+  "compiled_at": "2026-03-12T15:39:25"
 }
