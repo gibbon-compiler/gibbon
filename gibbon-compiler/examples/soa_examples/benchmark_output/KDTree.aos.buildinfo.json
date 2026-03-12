@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/KDTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/KDTree.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/KDTree.aos.exe",
-  "compiled_at": "2026-03-12T15:30:00"
+  "compiled_at": "2026-03-12T18:16:06"
 }

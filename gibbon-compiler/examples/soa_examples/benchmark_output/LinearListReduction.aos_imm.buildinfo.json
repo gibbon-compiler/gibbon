@@ -15,5 +15,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/LinearListReduction.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.exe",
-  "compiled_at": "2026-03-12T15:31:27"
+  "compiled_at": "2026-03-12T18:17:15"
 }
