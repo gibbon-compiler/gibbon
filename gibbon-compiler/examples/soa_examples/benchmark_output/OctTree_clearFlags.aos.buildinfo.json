@@ -15,5 +15,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_clearFlags.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_clearFlags.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_clearFlags.aos.exe",
-  "compiled_at": "2026-03-04T19:06:35"
+  "compiled_at": "2026-03-12T14:12:30"
 }

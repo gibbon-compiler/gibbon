@@ -86,7 +86,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # ---------------------------------------------------------------------------
 DEFAULT_PROGRAMS = [
     "Compiler.hs", "DBQuery.hs", "DecisionTree.hs", "DomTree.hs",
-    "KDTree.hs", "LinearListReduction.hs", "List.hs", "MonoTree.hs",
+    "KDTree.hs", "LinearListReduction.hs", "reduceNestedList.hs",
+    "List.hs", "MonoTree.hs",
     "ObjectGraph.hs",
     "OctTree_sumMass.hs", "OctTree_sumEnergy.hs",
     "OctTree_countActive.hs", "OctTree_countParticles.hs",
@@ -94,6 +95,28 @@ DEFAULT_PROGRAMS = [
     "OctTree_scaleEnergy.hs", "OctTree_clearFlags.hs",
     "PiecewiseFunctions.hs", "TernaryTree.hs", "Trie.hs", "ColorOctree.hs"
 ]
+
+# Per-program compile overrides for benchmarks that need non-default flags.
+PROGRAM_COMPILE_OVERRIDES = {
+    "reduceNestedList.hs": {
+        "aos": {
+            "use_mutable_cursors": True,
+            "use_no_ran": False,
+        },
+        "aos_imm": {
+            "use_mutable_cursors": False,
+            "use_no_ran": False,
+        },
+        "soa": {
+            "use_mutable_cursors": True,
+            "use_no_ran": False,
+        },
+        "soa_imm": {
+            "use_mutable_cursors": False,
+            "use_no_ran": False,
+        },
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Result container
@@ -1597,6 +1620,7 @@ def run_exe(exe: Path, iterations: int,
 
 def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
                          programs_dir: Path, out_dir: Path, iterations: int, force: bool,
+                         use_no_ran: bool = True,
                          dump_raw: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
     """
     Benchmark build-only executable by launching it repeatedly (no --iterate).
@@ -1657,7 +1681,7 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
         use_mutable_cursors=use_mutable_cursors,
         enable_papi=False,
         enable_papi_native=False,
-        use_no_ran=True,
+        use_no_ran=use_no_ran,
     )
     if not ok:
         return None, err or "build-only compile failed"
@@ -1720,9 +1744,17 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         variants.append(("mlton", False))
 
     tasks = []
+    variant_compile_opts: Dict[str, Dict[str, bool]] = {}
     for var, use_mut in variants:
         # For GHC comparison runs, compile Gibbon AoS/SoA without --no-ran.
         use_no_ran = not (benchmark_ghc and (var.startswith("aos") or var.startswith("soa")))
+        override = PROGRAM_COMPILE_OVERRIDES.get(prog, {}).get(var, {})
+        use_mut_eff = override.get("use_mutable_cursors", use_mut)
+        use_no_ran_eff = override.get("use_no_ran", use_no_ran)
+        variant_compile_opts[var] = {
+            "use_mutable_cursors": use_mut_eff,
+            "use_no_ran": use_no_ran_eff,
+        }
         if var == "ghc":
             src_dir = "GHC"
             src = programs_dir / src_dir / prog
@@ -1740,7 +1772,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             src_dir = "AOS" if var.startswith("aos") else "SOA"
             src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force, use_mut, enable_papi, enable_papi_native, use_no_ran))
+            tasks.append((prog, var, src, out_dir, force, use_mut_eff, enable_papi, enable_papi_native, use_no_ran_eff))
         else:
             print(f"  Warning: {src} not found")
 
@@ -1755,6 +1787,10 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         res = BenchmarkResult(prog, var)
         res.adt_fields = src_data.get("adt_fields")
         key = (prog, var)
+        compile_opts = variant_compile_opts.get(var, {
+            "use_mutable_cursors": use_mut,
+            "use_no_ran": True,
+        })
 
         if key not in compile_results:
             res.compile_success = False
@@ -1836,11 +1872,12 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                     build_stats, build_err = benchmark_build_pass(
                         program=prog,
                         variant=var,
-                        use_mutable_cursors=use_mut,
+                        use_mutable_cursors=compile_opts["use_mutable_cursors"],
                         programs_dir=programs_dir,
                         out_dir=out_dir,
                         iterations=iterations,
                         force=force,
+                        use_no_ran=compile_opts["use_no_ran"],
                         dump_raw=dump_raw,
                     )
                     if build_stats is not None:

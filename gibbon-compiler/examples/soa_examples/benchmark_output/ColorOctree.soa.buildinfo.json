@@ -15,5 +15,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/ColorOctree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ColorOctree.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ColorOctree.soa.exe",
-  "compiled_at": "2026-03-04T19:07:03"
+  "compiled_at": "2026-03-12T14:12:54"
 }

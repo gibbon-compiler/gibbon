@@ -1,6 +1,7 @@
 {
   "compile_cmd": [
     "gibbon",
+    "--enable-papi-native",
     "--no-ran",
     "--packed",
     "--to-exe",
@@ -10,9 +11,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/PiecewiseFunctions.hs"
   ],
-  "compile_cmd_signature": "gibbon --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/PiecewiseFunctions.hs",
+  "compile_cmd_signature": "gibbon --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/PiecewiseFunctions.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/PiecewiseFunctions.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/PiecewiseFunctions.aos_imm.exe",
-  "compiled_at": "2026-03-04T20:16:15"
+  "compiled_at": "2026-03-11T21:12:22"
 }
