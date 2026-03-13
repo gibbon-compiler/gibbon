@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/Trie.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/Trie.soa.exe",
-  "compiled_at": "2026-03-12T18:30:46"
+  "compiled_at": "2026-03-12T19:28:26"
 }

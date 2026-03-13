@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_countActive.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_countActive.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_countActive.aos.exe",
-  "compiled_at": "2026-03-12T18:23:35"
+  "compiled_at": "2026-03-12T19:21:17"
 }

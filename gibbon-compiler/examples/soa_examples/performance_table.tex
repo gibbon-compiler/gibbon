@@ -13,7 +13,21 @@
 \cmidrule(lr){4-8}\cmidrule(lr){9-13}\cmidrule(lr){14-18}
  & fields & bufs & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm \\
 \midrule
-reduceNestedList & 6 & 2 & 0.0871 & 0.0935 & 0.0074 & \textbf{11.74$\times$} & \textbf{12.60$\times$} & 0.0871 & 0.0935 & 0.0074 & \textbf{11.74$\times$} & \textbf{12.60$\times$} & -- & -- & -- & -- & -- \\
+OctTree & 16 & 9 & 0.6715 & -- & 0.6716 & 1.00$\times$ & -- & 0.3685 & -- & 0.3236 & \textbf{1.14$\times$} & -- & 0.3030 & -- & 0.3481 & 0.87$\times$ & -- \\
+Compiler & 9 & 8 & 0.2847 & 1.086 & 0.2143 & \textbf{1.33$\times$} & \textbf{5.07$\times$} & 0.1258 & 0.7166 & 0.0389 & \textbf{3.23$\times$} & \textbf{18.42$\times$} & 0.1589 & 0.3696 & 0.1753 & 0.91$\times$ & \textbf{2.11$\times$} \\
+DBQuery & 15 & 13 & 0.2579 & 0.3267 & 0.2503 & 1.03$\times$ & \textbf{1.31$\times$} & 0.1217 & 0.1753 & 0.0851 & \textbf{1.43$\times$} & \textbf{2.06$\times$} & 0.1362 & 0.1514 & 0.1651 & 0.82$\times$ & 0.92$\times$ \\
+DecisionTree & 7 & 6 & 3.726 & 5.579 & 2.934 & \textbf{1.27$\times$} & \textbf{1.90$\times$} & 3.726 & 5.579 & 2.934 & \textbf{1.27$\times$} & \textbf{1.90$\times$} & -- & -- & -- & -- & -- \\
+DomTree & 15 & 14 & 0.1969 & 0.3377 & 0.1412 & \textbf{1.39$\times$} & \textbf{2.39$\times$} & 0.1385 & 0.2774 & 0.0615 & \textbf{2.25$\times$} & \textbf{4.51$\times$} & 0.0584 & 0.0603 & 0.0797 & 0.73$\times$ & 0.76$\times$ \\
+KDTree & 17 & 16 & 0.1802 & 0.2462 & 0.1399 & \textbf{1.29$\times$} & \textbf{1.76$\times$} & 0.1802 & 0.2462 & 0.1399 & \textbf{1.29$\times$} & \textbf{1.76$\times$} & -- & -- & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.0298 & 0.1318 & 0.0049 & \textbf{6.03$\times$} & \textbf{26.67$\times$} & 0.0298 & 0.1318 & 0.0049 & \textbf{6.03$\times$} & \textbf{26.67$\times$} & -- & -- & -- & -- & -- \\
+reduceNestedList & 6 & 2 & 0.0853 & 0.0929 & 0.0074 & \textbf{11.58$\times$} & \textbf{12.61$\times$} & 0.0853 & 0.0929 & 0.0074 & \textbf{11.58$\times$} & \textbf{12.61$\times$} & -- & -- & -- & -- & -- \\
+List & 2 & 2 & 0.3828 & -- & 0.4496 & 0.85$\times$ & -- & 0.1321 & -- & 0.1143 & \textbf{1.16$\times$} & -- & 0.2508 & -- & 0.3353 & 0.75$\times$ & -- \\
+MonoTree & 3 & 2 & 0.0631 & 0.1403 & 0.0645 & 0.98$\times$ & \textbf{2.18$\times$} & 0.0172 & 0.0801 & 0.0223 & 0.77$\times$ & \textbf{3.60$\times$} & 0.0459 & 0.0602 & 0.0422 & 1.09$\times$ & \textbf{1.43$\times$} \\
+ObjectGraph & 5 & 4 & 0.2337 & 0.4804 & 0.2419 & 0.97$\times$ & \textbf{1.99$\times$} & 0.0911 & 0.3060 & 0.0807 & \textbf{1.13$\times$} & \textbf{3.79$\times$} & 0.1426 & 0.1744 & 0.1612 & 0.88$\times$ & 1.08$\times$ \\
+PiecewiseFunctions & 8 & 7 & 0.3741 & 0.5545 & 0.3553 & 1.05$\times$ & \textbf{1.56$\times$} & 0.1365 & 0.2932 & 0.0956 & \textbf{1.43$\times$} & \textbf{3.07$\times$} & 0.2376 & 0.2613 & 0.2598 & 0.91$\times$ & 1.01$\times$ \\
+TernaryTree & 5 & 3 & 0.1153 & 0.1432 & 0.1042 & \textbf{1.11$\times$} & \textbf{1.37$\times$} & 0.0294 & 0.0501 & 0.0267 & 1.10$\times$ & \textbf{1.87$\times$} & 0.0859 & 0.0931 & 0.0775 & \textbf{1.11$\times$} & \textbf{1.20$\times$} \\
+Trie & 10 & 9 & 0.2168 & 0.2939 & 0.1990 & 1.09$\times$ & \textbf{1.48$\times$} & 0.0642 & 0.1332 & 0.0324 & \textbf{1.99$\times$} & \textbf{4.12$\times$} & 0.1525 & 0.1607 & 0.1666 & 0.92$\times$ & 0.96$\times$ \\
+ColorOctree & 25 & 18 & 0.0876 & 0.1172 & 0.0738 & \textbf{1.19$\times$} & \textbf{1.59$\times$} & 0.0876 & 0.1172 & 0.0738 & \textbf{1.19$\times$} & \textbf{1.59$\times$} & -- & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -29,9 +43,22 @@ reduceNestedList & 6 & 2 & 0.0871 & 0.0935 & 0.0074 & \textbf{11.74$\times$} & \
 \toprule
 \textbf{Program} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
-reduceNestedList & \textbf{11.68$\times$} & 0.62$\times$ & \textbf{6.31$\times$} & \textbf{2.91$\times$} & \textbf{62.87$\times$} & \textbf{2.80$\times$} & \textbf{6.13$\times$} \\
+OctTree & 1.04$\times$ & 0.75$\times$ & \textbf{1.59$\times$} & 0.43$\times$ & 0.24$\times$ & 0.61$\times$ & \textbf{3.58$\times$} \\
+Compiler & \textbf{1.63$\times$} & 0.52$\times$ & \textbf{4.13$\times$} & 0.80$\times$ & \textbf{14.91$\times$} & 0.30$\times$ & \textbf{6.58$\times$} \\
+DBQuery & 1.09$\times$ & 0.47$\times$ & \textbf{1.44$\times$} & 0.42$\times$ & \textbf{9.02$\times$} & 0.37$\times$ & \textbf{6.28$\times$} \\
+DecisionTree & \textbf{1.27$\times$} & 0.59$\times$ & \textbf{18.42$\times$} & \textbf{2.86$\times$} & 1.04$\times$ & \textbf{3.06$\times$} & \textbf{36.95$\times$} \\
+DomTree & \textbf{1.53$\times$} & 0.57$\times$ & \textbf{2.92$\times$} & 0.75$\times$ & \textbf{21.62$\times$} & 0.17$\times$ & \textbf{10.41$\times$} \\
+KDTree & \textbf{1.28$\times$} & 0.77$\times$ & \textbf{1.11$\times$} & 0.99$\times$ & 0.23$\times$ & 1.00$\times$ & \textbf{4.63$\times$} \\
+LinearListReduction & \textbf{6.06$\times$} & 0.90$\times$ & \textbf{33.77$\times$} & \textbf{6.30$\times$} & \textbf{38.33$\times$} & \textbf{5.73$\times$} & \textbf{11.62$\times$} \\
+reduceNestedList & \textbf{11.63$\times$} & 0.62$\times$ & \textbf{6.34$\times$} & \textbf{2.96$\times$} & \textbf{63.44$\times$} & \textbf{2.87$\times$} & \textbf{6.18$\times$} \\
+List & 0.82$\times$ & 0.80$\times$ & \textbf{3.12$\times$} & 0.44$\times$ & 0.09$\times$ & 0.47$\times$ & \textbf{1.45$\times$} \\
+MonoTree & 0.98$\times$ & 0.85$\times$ & 0.47$\times$ & \textbf{1.14$\times$} & 0.27$\times$ & 0.57$\times$ & \textbf{1.23$\times$} \\
+ObjectGraph & 0.95$\times$ & 0.75$\times$ & \textbf{3.86$\times$} & 0.79$\times$ & 0.57$\times$ & 0.77$\times$ & \textbf{2.91$\times$} \\
+PiecewiseFunctions & 1.09$\times$ & 0.60$\times$ & \textbf{2.73$\times$} & \textbf{1.15$\times$} & \textbf{2.01$\times$} & 0.48$\times$ & \textbf{4.45$\times$} \\
+TernaryTree & \textbf{1.17$\times$} & 0.79$\times$ & 0.28$\times$ & 0.56$\times$ & 0.24$\times$ & \textbf{2.31$\times$} & \textbf{1.39$\times$} \\
+Trie & \textbf{1.13$\times$} & 0.56$\times$ & \textbf{3.63$\times$} & \textbf{1.13$\times$} & \textbf{3.59$\times$} & 0.09$\times$ & \textbf{6.32$\times$} \\
 \midrule
-\textbf{Geomean} & \textbf{11.68$\times$} & 0.62$\times$ & \textbf{6.31$\times$} & \textbf{2.91$\times$} & \textbf{62.87$\times$} & \textbf{2.80$\times$} & \textbf{6.13$\times$} \\
+\textbf{Geomean} & \textbf{1.52$\times$} & 0.67$\times$ & \textbf{2.80$\times$} & 1.04$\times$ & \textbf{1.93$\times$} & 0.73$\times$ & \textbf{4.84$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -47,7 +74,20 @@ reduceNestedList & \textbf{11.68$\times$} & 0.62$\times$ & \textbf{6.31$\times$}
 \toprule
 \textbf{Program} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
-reduceNestedList & 4.4e+08/\textbf{3.7e+07} & \textbf{1.2e+07}/2.0e+07 & 1.9e+06/\textbf{3.1e+05} & 2.3e+02/\textbf{8.0e+01} & 1.1e+06/\textbf{1.8e+04} & 2.2e+02/\textbf{8.0e+01} & 6.9e+06/\textbf{1.1e+06} \\
+OctTree & 2.6e+09/\textbf{2.5e+09} & \textbf{8.2e+09}/1.1e+10 & 1.6e+07/\textbf{9.8e+06} & \textbf{4.2e+05}/9.8e+05 & \textbf{5.9e+04}/2.5e+05 & \textbf{1.8e+04}/3.0e+04 & 6.4e+07/\textbf{1.8e+07} \\
+Compiler & 9.4e+08/\textbf{5.8e+08} & \textbf{9.9e+08}/1.9e+09 & 1.3e+07/\textbf{3.1e+06} & \textbf{2.1e+05}/2.7e+05 & 1.2e+06/\textbf{8.4e+04} & \textbf{1.0e+04}/3.4e+04 & 5.1e+07/\textbf{7.7e+06} \\
+DBQuery & 9.4e+08/\textbf{8.7e+08} & \textbf{1.1e+09}/2.2e+09 & 4.1e+06/\textbf{2.8e+06} & \textbf{1.3e+05}/3.2e+05 & 8.5e+05/\textbf{9.4e+04} & \textbf{7.2e+03}/1.9e+04 & 2.1e+07/\textbf{3.3e+06} \\
+DecisionTree & 1.9e+10/\textbf{1.5e+10} & \textbf{4.0e+10}/6.8e+10 & 5.4e+08/\textbf{2.9e+07} & 1.0e+05/\textbf{3.6e+04} & 2.2e+06/\textbf{2.1e+06} & 1.0e+05/\textbf{3.3e+04} & 1.1e+09/\textbf{2.9e+07} \\
+DomTree & 8.3e+08/\textbf{5.4e+08} & \textbf{1.2e+09}/2.2e+09 & 1.2e+07/\textbf{4.2e+06} & \textbf{1.0e+05}/1.4e+05 & 1.1e+06/\textbf{5.0e+04} & \textbf{5.0e+03}/3.0e+04 & 5.7e+07/\textbf{5.4e+06} \\
+KDTree & 9.1e+08/\textbf{7.1e+08} & \textbf{3.1e+09}/4.0e+09 & 1.4e+07/\textbf{1.2e+07} & \textbf{9.2e+02}/9.4e+02 & \textbf{2.6e+04}/1.1e+05 & 9.3e+02/9.3e+02 & 4.4e+07/\textbf{9.5e+06} \\
+LinearListReduction & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 1.5e+06/\textbf{4.6e+04} & 2.3e+02/\textbf{3.7e+01} & 2.7e+05/\textbf{7.0e+03} & 2.4e+02/\textbf{4.1e+01} & 1.2e+07/\textbf{1.1e+06} \\
+reduceNestedList & 4.3e+08/\textbf{3.7e+07} & \textbf{1.2e+07}/2.0e+07 & 1.9e+06/\textbf{3.0e+05} & 2.2e+02/\textbf{7.3e+01} & 1.1e+06/\textbf{1.7e+04} & 2.2e+02/\textbf{7.5e+01} & 6.9e+06/\textbf{1.1e+06} \\
+List & \textbf{1.3e+09}/1.5e+09 & \textbf{4.5e+09}/5.6e+09 & 9.7e+06/\textbf{3.1e+06} & \textbf{2.7e+05}/6.0e+05 & \textbf{1.9e+04}/2.1e+05 & \textbf{7.6e+03}/1.6e+04 & 4.8e+07/\textbf{3.3e+07} \\
+MonoTree & \textbf{2.5e+08}/2.6e+08 & \textbf{9.1e+08}/1.1e+09 & \textbf{2.4e+05}/5.1e+05 & 5.0e+04/\textbf{4.4e+04} & \textbf{3.4e+03}/1.3e+04 & \textbf{1.5e+03}/2.6e+03 & 2.0e+06/\textbf{1.6e+06} \\
+ObjectGraph & \textbf{8.4e+08}/8.9e+08 & \textbf{3.0e+09}/4.0e+09 & 9.6e+06/\textbf{2.5e+06} & \textbf{1.9e+05}/2.4e+05 & \textbf{3.1e+04}/5.4e+04 & \textbf{1.3e+04}/1.6e+04 & 2.4e+07/\textbf{8.1e+06} \\
+PiecewiseFunctions & 1.2e+09/\textbf{1.1e+09} & \textbf{2.8e+09}/4.7e+09 & 1.4e+07/\textbf{5.3e+06} & 4.8e+05/\textbf{4.2e+05} & 1.8e+05/\textbf{9.1e+04} & \textbf{2.3e+04}/4.7e+04 & 4.5e+07/\textbf{1.0e+07} \\
+TernaryTree & 4.3e+08/\textbf{3.6e+08} & \textbf{1.2e+09}/1.5e+09 & \textbf{4.4e+05}/1.6e+06 & \textbf{6.5e+04}/1.2e+05 & \textbf{4.6e+03}/1.9e+04 & 4.2e+03/\textbf{1.8e+03} & 3.2e+06/\textbf{2.3e+06} \\
+Trie & 6.5e+08/\textbf{5.7e+08} & \textbf{1.2e+09}/2.2e+09 & 8.8e+06/\textbf{2.4e+06} & 2.5e+05/\textbf{2.2e+05} & 1.7e+05/\textbf{4.6e+04} & \textbf{3.4e+03}/3.8e+04 & 2.6e+07/\textbf{4.1e+06} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -68,7 +108,21 @@ reduceNestedList & 4.4e+08/\textbf{3.7e+07} & \textbf{1.2e+07}/2.0e+07 & 1.9e+06
 \toprule
 \textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} \\
 \midrule
-reduceNestedList & 16.28 & 23.06 & \textbf{8.102} \\
+Compiler & 29.96 & 110.1 & \textbf{23.17} \\
+DBQuery & 26.76 & 33.48 & \textbf{26.19} \\
+DecisionTree & 372.6 & 558.0 & \textbf{294.7} \\
+DomTree & 20.32 & 34.72 & \textbf{15.15} \\
+KDTree & 18.32 & 24.81 & \textbf{14.45} \\
+LinearListReduction & 3.280 & 13.96 & \textbf{0.8972} \\
+reduceNestedList & 16.00 & 23.10 & \textbf{8.181} \\
+List & \textbf{39.87} & \textit{OOM} & 47.20 \\
+MonoTree & \textbf{6.833} & 14.41 & 7.045 \\
+ObjectGraph & \textbf{24.41} & 49.26 & 25.31 \\
+OctTree & \textbf{63.08} & 68.61 & 69.30 \\
+PiecewiseFunctions & 39.07 & 57.06 & \textbf{37.38} \\
+TernaryTree & 12.06 & 15.15 & \textbf{10.98} \\
+Trie & 22.74 & 30.73 & \textbf{21.47} \\
+ColorOctree & 9.194 & 12.14 & \textbf{8.180} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -82,10 +136,386 @@ reduceNestedList & 16.28 & 23.06 & \textbf{8.102} \\
 \toprule
 \textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
 \midrule
-reduceNestedList & \textbf{2.01$\times$} & \textbf{1.42$\times$} & \textbf{2.85$\times$} \\
+Compiler & \textbf{1.29$\times$} & \textbf{3.67$\times$} & \textbf{4.75$\times$} \\
+DBQuery & 1.02$\times$ & \textbf{1.25$\times$} & \textbf{1.28$\times$} \\
+DecisionTree & \textbf{1.26$\times$} & \textbf{1.50$\times$} & \textbf{1.89$\times$} \\
+DomTree & \textbf{1.34$\times$} & \textbf{1.71$\times$} & \textbf{2.29$\times$} \\
+KDTree & \textbf{1.27$\times$} & \textbf{1.35$\times$} & \textbf{1.72$\times$} \\
+LinearListReduction & \textbf{3.66$\times$} & \textbf{4.26$\times$} & \textbf{15.56$\times$} \\
+reduceNestedList & \textbf{1.96$\times$} & \textbf{1.44$\times$} & \textbf{2.82$\times$} \\
+List & 0.84$\times$ & -- & -- \\
+MonoTree & 0.97$\times$ & \textbf{2.11$\times$} & \textbf{2.05$\times$} \\
+ObjectGraph & 0.96$\times$ & \textbf{2.02$\times$} & \textbf{1.95$\times$} \\
+OctTree & 0.91$\times$ & 1.09$\times$ & 0.99$\times$ \\
+PiecewiseFunctions & 1.05$\times$ & \textbf{1.46$\times$} & \textbf{1.53$\times$} \\
+TernaryTree & 1.10$\times$ & \textbf{1.26$\times$} & \textbf{1.38$\times$} \\
+Trie & 1.06$\times$ & \textbf{1.35$\times$} & \textbf{1.43$\times$} \\
+ColorOctree & \textbf{1.12$\times$} & \textbf{1.32$\times$} & \textbf{1.48$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+% -- Table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{OctTree}, OctTree SoA uses 9 buffers; ColorOctree SoA uses 18 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:OctTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+barnesHutPotential & F & 11/16 & 31\% & 0.0416$\pm$0.00003 & 0.0576$\pm$0.00010 & \textbf{0.0391$\pm$0.00017} & 1.06$\times$ & \textbf{1.38$\times$} & \textbf{1.47$\times$} \\
+countActive & F & 10/16 & 38\% & 0.0356$\pm$0.00002 & 0.0441$\pm$0.00122 & \textbf{0.0291$\pm$0.00003} & \textbf{1.23$\times$} & \textbf{1.24$\times$} & \textbf{1.52$\times$} \\
+countParticles & F & 8/16 & 50\% & 0.0359$\pm$0.00002 & 0.0434$\pm$0.00163 & \textbf{0.0264$\pm$0.00159} & \textbf{1.36$\times$} & \textbf{1.21$\times$} & \textbf{1.64$\times$} \\
+fmmPotential & F & 12/16 & 25\% & 0.0967$\pm$0.00131 & 0.0967$\pm$0.00118 & \textbf{0.0955$\pm$0.00020} & 1.01$\times$ & 1.00$\times$ & 1.01$\times$ \\
+sumEnergy & F & 12/16 & 25\% & 0.0369$\pm$0.00003 & 0.0524$\pm$0.00009 & \textbf{0.0328$\pm$0.00002} & \textbf{1.13$\times$} & \textbf{1.42$\times$} & \textbf{1.60$\times$} \\
+sumMass & F & 10/16 & 38\% & 0.0342$\pm$0.00110 & 0.0433$\pm$0.00008 & \textbf{0.0270$\pm$0.00002} & \textbf{1.27$\times$} & \textbf{1.27$\times$} & \textbf{1.61$\times$} \\
+clearFlags & M & 15/16 & 6\% & 0.1531$\pm$0.00020 & \textbf{0.1479$\pm$0.00020} & 0.1725$\pm$0.00128 & 0.89$\times$ & 0.97$\times$ & 0.86$\times$ \\
+scaleEnergy & M & 16/16 & 0\% & \textbf{0.1498$\pm$0.00103} & 0.1515$\pm$0.00029 & 0.1756$\pm$0.00165 & 0.85$\times$ & 1.01$\times$ & 0.86$\times$ \\
+\midrule
+paletteEntriesQuantized & F & 13/25 & 48\% & 0.0415$\pm$0.00086 & 0.0531$\pm$0.00079 & \textbf{0.0311$\pm$0.00005} & \textbf{1.33$\times$} & \textbf{1.28$\times$} & \textbf{1.71$\times$} \\
+quantizationErrorProxy & F & 10/25 & 60\% & 0.0462$\pm$0.00001 & 0.0641$\pm$0.00002 & \textbf{0.0427$\pm$0.00102} & 1.08$\times$ & \textbf{1.39$\times$} & \textbf{1.50$\times$} \\
+\midrule
+\textbf{Total} & & & & \textbf{0.6715} & 0.7541 & 0.6716 & 1.00$\times$ & \textbf{1.12$\times$} & \textbf{1.12$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.11$\times$} & \textbf{1.21$\times$} & \textbf{1.34$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: OctTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{OctTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:OctTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+barnesHutPotential & F & 2.1e+08/\textbf{2.0e+08} & \textbf{8.2e+08}/1.0e+09 & \textbf{3.7e+04}/5.4e+05 & 1.5e+02/\textbf{7.0e+01} & \textbf{1.8e+03}/2.3e+04 & 1.5e+02/\textbf{7.1e+01} & 6.2e+06/\textbf{2.2e+06} \\
+countActive & F & 1.8e+08/\textbf{1.5e+08} & 5.8e+08/\textbf{5.8e+08} & 1.0e+06/\textbf{3.9e+05} & 1.3e+02/\textbf{5.4e+01} & \textbf{3.7e+03}/1.4e+04 & 1.3e+02/\textbf{5.5e+01} & 6.1e+06/\textbf{3.3e+05} \\
+countParticles & F & 1.8e+08/\textbf{1.3e+08} & 5.7e+08/\textbf{5.7e+08} & 8.9e+05/\textbf{2.1e+05} & 3.4e+02/\textbf{5.1e+01} & \textbf{3.9e+03}/7.7e+03 & 3.4e+02/\textbf{5.3e+01} & 6.0e+06/\textbf{6.3e+04} \\
+fmmPotential & F & 4.9e+08/\textbf{4.8e+08} & \textbf{1.6e+09}/1.8e+09 & \textbf{2.4e+04}/6.3e+05 & \textbf{4.7e+02}/5.3e+02 & \textbf{1.7e+03}/2.5e+04 & \textbf{4.7e+02}/5.2e+02 & 4.5e+06/\textbf{2.2e+06} \\
+sumEnergy & F & 1.9e+08/\textbf{1.7e+08} & \textbf{7.7e+08}/8.9e+08 & \textbf{3.3e+05}/4.8e+05 & 2.5e+02/\textbf{8.4e+01} & \textbf{2.2e+03}/2.4e+04 & 2.6e+02/\textbf{8.9e+01} & 6.2e+06/\textbf{2.6e+06} \\
+sumMass & F & 1.7e+08/\textbf{1.4e+08} & \textbf{5.7e+08}/6.3e+08 & 7.5e+05/\textbf{1.8e+05} & 3.9e+02/\textbf{5.8e+01} & \textbf{2.7e+03}/8.1e+03 & 3.9e+02/\textbf{5.8e+01} & 6.1e+06/\textbf{1.2e+06} \\
+clearFlags & M & \textbf{3.7e+08}/4.2e+08 & \textbf{8.0e+08}/1.7e+09 & \textbf{8.2e+05}/2.2e+06 & \textbf{1.8e+05}/5.4e+05 & \textbf{8.7e+03}/3.4e+04 & \textbf{8.1e+03}/1.2e+04 & 5.3e+06/\textbf{2.6e+06} \\
+scaleEnergy & M & \textbf{3.6e+08}/4.4e+08 & \textbf{9.1e+08}/1.9e+09 & \textbf{1.2e+06}/2.5e+06 & \textbf{2.4e+05}/4.3e+05 & \textbf{8.8e+03}/3.7e+04 & \textbf{7.9e+03}/1.6e+04 & 5.3e+06/\textbf{2.6e+06} \\
+\midrule
+paletteEntriesQuantized & F & 2.1e+08/\textbf{1.6e+08} & \textbf{6.7e+08}/7.6e+08 & 6.2e+06/\textbf{1.8e+06} & 2.9e+02/\textbf{2.4e+02} & \textbf{9.1e+03}/4.2e+04 & 2.9e+02/\textbf{2.4e+02} & 9.5e+06/\textbf{1.3e+06} \\
+quantizationErrorProxy & F & 2.3e+08/\textbf{2.2e+08} & \textbf{9.7e+08}/1.2e+09 & 4.3e+06/\textbf{9.1e+05} & 1.4e+02/\textbf{1.3e+02} & \textbf{1.7e+04}/3.2e+04 & 1.4e+02/\textbf{1.4e+02} & 9.3e+06/\textbf{2.9e+06} \\
+\midrule
+\textbf{Total} &  & 2.6e+09/2.5e+09 & 8.2e+09/1.1e+10 & 1.6e+07/9.8e+06 & 4.2e+05/9.8e+05 & 5.9e+04/2.5e+05 & 1.8e+04/3.0e+04 & 6.4e+07/1.8e+07 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: Compiler --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{Compiler}, ADT has 9 fields, SoA uses 8 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:Compiler}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+blockCountPass & F & 2/9 & 78\% & 0.0120$\pm$0.00001 & 0.0789$\pm$0.00002 & \textbf{0.0019$\pm$0.00000} & \textbf{6.24$\times$} & \textbf{6.60$\times$} & \textbf{41.16$\times$} \\
+branchStatsPass & F & 2/9 & 78\% & 0.0116$\pm$0.00042 & 0.0790$\pm$0.00002 & \textbf{0.0036$\pm$0.00000} & \textbf{3.25$\times$} & \textbf{6.82$\times$} & \textbf{22.20$\times$} \\
+castInstCountPass & F & 3/9 & 67\% & 0.0181$\pm$0.00002 & 0.0789$\pm$0.00100 & \textbf{0.0013$\pm$0.00000} & \textbf{14.07$\times$} & \textbf{4.35$\times$} & \textbf{61.17$\times$} \\
+has cycle & F & 4/9 & 56\% & 0.0242$\pm$0.00011 & 0.0923$\pm$0.00104 & \textbf{0.0170$\pm$0.00015} & \textbf{1.43$\times$} & \textbf{3.81$\times$} & \textbf{5.43$\times$} \\
+instCountPass & F & 2/9 & 78\% & 0.0120$\pm$0.00042 & 0.0791$\pm$0.00018 & \textbf{0.0019$\pm$0.00000} & \textbf{6.22$\times$} & \textbf{6.60$\times$} & \textbf{41.04$\times$} \\
+latencyModelPass & F & 3/9 & 67\% & 0.0119$\pm$0.00001 & 0.0795$\pm$0.00155 & \textbf{0.0030$\pm$0.00000} & \textbf{3.99$\times$} & \textbf{6.69$\times$} & \textbf{26.73$\times$} \\
+memoryOpStatsPass & F & 3/9 & 67\% & 0.0117$\pm$0.00001 & 0.0789$\pm$0.00002 & \textbf{0.0038$\pm$0.00000} & \textbf{3.07$\times$} & \textbf{6.73$\times$} & \textbf{20.63$\times$} \\
+throughputModelPass & F & 3/9 & 67\% & 0.0119$\pm$0.00001 & 0.0794$\pm$0.00002 & \textbf{0.0030$\pm$0.00000} & \textbf{4.00$\times$} & \textbf{6.65$\times$} & \textbf{26.62$\times$} \\
+verifyIR & F & 9/9 & 0\% & 0.0124$\pm$0.00010 & 0.0705$\pm$0.00006 & \textbf{0.0034$\pm$0.00004} & \textbf{3.60$\times$} & \textbf{5.69$\times$} & \textbf{20.49$\times$} \\
+stripSideEffectsPass & M & 7/9 & 22\% & \textbf{0.0804$\pm$0.00128} & 0.1855$\pm$0.00076 & 0.0874$\pm$0.00082 & 0.92$\times$ & \textbf{2.31$\times$} & \textbf{2.12$\times$} \\
+targetReturnPass & M & 9/9 & 0\% & \textbf{0.0785$\pm$0.00015} & 0.1841$\pm$0.00097 & 0.0880$\pm$0.00122 & 0.89$\times$ & \textbf{2.34$\times$} & \textbf{2.09$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.2847 & 1.086 & \textbf{0.2143} & \textbf{1.33$\times$} & \textbf{3.82$\times$} & \textbf{5.07$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{3.21$\times$} & \textbf{4.97$\times$} & \textbf{15.92$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: Compiler PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{Compiler} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:Compiler_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+blockCountPass & F & 6.1e+07/\textbf{9.7e+06} & 5.1e+07/\textbf{4.5e+07} & 1.3e+06/\textbf{1.6e+04} & 3.5e+02/\textbf{1.9e+01} & 2.2e+05/\textbf{1.1e+03} & 3.6e+02/\textbf{1.9e+01} & 4.7e+06/\textbf{4.5e+03} \\
+branchStatsPass & F & 5.9e+07/\textbf{1.8e+07} & \textbf{7.9e+07}/8.6e+07 & 8.4e+05/\textbf{2.0e+04} & 2.7e+02/\textbf{4.3e+01} & 5.0e+04/\textbf{3.3e+03} & 2.7e+02/\textbf{4.5e+01} & 4.6e+06/\textbf{4.2e+05} \\
+castInstCountPass & F & 9.2e+07/\textbf{6.6e+06} & 5.1e+07/\textbf{3.9e+07} & \textbf{1.3e+04}/2.3e+04 & 8.5e+01/\textbf{1.7e+01} & \textbf{8.1e+02}/1.1e+03 & 8.7e+01/\textbf{1.7e+01} & 4.6e+06/\textbf{1.0e+03} \\
+has cycle & F & 1.2e+08/\textbf{8.6e+07} & \textbf{1.1e+08}/1.5e+08 & 2.4e+06/\textbf{2.8e+05} & 4.0e+02/\textbf{1.1e+02} & 1.5e+05/\textbf{2.2e+04} & 4.1e+02/\textbf{1.1e+02} & 5.1e+06/\textbf{2.4e+06} \\
+instCountPass & F & 6.1e+07/\textbf{9.8e+06} & \textbf{5.6e+07}/5.7e+07 & 1.3e+06/\textbf{1.3e+04} & 2.4e+02/\textbf{1.8e+01} & 2.3e+05/\textbf{1.1e+03} & 2.4e+02/\textbf{1.8e+01} & 4.7e+06/\textbf{4.5e+03} \\
+latencyModelPass & F & 6.0e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{2.9e+04} & 3.6e+02/\textbf{4.0e+01} & 2.0e+05/\textbf{3.9e+03} & 3.7e+02/\textbf{4.2e+01} & 4.7e+06/\textbf{5.3e+05} \\
+memoryOpStatsPass & F & 5.9e+07/\textbf{1.9e+07} & \textbf{8.5e+07}/9.1e+07 & 6.7e+05/\textbf{3.7e+04} & 3.4e+02/\textbf{3.7e+01} & 3.1e+04/\textbf{3.3e+03} & 3.5e+02/\textbf{4.1e+01} & 4.6e+06/\textbf{4.5e+05} \\
+throughputModelPass & F & 6.1e+07/\textbf{1.5e+07} & \textbf{6.2e+07}/6.9e+07 & 1.2e+06/\textbf{3.0e+04} & 3.0e+02/\textbf{3.9e+01} & 2.0e+05/\textbf{3.5e+03} & 3.0e+02/\textbf{3.9e+01} & 4.7e+06/\textbf{5.5e+05} \\
+verifyIR & F & 6.3e+07/\textbf{1.7e+07} & \textbf{7.4e+07}/8.6e+07 & 9.2e+05/\textbf{1.8e+04} & 2.4e+02/\textbf{1.1e+02} & 1.4e+05/\textbf{4.0e+03} & 2.4e+02/\textbf{1.1e+02} & 4.6e+06/\textbf{4.6e+05} \\
+stripSideEffectsPass & M & \textbf{1.6e+08}/1.9e+08 & \textbf{1.8e+08}/6.0e+08 & \textbf{1.2e+06}/1.3e+06 & \textbf{1.2e+05}/1.3e+05 & \textbf{6.5e+03}/1.6e+04 & \textbf{5.1e+03}/1.2e+04 & 4.1e+06/\textbf{1.2e+06} \\
+targetReturnPass & M & \textbf{1.5e+08}/1.9e+08 & \textbf{1.7e+08}/6.3e+08 & 2.0e+06/\textbf{1.4e+06} & \textbf{9.1e+04}/1.4e+05 & \textbf{5.9e+03}/2.4e+04 & \textbf{2.3e+03}/2.2e+04 & 4.2e+06/\textbf{1.7e+06} \\
+\midrule
+\textbf{Total} &  & 9.4e+08/5.8e+08 & 9.9e+08/1.9e+09 & 1.3e+07/3.1e+06 & 2.1e+05/2.7e+05 & 1.2e+06/8.4e+04 & 1.0e+04/3.4e+04 & 5.1e+07/7.7e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DBQuery --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DBQuery}, ADT has 15 fields, SoA uses 13 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DBQuery}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+countJoins & F & 3/15 & 80\% & 0.0189$\pm$0.00001 & 0.0283$\pm$0.00001 & \textbf{0.0109$\pm$0.00000} & \textbf{1.73$\times$} & \textbf{1.50$\times$} & \textbf{2.59$\times$} \\
+filterSelectivitySkew & F & 5/15 & 67\% & 0.0189$\pm$0.00001 & 0.0284$\pm$0.00001 & \textbf{0.0122$\pm$0.00001} & \textbf{1.55$\times$} & \textbf{1.50$\times$} & \textbf{2.33$\times$} \\
+hashJoinPressure & F & 5/15 & 67\% & 0.0196$\pm$0.00001 & 0.0324$\pm$0.00001 & \textbf{0.0125$\pm$0.00001} & \textbf{1.57$\times$} & \textbf{1.65$\times$} & \textbf{2.60$\times$} \\
+sumCost & F & 6/15 & 60\% & 0.0190$\pm$0.00011 & 0.0282$\pm$0.00015 & \textbf{0.0143$\pm$0.00009} & \textbf{1.33$\times$} & \textbf{1.48$\times$} & \textbf{1.97$\times$} \\
+sumMemory & F & 6/15 & 60\% & 0.0190$\pm$0.00089 & 0.0284$\pm$0.00001 & \textbf{0.0140$\pm$0.00002} & \textbf{1.36$\times$} & \textbf{1.49$\times$} & \textbf{2.03$\times$} \\
+sumRows & F & 6/15 & 60\% & 0.0263$\pm$0.00001 & 0.0297$\pm$0.00002 & \textbf{0.0213$\pm$0.00004} & \textbf{1.23$\times$} & \textbf{1.13$\times$} & \textbf{1.40$\times$} \\
+clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0681$\pm$0.00010} & 0.0755$\pm$0.00009 & 0.0820$\pm$0.00005 & 0.83$\times$ & \textbf{1.11$\times$} & 0.92$\times$ \\
+scaleCosts & M & 15/15 & 0\% & \textbf{0.0681$\pm$0.00010} & 0.0759$\pm$0.00010 & 0.0831$\pm$0.00004 & 0.82$\times$ & \textbf{1.12$\times$} & 0.91$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.2579 & 0.3267 & \textbf{0.2503} & 1.03$\times$ & \textbf{1.27$\times$} & \textbf{1.31$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.26$\times$} & \textbf{1.36$\times$} & \textbf{1.71$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DBQuery PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{DBQuery} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:DBQuery_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+countJoins & F & 9.6e+07/\textbf{5.5e+07} & 7.4e+07/\textbf{7.1e+07} & 7.0e+05/\textbf{2.6e+04} & 5.8e+02/\textbf{6.4e+01} & 1.7e+05/\textbf{2.1e+03} & 5.7e+02/\textbf{4.5e+01} & 2.7e+06/\textbf{2.9e+03} \\
+filterSelectivitySkew & F & 9.5e+07/\textbf{6.2e+07} & \textbf{1.0e+08}/1.1e+08 & 5.3e+05/\textbf{7.5e+04} & 1.9e+02/\textbf{9.0e+01} & 1.2e+05/\textbf{6.3e+03} & 1.9e+02/\textbf{9.4e+01} & 2.6e+06/\textbf{2.3e+05} \\
+hashJoinPressure & F & 1.0e+08/\textbf{6.3e+07} & \textbf{8.4e+07}/9.9e+07 & 7.2e+05/\textbf{9.5e+04} & 5.5e+02/\textbf{7.7e+01} & 1.8e+05/\textbf{7.3e+03} & 5.5e+02/\textbf{7.7e+01} & 2.6e+06/\textbf{1.3e+05} \\
+sumCost & F & 9.6e+07/\textbf{7.2e+07} & \textbf{9.0e+07}/1.2e+08 & 6.9e+05/\textbf{8.3e+04} & 1.4e+02/\textbf{1.1e+02} & 1.6e+05/\textbf{1.1e+04} & 1.4e+02/\textbf{1.1e+02} & 2.7e+06/\textbf{3.3e+05} \\
+sumMemory & F & 9.6e+07/\textbf{7.1e+07} & \textbf{9.0e+07}/1.2e+08 & 5.8e+05/\textbf{8.3e+04} & 3.2e+02/\textbf{6.5e+01} & 1.3e+05/\textbf{1.1e+04} & 3.2e+02/\textbf{6.6e+01} & 2.6e+06/\textbf{3.2e+05} \\
+sumRows & F & 1.3e+08/\textbf{1.1e+08} & \textbf{2.1e+08}/2.3e+08 & 2.5e+05/\textbf{1.1e+05} & 1.7e+02/\textbf{7.0e+01} & 2.3e+04/\textbf{7.7e+03} & 1.7e+02/\textbf{7.1e+01} & 2.3e+06/\textbf{2.7e+05} \\
+clearQueryFlags & M & \textbf{1.6e+08}/2.2e+08 & \textbf{1.9e+08}/7.2e+08 & \textbf{3.0e+05}/1.2e+06 & \textbf{6.5e+04}/1.5e+05 & 4.2e+04/\textbf{2.3e+04} & \textbf{2.6e+03}/7.6e+03 & 2.5e+06/\textbf{9.1e+05} \\
+scaleCosts & M & \textbf{1.6e+08}/2.2e+08 & \textbf{2.2e+08}/7.5e+08 & \textbf{2.9e+05}/1.1e+06 & \textbf{6.6e+04}/1.7e+05 & 3.2e+04/\textbf{2.4e+04} & \textbf{2.7e+03}/1.1e+04 & 2.5e+06/\textbf{1.1e+06} \\
+\midrule
+\textbf{Total} &  & 9.4e+08/8.7e+08 & 1.1e+09/2.2e+09 & 4.1e+06/2.8e+06 & 1.3e+05/3.2e+05 & 8.5e+05/9.4e+04 & 7.2e+03/1.9e+04 & 2.1e+07/3.3e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DecisionTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DecisionTree}, ADT has 7 fields, SoA uses 6 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DecisionTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+classify Batch & F & 5/7 & 29\% & 3.197$\pm$0.0067 & 4.220$\pm$0.0067 & \textbf{2.593$\pm$0.0110} & \textbf{1.23$\times$} & \textbf{1.32$\times$} & \textbf{1.63$\times$} \\
+classify Depth & F & 4/7 & 43\% & 0.0456$\pm$0.00001 & 0.0598$\pm$0.00002 & \textbf{0.0366$\pm$0.00006} & \textbf{1.25$\times$} & \textbf{1.31$\times$} & \textbf{1.64$\times$} \\
+classify tree & F & 5/7 & 29\% & 0.0456$\pm$0.00001 & 0.0598$\pm$0.00001 & \textbf{0.0365$\pm$0.00005} & \textbf{1.25$\times$} & \textbf{1.31$\times$} & \textbf{1.64$\times$} \\
+countFeatureUses & F & 3/7 & 57\% & 0.0492$\pm$0.00001 & 0.1416$\pm$0.00179 & \textbf{0.0319$\pm$0.00002} & \textbf{1.54$\times$} & \textbf{2.88$\times$} & \textbf{4.44$\times$} \\
+countLeaves & F & 2/7 & 71\% & 0.0466$\pm$0.00002 & 0.1391$\pm$0.00144 & \textbf{0.0249$\pm$0.00001} & \textbf{1.87$\times$} & \textbf{2.99$\times$} & \textbf{5.58$\times$} \\
+countNodes & F & 2/7 & 71\% & 0.0464$\pm$0.00098 & 0.1391$\pm$0.00144 & \textbf{0.0261$\pm$0.00098} & \textbf{1.78$\times$} & \textbf{3.00$\times$} & \textbf{5.34$\times$} \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0496$\pm$0.00001 & 0.1358$\pm$0.00154 & \textbf{0.0319$\pm$0.00003} & \textbf{1.55$\times$} & \textbf{2.74$\times$} & \textbf{4.25$\times$} \\
+inferenceCost & F & 2/7 & 71\% & 0.0494$\pm$0.00001 & 0.1381$\pm$0.00004 & \textbf{0.0286$\pm$0.00000} & \textbf{1.72$\times$} & \textbf{2.80$\times$} & \textbf{4.82$\times$} \\
+sumImpurity & F & 3/7 & 57\% & 0.0489$\pm$0.00117 & 0.1380$\pm$0.00188 & \textbf{0.0316$\pm$0.00003} & \textbf{1.55$\times$} & \textbf{2.82$\times$} & \textbf{4.36$\times$} \\
+sumPathLengths & F & 3/7 & 57\% & 0.0509$\pm$0.00090 & 0.1371$\pm$0.00185 & \textbf{0.0336$\pm$0.00015} & \textbf{1.51$\times$} & \textbf{2.70$\times$} & \textbf{4.08$\times$} \\
+sumSamples & F & 3/7 & 57\% & 0.0468$\pm$0.00115 & 0.1332$\pm$0.00004 & \textbf{0.0320$\pm$0.00002} & \textbf{1.46$\times$} & \textbf{2.85$\times$} & \textbf{4.16$\times$} \\
+treeDepth & F & 2/7 & 71\% & 0.0496$\pm$0.00027 & 0.1379$\pm$0.00130 & \textbf{0.0279$\pm$0.00001} & \textbf{1.78$\times$} & \textbf{2.78$\times$} & \textbf{4.95$\times$} \\
+\midrule
+\textbf{Total} & & & & 3.726 & 5.579 & \textbf{2.934} & \textbf{1.27$\times$} & \textbf{1.50$\times$} & \textbf{1.90$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.53$\times$} & \textbf{2.34$\times$} & \textbf{3.57$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DecisionTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{DecisionTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:DecisionTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+classify Batch & F & 1.6e+10/\textbf{1.3e+10} & \textbf{3.3e+10}/5.9e+10 & 4.6e+08/\textbf{2.7e+07} & 9.1e+04/\textbf{3.1e+04} & \textbf{1.7e+06}/2.0e+06 & 9.0e+04/\textbf{2.8e+04} & 9.3e+08/\textbf{1.7e+07} \\
+classify Depth & F & 2.3e+08/\textbf{1.9e+08} & \textbf{4.7e+08}/8.5e+08 & 6.5e+06/\textbf{3.7e+05} & 8.0e+02/\textbf{5.3e+02} & \textbf{2.0e+04}/2.8e+04 & 8.0e+02/\textbf{4.9e+02} & 1.3e+07/\textbf{2.8e+05} \\
+classify tree & F & 2.3e+08/\textbf{1.9e+08} & \textbf{4.7e+08}/8.5e+08 & 6.5e+06/\textbf{3.7e+05} & 1.3e+03/\textbf{5.4e+02} & \textbf{2.2e+04}/2.8e+04 & 1.3e+03/\textbf{5.0e+02} & 1.3e+07/\textbf{2.8e+05} \\
+countFeatureUses & F & 2.5e+08/\textbf{1.6e+08} & \textbf{7.5e+08}/7.8e+08 & 7.6e+06/\textbf{2.6e+05} & 1.9e+03/\textbf{6.4e+02} & 7.3e+04/\textbf{1.3e+04} & 1.9e+03/\textbf{6.4e+02} & 1.5e+07/\textbf{2.0e+06} \\
+countLeaves & F & 2.4e+08/\textbf{1.3e+08} & \textbf{6.0e+08}/6.1e+08 & 7.3e+06/\textbf{1.1e+05} & 7.6e+02/\textbf{3.7e+02} & 4.7e+04/\textbf{7.9e+03} & 7.6e+02/\textbf{3.7e+02} & 1.4e+07/\textbf{3.3e+05} \\
+countNodes & F & 2.4e+08/\textbf{1.3e+08} & \textbf{6.1e+08}/6.2e+08 & 7.1e+06/\textbf{1.1e+05} & 6.7e+02/\textbf{2.4e+02} & 4.7e+04/\textbf{7.9e+03} & 6.7e+02/\textbf{2.4e+02} & 1.4e+07/\textbf{3.5e+05} \\
+countSmallLeaves & F & 2.5e+08/\textbf{1.6e+08} & \textbf{7.1e+08}/8.4e+08 & 5.9e+06/\textbf{8.8e+04} & 1.4e+03/\textbf{4.7e+02} & 3.1e+04/\textbf{1.3e+04} & 1.4e+03/\textbf{4.7e+02} & 1.5e+07/\textbf{2.0e+06} \\
+inferenceCost & F & 2.5e+08/\textbf{1.5e+08} & 6.1e+08/\textbf{6.1e+08} & 8.1e+06/\textbf{1.2e+05} & 1.3e+03/\textbf{3.3e+02} & 2.2e+04/\textbf{7.7e+03} & 1.3e+03/\textbf{3.3e+02} & 1.4e+07/\textbf{3.3e+05} \\
+sumImpurity & F & 2.5e+08/\textbf{1.6e+08} & \textbf{7.6e+08}/7.8e+08 & 7.6e+06/\textbf{5.7e+05} & 9.2e+02/\textbf{5.1e+02} & 7.3e+04/\textbf{1.3e+04} & 9.1e+02/\textbf{5.1e+02} & 1.5e+07/\textbf{2.0e+06} \\
+sumPathLengths & F & 2.6e+08/\textbf{1.7e+08} & \textbf{8.0e+08}/9.0e+08 & 7.8e+06/\textbf{3.9e+05} & 1.2e+03/\textbf{8.7e+02} & 8.9e+04/\textbf{1.4e+04} & 1.2e+03/\textbf{8.7e+02} & 1.5e+07/\textbf{2.0e+06} \\
+sumSamples & F & 2.4e+08/\textbf{1.6e+08} & \textbf{6.4e+08}/7.7e+08 & 6.2e+06/\textbf{2.5e+05} & 9.0e+02/\textbf{5.8e+02} & 4.1e+04/\textbf{1.4e+04} & 8.7e+02/\textbf{5.8e+02} & 1.5e+07/\textbf{2.0e+06} \\
+treeDepth & F & 2.5e+08/\textbf{1.4e+08} & 6.1e+08/\textbf{6.1e+08} & 8.1e+06/\textbf{1.1e+05} & 1.5e+03/\textbf{3.9e+02} & 2.1e+04/\textbf{7.8e+03} & 1.5e+03/\textbf{3.9e+02} & 1.4e+07/\textbf{3.3e+05} \\
+\midrule
+\textbf{Total} &  & 1.9e+10/1.5e+10 & 4.0e+10/6.8e+10 & 5.4e+08/2.9e+07 & 1.0e+05/3.6e+04 & 2.2e+06/2.1e+06 & 1.0e+05/3.3e+04 & 1.1e+09/2.9e+07 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DomTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DomTree}, ADT has 15 fields, SoA uses 14 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DomTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+count styled & F & 3/15 & 80\% & 0.0344$\pm$0.00002 & 0.0692$\pm$0.00015 & \textbf{0.0116$\pm$0.00001} & \textbf{2.96$\times$} & \textbf{2.01$\times$} & \textbf{5.96$\times$} \\
+find max Bottom & F & 5/15 & 67\% & 0.0344$\pm$0.00002 & 0.0688$\pm$0.00002 & \textbf{0.0190$\pm$0.00003} & \textbf{1.81$\times$} & \textbf{2.00$\times$} & \textbf{3.61$\times$} \\
+SumArea & F & 6/15 & 60\% & 0.0356$\pm$0.00002 & 0.0696$\pm$0.00006 & \textbf{0.0191$\pm$0.00003} & \textbf{1.86$\times$} & \textbf{1.96$\times$} & \textbf{3.64$\times$} \\
+sumTextWidth & F & 3/15 & 80\% & 0.0342$\pm$0.00001 & 0.0697$\pm$0.00001 & \textbf{0.0117$\pm$0.00001} & \textbf{2.93$\times$} & \textbf{2.04$\times$} & \textbf{5.98$\times$} \\
+computeWidths & M & 14/15 & 7\% & \textbf{0.0295$\pm$0.00004} & 0.0302$\pm$0.00130 & 0.0443$\pm$0.00006 & 0.67$\times$ & 1.02$\times$ & 0.68$\times$ \\
+scaleLayout & M & 15/15 & 0\% & \textbf{0.0288$\pm$0.00015} & 0.0301$\pm$0.00131 & 0.0354$\pm$0.00085 & 0.81$\times$ & 1.04$\times$ & 0.85$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.1969 & 0.3377 & \textbf{0.1412} & \textbf{1.39$\times$} & \textbf{1.72$\times$} & \textbf{2.39$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.58$\times$} & \textbf{1.61$\times$} & \textbf{2.54$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DomTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{DomTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:DomTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+count styled & F & 1.7e+08/\textbf{5.9e+07} & \textbf{2.6e+08}/2.6e+08 & 2.2e+06/\textbf{3.3e+04} & 1.1e+03/\textbf{9.6e+01} & 3.0e+05/\textbf{4.9e+03} & 1.0e+03/\textbf{9.6e+01} & 1.4e+07/\textbf{6.4e+05} \\
+find max Bottom & F & 1.7e+08/\textbf{9.6e+07} & \textbf{2.5e+08}/4.1e+08 & 2.4e+06/\textbf{1.2e+06} & 4.8e+02/\textbf{1.4e+02} & 1.5e+05/\textbf{9.4e+03} & 4.8e+02/\textbf{1.4e+02} & 1.4e+07/\textbf{1.4e+06} \\
+SumArea & F & 1.8e+08/\textbf{9.7e+07} & \textbf{2.9e+08}/4.9e+08 & 2.8e+06/\textbf{5.3e+05} & 3.1e+02/\textbf{9.9e+01} & 1.7e+05/\textbf{1.2e+04} & 3.1e+02/\textbf{9.9e+01} & 1.4e+07/\textbf{1.9e+06} \\
+sumTextWidth & F & 1.7e+08/\textbf{5.9e+07} & \textbf{2.0e+08}/2.4e+08 & 2.5e+06/\textbf{2.0e+04} & 6.4e+02/\textbf{1.0e+02} & 4.4e+05/\textbf{4.2e+03} & 6.4e+02/\textbf{1.0e+02} & 1.4e+07/\textbf{6.5e+05} \\
+computeWidths & M & \textbf{6.4e+07}/1.4e+08 & \textbf{1.4e+08}/4.6e+08 & \textbf{1.3e+06}/1.6e+06 & \textbf{3.7e+04}/4.4e+04 & \textbf{6.0e+03}/1.1e+04 & \textbf{1.3e+03}/1.5e+04 & 1.2e+06/\textbf{4.2e+05} \\
+scaleLayout & M & \textbf{5.9e+07}/9.1e+07 & \textbf{8.8e+07}/2.9e+08 & 1.0e+06/\textbf{7.8e+05} & \textbf{6.2e+04}/9.1e+04 & 1.5e+04/\textbf{8.1e+03} & \textbf{1.3e+03}/1.4e+04 & 1.3e+06/\textbf{4.5e+05} \\
+\midrule
+\textbf{Total} &  & 8.3e+08/5.4e+08 & 1.2e+09/2.2e+09 & 1.2e+07/4.2e+06 & 1.0e+05/1.4e+05 & 1.1e+06/5.0e+04 & 5.0e+03/3.0e+04 & 5.7e+07/5.4e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: KDTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{KDTree}, ADT has 17 fields, SoA uses 16 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:KDTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+countInRange tight\_box & F & 13/17 & 24\% & 0.0282$\pm$0.00001 & 0.0403$\pm$0.00001 & \textbf{0.0198$\pm$0.00001} & \textbf{1.43$\times$} & \textbf{1.43$\times$} & \textbf{2.04$\times$} \\
+Find nearest Neighbour & F & 13/17 & 24\% & 0.0281$\pm$0.00002 & 0.0397$\pm$0.00006 & \textbf{0.0213$\pm$0.00004} & \textbf{1.32$\times$} & \textbf{1.41$\times$} & \textbf{1.86$\times$} \\
+photonMappingBenchmark & F & 12/17 & 29\% & 0.0421$\pm$0.00099 & 0.0476$\pm$0.00002 & \textbf{0.0413$\pm$0.00108} & 1.02$\times$ & \textbf{1.13$\times$} & \textbf{1.15$\times$} \\
+pointCloudNeighborhood & F & 11/17 & 35\% & 0.0250$\pm$0.00001 & 0.0389$\pm$0.00084 & \textbf{0.0166$\pm$0.00089} & \textbf{1.50$\times$} & \textbf{1.56$\times$} & \textbf{2.34$\times$} \\
+sumMassInRange & F & 14/17 & 18\% & 0.0278$\pm$0.00081 & 0.0404$\pm$0.00001 & \textbf{0.0199$\pm$0.00001} & \textbf{1.40$\times$} & \textbf{1.45$\times$} & \textbf{2.03$\times$} \\
+twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0290$\pm$0.00002 & 0.0393$\pm$0.00001 & \textbf{0.0210$\pm$0.00000} & \textbf{1.38$\times$} & \textbf{1.36$\times$} & \textbf{1.87$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.1802 & 0.2462 & \textbf{0.1399} & \textbf{1.29$\times$} & \textbf{1.37$\times$} & \textbf{1.76$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.33$\times$} & \textbf{1.38$\times$} & \textbf{1.84$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: KDTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{KDTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:KDTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+countInRange tight\_box & F & 1.4e+08/\textbf{1.0e+08} & \textbf{4.0e+08}/5.5e+08 & \textbf{1.9e+06}/2.2e+06 & 2.0e+02/\textbf{1.1e+02} & \textbf{3.8e+03}/1.9e+04 & 2.0e+02/\textbf{1.1e+02} & 7.7e+06/\textbf{1.7e+06} \\
+Find nearest Neighbour & F & 1.4e+08/\textbf{1.1e+08} & \textbf{4.7e+08}/6.3e+08 & 2.7e+06/\textbf{1.9e+06} & 1.2e+02/\textbf{9.4e+01} & \textbf{9.0e+03}/2.0e+04 & 1.2e+02/\textbf{9.4e+01} & 7.7e+06/\textbf{1.7e+06} \\
+photonMappingBenchmark & F & 2.1e+08/\textbf{2.1e+08} & \textbf{1.0e+09}/1.2e+09 & \textbf{2.2e+06}/2.4e+06 & \textbf{2.4e+02}/4.1e+02 & \textbf{3.5e+03}/1.6e+04 & \textbf{2.4e+02}/4.1e+02 & 5.6e+06/\textbf{1.5e+06} \\
+pointCloudNeighborhood & F & 1.3e+08/\textbf{8.4e+07} & \textbf{3.3e+08}/4.8e+08 & 2.6e+06/\textbf{1.3e+06} & \textbf{8.7e+01}/1.2e+02 & \textbf{3.4e+03}/1.6e+04 & \textbf{8.9e+01}/1.2e+02 & 7.8e+06/\textbf{1.5e+06} \\
+sumMassInRange & F & 1.4e+08/\textbf{1.0e+08} & \textbf{4.0e+08}/5.7e+08 & \textbf{2.1e+06}/3.7e+06 & \textbf{1.3e+02}/1.5e+02 & \textbf{3.6e+03}/2.6e+04 & \textbf{1.3e+02}/1.5e+02 & 7.7e+06/\textbf{1.9e+06} \\
+twoPointCorrelation bin\_8\_16 & F & 1.5e+08/\textbf{1.1e+08} & \textbf{4.8e+08}/6.1e+08 & 2.1e+06/\textbf{7.3e+05} & 1.5e+02/\textbf{5.6e+01} & \textbf{2.8e+03}/1.5e+04 & 1.5e+02/\textbf{5.4e+01} & 7.7e+06/\textbf{1.3e+06} \\
+\midrule
+\textbf{Total} &  & 9.1e+08/7.1e+08 & 3.1e+09/4.0e+09 & 1.4e+07/1.2e+07 & 9.2e+02/9.4e+02 & 2.6e+04/1.1e+05 & 9.3e+02/9.3e+02 & 4.4e+07/9.5e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{LinearListReduction}, ADT has 11 fields, SoA uses 11 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:LinearListReduction}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+reduction & F & 2/11 & 82\% & 0.0298$\pm$0.00002 & 0.1318$\pm$0.00188 & \textbf{0.0049$\pm$0.00009} & \textbf{6.03$\times$} & \textbf{4.42$\times$} & \textbf{26.67$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0298 & 0.1318 & \textbf{0.0049} & \textbf{6.03$\times$} & \textbf{4.42$\times$} & \textbf{26.67$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{6.03$\times$} & \textbf{4.42$\times$} & \textbf{26.67$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: LinearListReduction PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{LinearListReduction} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:LinearListReduction_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+reduction & F & 1.5e+08/\textbf{2.5e+07} & \textbf{9.0e+07}/1.0e+08 & 1.5e+06/\textbf{4.6e+04} & 2.3e+02/\textbf{3.7e+01} & 2.7e+05/\textbf{7.0e+03} & 2.4e+02/\textbf{4.1e+01} & 1.2e+07/\textbf{1.1e+06} \\
+\midrule
+\textbf{Total} &  & 1.5e+08/2.5e+07 & 9.0e+07/1.0e+08 & 1.5e+06/4.6e+04 & 2.3e+02/3.7e+01 & 2.7e+05/7.0e+03 & 2.4e+02/4.1e+01 & 1.2e+07/1.1e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 
 % -- Table: reduceNestedList --
 \begin{table}[t]
@@ -97,10 +527,10 @@ reduceNestedList & \textbf{2.01$\times$} & \textbf{1.42$\times$} & \textbf{2.85$
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
 \midrule
-reduction & F & 2/6 & 67\% & 0.0871$\pm$0.00071 & 0.0935$\pm$0.00005 & \textbf{0.0074$\pm$0.00001} & \textbf{11.74$\times$} & 1.07$\times$ & \textbf{12.60$\times$} \\
+reduction & F & 2/6 & 67\% & 0.0853$\pm$0.00062 & 0.0929$\pm$0.00086 & \textbf{0.0074$\pm$0.00001} & \textbf{11.58$\times$} & 1.09$\times$ & \textbf{12.61$\times$} \\
 \midrule
-\textbf{Total} & & & & 0.0871 & 0.0935 & \textbf{0.0074} & \textbf{11.74$\times$} & 1.07$\times$ & \textbf{12.60$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{11.74$\times$} & 1.07$\times$ & \textbf{12.60$\times$} \\
+\textbf{Total} & & & & 0.0853 & 0.0929 & \textbf{0.0074} & \textbf{11.58$\times$} & 1.09$\times$ & \textbf{12.61$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{11.58$\times$} & 1.09$\times$ & \textbf{12.61$\times$} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -117,9 +547,291 @@ reduction & F & 2/6 & 67\% & 0.0871$\pm$0.00071 & 0.0935$\pm$0.00005 & \textbf{0
 \toprule
 \textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
 \midrule
-reduction & F & 4.4e+08/\textbf{3.7e+07} & \textbf{1.2e+07}/2.0e+07 & 1.9e+06/\textbf{3.1e+05} & 2.3e+02/\textbf{8.0e+01} & 1.1e+06/\textbf{1.8e+04} & 2.2e+02/\textbf{8.0e+01} & 6.9e+06/\textbf{1.1e+06} \\
+reduction & F & 4.3e+08/\textbf{3.7e+07} & \textbf{1.2e+07}/2.0e+07 & 1.9e+06/\textbf{3.0e+05} & 2.2e+02/\textbf{7.3e+01} & 1.1e+06/\textbf{1.7e+04} & 2.2e+02/\textbf{7.5e+01} & 6.9e+06/\textbf{1.1e+06} \\
 \midrule
-\textbf{Total} &  & 4.4e+08/3.7e+07 & 1.2e+07/2.0e+07 & 1.9e+06/3.1e+05 & 2.3e+02/8.0e+01 & 1.1e+06/1.8e+04 & 2.2e+02/8.0e+01 & 6.9e+06/1.1e+06 \\
+\textbf{Total} &  & 4.3e+08/3.7e+07 & 1.2e+07/2.0e+07 & 1.9e+06/3.0e+05 & 2.2e+02/7.3e+01 & 1.1e+06/1.7e+04 & 2.2e+02/7.5e+01 & 6.9e+06/1.1e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: List --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{List}, ADT has 2 fields, SoA uses 2 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:List}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+length List & F & 1/2 & 50\% & 0.0441$\pm$0.00002 & \textit{OOM} & \textbf{0.0216$\pm$0.00001} & \textbf{2.04$\times$} & -- & -- \\
+sumList & F & 2/2 & 0\% & \textbf{0.0443$\pm$0.00002} & \textit{OOM} & 0.0464$\pm$0.00071 & 0.95$\times$ & -- & -- \\
+sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0437$\pm$0.00003} & \textit{OOM} & 0.0463$\pm$0.00002 & 0.94$\times$ & -- & -- \\
+add1 List & M & 2/2 & 0\% & \textbf{0.2508$\pm$0.00039} & \textit{OOM} & 0.3353$\pm$0.00167 & 0.75$\times$ & -- & -- \\
+\midrule
+\textbf{Total} & & & & \textbf{0.3828} & -- & 0.4496 & 0.85$\times$ & -- & -- \\
+\textbf{Geomean} & & & & & & 1.08$\times$ & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: List PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{List} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:List_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+length List & F & 2.2e+08/\textbf{1.1e+08} & 8.0e+08/\textbf{8.0e+08} & \textbf{1.1e+05}/1.8e+05 & 9.8e+01/\textbf{6.6e+01} & \textbf{3.1e+03}/1.9e+04 & 9.9e+01/\textbf{6.4e+01} & 1.3e+07/\textbf{1.2e+06} \\
+sumList & F & \textbf{2.2e+08}/2.4e+08 & \textbf{9.0e+08}/1.0e+09 & 5.9e+05/\textbf{5.5e+05} & 1.6e+02/\textbf{5.8e+01} & \textbf{3.0e+03}/6.9e+04 & 1.6e+02/\textbf{6.1e+01} & 1.3e+07/\textbf{1.2e+07} \\
+sumList tail recursive & F & \textbf{2.2e+08}/2.3e+08 & \textbf{9.0e+08}/1.0e+09 & 8.2e+05/\textbf{5.5e+05} & 1.3e+02/\textbf{1.3e+02} & \textbf{3.2e+03}/7.0e+04 & 1.3e+02/1.3e+02 & 1.3e+07/\textbf{1.2e+07} \\
+add1 List & M & \textbf{5.8e+08}/9.5e+08 & \textbf{1.9e+09}/2.8e+09 & 8.1e+06/\textbf{1.8e+06} & \textbf{2.7e+05}/6.0e+05 & \textbf{1.0e+04}/5.2e+04 & \textbf{7.2e+03}/1.6e+04 & 9.1e+06/\textbf{7.8e+06} \\
+\midrule
+\textbf{Total} &  & 1.3e+09/1.5e+09 & 4.5e+09/5.6e+09 & 9.7e+06/3.1e+06 & 2.7e+05/6.0e+05 & 1.9e+04/2.1e+05 & 7.6e+03/1.6e+04 & 4.8e+07/3.3e+07 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{MonoTree}, ADT has 3 fields, SoA uses 2 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:MonoTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+sumTree & F & 3/3 & 0\% & \textbf{0.0089$\pm$0.00001} & 0.0400$\pm$0.00001 & 0.0113$\pm$0.00066 & 0.79$\times$ & \textbf{4.49$\times$} & \textbf{3.56$\times$} \\
+sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0082$\pm$0.00000} & 0.0401$\pm$0.00001 & 0.0110$\pm$0.00073 & 0.75$\times$ & \textbf{4.87$\times$} & \textbf{3.64$\times$} \\
+add1Tree & M & 3/3 & 0\% & 0.0459$\pm$0.00144 & 0.0602$\pm$0.00141 & \textbf{0.0422$\pm$0.00034} & 1.09$\times$ & \textbf{1.31$\times$} & \textbf{1.43$\times$} \\
+\midrule
+\textbf{Total} & & & & \textbf{0.0631} & 0.1403 & 0.0645 & 0.98$\times$ & \textbf{2.23$\times$} & \textbf{2.18$\times$} \\
+\textbf{Geomean} & & & & & & 0.86$\times$ & \textbf{3.06$\times$} & \textbf{2.64$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: MonoTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{MonoTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:MonoTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+sumTree & F & \textbf{4.5e+07}/5.7e+07 & \textbf{2.2e+08}/2.6e+08 & \textbf{5.0e+03}/3.5e+04 & 1.8e+02/\textbf{1.7e+02} & \textbf{6.0e+02}/4.0e+03 & 1.8e+02/\textbf{1.7e+02} & 7.4e+05/\textbf{5.9e+05} \\
+sumTree TailRec & F & \textbf{4.2e+07}/5.6e+07 & \textbf{1.9e+08}/2.2e+08 & \textbf{6.0e+03}/2.0e+04 & \textbf{2.0e+02}/3.0e+02 & \textbf{7.2e+02}/3.9e+03 & \textbf{2.0e+02}/3.0e+02 & 7.5e+05/\textbf{5.8e+05} \\
+add1Tree & M & 1.6e+08/\textbf{1.4e+08} & \textbf{5.0e+08}/5.9e+08 & \textbf{2.3e+05}/4.5e+05 & 5.0e+04/\textbf{4.3e+04} & \textbf{2.1e+03}/4.9e+03 & \textbf{1.1e+03}/2.2e+03 & 5.1e+05/\textbf{4.5e+05} \\
+\midrule
+\textbf{Total} &  & 2.5e+08/2.6e+08 & 9.1e+08/1.1e+09 & 2.4e+05/5.1e+05 & 5.0e+04/4.4e+04 & 3.4e+03/1.3e+04 & 1.5e+03/2.6e+03 & 2.0e+06/1.6e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{ObjectGraph}, ADT has 5 fields, SoA uses 4 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:ObjectGraph}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+countLargeItems & F & 3/5 & 40\% & 0.0131$\pm$0.00000 & 0.0442$\pm$0.00013 & \textbf{0.0106$\pm$0.00002} & \textbf{1.24$\times$} & \textbf{3.38$\times$} & \textbf{4.18$\times$} \\
+countMarked & F & 3/5 & 40\% & 0.0127$\pm$0.00001 & 0.0443$\pm$0.00001 & \textbf{0.0106$\pm$0.00001} & \textbf{1.20$\times$} & \textbf{3.49$\times$} & \textbf{4.19$\times$} \\
+countSurvivors & F & 4/5 & 20\% & 0.0136$\pm$0.00001 & 0.0443$\pm$0.00101 & \textbf{0.0132$\pm$0.00001} & 1.03$\times$ & \textbf{3.26$\times$} & \textbf{3.36$\times$} \\
+deadBytes & F & 4/5 & 20\% & 0.0133$\pm$0.00001 & 0.0439$\pm$0.00001 & \textbf{0.0126$\pm$0.00068} & 1.06$\times$ & \textbf{3.30$\times$} & \textbf{3.49$\times$} \\
+liveBytes & F & 4/5 & 20\% & 0.0137$\pm$0.00001 & 0.0433$\pm$0.00002 & \textbf{0.0126$\pm$0.00001} & 1.09$\times$ & \textbf{3.16$\times$} & \textbf{3.45$\times$} \\
+sumObjIds & F & 3/5 & 40\% & 0.0124$\pm$0.00000 & 0.0431$\pm$0.00001 & \textbf{0.0106$\pm$0.00002} & \textbf{1.17$\times$} & \textbf{3.47$\times$} & \textbf{4.08$\times$} \\
+totalHeapSize & F & 3/5 & 40\% & 0.0123$\pm$0.00009 & 0.0429$\pm$0.00028 & \textbf{0.0107$\pm$0.00009} & \textbf{1.16$\times$} & \textbf{3.48$\times$} & \textbf{4.03$\times$} \\
+sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0706$\pm$0.00007} & 0.0876$\pm$0.00109 & 0.0809$\pm$0.00003 & 0.87$\times$ & \textbf{1.24$\times$} & 1.08$\times$ \\
+touchHotObjects & M & 5/5 & 0\% & \textbf{0.0720$\pm$0.00122} & 0.0868$\pm$0.00156 & 0.0804$\pm$0.00123 & 0.90$\times$ & \textbf{1.21$\times$} & 1.08$\times$ \\
+\midrule
+\textbf{Total} & & & & \textbf{0.2337} & 0.4804 & 0.2419 & 0.97$\times$ & \textbf{2.06$\times$} & \textbf{1.99$\times$} \\
+\textbf{Geomean} & & & & & & 1.07$\times$ & \textbf{2.69$\times$} & \textbf{2.88$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: ObjectGraph PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{ObjectGraph} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:ObjectGraph_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+countLargeItems & F & 6.6e+07/\textbf{5.3e+07} & \textbf{2.6e+08}/2.8e+08 & 1.1e+06/\textbf{2.6e+05} & 2.0e+02/\textbf{9.1e+01} & 6.1e+03/\textbf{3.6e+03} & 2.0e+02/\textbf{9.5e+01} & 2.9e+06/\textbf{6.2e+05} \\
+countMarked & F & 6.4e+07/\textbf{5.3e+07} & \textbf{2.6e+08}/2.8e+08 & 1.2e+06/\textbf{2.5e+05} & 2.2e+02/\textbf{1.0e+02} & \textbf{3.1e+03}/4.0e+03 & 2.2e+02/\textbf{1.0e+02} & 2.9e+06/\textbf{6.3e+05} \\
+countSurvivors & F & 6.9e+07/\textbf{6.7e+07} & \textbf{3.1e+08}/3.8e+08 & 9.9e+05/\textbf{1.5e+05} & \textbf{2.3e+02}/2.6e+02 & \textbf{2.3e+03}/5.8e+03 & \textbf{2.3e+02}/2.6e+02 & 2.7e+06/\textbf{1.2e+06} \\
+deadBytes & F & 6.7e+07/\textbf{6.4e+07} & \textbf{2.7e+08}/3.5e+08 & 7.8e+05/\textbf{1.1e+05} & 1.8e+02/\textbf{1.6e+02} & \textbf{2.3e+03}/5.4e+03 & 1.9e+02/\textbf{1.7e+02} & 2.7e+06/\textbf{1.2e+06} \\
+liveBytes & F & 6.9e+07/\textbf{6.4e+07} & \textbf{2.7e+08}/3.5e+08 & 6.8e+05/\textbf{1.1e+05} & \textbf{1.4e+02}/1.8e+02 & \textbf{1.9e+03}/5.4e+03 & \textbf{1.4e+02}/1.9e+02 & 2.7e+06/\textbf{1.2e+06} \\
+sumObjIds & F & 6.3e+07/\textbf{5.3e+07} & \textbf{2.5e+08}/2.7e+08 & 1.3e+06/\textbf{8.1e+04} & \textbf{1.5e+02}/1.8e+02 & \textbf{3.0e+03}/4.4e+03 & \textbf{1.6e+02}/1.8e+02 & 2.8e+06/\textbf{6.2e+05} \\
+totalHeapSize & F & 6.2e+07/\textbf{5.4e+07} & \textbf{2.5e+08}/2.7e+08 & 1.4e+06/\textbf{3.4e+05} & 1.9e+02/\textbf{1.2e+02} & \textbf{2.8e+03}/3.6e+03 & 1.9e+02/\textbf{1.2e+02} & 2.9e+06/\textbf{6.1e+05} \\
+sweepUnmarked & M & \textbf{1.9e+08}/2.4e+08 & \textbf{5.5e+08}/8.8e+08 & 1.1e+06/\textbf{6.4e+05} & \textbf{7.2e+04}/1.1e+05 & \textbf{4.2e+03}/1.1e+04 & \textbf{4.2e+03}/9.1e+03 & 2.0e+06/\textbf{1.0e+06} \\
+touchHotObjects & M & \textbf{1.9e+08}/2.4e+08 & \textbf{5.7e+08}/9.0e+08 & 1.0e+06/\textbf{5.5e+05} & \textbf{1.1e+05}/1.2e+05 & \textbf{5.1e+03}/1.1e+04 & 7.2e+03/\textbf{6.2e+03} & 2.0e+06/\textbf{1.0e+06} \\
+\midrule
+\textbf{Total} &  & 8.4e+08/8.9e+08 & 3.0e+09/4.0e+09 & 9.6e+06/2.5e+06 & 1.9e+05/2.4e+05 & 3.1e+04/5.4e+04 & 1.3e+04/1.6e+04 & 2.4e+07/8.1e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{PiecewiseFunctions}, ADT has 8 fields, SoA uses 7 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:PiecewiseFunctions}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+autorefineMaxLevel & F & 4/8 & 50\% & \textbf{0.0203$\pm$0.00001} & 0.0450$\pm$0.00001 & 0.0214$\pm$0.00101 & 0.95$\times$ & \textbf{2.22$\times$} & \textbf{2.10$\times$} \\
+compressMass & F & 3/8 & 62\% & 0.0193$\pm$0.00000 & 0.0453$\pm$0.00097 & \textbf{0.0117$\pm$0.00001} & \textbf{1.65$\times$} & \textbf{2.35$\times$} & \textbf{3.89$\times$} \\
+lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0212$\pm$0.00001 & 0.0470$\pm$0.00001 & \textbf{0.0190$\pm$0.00001} & \textbf{1.12$\times$} & \textbf{2.22$\times$} & \textbf{2.48$\times$} \\
+norm2Estimate & F & 5/8 & 38\% & 0.0246$\pm$0.00006 & 0.0545$\pm$0.00051 & \textbf{0.0184$\pm$0.00005} & \textbf{1.33$\times$} & \textbf{2.22$\times$} & \textbf{2.95$\times$} \\
+pmapCutHistogram & F & 4/8 & 50\% & 0.0315$\pm$0.00090 & 0.0555$\pm$0.00002 & \textbf{0.0134$\pm$0.00001} & \textbf{2.35$\times$} & \textbf{1.76$\times$} & \textbf{4.14$\times$} \\
+truncateTolViolations & F & 3/8 & 62\% & 0.0196$\pm$0.00000 & 0.0458$\pm$0.00001 & \textbf{0.0117$\pm$0.00001} & \textbf{1.68$\times$} & \textbf{2.33$\times$} & \textbf{3.92$\times$} \\
+addConstPW & M & 8/8 & 0\% & \textbf{0.1189$\pm$0.00014} & 0.1293$\pm$0.00021 & 0.1305$\pm$0.00081 & 0.91$\times$ & 1.09$\times$ & 0.99$\times$ \\
+diffPW & M & 8/8 & 0\% & \textbf{0.1187$\pm$0.00126} & 0.1320$\pm$0.00013 & 0.1292$\pm$0.00015 & 0.92$\times$ & \textbf{1.11$\times$} & 1.02$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.3741 & 0.5545 & \textbf{0.3553} & 1.05$\times$ & \textbf{1.48$\times$} & \textbf{1.56$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.29$\times$} & \textbf{1.83$\times$} & \textbf{2.37$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: PiecewiseFunctions PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{PiecewiseFunctions} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:PiecewiseFunctions_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+autorefineMaxLevel & F & \textbf{1.0e+08}/1.1e+08 & \textbf{2.5e+08}/3.7e+08 & 2.5e+06/\textbf{2.2e+05} & 4.9e+02/\textbf{1.3e+02} & 1.1e+04/\textbf{7.0e+03} & 4.9e+02/\textbf{1.4e+02} & 6.1e+06/\textbf{9.3e+05} \\
+compressMass & F & 9.8e+07/\textbf{5.9e+07} & \textbf{2.5e+08}/2.8e+08 & 2.2e+06/\textbf{3.2e+04} & 5.0e+02/\textbf{1.6e+02} & 1.9e+04/\textbf{5.0e+03} & 5.0e+02/\textbf{1.7e+02} & 6.2e+06/\textbf{6.0e+05} \\
+lbDeuxLoadProxy & F & 1.1e+08/\textbf{9.6e+07} & \textbf{3.3e+08}/4.9e+08 & 2.4e+06/\textbf{3.1e+05} & 9.0e+02/\textbf{2.0e+02} & 1.5e+04/\textbf{1.0e+04} & 9.0e+02/\textbf{2.0e+02} & 6.2e+06/\textbf{1.6e+06} \\
+norm2Estimate & F & 1.2e+08/\textbf{9.4e+07} & \textbf{3.4e+08}/4.4e+08 & 1.2e+06/\textbf{4.7e+05} & 3.2e+02/\textbf{1.4e+02} & 1.1e+04/\textbf{9.4e+03} & 3.2e+02/\textbf{1.4e+02} & 6.2e+06/\textbf{1.5e+06} \\
+pmapCutHistogram & F & 1.6e+08/\textbf{6.8e+07} & \textbf{2.8e+08}/3.7e+08 & 1.6e+06/\textbf{7.7e+04} & 1.4e+03/\textbf{4.4e+02} & 9.1e+04/\textbf{7.6e+03} & 1.4e+03/\textbf{4.4e+02} & 4.7e+06/\textbf{1.2e+06} \\
+truncateTolViolations & F & 1.0e+08/\textbf{5.9e+07} & \textbf{2.5e+08}/2.9e+08 & 2.1e+06/\textbf{3.6e+04} & 5.7e+02/\textbf{2.0e+02} & 1.6e+04/\textbf{5.0e+03} & 5.7e+02/\textbf{2.1e+02} & 6.3e+06/\textbf{6.2e+05} \\
+addConstPW & M & \textbf{2.7e+08}/3.3e+08 & \textbf{5.7e+08}/1.2e+09 & \textbf{1.2e+06}/2.1e+06 & \textbf{1.9e+05}/2.0e+05 & \textbf{9.8e+03}/2.5e+04 & \textbf{1.3e+04}/2.7e+04 & 4.5e+06/\textbf{1.8e+06} \\
+diffPW & M & \textbf{2.8e+08}/3.3e+08 & \textbf{5.9e+08}/1.3e+09 & \textbf{1.3e+06}/2.0e+06 & 2.9e+05/\textbf{2.2e+05} & \textbf{1.1e+04}/2.2e+04 & \textbf{6.0e+03}/1.9e+04 & 4.5e+06/\textbf{1.8e+06} \\
+\midrule
+\textbf{Total} &  & 1.2e+09/1.1e+09 & 2.8e+09/4.7e+09 & 1.4e+07/5.3e+06 & 4.8e+05/4.2e+05 & 1.8e+05/9.1e+04 & 2.3e+04/4.7e+04 & 4.5e+07/1.0e+07 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{TernaryTree}, ADT has 5 fields, SoA uses 3 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:TernaryTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+sum tree & F & 5/5 & 0\% & 0.0294$\pm$0.00006 & 0.0501$\pm$0.00002 & \textbf{0.0267$\pm$0.00007} & 1.10$\times$ & \textbf{1.71$\times$} & \textbf{1.87$\times$} \\
+add 1 tree & M & 5/5 & 0\% & 0.0859$\pm$0.00112 & 0.0931$\pm$0.00172 & \textbf{0.0775$\pm$0.00013} & \textbf{1.11$\times$} & 1.08$\times$ & \textbf{1.20$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.1153 & 0.1432 & \textbf{0.1042} & \textbf{1.11$\times$} & \textbf{1.24$\times$} & \textbf{1.37$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.10$\times$} & \textbf{1.36$\times$} & \textbf{1.50$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: TernaryTree PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{TernaryTree} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:TernaryTree_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+sum tree & F & 1.5e+08/\textbf{1.4e+08} & \textbf{4.6e+08}/5.4e+08 & \textbf{6.5e+04}/3.5e+05 & \textbf{1.1e+02}/1.7e+02 & \textbf{7.8e+02}/9.0e+03 & \textbf{1.2e+02}/1.6e+02 & 1.7e+06/\textbf{1.2e+06} \\
+add 1 tree & M & 2.8e+08/\textbf{2.3e+08} & \textbf{7.5e+08}/9.8e+08 & \textbf{3.8e+05}/1.2e+06 & \textbf{6.5e+04}/1.2e+05 & \textbf{3.9e+03}/1.0e+04 & 4.1e+03/\textbf{1.7e+03} & 1.5e+06/\textbf{1.2e+06} \\
+\midrule
+\textbf{Total} &  & 4.3e+08/3.6e+08 & 1.2e+09/1.5e+09 & 4.4e+05/1.6e+06 & 6.5e+04/1.2e+05 & 4.6e+03/1.9e+04 & 4.2e+03/1.8e+03 & 3.2e+06/2.3e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: Trie --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{Trie}, ADT has 10 fields, SoA uses 9 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:Trie}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+autocompleteTopKProxy & F & 5/10 & 50\% & 0.0144$\pm$0.00001 & 0.0273$\pm$0.00001 & \textbf{0.0085$\pm$0.00003} & \textbf{1.69$\times$} & \textbf{1.90$\times$} & \textbf{3.22$\times$} \\
+countLazyNodes & F & 4/10 & 60\% & 0.0129$\pm$0.00001 & 0.0277$\pm$0.00001 & \textbf{0.0067$\pm$0.00056} & \textbf{1.94$\times$} & \textbf{2.14$\times$} & \textbf{4.15$\times$} \\
+countTerminals & F & 3/10 & 70\% & 0.0122$\pm$0.00001 & 0.0258$\pm$0.00052 & \textbf{0.0058$\pm$0.00001} & \textbf{2.10$\times$} & \textbf{2.11$\times$} & \textbf{4.43$\times$} \\
+sumPrefixFreq & F & 3/10 & 70\% & 0.0124$\pm$0.00021 & 0.0263$\pm$0.00015 & \textbf{0.0057$\pm$0.00006} & \textbf{2.18$\times$} & \textbf{2.12$\times$} & \textbf{4.60$\times$} \\
+sumSubtreeHints & F & 3/10 & 70\% & 0.0124$\pm$0.00000 & 0.0262$\pm$0.00082 & \textbf{0.0057$\pm$0.00000} & \textbf{2.17$\times$} & \textbf{2.12$\times$} & \textbf{4.61$\times$} \\
+decayTrieStats & M & 10/10 & 0\% & \textbf{0.0755$\pm$0.00006} & 0.0798$\pm$0.00022 & 0.0843$\pm$0.00167 & 0.90$\times$ & 1.06$\times$ & 0.95$\times$ \\
+resetTraversalState & M & 10/10 & 0\% & \textbf{0.0770$\pm$0.00006} & 0.0809$\pm$0.00011 & 0.0823$\pm$0.00010 & 0.94$\times$ & 1.05$\times$ & 0.98$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.2168 & 0.2939 & \textbf{0.1990} & 1.09$\times$ & \textbf{1.36$\times$} & \textbf{1.48$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.60$\times$} & \textbf{1.71$\times$} & \textbf{2.74$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: Trie PAPI Am/Sm --
+\begin{table}[t]
+\centering
+\caption{Per-pass PAPI counters for \texttt{Trie} (Am/Sm). Each cell is median counter value pair per pass. Counter headers are abbreviated for compactness: CYC=CPU cycles, L1D/L1I/L2D/L2I=cache misses, LLC=LLC load misses.}}
+\label{tab:Trie_papi_mut}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{CYC (Am/Sm)} & \textbf{INS (Am/Sm)} & \textbf{L1D (Am/Sm)} & \textbf{L1I (Am/Sm)} & \textbf{L2D (Am/Sm)} & \textbf{L2I (Am/Sm)} & \textbf{LLC (Am/Sm)} \\
+\midrule
+autocompleteTopKProxy & F & 7.3e+07/\textbf{4.3e+07} & \textbf{1.3e+08}/2.1e+08 & 1.5e+06/\textbf{2.5e+05} & \textbf{5.1e+01}/5.4e+01 & 4.7e+04/\textbf{4.6e+03} & 5.7e+01/\textbf{5.3e+01} & 3.7e+06/\textbf{7.9e+05} \\
+countLazyNodes & F & 6.5e+07/\textbf{3.4e+07} & \textbf{1.3e+08}/1.6e+08 & 1.3e+06/\textbf{2.6e+04} & \textbf{7.9e+01}/9.5e+01 & 1.7e+04/\textbf{3.3e+03} & \textbf{8.6e+01}/9.3e+01 & 4.0e+06/\textbf{5.6e+05} \\
+countTerminals & F & 6.2e+07/\textbf{2.9e+07} & \textbf{1.0e+08}/1.2e+08 & 1.4e+06/\textbf{1.2e+04} & 1.2e+02/\textbf{8.3e+01} & 3.0e+04/\textbf{2.3e+03} & 1.3e+02/\textbf{8.0e+01} & 3.9e+06/\textbf{2.1e+05} \\
+sumPrefixFreq & F & 6.3e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e+06/\textbf{1.4e+04} & \textbf{7.3e+01}/7.5e+01 & 2.2e+04/\textbf{2.5e+03} & 8.0e+01/\textbf{7.5e+01} & 3.9e+06/\textbf{2.1e+05} \\
+sumSubtreeHints & F & 6.3e+07/\textbf{2.9e+07} & \textbf{1.1e+08}/1.2e+08 & 1.5e+06/\textbf{1.5e+04} & 1.8e+02/\textbf{7.0e+01} & 3.4e+04/\textbf{2.5e+03} & 1.9e+02/\textbf{6.9e+01} & 3.9e+06/\textbf{2.1e+05} \\
+decayTrieStats & M & \textbf{1.6e+08}/2.1e+08 & \textbf{3.5e+08}/7.9e+08 & \textbf{9.4e+05}/1.3e+06 & \textbf{1.1e+05}/1.2e+05 & \textbf{7.3e+03}/1.9e+04 & \textbf{1.4e+03}/2.5e+04 & 3.1e+06/\textbf{1.2e+06} \\
+resetTraversalState & M & \textbf{1.6e+08}/2.0e+08 & \textbf{2.8e+08}/7.0e+08 & \textbf{5.8e+05}/8.6e+05 & 1.4e+05/\textbf{1.1e+05} & \textbf{8.4e+03}/1.1e+04 & \textbf{1.5e+03}/1.2e+04 & 3.0e+06/\textbf{8.9e+05} \\
+\midrule
+\textbf{Total} &  & 6.5e+08/5.7e+08 & 1.2e+09/2.2e+09 & 8.8e+06/2.4e+06 & 2.5e+05/2.2e+05 & 1.7e+05/4.6e+04 & 3.4e+03/3.8e+04 & 2.6e+07/4.1e+06 \\
 \bottomrule
 \end{tabular}
 \end{table}

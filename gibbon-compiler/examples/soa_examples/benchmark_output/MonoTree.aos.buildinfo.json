@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/MonoTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/MonoTree.aos.exe",
-  "compiled_at": "2026-03-12T18:20:21"
+  "compiled_at": "2026-03-12T19:18:04"
 }

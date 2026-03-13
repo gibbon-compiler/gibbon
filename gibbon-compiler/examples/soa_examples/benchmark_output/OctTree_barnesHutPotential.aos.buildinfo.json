@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_barnesHutPotential.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_barnesHutPotential.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_barnesHutPotential.aos.exe",
-  "compiled_at": "2026-03-12T18:24:20"
+  "compiled_at": "2026-03-12T19:22:02"
 }
