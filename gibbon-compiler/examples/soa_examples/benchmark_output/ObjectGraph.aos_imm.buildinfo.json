@@ -15,5 +15,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/ObjectGraph.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos_imm.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/ObjectGraph.aos_imm.exe",
-  "compiled_at": "2026-03-12T19:18:44"
+  "compiled_at": "2026-03-17T14:52:14"
 }

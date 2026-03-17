@@ -1,6 +1,5 @@
 -- @BENCH adt_fields=2
-data List = Cons Int List | Nil
-
+data List = Cons Int List | Nil 
 {-# ANN type List "Factored" #-}
 
 mkList :: Int -> List 

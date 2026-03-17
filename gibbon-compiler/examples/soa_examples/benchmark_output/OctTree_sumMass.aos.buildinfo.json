@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/OctTree_sumMass.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumMass.aos.exe",
-  "compiled_at": "2026-03-12T19:20:31"
+  "compiled_at": "2026-03-17T14:54:04"
 }
