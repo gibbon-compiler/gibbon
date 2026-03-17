@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/TernaryTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.aos.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.aos.exe",
-  "compiled_at": "2026-03-17T15:01:18"
+  "compiled_at": "2026-03-17T16:35:01"
 }

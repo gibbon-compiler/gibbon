@@ -27,21 +27,23 @@ Buffer analysis (automatic — no extra annotation needed):
     AoS: always 1 buffer (all data packed together).
 
     SoA: 1 buffer for constructor tags
-         + 1 buffer per primitive/scalar field slot
-         + 1 buffer per packed field slot whose type is annotated Factored
-         + 0 extra buffers for packed field slots whose type is annotated Linear
+         + 1 buffer per scalar field
+         + 0 buffers for self-recursive fields
+         + 1 buffer for non-self packed fields annotated Linear
+         + recursively counted buffers for non-self packed fields annotated Factored
 
        e.g.  data Tree = Node Int Tree Tree | Leaf Int
              with Tree annotated Linear
              → tags:1  Node.Int:1  Leaf.Int:1
              → soa_total_buffers = 3
+             (self-recursive Tree fields add no extra buffers)
 
        e.g.  data ListA = ConsA Int ListA | NilA
              data List  = Cons Int ListA List | Nil
              with ListA annotated Linear, List annotated Factored
-             → tags:1  Cons.Int:1  Cons.List:1
+             → tags:1  Cons.Int:1  Cons.ListA:1
              → soa_total_buffers = 3
-             (the linear ListA field stays inline and adds no new buffer)
+             (the self-recursive List field adds no new buffer)
 
   Per-pass buffer access:
     dead_fields = adt_fields - uses         (adt_fields and uses both include recursive)
@@ -281,9 +283,10 @@ def parse_adt_buffers(content: str, search_root: Optional[Path] = None) -> Optio
     SoA buffer counting rules:
       • 1 buffer for all constructor tags.
       • 1 buffer per primitive/scalar field slot.
-      • 1 buffer per packed field slot whose type is annotated "Factored".
-      • 0 extra buffers for packed field slots whose type is annotated "Linear"
-        (they stay inline in the surrounding buffer).
+      • 0 extra buffers for self-recursive fields.
+      • 1 buffer per NON-self packed field slot whose type is annotated "Linear".
+      • For NON-self packed field slots whose type is annotated "Factored",
+        count that nested type recursively using the same rules.
 
       Examples:
         data Tree = Node Int Tree Tree | Leaf Int
@@ -294,8 +297,8 @@ def parse_adt_buffers(content: str, search_root: Optional[Path] = None) -> Optio
         data List = Cons Int ListA List | Nil
         {-# ANN type ListA "Linear" #-}
         {-# ANN type List "Factored" #-}
-          → 1(tags) + 1(Int slot) + 1(factored List field) = 3 SoA buffers
-            (the linear ListA field stays inline and adds no new buffer)
+          → 1(tags) + 1(Int slot) + 1(linear ListA field) = 3 SoA buffers
+            (the self-recursive List field adds no new buffer)
 
     AoS is always 1 buffer.
 
@@ -418,53 +421,93 @@ def parse_adt_buffers(content: str, search_root: Optional[Path] = None) -> Optio
 
     all_type_names = {a["type_name"] for a in parsed_adts}
 
+    adt_map = {a["type_name"]: a for a in parsed_adts}
+    memo_total_buffers: Dict[str, int] = {}
+
+    def _buffer_cost(owner_type: str, field_ctor: Optional[str]) -> int:
+        # Scalars / primitive slots always get one buffer.
+        if field_ctor is None:
+            return 1
+        # Self-recursive fields do not allocate an additional buffer.
+        if field_ctor == owner_type:
+            return 0
+        # User-defined packed fields: linear => one buffer, factored => recurse.
+        is_user_adt = (field_ctor in adt_map) or (field_ctor in type_layouts)
+        if is_user_adt:
+            field_layout = type_layouts.get(field_ctor, "linear")
+            if field_layout == "factored":
+                return _buffers_for_type(field_ctor)
+            return 1
+        # Primitive / scalar slots.
+        return 1
+
+    def _buffers_for_type(type_name: str) -> int:
+        if type_name in memo_total_buffers:
+            return memo_total_buffers[type_name]
+        adt = adt_map.get(type_name)
+        if adt is None:
+            return 1
+        total = 1  # constructor/tag buffer
+        for ctor in adt["constructors"]:
+            for fctor in ctor["field_ctors"]:
+                total += _buffer_cost(type_name, fctor)
+        memo_total_buffers[type_name] = total
+        return total
+
     # Compute SoA layout stats after all type names are known, so nested ADT
-    # fields can be distinguished from primitive/scalar fields.
+    # fields can be counted recursively when their layout is Factored.
     for adt in parsed_adts:
         type_name = adt["type_name"]
         adt_layout = type_layouts.get(type_name, "linear")
         total_fields = 0
-        buffer_fields = 0
-        inline_fields = 0
-        primitive_fields = 0
-        factored_fields = 0
+        scalar_fields = 0
+        linear_packed_fields = 0
+        factored_packed_fields = 0
         recursive_fields = 0
+        direct_field_entries = 0
 
         for ctor in adt["constructors"]:
-            ctor_buffer_fields = 0
-            ctor_inline_fields = 0
-            for ftype, fctor in zip(ctor["field_types"], ctor["field_ctors"]):
+            ctor_entry_count = 0
+            ctor_recursive_count = 0
+            for fctor in ctor["field_ctors"]:
                 total_fields += 1
                 if fctor == type_name:
                     recursive_fields += 1
-                is_user_adt = (fctor in all_type_names) or (fctor in type_layouts)
+                    ctor_recursive_count += 1
+                    continue
+                direct_field_entries += 1
+                ctor_entry_count += 1
+                is_user_adt = (fctor in adt_map) or (fctor in type_layouts)
                 if is_user_adt:
                     field_layout = type_layouts.get(fctor, "linear")
                     if field_layout == "factored":
-                        buffer_fields += 1
-                        factored_fields += 1
-                        ctor_buffer_fields += 1
+                        factored_packed_fields += 1
                     else:
-                        inline_fields += 1
-                        ctor_inline_fields += 1
+                        linear_packed_fields += 1
                 else:
-                    # Primitive / scalar fields become their own SoA buffers.
-                    buffer_fields += 1
-                    primitive_fields += 1
-                    ctor_buffer_fields += 1
-            ctor["buffer_field_count"] = ctor_buffer_fields
-            ctor["inline_field_count"] = ctor_inline_fields
+                    scalar_fields += 1
+            ctor["buffer_field_count"] = ctor_entry_count
+            ctor["inline_field_count"] = 0
+            ctor["recursive_count"] = ctor_recursive_count
+
+        soa_total_buffers = _buffers_for_type(type_name)
+        expanded_nested_buffers = max(0, (soa_total_buffers - 1) - direct_field_entries)
 
         adt["layout"] = adt_layout
         adt["total_field_slots"] = total_fields
-        adt["buffer_field_slots"] = buffer_fields
-        adt["inline_field_slots"] = inline_fields
-        adt["primitive_field_slots"] = primitive_fields
-        adt["factored_field_slots"] = factored_fields
+        adt["buffer_field_slots"] = soa_total_buffers - 1
+        adt["direct_field_entry_slots"] = direct_field_entries
+        adt["expanded_nested_buffer_slots"] = expanded_nested_buffers
+        adt["scalar_field_slots"] = scalar_fields
+        adt["linear_packed_field_slots"] = linear_packed_fields
+        adt["factored_packed_field_slots"] = factored_packed_fields
         adt["recursive_field_slots"] = recursive_fields
         # Back-compat for existing report/JSON consumers.
-        adt["nonrec_field_slots"] = buffer_fields
-        adt["soa_total_buffers"] = 1 + buffer_fields
+        adt["nonrec_field_slots"] = direct_field_entries
+        adt["inline_field_slots"] = 0
+        adt["primitive_field_slots"] = scalar_fields
+        adt["factored_field_slots"] = factored_packed_fields
+        adt["soa_total_buffers"] = soa_total_buffers
 
     # Select target ADT
     if type_hint:
@@ -579,8 +622,9 @@ def build_source_classification(programs_dir: Path) -> Dict[str, Dict]:
                 f"  ✓ {prog}: ADT '{adt_info['type_name']}' from {src_variant} "
                 f"(layout={adt_info.get('layout', 'linear')}) "
                 f"→ AoS=1 buf, SoA={adt_info['soa_total_buffers']} bufs "
-                f"({adt_info['buffer_field_slots']} dedicated field buffers, "
-                f"{adt_info['inline_field_slots']} inline field slots, "
+                f"({adt_info['direct_field_entry_slots']} non-self field entries, "
+                f"{adt_info['expanded_nested_buffer_slots']} recursively expanded nested buffers, "
+                f"{adt_info['recursive_field_slots']} self-recursive field slots skipped, "
                 f"{len(adt_info['constructors'])} constructor(s))"
             )
             if ann is not None and ann != parsed_fields:
@@ -2739,9 +2783,10 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         "ColorOctree row reports only those passes. "
         "ADT fields = total fields in the selected benchmark ADT "
         "(prefer parsed ADT definition; fall back to {\\tt @BENCH adt\\_fields}). "
-        "SoA bufs = 1 tag buffer plus one buffer for each primitive field slot "
-        "and each packed field slot whose type is annotated Factored "
-        "(Linear packed fields stay inline). "
+        "SoA bufs = 1 tag buffer plus one buffer for each scalar field, "
+        "plus one buffer for each non-self packed field annotated Linear, "
+        "plus recursively counted buffers for each non-self packed field "
+        "annotated Factored; self-recursive fields add no new buffers. "
         "Speedup ${>}1{\\times}$ means the denominator is faster; "
         "\\textbf{bold} marks ${>}1.1{\\times}$.}\n"
     )

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  17 MAR 2026 15:04
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  17 MAR 2026 16:37
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -518,11 +518,11 @@ L3 programming layer <2024-01-22>
 Here is how much of TeX's memory you used:
  1958 strings out of 474222
  31593 string characters out of 5748733
- 2125975 words of memory out of 5000000
+ 2126975 words of memory out of 5000000
  24231 multiletter control sequences out of 15000+600000
  561021 words of font info for 46 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,10n,65p,789b,281s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 57i,10n,65p,877b,281s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/share
 /texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texli
@@ -532,7 +532,7 @@ onts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/t
 ype1/public/amsfonts/cm/cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/pu
 blic/amsfonts/cm/cmti9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/am
 sfonts/cm/cmtt10.pfb>
-Output written on figures/table_preview.pdf (6 pages, 150360 bytes).
+Output written on figures/table_preview.pdf (6 pages, 150371 bytes).
 PDF statistics:
  68 PDF objects out of 1000 (max. 8388607)
  41 compressed objects within 1 object stream

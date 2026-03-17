@@ -16,5 +16,5 @@
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/DomTree.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DomTree.soa.exe",
-  "compiled_at": "2026-03-17T14:45:52"
+  "compiled_at": "2026-03-17T16:19:42"
 }
