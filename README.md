@@ -32,7 +32,7 @@ Gibbon is implemented in Haskell, and is set up to be built with
 Follow the instructions below to get all dependencies or enter the Nix shell
 with `nix-shell` to get them via [Nix](https://nix.dev/).
 
-# Nix
+#### Nix
 Use `cachix` to pull OpenCilk build artifacts.
 - Run `cachix use opencilk` or if that fails add the following to `~/.config/nix/nix.conf`:
 ```
