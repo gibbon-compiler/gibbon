@@ -7,6 +7,7 @@ let
   opencilk-pkgs = import (builtins.fetchGit {
                     url = "https://github.com/Noir01/nixpkgs";
                     rev = "ec057fb50aaea43dc26690840c3198922d6604fc";
+                    allRefs = true;
                   }) {};
 
   clang = opencilk-pkgs.llvmPackages_opencilk.clang;
