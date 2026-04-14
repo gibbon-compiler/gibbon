@@ -4,15 +4,19 @@ let
                    ref = "refs/tags/24.05";
                  }) {};
 
-  clang = pkgs.clang_16;
-  llvm = pkgs.llvm_16;
+  opencilk-pkgs = import (builtins.fetchGit {
+                    url = "https://github.com/Noir01/nixpkgs";
+                    rev = "ec057fb50aaea43dc26690840c3198922d6604fc";
+                  }) {};
+
+  clang = opencilk-pkgs.llvmPackages_opencilk.clang;
+  llvm = opencilk-pkgs.llvmPackages_opencilk.llvm;
   gibbon_dir = builtins.toString ./.;
 in
   with pkgs;
 
-  # we are stuck with GCC 7 because Cilk was kicked out in GCC 8,
-  # OpenCilk needs packaging in nixpkgs, see
-  # https://github.com/NixOS/nixpkgs/issues/144256
+  # gcc7Stdenv is kept for C codebase compatibility;
+  # Cilk support is provided by OpenCilk clang via -fopencilk
   mkShell.override { stdenv = pkgs.gcc7Stdenv; }  {
 
     # we use default Haskell toolchain supplied with the chosen nixpkgs; this way we hit their cache
