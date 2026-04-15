@@ -46,3 +46,17 @@ cabal.project.local~
 .ghc.environment.*
 stack*.yaml.lock
 .vscode/*
+__pycache__/
+*.pyc
+*.pyo
+*.a
+*.log
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+gibbon-compiler/examples/soa_examples/benchmark_output/
+gibbon-compiler/examples/soa_examples/figures/
+microbench/parallel/measurements/

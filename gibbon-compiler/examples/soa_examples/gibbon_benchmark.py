@@ -3892,7 +3892,8 @@ def _table_per_program_papi_one_pair(
             continue
         ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
         tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
-        row = f"{pname.replace('_', '\\_')} & {tchar}"
+        pname_tex = pname.replace("_", "\\_")
+        row = f"{pname_tex} & {tchar}"
         for c in counters:
             row += f" & {_papi_pair_cell(ad, sd, c)}"
         f.write(row + " \\\\\n")
@@ -3911,7 +3912,8 @@ def _table_per_program_papi_one_pair(
                 continue
             ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
             tchar = "F" if ptype == "fold" else ("M" if ptype == "map" else "?")
-            row = f"{pname.replace('_', '\\_')} & {tchar}"
+            pname_tex = pname.replace("_", "\\_")
+            row = f"{pname_tex} & {tchar}"
             for c in counters:
                 row += f" & {_papi_pair_cell(ad, sd, c)}"
             f.write(row + " \\\\\n")
@@ -4056,8 +4058,9 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
             if g_over_s is not None:
                 ghc_over_sm_vals.append(g_over_s)
 
+            pname_tex = pname.replace("_", "\\_")
             f.write(
-                f"{pname.replace('_', '\\_')} & {tchar}"
+                f"{pname_tex} & {tchar}"
                 f" & {ghc_cell}"
                 f" & {(_spd_cell(g_over_a) if g_over_a else '--')}"
                 f" & {(_spd_cell(g_over_s) if g_over_s else '--')} \\\\\n"
