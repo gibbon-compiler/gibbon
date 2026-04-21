@@ -10,7 +10,7 @@ mkList length = if length <= 0
                    in Cons length rst 
 
 
-
+{-# ANN add1 "OPT:CanVectorize" #-}
 add1 :: List -> List 
 add1 lst = case lst of 
 		Nil -> Nil 

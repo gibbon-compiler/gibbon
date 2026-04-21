@@ -188,7 +188,7 @@ extendEnv = foldr (uncurry M.insert)
 
 apply :: Env -> Val -> [Val] -> IO [Val]
 
-apply env (FunVal (FunDecl _ as _ body _)) args =
+apply env (FunVal FunDecl{funArgs = as, funBody = body}) args =
     exec (extendEnv env (zip (map fst as) args)) body
 
 apply _ notFun _ =
@@ -222,6 +222,9 @@ applyPrim ReadTag [BufVal is] = case Seq.viewl is of
 
 applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []
+applyPrim ScalarCountFooterBegin [] = pure []
+applyPrim ScalarCountBump{} [_footer] = pure []
+applyPrim ScalarCountFooterEnd{} [] = pure []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"
 applyPrim ScopedBuffer{} [] = error "TargetInterp/applyPrim: finish ScopedBuf"

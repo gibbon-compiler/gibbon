@@ -108,7 +108,8 @@ genUnpacker DDef{tyName, dataCons} = do
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.ProdTy [T.PtrTy, T.CursorTy],
                     T.funBody  = bod,
-                    T.isPure   = False
+                    T.isPure   = False,
+                    T.funMeta  = FunMeta NotRec NoInline False []
                   }
 
 
@@ -381,16 +382,64 @@ lower Prog{fundefs,ddefs,mainExp} = do
   (T.Prog info_tbl sym_tbl) <$> pure (funs ++ unpackers) <*> pure mn
  where
   fund :: M.Map String Word16 -> FunDef3 -> PassM T.FunDecl
-  fund sym_tbl FunDef{funName,funTy,funArgs,funBody} = do
+  fund sym_tbl FunDef{funName,funTy,funArgs,funBody,funMeta} = do
+      dflags <- getDynFlags
       let (intys, outty) = funTy
       let (args, bod) = (zip funArgs (map typ intys), funBody)
+          storeScalarCounts =
+            gopt Opt_StoreScalarFieldCounts dflags &&
+            StoreScalarCounts `elem` funOpt funMeta
       bod' <- tail (not (hasCursorTy outty)) sym_tbl bod
+      let bod'' =
+            if storeScalarCounts
+            then T.LetPrimCallT [] T.ScalarCountFooterBegin [] $
+                   endScalarCountFooter funName bod'
+            else bod'
       return T.FunDecl{ T.funName  = funName
                       , T.funArgs  = args
                       , T.funRetTy = typ outty
-                      , T.funBody  = bod'
+                      , T.funBody  = bod''
                       , T.isPure   = ispure funBody
+                      , T.funMeta  = funMeta
                       }
+
+  endScalarCountFooter :: Var -> T.Tail -> T.Tail
+  endScalarCountFooter funName tl =
+      case tl of
+        T.RetValsT{} ->
+          T.LetPrimCallT [] (T.ScalarCountFooterEnd (fromVar funName)) [] tl
+        T.EndOfMain -> tl
+        T.AssnValsT upds bod_maybe ->
+          T.AssnValsT upds (fmap go bod_maybe)
+        T.LetCallT async binds rator rands bod ->
+          T.LetCallT async binds rator rands (go bod)
+        T.LetPrimCallT binds prim rands bod ->
+          T.LetPrimCallT binds prim rands (go bod)
+        T.LetTrivT bnd bod ->
+          T.LetTrivT bnd (go bod)
+        T.LetIfT binds (tst, con, els) bod ->
+          T.LetIfT binds (tst, go con, go els) (go bod)
+        T.LetUnpackT binds ptr bod ->
+          T.LetUnpackT binds ptr (go bod)
+        T.LetAllocT lhs vals bod ->
+          T.LetAllocT lhs vals (go bod)
+        T.LetAvailT vars bod ->
+          T.LetAvailT vars (go bod)
+        T.IfT tst con els ->
+          T.IfT tst (go con) (go els)
+        T.ErrT{} -> tl
+        T.LetTimedT isIter binds timed bod ->
+          T.LetTimedT isIter binds (go timed) (go bod)
+        T.Switch label trv alts def ->
+          T.Switch label trv (goAlts alts) (fmap go def)
+        T.TailCall{} -> tl
+        T.Goto{} -> tl
+        T.LetArenaT lhs bod ->
+          T.LetArenaT lhs (go bod)
+    where
+      go = endScalarCountFooter funName
+      goAlts (T.TagAlts xs) = T.TagAlts $ L.map (\(tag, bod) -> (tag, go bod)) xs
+      goAlts (T.IntAlts xs) = T.IntAlts $ L.map (\(tag, bod) -> (tag, go bod)) xs
 
   build_info_table :: T.InfoTable
   build_info_table =
@@ -526,6 +575,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               EndTagAllocation{} -> syms
               StartScalarsAllocation{} -> syms
               EndScalarsAllocation{} -> syms
+              ScalarCountBump{} -> syms
               SSPush{} -> syms
               SSPop{} -> syms
               Assert ex -> go ex
@@ -749,6 +799,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, _,  (Ext (WriteScalar s c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] (T.WriteScalar s) [triv sym_tbl "WriteTag arg" e, T.VarTriv c] <$>
          tail free_reg sym_tbl bod
+
+    LetE (_, _, _, Ext (ScalarCountBump dcon field_idx footer)) bod ->
+      let dcon_tag = getTagOfDataCon ddefs dcon
+       in T.LetPrimCallT [] (T.ScalarCountBump dcon_tag field_idx) [T.VarTriv footer] <$>
+             tail free_reg sym_tbl bod
 
 
     -- In Target, AddP is overloaded still:

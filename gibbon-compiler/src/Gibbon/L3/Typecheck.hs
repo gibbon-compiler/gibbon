@@ -81,6 +81,11 @@ tcExp isPacked ddfs env exp = do
         MemCpy{} -> do
           return $ ProdTy []
 
+        ScalarCountBump _ _ footer -> do
+          footer_ty <- lookupVar env footer exp
+          ensureEqualTyModCursor ddfs exp footer_ty CursorTy
+          return $ ProdTy []
+
         ReadCursor v -> do
           vty <- lookupVar env v exp
           ensureEqualTyModCursor ddfs exp vty CursorTy

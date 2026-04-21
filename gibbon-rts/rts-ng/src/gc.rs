@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 // use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
-use std::ptr::{null, null_mut, write_bytes};
+use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
 
 use crate::ffi::c::*;
 use crate::record_time;
@@ -54,6 +54,29 @@ const COMPACT: bool = false;
 
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut GibGcStats = null_mut();
+
+unsafe fn init_scalar_count_footer(counts: *mut GibScalarCountFooter) {
+    write_bytes(
+        (*counts).slots.as_mut_ptr(),
+        0,
+        GIB_SCALAR_COUNT_MAX_SLOTS,
+    );
+}
+
+unsafe fn clone_scalar_count_footer(
+    dst: *mut GibScalarCountFooter,
+    src: *const GibScalarCountFooter,
+) {
+    copy_nonoverlapping(
+        (*src).slots.as_ptr(),
+        (*dst).slots.as_mut_ptr(),
+        GIB_SCALAR_COUNT_MAX_SLOTS,
+    );
+}
+
+unsafe fn free_scalar_count_footer(counts: *mut GibScalarCountFooter) {
+    init_scalar_count_footer(counts);
+}
 
 /// This stores pairs of (start_address -> end_address) of evacuated objects,
 /// in case we need to skip over them during subsequent evacuation. We only
@@ -488,19 +511,23 @@ unsafe fn root_first_chunk(
     let footer_in_nursery = nursery.contains_addr(src_end);
     if footer_in_nursery {
         let src_footer = src_end as *mut GibNurseryChunkFooter;
-        let chunk_size = *src_footer;
+        let chunk_size = (*src_footer).size as usize;
         let is_loc_0 = src_end.offset_from(src) == (chunk_size as isize);
         // Initialize the footer with refcount 1.
         let (dst, dst_end) = if COMPACT {
             Heap::allocate_first_chunk(
                 oldgen,
-                (chunk_size as usize) + size_of::<GibOldgenChunkFooter>(),
+                chunk_size + size_of::<GibOldgenChunkFooter>(),
                 refcount,
             )?
         } else {
             Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, refcount)?
         };
         let footer = dst_end as *const GibOldgenChunkFooter;
+        clone_scalar_count_footer(
+            &mut (*(footer as *mut GibOldgenChunkFooter)).scalar_counts,
+            &(*src_footer).scalar_counts,
+        );
         (*((*oldgen).new_zct)).insert((*footer).reg_info);
         dbgprintln!(
             "  creating new first chunk, added {:?} to new zct, size after this {:?}, prefix(10) {:?}",
@@ -529,6 +556,7 @@ unsafe fn root_first_chunk(
         (*new_footer).reg_info = reg_info;
         (*new_footer).next = (*reg_info).first_chunk_footer as *mut GibOldgenChunkFooter;
         (*new_footer).size = CHUNK_SIZE - size_of::<GibOldgenChunkFooter>();
+        clone_scalar_count_footer(&mut (*new_footer).scalar_counts, &(*src_footer).scalar_counts);
         (*reg_info).first_chunk_footer = new_footer;
         // For remembered set roots:
         // bump the refcount to account for the oldgen->nursery pointer.
@@ -1811,13 +1839,16 @@ pub unsafe fn free_region(footer: *const GibOldgenChunkFooter, zct: *mut Zct) ->
     let mut next_chunk_footer = (*footer).next;
     // Free the first chunk and then all others.
     dbgprintln!("  freeing chunk {:?}", free_this);
+    free_scalar_count_footer(&mut (*(footer as *mut GibOldgenChunkFooter)).scalar_counts);
     if !EASY_OLDGEN_COLLECTION {
         libc::free(free_this);
     }
     while !next_chunk_footer.is_null() {
-        free_this = addr_to_free(next_chunk_footer);
-        next_chunk_footer = (*next_chunk_footer).next;
+        let this_footer = next_chunk_footer;
+        free_this = addr_to_free(this_footer);
+        next_chunk_footer = (*this_footer).next;
         dbgprintln!("  freeing chunk {:?}", free_this);
+        free_scalar_count_footer(&mut (*this_footer).scalar_counts);
         if !EASY_OLDGEN_COLLECTION {
             libc::free(free_this);
         }
@@ -1938,6 +1969,7 @@ pub unsafe fn init_footer_at(
     (*footer).reg_info = region_info_ptr;
     (*footer).size = chunk_size - footer_space;
     (*footer).next = null_mut();
+    init_scalar_count_footer(&mut (*footer).scalar_counts);
 
     dbgprintln!("Initialized footer at {:?}: {:?}; {:?}", footer_start, *footer, *region_info_ptr);
 
@@ -1948,7 +1980,7 @@ pub unsafe fn init_footer_at(
 fn is_loc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
     unsafe {
         let chunk_size: usize = if in_nursery {
-            *(footer_addr as *const GibNurseryChunkFooter) as usize
+            (*(footer_addr as *const GibNurseryChunkFooter)).size as usize
         } else {
             (*(footer_addr as *const GibOldgenChunkFooter)).size
         };
@@ -2038,8 +2070,9 @@ impl Iterator for NurseryIter {
         unsafe {
             if self.run_ptr > self.end_ptr {
                 let chunk_end = self.run_ptr;
-                let footer_start = self.run_ptr.sub(2);
-                let chunk_size: u16 = *(footer_start as *const u16);
+                let footer_start = self.run_ptr.sub(size_of::<GibNurseryChunkFooter>());
+                let footer = footer_start as *const GibNurseryChunkFooter;
+                let chunk_size: u16 = (*footer).size;
                 let chunk_start = footer_start.sub(chunk_size as usize);
                 debug_assert!(chunk_start < footer_start);
                 debug_assert!(footer_start <= chunk_end);

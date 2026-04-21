@@ -54,7 +54,7 @@ harvestStructTys (Prog _ _ funs mtal) =
   -- structs f = makeStructs $ S.toList $ harvestStructTys prg
 
   funTys :: FunDecl -> [Ty]
-  funTys (FunDecl _ args ty _ _) = ty : (map snd args)
+  funTys FunDecl{funArgs = args, funRetTy = ty} = ty : (map snd args)
 
   allTails = (case mtal of
                 Just (PrintExp t) -> [t]
@@ -330,7 +330,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
-      codegenFun' (FunDecl nam args ty tal _) =
+      codegenFun' FunDecl{funName = nam, funArgs = args, funRetTy = ty, funBody = tal} =
           do dflags <- getDynFlags
              let gen_gc = gopt Opt_GenGc dflags
              let retTy   = codegenTy ty
@@ -352,7 +352,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
       -- generates the actual sort function; which reads the values from these void*
       -- pointers and calls the user written one after that.
       codegenSortFn :: FunDecl -> PassM C.Func
-      codegenSortFn (FunDecl nam args _ty _tal _) = do
+      codegenSortFn FunDecl{funName = nam, funArgs = args} = do
         let nam' = varAppend nam (toVar "_original")
             ([v0,v1],[ty0,ty1]) = unzip args
             params     = map (\v -> [cparam| const void* $id:v |]) [v0,v1]
@@ -1126,6 +1126,19 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                        Nothing -> (venv'base, mutEndEnv)
                    _ ->
                      (venv'base, mutEndEnv)
+               BoundsCheck L2.OutputMutable ->
+                 case rnds of
+                   [_, VarTriv bound, VarTriv cur, _, _] ->
+                     (venv'base, M.insert cur bound mutEndEnv)
+                   _ ->
+                     (venv'base, mutEndEnv)
+               BoundsCheckVector ->
+                 let addBoundForCur acc triv =
+                       case triv of
+                         ProdTriv [_, VarTriv bound, VarTriv cur, _] ->
+                           M.insert cur bound acc
+                         _ -> acc
+                  in (venv'base, foldl addBoundForCur mutEndEnv rnds)
                _ ->
                  (venv'base, mutEndEnv)
        bod' <- case prm of
@@ -1331,6 +1344,30 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                       [val,(VarTriv cur)] = rnds in pure
                                   [ C.BlockStm [cstm| *( $ty:(codegenTy (scalarToTy s))  *)($id:cur) = $(codegenTriv venv val); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy (scalarToTy s)) ); |] ]
+
+                 ScalarCountFooterBegin -> do
+                   when (not (null bnds) || not (null rnds)) $
+                     error $ "ScalarCountFooterBegin expected no bindings/args: " ++ show (bnds, rnds)
+                   pure [ C.BlockStm [cstm| gib_scalar_count_footer_begin(); |] ]
+
+                 ScalarCountBump dcon_tag field_idx -> do
+                   when (not (null bnds) || length rnds /= 1) $
+                     error $ "ScalarCountBump expected no bindings and one footer arg: " ++ show (bnds, rnds)
+                   let dcon_tag_i = fromIntegral dcon_tag :: Int
+                   let [footer] = rnds
+                   let footer_arg =
+                         case footer of
+                           VarTriv v ->
+                             case M.lookup v mutEndEnv of
+                               Just endVar -> [cexp| $id:endVar |]
+                               Nothing -> codegenTriv venv footer
+                           _ -> codegenTriv venv footer
+                   pure [ C.BlockStm [cstm| gib_scalar_count_footer_bump($exp:footer_arg, $int:dcon_tag_i, $int:field_idx); |] ]
+
+                 ScalarCountFooterEnd fun_name -> do
+                   when (not (null bnds) || not (null rnds)) $
+                     error $ "ScalarCountFooterEnd expected no bindings/args: " ++ show (bnds, rnds)
+                   pure [ C.BlockStm [cstm| gib_scalar_count_footer_end($string:fun_name); |] ]
 
                  ReadScalar s -> let [(valV,valTy),(curV,CursorTy)] = bnds
                                      [(VarTriv cur)] = rnds in pure

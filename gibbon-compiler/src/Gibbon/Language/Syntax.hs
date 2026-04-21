@@ -20,7 +20,7 @@ module Gibbon.Language.Syntax
   getCursorTypeForDataCon, getCursorTypeFromTy
 
     -- * Function definitions
-  , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..)
+  , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..), FunOpt(..)
   , insertFD, fromListFD, initFunEnv, initFunEnv'
 
     -- * Programs
@@ -85,6 +85,10 @@ type Tag     = Word8
 
 type IsBoxed = Bool
 
+
+data FunOpt = CanVectorize
+            | StoreScalarCounts
+        deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data MemoryLayout = 
     FullyFactored
@@ -278,6 +282,7 @@ data FunMeta = FunMeta
   , funInline :: FunInline
     -- Whether the transitive closure of this function can trigger GC.
   , funCanTriggerGC :: Bool
+  , funOpt :: [FunOpt]
   }
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 

@@ -575,5 +575,6 @@ genRelOffsetsFunNameFn needRANsTyCons ddfs DDef{tyName, dataCons} = do
                   , funMeta = FunMeta { funRec = Rec
                                       , funInline = NoInline
                                       , funCanTriggerGC = False
+                                      , funOpt = []
                                       }
                   }

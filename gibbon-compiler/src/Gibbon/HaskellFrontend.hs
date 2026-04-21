@@ -157,6 +157,7 @@ data TopLevel
   | HMain (Maybe (Exp0, Ty0))
   | HInline Var
   | MemLayoutTy TyCon MemoryLayout 
+  | HFunAnnot Var FunOpt
   deriving (Show, Eq)
 
 type TopTyEnv = TyEnv Var TyScheme
@@ -173,9 +174,10 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
   imported_progs :: [PassM Prog0] <- mapM (processImport cfg pstate_ref (mod_name : import_route) dir) imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel type_syns funtys) decls
-        let (defs,_vars,funs,inlines,main, memlayouts) = foldr classify init_acc toplevels
+        let (defs,_vars,funs,inlines,funannots,main, memlayouts) = foldr classify init_acc toplevels
             defs' = updateMemoryLayout defs memlayouts
             funs' = foldr (\v acc -> M.update (\fn@(FunDef{funMeta}) -> Just (fn { funMeta = funMeta { funInline = Inline }})) v acc) funs inlines
+            funs'' = M.foldrWithKey applyFunAnnots funs' funannots
         imported_progs' <- mapM id imported_progs
         let (defs0,funs0) =
               foldr
@@ -204,12 +206,12 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
                             ([], []) -> (M.union ddefs defs1,  M.union fundefs funs1)
                             (_x:_xs,_) -> error $ "Conflicting definitions of " ++ show conflicts1 ++ " found in " ++ mod_name
                             (_,_x:_xs) -> error $ "Conflicting definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
-                (defs', funs')
+                (defs', funs'')
                 imported_progs'
         pure (Prog defs0 funs0 main)
   pure prog
   where
-    init_acc = (M.empty, M.empty, M.empty, S.empty, Nothing, M.empty)
+    init_acc = (M.empty, M.empty, M.empty, S.empty, M.empty, Nothing, M.empty)
     mod_name = moduleName head_mb
 
     moduleName :: Maybe (ModuleHead a) -> String
@@ -217,17 +219,24 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
     moduleName (Just (ModuleHead _ mod_name1 _warnings _exports)) =
       mnameToStr mod_name1
 
-    classify thing (defs,vars,funs,inlines,main, memlayouts) =
+    classify thing (defs,vars,funs,inlines,funannots,main, memlayouts) =
       case thing of
-        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, inlines, main, memlayouts)
-        HFunDef f -> (defs, vars, M.insert (funName f) f funs, inlines, main, memlayouts)
+        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, inlines, funannots, main, memlayouts)
+        HFunDef f -> (defs, vars, M.insert (funName f) f funs, inlines, funannots, main, memlayouts)
         HMain m ->
           case main of
-            Nothing -> (defs, vars, funs, inlines, m, memlayouts)
+            Nothing -> (defs, vars, funs, inlines, funannots, m, memlayouts)
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
-        HInline v   -> (defs,vars,funs,S.insert v inlines,main, memlayouts)
-        MemLayoutTy tycon l -> (defs,vars,funs,inlines,main, M.insert tycon l memlayouts)
+        HInline v -> (defs,vars,funs,S.insert v inlines,funannots,main, memlayouts)
+        HFunAnnot v opt -> (defs,vars,funs,inlines,M.insertWith (++) v [opt] funannots,main, memlayouts)
+        MemLayoutTy tycon l -> (defs,vars,funs,inlines,funannots,main, M.insert tycon l memlayouts)
+
+    applyFunAnnots fn opts =
+      M.update
+        (\f@FunDef{funMeta} ->
+           Just (f { funMeta = funMeta { funOpt = opts ++ funOpt funMeta } }))
+        fn
     
     updateMemoryLayout indefs memlayouts = 
       let defs'' = M.mapWithKey (\k v -> let tyName = fromVar k
@@ -961,6 +970,8 @@ collectTopLevel type_syns env decl =
       case annotation of 
             TypeAnn _ (Ident _ tycon) (Lit _ (String _ "Factored" _)) -> pure $ Just (MemLayoutTy tycon FullyFactored)
             TypeAnn _ (Ident _ tycon) (Lit _ (String _ "Linear" _)) -> pure $ Just (MemLayoutTy tycon Linear)
+            Ann _ (Ident _ fn) (Lit _ (String _ "OPT:CanVectorize" _)) -> pure $ Just (HFunAnnot (toVar fn) CanVectorize)
+            Ann _ (Ident _ fn) (Lit _ (String _ "OPT:StoreScalarCounts" _)) -> pure $ Just (HFunAnnot (toVar fn) StoreScalarCounts)
             _ -> error "Memory Layout not yet supported!"
 
 
@@ -1003,6 +1014,7 @@ collectTopLevel type_syns env decl =
                                                    , funMeta = FunMeta { funRec = NotRec
                                                                        , funInline = NoInline
                                                                        , funCanTriggerGC = False
+                                                                       , funOpt = []
                                                                        }
                                                    })
 
@@ -1018,6 +1030,7 @@ collectTopLevel type_syns env decl =
                                                , funMeta = FunMeta { funRec = NotRec
                                                                    , funInline = NoInline
                                                                    , funCanTriggerGC = False
+                                                                   , funOpt = []
                                                                    }
                                                })
 
@@ -1030,6 +1043,7 @@ collectTopLevel type_syns env decl =
                                                   , funMeta = FunMeta { funRec = NotRec
                                                                       , funInline = NoInline
                                                                       , funCanTriggerGC = False
+                                                                      , funOpt = []
                                                                       }
                                                   })
 

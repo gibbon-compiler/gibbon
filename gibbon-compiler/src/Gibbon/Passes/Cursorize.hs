@@ -266,13 +266,12 @@ cursorize Prog {ddefs, fundefs, mainExp} = do
       if hasPacked (unTy2 ty)
         then
           do 
-            (e', _, _, _) <- cursorizePackedExp M.empty M.empty userRequestedMutableCursors False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
+            (e', _, _, _) <- cursorizePackedExp M.empty M.empty userRequestedMutableCursors False False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
             Just . (,stripTyLocs (unTy2 ty))
-              <$> fromDi
-              <$> return e' 
+              <$> return (fromDi e')
         else
           do 
-          (e', _, _, _) <- cursorizeExp M.empty M.empty userRequestedMutableCursors False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
+          (e', _, _, _) <- cursorizeExp M.empty M.empty userRequestedMutableCursors False False M.empty M.empty ddefs fundefs M.empty M.empty M.empty e
           Just . (,stripTyLocs (unTy2 ty))
             <$> return e'
   pure (Prog ddefs' fundefs' mainExp')
@@ -392,6 +391,9 @@ cursorizeFunDef :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3
 cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta} = do
   dflags <- getDynFlags
   let userRequestedMutableCursors = gopt Opt_UseMutableCursors dflags
+      storeScalarCounts =
+        gopt Opt_StoreScalarFieldCounts dflags &&
+        StoreScalarCounts `elem` funOpt funMeta
   let fmet@FunMeta{funRec} = funMeta
   let isFunRec = case funRec of 
                             TailRec -> True
@@ -571,10 +573,10 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
     if hasPacked (unTy2 out_ty)
       then
         do 
-          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
           return $ fromDi funBody'
       else do 
-        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
         return funBody'
 
   let bod' = inCurBinds bod
@@ -743,6 +745,7 @@ cursorizeExp ::
   MutableLocOldValueEnv ->
   Bool -> 
   Bool ->
+  Bool ->
   M.Map FreeVarsTy Var ->
   TyEnv Var (Maybe LocVar) ->
   DDefs Ty2 ->
@@ -752,14 +755,14 @@ cursorizeExp ::
   SyncEnv ->
   Exp2 ->
   PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
+cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     VarE v -> return $ (VarE v, freeVarToVarEnv, m1, m2)
     LitE n -> return $ (LitE n, freeVarToVarEnv, m1, m2)
     CharE c -> return $ (CharE c, freeVarToVarEnv, m1, m2)
     FloatE n -> return $ (FloatE n, freeVarToVarEnv, m1, m2)
     LitSymE n -> return $ (LitSymE n, freeVarToVarEnv, m1, m2)
-    AppE {} -> cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
+    AppE {} -> cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
     PrimAppE RequestSizeOf [arg] -> do
       let (VarE v) = arg
       case M.lookup v tenv of
@@ -807,7 +810,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeReadPackedFile m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
+      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeReadPackedFile m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
       return (ret_e, M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2')
     LetE (_v, _locs, _ty, (MkProdE _ls)) _bod -> do
       freeVarToVarEnv' <-
@@ -837,7 +840,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_prod, freeVarToVarEnv'', m1', m2') <- cursorizeProd m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
+      (ret_prod, freeVarToVarEnv'', m1', m2') <- cursorizeProd m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
       return $ (ret_prod, M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2')
     LetE (_v, _locs, ty, ProjE {}) _bod | isPackedTy (unTy2 ty) -> do
       freeVarToVarEnv' <-
@@ -867,7 +870,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeProj m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
+      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeProj m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
       return $ (ret_e, M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2')
     LetE (_v, _locs, _ty, SpawnE {}) _bod -> do
       freeVarToVarEnv' <-
@@ -897,7 +900,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
+      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeSpawn m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
       return (ret_e, M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2')
     LetE (_v, _locs, _ty, SyncE) _bod -> do
       freeVarToVarEnv' <-
@@ -927,7 +930,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeSync m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
+      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeSync m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv ex
       return $ (ret_e, M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2')
     LetE (v, _locs, ty, rhs@(Ext (SSPush _ start _ _))) bod -> do
       case M.lookup (unwrapLocVar start) tenv of
@@ -993,7 +996,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           )
           freeVarToVarEnv
           _locs
-      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv bnd bod
+      (ret_e, freeVarToVarEnv'', m1', m2') <- cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv False ddfs fundefs denv tenv senv bnd bod
       return $ (ret_e, M.unions [freeVarToVarEnv, freeVarToVarEnv', freeVarToVarEnv''], m1', m2')
     IfE a b c -> do 
                   (a', e1, m1', m2') <- go insideTimeIt m1 m2 freeVarToVarEnv a
@@ -1088,7 +1091,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
         CursorTy -> do 
           case_expr <- 
             CaseE (VarE $ v)
-            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
           -- Vidush: For now we just return the environment.
           dbgTrace (minChatLvl) "Print in CursorTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt, alive_buffers)) dbgTrace (minChatLvl) "End printing CursorTy.\n" return (case_expr, freeVarToVarEnv, m1, m2)
         -- We need to dereference a mutable cursor to get its value.
@@ -1104,7 +1107,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                                                               return (m1i, m2i)
                        case_expr <- additional_deref_let 
                                     <$> CaseE (VarE $ deref_val)
-                                    <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
+                                    <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
                        dbgTrace (minChatLvl) "Print in MutCursorCase: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt, alive_buffers)) dbgTrace (minChatLvl) "End printing MutCursorCase.\n" return (case_expr, freeVarToVarEnv, m1', m2')
         CursorArrayTy {} -> do
           -- check if v points to any mutable location
@@ -1130,12 +1133,12 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
           let dcon_let_bind = mkLets dcon_let
           case_expr <- dcon_let_bind
             <$> CaseE (VarE $ dcon_var')
-            <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeIt dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
+            <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
           dbgTrace (minChatLvl) "Print in CursorArrayTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing CursorArrayTy.\n" return (case_expr, freeVarToVarEnv'', m1', m2')
         PackedTy _ scrutLoc -> case scrutLoc of
           Single _ -> do
             case_expr <- CaseE (VarE $ v)
-                <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+                <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
             dbgTrace (minChatLvl) "Print in PackedTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing PackedTy Single.\n" return (case_expr, freeVarToVarEnv', m1, m2)
 
           SoA _ _ -> do
@@ -1161,12 +1164,12 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
             let dcon_let_bind = mkLets dcon_let
             case_expr <- dcon_let_bind
               <$> CaseE (VarE $ dcon_var')
-              <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeIt dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
+              <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv False v) brs
             dbgTrace (minChatLvl) "Print in PackedTy: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, scrt)) dbgTrace (minChatLvl) "End printing PackedTy SoA.\n" return (case_expr, freeVarToVarEnv'', m1', m2')
         
         _ -> do
           case_expr <- CaseE (VarE $ v)
-            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
+            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv False v) brs
           return (case_expr, freeVarToVarEnv', m1, m2)
     
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: " ++ ndoc ex
@@ -1175,7 +1178,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                        return (TimeIt e' (stripTyLocs (unTy2 ty)) b, env, m1', m2')
 
     WithArenaE v e -> do
-      (e', env, m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv (M.insert v (MkTy2 ArenaTy) tenv) senv e
+      (e', env, m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv (M.insert v (MkTy2 ArenaTy) tenv) senv e
       return $ (WithArenaE v e', env, m1', m2')
     SpawnE {} -> error "cursorizeExp: Unbound SpawnE"
     SyncE {} -> error "cursorizeExp: Unbound SyncE"
@@ -1314,19 +1317,19 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
               case rhs of
                 FromEndLE {} ->
                   if isBound locs_var tenv
-                    then cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                    then cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                     -- Discharge bindings that were waiting on 'loc'.
                     else
                       do 
-                        (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                        (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                         return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> do 
-                     (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
+                     (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
                      if M.member loc m1 
                      then return (mkLets (bnds' ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                      else return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
-            Left denv' -> cursorizeExp m1mextended m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+            Left denv' -> cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg sz endmut _ bod -> do
@@ -1363,12 +1366,12 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
 
           let tenv' = M.insert reg_var_name reg_ty tenv
           let tenv'' = M.insert reg_var_name_end end_reg_ty tenv'
-          (bod, freeVarToVarEnv'''', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv''' lenv ddfs fundefs denv tenv'' senv bod
+          (bod, freeVarToVarEnv'''', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv''' lenv ddfs fundefs denv tenv'' senv bod
           return (mkLets (region_lets) bod, freeVarToVarEnv'''', m1', m2') 
         LetParRegionE reg sz _ bod -> do
           -- TODO: Vidush: Do we need to pass the mut loc env etc to this call?
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv True reg sz L2.RegionImmutable
-          (bod, freeVarToVarEnv'', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv bod
+          (bod, freeVarToVarEnv'', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv bod
           return (mkLets (region_lets) bod, freeVarToVarEnv'', m1', m2') 
 
         {- VS: TODO: variables are not in env-}
@@ -1578,10 +1581,10 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> case ty_of_loc of
                   MutCursorTy -> do
-                       (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
+                       (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
                        return (mkLets (bnds' ++ [(locs_var, [], ty_of_loc, Ext $ AddrOfCursor rhs')] ++ bnds) bod', env, m1'', m2'')
                   _ -> do
-                       (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
+                       (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (ty2_of_loc) tenv''') senv' bod
                        case modality of 
                             -- Getting rid of overwritten regions, in OutputMutable mode.
                             -- Vidush: Audit, is this correct way to handle this?
@@ -1589,7 +1592,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
                             _ -> return (mkLets (bnds' ++ [(locs_var, [], ty_of_loc, rhs')] ++ bnds) bod', env, m1'', m2'')
             -- cursorizeExp freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
             Left denv' -> do
-                          (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+                          (bod', env, m1'', m2'') <- cursorizeExp m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
                           return ((mkLets bnds) bod', env, m1'', m2'')
         -- case reg_var of
         -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
@@ -1598,7 +1601,7 @@ cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs 
     MapE {} -> error $ "TODO: cursorizeExp MapE"
     FoldE {} -> error $ "TODO: cursorizeExp FoldE"
   where
-    go insidetimeit gm1 gm2 fenv = cursorizeExp gm1 gm2 useMutableCursorsCall insidetimeit fenv lenv ddfs fundefs denv tenv senv
+    go insidetimeit gm1 gm2 fenv = cursorizeExp gm1 gm2 useMutableCursorsCall emitScalarCountBumps insidetimeit fenv lenv ddfs fundefs denv tenv senv
 
 insertRegInVarEnv :: RegVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var)
 insertRegInVarEnv reg_var env = do
@@ -1634,6 +1637,7 @@ cursorizePackedExp ::
   MutableLocOldValueEnv ->
   Bool ->
   Bool ->
+  Bool ->
   M.Map FreeVarsTy Var ->
   M.Map Var (Maybe LocVar) ->
   DDefs Ty2 ->
@@ -1643,7 +1647,7 @@ cursorizePackedExp ::
   SyncEnv ->
   Exp2 ->
   PassM (DiExp Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
+cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     -- Here the allocation has already been performed:
     -- To follow the calling convention, we are reponsible for tagging on the
@@ -1666,7 +1670,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
     FloatE {} -> error $ "Shouldn't encounter FloatE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
     AppE {} -> do
-               (ex', freeVarToVarEnv', m1', m2') <- cursorizeAppE m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
+               (ex', freeVarToVarEnv', m1', m2') <- cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex
                return (dl ex', freeVarToVarEnv', m1', m2')
     -- DictLookup returns a packed value bound to a free location.
     -- PrimAppE (DictLookupP (PackedTy _ ploc)) vs ->
@@ -1679,11 +1683,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
     -- it doesn't need memory allocation (NewBuffer/ScopedBuffer).
     -- This is more like the witness case below.
     LetE (v, _locs, _ty, (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod -> do
-      (bod', freeVarToVarEnv', m1', m2') <- cursorizeReadPackedFile m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
+      (bod', freeVarToVarEnv', m1', m2') <- cursorizeReadPackedFile m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv True v path tyc reg ty2 bod
       return (Di bod', freeVarToVarEnv', m1', m2') 
     LetE (v, _locs, _ty, (PrimAppE (DictLookupP (MkTy2 (PackedTy _ ploc))) vs)) bod ->
       do
-        vs' <- forM vs $ \w -> cursorizeExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv w
+        vs' <- forM vs $ \w -> cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv w
         let vs'' = map (\(a, _, _, _) -> a) vs'
         let envs' = map (\(_, b, _, _) -> b) vs'
         let m1s' = map (\(_, _, c, _) -> c) vs'
@@ -1698,11 +1702,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
         return (onDi bnd bod', M.unions $ [freeVarToVarEnv'] ++ envs', M.unions (m1s' ++ [m1]), M.unions (m2s' ++ [m2]))
 
     LetE (_v, _locs, _ty, (MkProdE _ls)) _bod -> do
-      (ex', freeVarToVarEnv', m1', m2') <- cursorizeProd m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
+      (ex', freeVarToVarEnv', m1', m2') <- cursorizeProd m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
       return (dl ex', freeVarToVarEnv', m1', m2') 
     LetE (_v, _locs, ty, ProjE {}) _bod
       | isPackedTy (unTy2 ty) -> do
-          (ex', freeVarToVarEnv', m1', m2') <- cursorizeProj m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
+          (ex', freeVarToVarEnv', m1', m2') <- cursorizeProj m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
           return (dl ex', freeVarToVarEnv', m1', m2') 
     MkProdE ls -> do
       let tys = L.map (gRecoverType ddfs (Env2 tenv M.empty)) ls
@@ -1710,9 +1714,9 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
         forM (zip tys ls) $ \(ty, e) -> do
           case ty of
             _ | isPackedTy (unTy2 ty) -> do 
-                                        (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+                                        (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
                                         return (fromDi e', freeVarToVarEnv', m1', m2') 
-            _ -> cursorizeExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+            _ -> cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
       let es = map fst4 res
       let envs = map snd4 res
       let m1s' = map thd4 res
@@ -1725,10 +1729,10 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                  (e', env, m1', m2') <- go insideTimeit m1 m2 freeVarToVarEnv tenv senv e 
                  return (dl $ ProjE i (fromDi e'), env, m1', m2') 
     LetE (_v, _locs, _ty, SpawnE {}) _bod -> do 
-      (ex', freeVarToVarEnv', m1', m2') <- cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
+      (ex', freeVarToVarEnv', m1', m2') <- cursorizeSpawn m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
       return (dl ex', freeVarToVarEnv', m1', m2') 
     LetE (_v, _locs, _ty, SyncE) _bod -> do
-      (ex', freeVarToVarEnv', m1', m2') <- cursorizeSync m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
+      (ex', freeVarToVarEnv', m1', m2') <- cursorizeSync m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv True ddfs fundefs denv tenv senv ex
       return (dl ex', freeVarToVarEnv', m1', m2') 
     LetE (v, _locs, ty, rhs@(Ext (SSPush _ start _ _))) bod ->
       case M.lookup (unwrapLocVar start) tenv of
@@ -1774,7 +1778,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
           )
           freeVarToVarEnv
           _locs
-      (bod', freeVarToVarEnv'', m1', m2') <- cursorizeLet m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv' lenv True ddfs fundefs denv tenv senv bnd bod    
+      (bod', freeVarToVarEnv'', m1', m2') <- cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv' lenv True ddfs fundefs denv tenv senv bnd bod
       return (dl bod', freeVarToVarEnv'', m1', m2') 
 
     -- Here we route the dest cursor to both braches.  We switch
@@ -1782,7 +1786,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
     IfE a b c -> do
       (Di b', env1, m1', m2') <- go insideTimeit m1 m2 freeVarToVarEnv tenv senv b
       (Di c', env2, m1'', m2'') <- go insideTimeit m1 m2 freeVarToVarEnv tenv senv c
-      (a', env3, m1''', m2''') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv a
+      (a', env3, m1''', m2''') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv a
       let m1'''' = M.unions [m1', m1'', m1''']
       let m2'''' = M.unions [m2', m2'', m2''']
       return (Di $ IfE a' b' c', M.unions [env1, env2, env3], m1'''', m2'''')
@@ -1863,7 +1867,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
       --let alive_buffers = S.empty
       case ty_of_scrut of
         CursorTy -> (,,,) <$> (dl <$> CaseE (VarE $ v))
-                          <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
+                          <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
                     <*> dbgTrace (minChatLvl) "Print in Cursor Case: " dbgTrace (minChatLvl) (sdoc (ty_of_scrut, v, alive_buffers)) dbgTrace (minChatLvl) "End print in Cursor Case.\n" return freeVarToVarEnv 
                     <*> return m1
                     <*> return m2
@@ -1879,7 +1883,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                               let m2i = M.insert outloc (deref_val, Just outloc, Nothing, S.empty) m2
                                                               return (m1i, m2i)
                        (,,,) <$> (dl <$> additional_deref_let <$> CaseE (VarE $ deref_val))
-                                        <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
+                                        <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv' senv True deref_val) brs
                                   <*> return freeVarToVarEnv 
                                   <*> return m1'
                                   <*> return m2'
@@ -1908,7 +1912,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
             (,,,) <$> dl
               <$> dcon_let_bind
               <$> CaseE (VarE $ dcon_var')
-              <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeit dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
+              <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
               <*> return freeVarToVarEnv'' 
               <*> return m1' 
               <*> return m2'
@@ -1916,7 +1920,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
         PackedTy _ scrutLoc -> case scrutLoc of
           Single _ -> (,,,) <$> dl
                         <$> CaseE (VarE $ v)
-                        <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
+                        <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
                       <*> return freeVarToVarEnv
                       <*> return m1
                       <*> return m2
@@ -1945,7 +1949,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
               (,,,) <$> dl
                 <$> dcon_let_bind
                 <$> CaseE (VarE $ dcon_var')
-                <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall insideTimeit dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
+                <$> mapM (unpackDataCon alive_buffers m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var' freeVarToVarEnv'' lenv ddfs fundefs denv tenv senv True v) brs
                 <*> return freeVarToVarEnv''
                 <*> return m1'
                 <*> return m2'
@@ -1953,7 +1957,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
         _ ->
             (,,,) <$> dl
             <$> CaseE (VarE $ v)
-            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
+            <$> mapM (unpackDataCon alive_buffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit dcon_var freeVarToVarEnv' lenv ddfs fundefs denv tenv senv True v) brs
             <*> return freeVarToVarEnv
             <*> return m1
             <*> return m2
@@ -2016,7 +2020,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
 
                   -- Int, Float, Sym, or Bool
                   _ | isScalarTy ty -> do
-                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                     let mut_loc_pts = dbgTrace (minChatLvl) "Print in DataConE: " dbgTrace (minChatLvl) (sdoc (additional_bnds, m1, m1')) dbgTrace (minChatLvl) "End in DataConE Case.\n" findMutableLocationPointingToVar d m1'
                     (additional_bnds, m1'') <- case mut_loc_pts of 
                                                       Nothing -> return ([], m1')
@@ -2033,21 +2037,21 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
 
                   -- Write a pointer to a vector
                   VectorTy el_ty -> do
-                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                     (res, m1g', m2g') <- go2 m1' m2' marker_added d' rst
                     let finalExpr = LetE (d', [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc, Ext $ WriteVector d rnd' (stripTyLocs el_ty)) res
                     return (finalExpr, m1g', m2g')
 
                   -- Write a pointer to a vector
                   ListTy el_ty -> do
-                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                     (res, m1g', m2g') <- go2 m1' m2' marker_added d' rst
                     let finalExpr = LetE (d', [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc, Ext $ WriteList d rnd' (stripTyLocs el_ty)) res
                     return (finalExpr, m1g', m2g')
 
                   -- shortcut pointer
                   CursorTy -> do
-                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
                     (res, m1g', m2g') <- go2 mg1 mg2 marker_added d' rst
                     let finalExpr = LetE (d', [], CursorTy, Ext $ WriteTaggedCursor d rnd') res
                     return (finalExpr, m1g', m2g')
@@ -2246,7 +2250,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                         else return (id res', mdc1', mdc2')
                     
                   _ | isScalarTy ty -> do
-                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
                     -- get the location variable where the scalar must be written
                     let floc_loc = case floc of
                           Just l -> l
@@ -2292,12 +2296,19 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                                            let ml_name = getVarNameFromFreeVar fvarenv' (fromLocVarToFreeVarsTy ml)
                                                            let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
                                                            return (bmp_bnd, mdc1i)
-                    let interm_binds = (mkLets bump_bnds) rest                        
+                    interm_binds <-
+                      if emitScalarCountBumps
+                      then do
+                        scalar_count_bump <- gensym "scalar_count_bump"
+                        pure $
+                          LetE (scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon index write_scalars_at) $
+                            (mkLets bump_bnds) rest
+                      else pure $ (mkLets bump_bnds) rest
                     return (let_assign_write_cur $ LetE (d', [], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') interm_binds, mdc1''', mdc2')
 
                   -- Write a pointer to a vector
                   VectorTy el_ty -> do
-                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
                     -- get the location variable where the scalar must be written
                     let floc_loc = case floc of
                           Just l -> l
@@ -2338,7 +2349,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                   -- TODO: Vidush, for SoA case, we should not use Cursor, but CursorArray to be precise 
                   -- and type correct, change followPtrs to do this.
                   CursorTy -> do
-                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
                     after_indirection <- gensym "aft_indirection"
                     casted_var <- gensym "cast"
                     let rnd_var = case rnd' of
@@ -2373,7 +2384,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                   -- TODO: Vidush, for SoA case, we should not use Cursor, but CursorArray to be precise 
                   -- and type correct, change followPtrs to do this.
                   CursorArrayTy _size -> do
-                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
+                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
                     after_indirection <- gensym "aft_indirection"
                     casted_var <- gensym "cast"
                     let rnd_var = case rnd' of
@@ -2582,7 +2593,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                        return (onDi (mkLets (bnds' ++ [(locs_var, [], locs_ty3, rhs')] ++ bnds_after ++ bnds)) bod', freeVarToVarEnv'', m1'', m2'')
 
             Left denv' -> do
-              (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1extended m2' useMutableCursorsCall insideTimeit freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+              (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1extended m2' useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
               return (onDi (mkLets bnds) bod', freeVarToVarEnv'', m1'', m2'') 
 
         {-VS: TODO: This needs to be fixed to produce the correct L3 expression. See above. -}
@@ -2640,7 +2651,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
                                _ -> return (onDi (mkLets (bnds' ++ [(locs_var, [], ty_of_loc, rhs')] ++ bnds)) bod, freeVarToVarEnv'', m1'', m2'')
 
             Left denv' -> do 
-                (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1' m2' useMutableCursorsCall insideTimeit freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
+                (bod', freeVarToVarEnv'', m1'', m2'') <- cursorizePackedExp m1' m2' useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
                 return (onDi (mkLets bnds) bod', freeVarToVarEnv'', m1'', m2'')
         -- case reg_var of
         -- SingleR v -> cursorizePackedExp freeVarToVarEnv ddfs fundefs denv tenv senv bod
@@ -2931,7 +2942,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv
     MapE {} -> error $ "TODO: cursorizePackedExp MapE"
     FoldE {} -> error $ "TODO: cursorizePackedExp FoldE"
   where
-    go intimit menv1 menv2 env = cursorizePackedExp menv1 menv2 useMutableCursorsCall intimit env lenv ddfs fundefs denv
+    go intimit menv1 menv2 env = cursorizePackedExp menv1 menv2 useMutableCursorsCall emitScalarCountBumps intimit env lenv ddfs fundefs denv
     dl = Di
 
 -- case (lv, v) of 
@@ -2974,6 +2985,7 @@ mutLocNeedsBump freeVarToVarEnv ptsEnv oldEnv lv v offset = do
 cursorizeReadPackedFile ::
   MutableLocPtsToEnv -> 
   MutableLocOldValueEnv ->
+  Bool ->
   Bool -> 
   Bool -> 
   M.Map FreeVarsTy Var ->
@@ -2991,7 +3003,7 @@ cursorizeReadPackedFile ::
   Ty2 ->
   Exp2 ->
   PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeReadPackedFile m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv isPackedContext v path tyc reg ty2 bod = do
+cursorizeReadPackedFile m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv isPackedContext v path tyc reg ty2 bod = do
   case reg of
     Nothing -> error $ "cursorizePackedExp: InferLocations did not set the reg for ReadPackedFile."
     Just reg_var -> do 
@@ -3009,9 +3021,9 @@ cursorizeReadPackedFile m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv
       if isPackedContext
         then 
           do 
-           (e', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv e
+           (e', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv e
            return (fromDi e', freeVarToVarEnv', m1g', m2g') 
-        else cursorizeExp m1g m2g useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv e
+        else cursorizeExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv e
 
 -- We may sometimes encounter a letloc which uses an unbound location.
 --
@@ -3789,8 +3801,8 @@ findRegInRegion r1 r2 =
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
+cursorizeAppE :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
+cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     AppE f _cty locs args -> do
       let (fnTy, fmeta) = case M.lookup f fundefs of
@@ -3944,31 +3956,31 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                                         let mut_loc = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" fromDi <$> return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" fromDi <$> return a'
                                     else do 
                                         let mut_loc = findMutableLocationPointingToVar av m1
                                         case mut_loc of 
                                               Nothing -> do  
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, a', args, (map unTy2 argTys))) dbgTrace (minChatLvl) "End printing in AppE 1.\n" return a'
                                               Just l ->  do 
                                                          let var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy l) 
-                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
+                                                         (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv (VarE var)
                                                          dbgTrace (minChatLvl) "Print args in AppE: " dbgTrace (minChatLvl) (sdoc (a, args)) dbgTrace (minChatLvl) "End printing in AppE 2.\n" return a'
 
                                         
                           _ -> if hasPacked (unTy2 t)
                                     then 
                                       do 
-                                        (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                        (a', _, _, _) <- cursorizePackedExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                         fromDi <$> return a'
                                     else do 
-                                        (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
+                                        (a', _, _, _) <- cursorizeExp m1 m2 (useMutForCall && isFunctionRec) emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv tenv senv a
                                         return a'
           )
           (zip in_tys args)
@@ -4144,10 +4156,85 @@ cursorizeAppE m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs
                   let lremLocToVar = case (M.lookup (fromLocVarToFreeVarsTy lremLoc) freeVarToVarEnv') of
                         Just v -> v
                         Nothing -> error "cursorizeAppE: unexpected location variable"
-                  chk <- gensym "chk"
-                  pure $
-                    LetE (chk, [], BoolTy, PrimAppE LtP [VarE (lremLocToVar), VarE lremEndRegToVar]) $
-                      LetE ("_", [], ProdTy [], Ext $ Assert (VarE chk)) $
+                  let static_loc_ty = getCursorizeTyFromLocVar''' (getModality loc) useMutableCursorsCall lremLoc
+                      static_end_ty = getCursorizeTyFromRegVar''' (getModality loc) useMutableCursorsCall lremEndReg
+                      mappedLocTy :: Var -> Ty3 -> Ty3
+                      mappedLocTy var fallback =
+                        case M.lookup var tenv of
+                          Just ty -> stripTyLocs (unTy2 ty)
+                          Nothing ->
+                            case fallback of
+                              CursorArrayTy {} -> CursorTy
+                              _ -> fallback
+                      mappedEndTy :: Var -> Ty3 -> Ty3
+                      mappedEndTy var fallback =
+                        case M.lookup var tenv of
+                          Just ty -> stripTyLocs (unTy2 ty)
+                          Nothing -> fallback
+                      loc_ty = mappedLocTy lremLocToVar static_loc_ty
+                      end_ty = mappedEndTy lremEndRegToVar static_end_ty
+                      cursorAt :: Ty3 -> Var -> Int -> Var -> PassM (Exp3, Exp3 -> Exp3)
+                      cursorAt ty var i prefix =
+                        case ty of
+                          CursorArrayTy {} -> do
+                            cur <- gensym prefix
+                            pure (VarE cur, LetE (cur, [], CursorTy, Ext $ IndexCursorArray var i))
+                          _ -> pure (VarE var, id)
+                      assertCursorVars :: Ty3 -> Var -> Int -> Ty3 -> Var -> Int -> Exp3 -> PassM Exp3
+                      assertCursorVars locTy locVar locIdx endTy endVar endIdx acc' = do
+                        (loc_exp, bind_loc) <- cursorAt locTy locVar locIdx "chk_loc"
+                        (end_exp, bind_end) <- cursorAt endTy endVar endIdx "chk_end"
+                        chk <- gensym "chk"
+                        pure $
+                          bind_loc $
+                            bind_end $
+                              LetE (chk, [], BoolTy, PrimAppE LtP [loc_exp, end_exp]) $
+                                LetE ("_", [], ProdTy [], Ext $ Assert (VarE chk)) $
+                                  acc'
+                  case (loc_ty, end_ty) of
+                    (CursorArrayTy loc_sz, CursorArrayTy end_sz) ->
+                      foldrM
+                        (\i acc' ->
+                            assertCursorVars
+                              loc_ty
+                              lremLocToVar
+                              i
+                              end_ty
+                              lremEndRegToVar
+                              i
+                              acc')
+                        acc
+                        [0 .. min loc_sz end_sz - 1]
+                    (CursorArrayTy loc_sz, _) ->
+                      foldrM
+                        (\i acc' ->
+                            assertCursorVars
+                              loc_ty
+                              lremLocToVar
+                              i
+                              end_ty
+                              lremEndRegToVar
+                              0
+                              acc')
+                        acc
+                        [0 .. loc_sz - 1]
+                    (_, CursorArrayTy {}) ->
+                      assertCursorVars
+                        loc_ty
+                        lremLocToVar
+                        0
+                        end_ty
+                        lremEndRegToVar
+                        0
+                        acc
+                    _ ->
+                      assertCursorVars
+                        loc_ty
+                        lremLocToVar
+                        0
+                        end_ty
+                        lremEndRegToVar
+                        0
                         acc
                 _ -> pure acc
           )
@@ -4191,8 +4278,8 @@ There are two ways in which projections can be cursorized:
 `cursorizeLet` creates the former, while the special case here outputs the latter.
 Reason: unariser can only eliminate direct projections of this form.
 -}
-cursorizeProj :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeProj m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
+cursorizeProj :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
+cursorizeProj m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v, _locs, ty, rhs@ProjE {}) bod | isPackedTy (unTy2 ty) -> do
       (rhs', freeVarToVarEnv', m1', m2') <- go insideTimeit m1 m2 tenv rhs
@@ -4216,9 +4303,9 @@ cursorizeProj m1 m2 useMutableCursorsCall insideTimeit freeVarToVarEnv lenv isPa
     go intime m1g m2g t x =
       if isPackedContext
         then do 
-           (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
+           (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
            return (fromDi x', freeVarToVarEnv', m1g', m2g')
-        else cursorizeExp m1g m2g useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
+        else cursorizeExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
 
 {-
 
@@ -4233,19 +4320,19 @@ If it's just `CursorTy`, this packed value doesn't have an end cursor,
 otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
 -}
-cursorizeProd :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeProd m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
+cursorizeProd :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
+cursorizeProd m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex =
   case ex of
     LetE (v, _locs, MkTy2 (ProdTy tys), rhs@(MkProdE ls)) bod -> do
       es <- forM (zip tys ls) $ \(ty, e) -> do
         case ty of
           _ | isPackedTy ty -> do 
-                                (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e  
+                                (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
                                 return (fromDi e', freeVarToVarEnv', m1', m2') 
           _ | hasPacked ty -> do 
-                               (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e 
+                               (e', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
                                return (fromDi e', freeVarToVarEnv', m1', m2')
-          _ -> cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
+          _ -> cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv e
       let es' = map (\(a, _, _, _) -> a) es
           rhs' = MkProdE es' 
           envs = map (\(_, b, _, _) -> b) es
@@ -4261,9 +4348,9 @@ cursorizeProd m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPa
     go intime m1 m2 t x =
       if isPackedContext
         then do
-           (x', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
+           (x', freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
            return (fromDi x', freeVarToVarEnv', m1', m2') 
-        else cursorizeExp m1 m2 useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
+        else cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t senv x
 
 {-
 
@@ -4275,13 +4362,13 @@ and add fewer things to the type environemnt because we have to wait until the
 join point.
 
 -}
-cursorizeSpawn :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
+cursorizeSpawn :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
+cursorizeSpawn m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, locs, MkTy2 ty, (SpawnE fn applocs args)) bod
       | isPackedTy ty -> do
           (rhs', freeVarToVarEnv', m11, m22) <- do 
-                  (expr, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
+                  (expr, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
                   return (fromDi expr, freeVarToVarEnv', m1', m2') 
           let rhs'' = case rhs' of
                 AppE fn' _cty applocs' args' -> SpawnE fn' applocs' args'
@@ -4326,7 +4413,7 @@ cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isP
           return (mkLets bnds bod'', M.union freeVarToVarEnv' freeVarToVarEnv'', m11', m22')
       | hasPacked ty -> do
           (rhs', freeVarToVarEnv', m11, m22) <- do 
-                   (expr, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn _cty applocs args)
+                   (expr, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn _cty applocs args)
                    return (fromDi expr, freeVarToVarEnv', m1', m2') 
           let rhs'' = case rhs' of
                 AppE fn' _ applocs' args' -> SpawnE fn' applocs' args'
@@ -4351,7 +4438,7 @@ cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isP
               (bod', freeVarToVarEnv'', m11', m22') <- go insideTimeIt m11 m22 tenv' senv' bod
               return (mkLets bnds bod', M.union freeVarToVarEnv' freeVarToVarEnv'', m11', m22') 
       | otherwise -> do
-          (rhs', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
+          (rhs', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv (AppE fn UnknownTailType applocs args)
           let rhs'' = case rhs' of
                 AppE fn' _ applocs' args' -> SpawnE fn' applocs' args'
                 _ -> error "cursorizeSpawn"
@@ -4384,12 +4471,12 @@ cursorizeSpawn m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isP
     go inTimeIt m1g m2g t s x =
       if isPackedContext
         then do 
-            (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall inTimeIt freeVarToVarEnv lenv ddfs fundefs denv t s x
+            (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall emitScalarCountBumps inTimeIt freeVarToVarEnv lenv ddfs fundefs denv t s x
             return (fromDi x', freeVarToVarEnv', m1g', m2g')
-        else cursorizeExp m1 m2 useMutableCursorsCall inTimeIt freeVarToVarEnv lenv ddfs fundefs denv t s x
+        else cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps inTimeIt freeVarToVarEnv lenv ddfs fundefs denv t s x
 
-cursorizeSync :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeSync m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
+cursorizeSync :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> Bool -> M.Map FreeVarsTy Var -> M.Map Var (Maybe LocVar) -> Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Var Ty2 -> SyncEnv -> Exp2 -> PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
+cursorizeSync m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv ex = do
   case ex of
     LetE (v, _locs, MkTy2 ty, SyncE) bod -> do
       let pending_bnds = concat (M.elems senv)
@@ -4404,9 +4491,9 @@ cursorizeSync m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPa
     go intime m1g m2g t x =
       if isPackedContext
         then do 
-           (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
+           (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
            return (fromDi x', freeVarToVarEnv', m1g', m2g') 
-        else cursorizeExp m1 m2 useMutableCursorsCall intime freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
+        else cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps intime freeVarToVarEnv lenv ddfs fundefs denv t M.empty x
 
 {-
 
@@ -4434,6 +4521,7 @@ cursorizeLet ::
   MutableLocPtsToEnv -> 
   MutableLocOldValueEnv ->
   Bool ->
+  Bool ->
   Bool -> 
   M.Map FreeVarsTy Var ->
   M.Map Var (Maybe LocVar) ->
@@ -4446,7 +4534,7 @@ cursorizeLet ::
   (Var, [LocArg], Ty2, Exp2) ->
   Exp2 ->
   PassM (Exp3, M.Map FreeVarsTy Var, MutableLocPtsToEnv, MutableLocOldValueEnv)
-cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v, locs, (MkTy2 ty), rhs) bod
+cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv isPackedContext ddfs fundefs denv tenv senv (v, locs, (MkTy2 ty), rhs) bod
   | isPackedTy ty = do
       let (start_loc, start_var) = case ty of 
                                       PackedTy _ l -> (l, getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l))
@@ -4465,7 +4553,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                                                               Rec -> useMutableCursorsCall
                                                               _ -> False
                                     _ -> useMutableCursorsCall
-      (_rhs, freeVarToVarEnv', m1', m2') <- dbgTrace (minChatLvl) "Print envs in CursorizeLet: " dbgTrace (minChatLvl) (sdoc (m1, m2)) dbgTrace (minChatLvl) "End printing envs in CursorizeLet.\n" cursorizePackedExp m1 m2 useMutableCursors insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
+      (_rhs, freeVarToVarEnv', m1', m2') <- dbgTrace (minChatLvl) "Print envs in CursorizeLet: " dbgTrace (minChatLvl) (sdoc (m1, m2)) dbgTrace (minChatLvl) "End printing envs in CursorizeLet.\n" cursorizePackedExp m1 m2 useMutableCursors emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       rhsfromdi <- fromDi <$> return _rhs
       -- we need to figure out TimtIt expressions here.
       -- For timeit expressions we need to make sure that we restore the start of the output mutable location.
@@ -4995,7 +5083,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                    in cursorType
               )
               locs
-      (_rhs, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
+      (_rhs, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       rhs' <- fromDi <$> return _rhs 
       fresh <- gensym "tup_haspacked"
       let ty' = case locs of
@@ -5112,7 +5200,7 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
                    in cursorType
               )
               locs
-      (rhs', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
+      (rhs', freeVarToVarEnv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       let scalarCallProjIx =
             case rhs of
               AppE {} ->
@@ -5314,9 +5402,9 @@ cursorizeLet m1 m2 useMutableCursorsCall insideTimeIt freeVarToVarEnv lenv isPac
       if isPackedContext
         then
           do 
-            (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall intime fenv lenv ddfs fundefs denv t senv x
+            (x', freeVarToVarEnv', m1g', m2g') <- cursorizePackedExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime fenv lenv ddfs fundefs denv t senv x
             return (fromDi x', freeVarToVarEnv', m1g', m2g') 
-        else cursorizeExp m1g m2g useMutableCursorsCall intime fenv lenv ddfs fundefs denv t senv x
+        else cursorizeExp m1g m2g useMutableCursorsCall emitScalarCountBumps intime fenv lenv ddfs fundefs denv t senv x
 
 {-
 
@@ -5342,6 +5430,7 @@ unpackDataCon ::
   MutableLocPtsToEnv -> 
   MutableLocOldValueEnv ->
   Bool ->
+  Bool ->
   Bool -> 
   Var ->
   M.Map FreeVarsTy Var ->
@@ -5355,7 +5444,7 @@ unpackDataCon ::
   Var ->
   (DataCon, [(Var, LocArg)], Exp2) ->
   PassM (DataCon, [t], Exp3)
-unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon, vlocs1, rhs) = do
+unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt dcon_var freeVarToVarEnv lenv ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon, vlocs1, rhs) = do
   field_cur <- gensym "field_cur"
   let ty_of_scrut = case (M.lookup scrtCur tenv1) of
         Just (MkTy2 ty) -> ty
@@ -5532,10 +5621,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall insideTimeIt dcon_var fre
     processRhs m1pr m2pr fenvpr denv env =
       if isPacked
         then do 
-          (rhs', _, m1' , m2') <- cursorizePackedExp m1pr m2pr useMutableCursorsCall insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
+          (rhs', _, m1' , m2') <- cursorizePackedExp m1pr m2pr useMutableCursorsCall emitScalarCountBumps insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
           pure (fromDi rhs', m1', m2')
         else do 
-          (rhs', _, m1', m2') <- cursorizeExp m1pr m2pr useMutableCursorsCall insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
+          (rhs', _, m1', m2') <- cursorizeExp m1pr m2pr useMutableCursorsCall emitScalarCountBumps insideTimeIt fenvpr lenv ddfs fundefs denv env senv rhs
           pure (rhs', m1', m2') 
 
     lookupVariable :: FreeVarsTy -> M.Map FreeVarsTy Var -> PassM Var

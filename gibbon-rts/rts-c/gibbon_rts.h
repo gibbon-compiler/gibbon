@@ -429,6 +429,23 @@ typedef struct gib_chunk {
     GibCursor end;
 } GibChunk;
 
+// Prototype scalar-count metadata for SoA field buffers.  A fixed slot table
+// keeps lookup/bump O(1) and avoids allocating from the footer path.
+#define GIB_SCALAR_COUNT_MAX_SLOTS 32
+#define GIB_SCALAR_COUNT_FIELD_STRIDE 8
+
+typedef struct gib_scalar_count_footer_slot {
+    uint64_t count;
+    uint32_t dcon_tag;
+    uint16_t field_index;
+    uint8_t is_touched;
+    uint8_t _padding;
+} GibScalarCountFooterSlot;
+
+typedef struct gib_scalar_count_footer {
+    GibScalarCountFooterSlot slots[GIB_SCALAR_COUNT_MAX_SLOTS];
+} GibScalarCountFooter;
+
 typedef struct gib_shadowstack {
     char *start;
     char *end;
@@ -491,9 +508,13 @@ typedef struct gib_oldgen_footer {
     GibRegionInfo *reg_info;
     size_t size;
     struct gib_oldgen_footer *next;
+    GibScalarCountFooter scalar_counts;
 } GibOldgenChunkFooter;
 
-typedef uint16_t GibNurseryChunkFooter;
+typedef struct gib_nursery_footer {
+    uint16_t size;
+    GibScalarCountFooter scalar_counts;
+} GibNurseryChunkFooter;
 
 typedef struct gib_gc_stats {
     // Number of copying minor collections (maintained by Rust RTS).
@@ -624,14 +645,14 @@ extern GibGcStats *gib_global_gc_stats;
 
 #if defined GIB_INIT_CHUNK_SIZE
 
-#if GIB_INIT_CHUNK_SIZE < 128
-// The nursery size provided is too small, set it to 64 bytes.
-#define GIB_INIT_CHUNK_SIZE 128
+#if GIB_INIT_CHUNK_SIZE < 1024
+// The initial chunk must have room for the fixed scalar-count footer slots.
+#define GIB_INIT_CHUNK_SIZE 1024
 #endif
 
 // GIB_INIT_CHUNK_SIZE not defined, initialize it to a default value.
 #else
-#define GIB_INIT_CHUNK_SIZE 512
+#define GIB_INIT_CHUNK_SIZE 1024
 #endif
 
 
@@ -748,6 +769,14 @@ GibChunk gib_alloc_region_on_heap(size_t size);
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
 void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
+void gib_scalar_count_footer_begin(void);
+void gib_scalar_count_footer_bump(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index);
+void gib_scalar_count_footer_end(const char *build_fun_name);
+void gib_scalar_count_footer_print(char *footer_ptr);
+uint64_t gib_scalar_count_footer_get(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index);
+void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr);
+void gib_scalar_count_register_chunk(char *chunk_start, char *footer_ptr);
+INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer);
 
 // Trigger GC.
 void gib_perform_GC(bool force_major);
@@ -790,6 +819,11 @@ INLINE_HEADER void gib_grow_region_on_heap(
 );
 INLINE_HEADER bool gib_addr_in_nursery(char *ptr);
 
+INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer)
+{
+    memset(footer->slots, 0, sizeof(footer->slots));
+}
+
 
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
 {
@@ -800,7 +834,7 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
-        GibNurseryChunkFooter oldsize = *(GibNurseryChunkFooter *) footer_ptr;
+        uint16_t oldsize = ((GibNurseryChunkFooter *) footer_ptr)->size;
         newsize = oldsize * 2;
     } else {
         old_chunk_in_nursery = false;
@@ -868,9 +902,12 @@ INLINE_HEADER void gib_grow_region_in_nursery_fast(
 
         nursery->alloc = bump;
         char *footer = old - sizeof(GibNurseryChunkFooter);
-        *(GibNurseryChunkFooter *) footer = size;
+        GibNurseryChunkFooter *nursery_footer = (GibNurseryChunkFooter *) footer;
+        nursery_footer->size = size;
+        gib_scalar_count_footer_init(&nursery_footer->scalar_counts);
         char *heap_start = bump;
         char *heap_end = footer;
+        gib_scalar_count_register_chunk(heap_start, heap_end);
 
         // Write a redirection tag at writeloc and make it point to the start of
         // this fresh chunk, but store a tagged pointer here.
@@ -945,8 +982,10 @@ INLINE_HEADER void gib_grow_region_on_heap(
         new_footer->reg_info = old_footer->reg_info;
         new_footer->size = (size_t) (new_footer_start - heap_start);
         new_footer->next = (GibOldgenChunkFooter *) NULL;
+        gib_scalar_count_footer_init(&new_footer->scalar_counts);
         // Link with the old chunk's footer.
         old_footer->next = (GibOldgenChunkFooter *) new_footer;
+        gib_scalar_count_on_grow((char *) old_footer, new_footer_start);
     }
 
     // Write a redirection tag at writeloc and make it point to the start of
@@ -973,6 +1012,7 @@ INLINE_HEADER void gib_grow_region_on_heap(
     // Update start and end cursors.
     *(char **) writeloc_addr = heap_start;
     *(char **) footer_addr = new_footer_start;
+    gib_scalar_count_register_chunk(heap_start, new_footer_start);
 
     return;
 }

@@ -147,6 +147,8 @@ data E3Ext loc dec =
   | EndTagAllocation Var       -- ^ Marks the end of tag allocation.
   | StartScalarsAllocation Var -- ^ Marks the beginning of scalar allocation.
   | EndScalarsAllocation Var   -- ^ Marks the end of scalar allocation.
+  | ScalarCountBump DataCon Int Var
+    -- ^ Increment dynamic scalar-count metadata for the chunk containing a SoA field write cursor.
   | SSPush SSModality Var Var TyCon
   | SSPop SSModality Var Var
   | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
@@ -226,6 +228,7 @@ instance FreeVars (E3Ext l d) where
       EndTagAllocation v -> S.singleton v
       StartScalarsAllocation v -> S.singleton v
       EndScalarsAllocation v -> S.singleton v
+      ScalarCountBump _ _ footer -> S.singleton footer
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
       Assert a -> gFreeVars a
@@ -342,6 +345,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       EndTagAllocation v -> EndTagAllocation (go v)
       StartScalarsAllocation v -> StartScalarsAllocation (go v)
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
+      ScalarCountBump dcon idx footer -> ScalarCountBump dcon idx (go footer)
       SSPush a b c d -> SSPush a (go b) (go c) d
       SSPop a b c -> SSPop a (go b) (go c)
       Assert e -> Assert (go e)

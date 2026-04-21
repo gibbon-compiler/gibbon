@@ -451,7 +451,30 @@ pub mod c {
         }
     }
 
-    pub type GibNurseryChunkFooter = u16;
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy)]
+    pub struct GibScalarCountFooterSlot {
+        pub count: u64,
+        pub dcon_tag: u32,
+        pub field_index: u16,
+        pub is_touched: u8,
+        pub _padding: u8,
+    }
+
+    pub const GIB_SCALAR_COUNT_MAX_SLOTS: usize = 32;
+
+    #[repr(C)]
+    #[derive(Debug, Clone)]
+    pub struct GibScalarCountFooter {
+        pub slots: [GibScalarCountFooterSlot; GIB_SCALAR_COUNT_MAX_SLOTS],
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Clone)]
+    pub struct GibNurseryChunkFooter {
+        pub size: u16,
+        pub scalar_counts: GibScalarCountFooter,
+    }
 
     #[repr(C)]
     #[derive(Debug, Clone)]
@@ -459,6 +482,7 @@ pub mod c {
         pub reg_info: *mut GibRegionInfo,
         pub size: usize,
         pub next: *mut GibOldgenChunkFooter,
+        pub scalar_counts: GibScalarCountFooter,
     }
 
     /*

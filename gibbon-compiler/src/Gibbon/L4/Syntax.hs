@@ -329,6 +329,9 @@ data Prim
 
     | ReadScalar L3.Scalar
     | WriteScalar L3.Scalar
+    | ScalarCountFooterBegin
+    | ScalarCountBump Tag Int
+    | ScalarCountFooterEnd String
 
     | ReadList
     | WriteList
@@ -392,6 +395,7 @@ data FunDecl = FunDecl
   , funRetTy :: Ty
   , funBody  :: Tail
   , isPure   :: Bool
+  , funMeta   :: L.FunMeta
   } deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 voidTy :: Ty

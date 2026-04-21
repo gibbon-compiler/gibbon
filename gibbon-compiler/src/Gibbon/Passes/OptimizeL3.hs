@@ -160,6 +160,7 @@ removeReDefsExp env ex =
       pure $ (Ext $ StartScalarsAllocation v)
     Ext (EndScalarsAllocation v) -> do
       pure $ (Ext $ EndScalarsAllocation v)
+    Ext ScalarCountBump{} -> pure ex
     Ext (SSPush _ _ _ _) -> pure ex
     Ext (SSPop _ _ _) -> pure ex
     Ext (Assert e) -> do

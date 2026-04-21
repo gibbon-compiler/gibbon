@@ -45,6 +45,7 @@ data GeneralFlag
   | Opt_PapiInstrumentation -- ^ Enable PAPI instrumentation while compiling the gibbon binary.
   | Opt_PapiNativeInstrumentation -- ^ Enable native PAPI event instrumentation while compiling the gibbon binary.
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
+  | Opt_StoreScalarFieldCounts -- ^ Store scalar-field counts for annotated SoA builders.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -127,6 +128,7 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                          help "Don't use RAN pointers, instead, use extra traversals.") <|>
                    flag' Opt_UseMutableCursors (long "use-mutable-cursors" <> help "Use Mutable Cursors Instead of Immutable Cursors.") <|>
                    flag' Opt_TailCallOptimize (long "tail-call-optimize" <> help "Run the oprimization pass to optimize functions that are tail recursive.") <|>
+                   flag' Opt_StoreScalarFieldCounts (long "store-scalar-field-counts" <> help "Store scalar-field counts for functions annotated with OPT:StoreScalarCounts.") <|>
                    flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) <|>
                    flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).")
     dflagsParser :: Parser DebugFlag

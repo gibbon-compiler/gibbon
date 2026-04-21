@@ -1078,6 +1078,7 @@ specLambdasExp ddefs env2 ex =
                         , funMeta = FunMeta { funRec = NotRec
                                             , funInline = Inline
                                             , funCanTriggerGC = False
+                                            , funOpt = []
                                             }
                         }
             env2' = extendFEnv v' ty' env2
@@ -1100,6 +1101,7 @@ specLambdasExp ddefs env2 ex =
                         , funMeta = FunMeta { funRec = NotRec
                                             , funInline = Inline
                                             , funCanTriggerGC = False
+                                            , funOpt = []
                                             }
                         }
             env2' = extendFEnv v' (ForAll [] ty) env2
@@ -1178,6 +1180,7 @@ specLambdasExp ddefs env2 ex =
                                 , funMeta = FunMeta { funRec = NotRec
                                                     , funInline = NoInline
                                                     , funCanTriggerGC = False
+                                                    , funOpt = []
                                                     }
                                 }
                 pure (Just fn, binds, AppE fnname UnknownTailType [] (map VarE args))
@@ -1602,6 +1605,7 @@ genCopyFn DDef{tyName, dataCons} = do
                   , funMeta = FunMeta { funRec = Rec
                                       , funInline = NoInline
                                       , funCanTriggerGC = False
+                                      , funOpt = []
                                       }
                   }
 
@@ -1626,6 +1630,7 @@ genCopySansPtrsFn DDef{tyName,dataCons} = do
                   , funMeta = FunMeta  { funRec = Rec
                                        , funInline = NoInline
                                        , funCanTriggerGC = False
+                                       , funOpt = []
                                        }
                   }
 
@@ -1653,6 +1658,7 @@ genTravFn DDef{tyName, dataCons} = do
                   , funMeta = FunMeta  { funRec = Rec
                                        , funInline = NoInline
                                        , funCanTriggerGC = False
+                                       , funOpt = []
                                        }
                   }
 
@@ -1703,6 +1709,7 @@ genPrintFn DDef{tyName, dataCons} = do
                   , funMeta = FunMeta  { funRec = Rec
                                        , funInline = NoInline
                                        , funCanTriggerGC = False
+                                       , funOpt = []
                                        }
                   }
 
@@ -1751,7 +1758,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
       fn_name <- lift $ gensym "caseFn"
       args <- mapM (\x -> lift $ gensym x) free
       let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
-      let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False)
+      let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False [])
       state (\s -> ((AppE fn_name UnknownTailType [] (map VarE free)), M.insert fn_name fn s))
 
     go :: Bool -> Env2 Var Ty0 -> Exp0 -> FloatM Exp0
