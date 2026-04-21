@@ -10,19 +10,15 @@ env:
 jobs:
   build_and_test:
     name: test-gibbon-rts
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        toolchain:
-          - nightly-2022-12-30
+    runs-on: ubuntu-24.04
     steps:
       - name: dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11
           sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
-      - name: rustup
-        run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
       - name: checkout
         uses: actions/checkout@v3
       - name: build and test
