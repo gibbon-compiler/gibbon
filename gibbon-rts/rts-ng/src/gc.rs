@@ -13,11 +13,12 @@ use std::error::Error;
 // use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
 use std::ptr::{null, null_mut, write_bytes};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 use crate::ffi::c::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
-use crate::{dbgprintln, worklist_next, write_shortcut_ptr};
+use crate::{worklist_next, write_shortcut_ptr};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
@@ -134,11 +135,12 @@ pub fn cleanup(
     nursery: &mut GibNursery,
     oldgen: &mut GibOldgen,
 ) -> Result<()> {
-    unsafe {
-        // Free the info table.
-        _INFO_TABLE.drain(..);
-        _INFO_TABLE.shrink_to_fit();
-    }
+    // Free the info table.
+    let mut info_table = build_info_table().lock().unwrap();
+    info_table.clear();
+    info_table.shrink_to_fit();
+    drop(info_table);
+    finalized_info_table().write().unwrap().clear();
     // Free all the regions.
     unsafe {
         for frame in rstack.into_iter().chain(wstack.into_iter()) {
@@ -1215,8 +1217,11 @@ unsafe fn evacuate_packed(
 
                     // Regular datatype, copy.
                     _oth => {
-                        let packed_info: &&[DataconInfo] =
-                            INFO_TABLE.get_unchecked(next_ty as usize);
+                        let info_table = finalized_info_table().read().unwrap();
+                        let packed_info = info_table
+                            .get_unchecked(next_ty as usize)
+                            .as_deref()
+                            .expect("missing packed info for datatype");
                         let DataconInfo { scalar_bytes, field_tys, num_shortcut, .. } =
                             packed_info.get_unchecked(tag as usize);
                         dbgprintln!("   regular datacon, field_tys {:?}", field_tys);
@@ -1505,8 +1510,11 @@ unsafe fn evacuate_packed_simpl(
                     }
 
                     _ => {
-                        let packed_info: &&[DataconInfo] =
-                            INFO_TABLE.get_unchecked(next_ty as usize);
+                        let info_table = finalized_info_table().read().unwrap();
+                        let packed_info = info_table
+                            .get_unchecked(next_ty as usize)
+                            .as_deref()
+                            .expect("missing packed info for datatype");
                         let DataconInfo { scalar_bytes, field_tys, num_shortcut, .. } =
                             packed_info.get_unchecked(tag as usize);
                         dbgprintln!("   [SIMPL] regular datacon, field_tys {:?}", field_tys);
@@ -2411,15 +2419,18 @@ enum DatatypeInfo {
 }
 
 /// The global info table.
-static mut _INFO_TABLE: Vec<DatatypeInfo> = Vec::new();
+static _INFO_TABLE: OnceLock<Mutex<Vec<DatatypeInfo>>> = OnceLock::new();
+
+fn build_info_table() -> &'static Mutex<Vec<DatatypeInfo>> {
+    _INFO_TABLE.get_or_init(|| Mutex::new(Vec::new()))
+}
 
 #[inline(always)]
 pub fn info_table_initialize(size: usize) {
-    unsafe {
-        // If a datatype is not packed, info_table_insert_scalar will
-        // overwrite this entry.
-        _INFO_TABLE = vec![DatatypeInfo::Packed(Vec::new()); size];
-    }
+    let mut info_table = build_info_table().lock().unwrap();
+    // If a datatype is not packed, info_table_insert_scalar will
+    // overwrite this entry.
+    *info_table = vec![DatatypeInfo::Packed(Vec::new()); size];
 }
 
 #[inline(always)]
@@ -2433,7 +2444,8 @@ pub fn info_table_insert_packed_dcon(
     field_tys: Vec<GibDatatype>,
 ) -> Result<()> {
     let dcon_info = DataconInfo { scalar_bytes, num_scalars, num_shortcut, num_packed, field_tys };
-    let entry = unsafe { _INFO_TABLE.get_unchecked_mut(datatype as usize) };
+    let mut info_table = build_info_table().lock().unwrap();
+    let entry = unsafe { info_table.get_unchecked_mut(datatype as usize) };
     match entry {
         DatatypeInfo::Packed(packed_info) => {
             while packed_info.len() <= datacon.into() {
@@ -2450,9 +2462,8 @@ pub fn info_table_insert_packed_dcon(
 }
 
 pub fn info_table_insert_scalar(datatype: GibDatatype, size: usize) {
-    unsafe {
-        _INFO_TABLE[datatype as usize] = DatatypeInfo::Scalar(size);
-    }
+    let mut info_table = build_info_table().lock().unwrap();
+    info_table[datatype as usize] = DatatypeInfo::Scalar(size);
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -2460,43 +2471,36 @@ pub fn info_table_insert_scalar(datatype: GibDatatype, size: usize) {
 // [2022.07.06] does converting a vector to a slice really help performance?
 
 /// The global info table.
-static mut INFO_TABLE: &[&[DataconInfo]] = &[];
+static INFO_TABLE: OnceLock<RwLock<Vec<Option<Box<[DataconInfo]>>>>> = OnceLock::new();
+
+fn finalized_info_table() -> &'static RwLock<Vec<Option<Box<[DataconInfo]>>>> {
+    INFO_TABLE.get_or_init(|| RwLock::new(Vec::new()))
+}
 
 pub fn info_table_finalize() {
-    unsafe {
-        let info_table: *mut &[DataconInfo] =
-            libc::malloc(_INFO_TABLE.len() * size_of::<&[DataconInfo]>()) as *mut &[DataconInfo];
-        let mut info_table_alloc = info_table;
-        for ty in _INFO_TABLE.iter() {
-            match ty {
-                DatatypeInfo::Scalar(_size) => {
-                    // let ty_info = DatatypeInfo::Scalar(*size);
-                    // // info_table_alloc.write_unaligned(ty_info);
-                    // *info_table_alloc = ty_info;
-                    info_table_alloc = info_table_alloc.add(1);
-                }
-                DatatypeInfo::Packed(_packed_info) => {
-                    let packed_info = &_packed_info[..];
-                    *info_table_alloc = packed_info;
-                    info_table_alloc = info_table_alloc.add(1);
-                }
+    let info_table = build_info_table().lock().unwrap();
+    let mut finalized = Vec::with_capacity(info_table.len());
+    for ty in info_table.iter() {
+        match ty {
+            DatatypeInfo::Scalar(_size) => finalized.push(None),
+            DatatypeInfo::Packed(packed_info) => {
+                finalized.push(Some(packed_info.clone().into_boxed_slice()));
             }
         }
-        INFO_TABLE = std::slice::from_raw_parts(info_table, _INFO_TABLE.len());
-        dbgprintln!("INFO_TABLE: {:?}", INFO_TABLE);
     }
+    let mut final_table = finalized_info_table().write().unwrap();
+    *final_table = finalized;
+    dbgprintln!("INFO_TABLE: {:?}", *final_table);
 }
 
 pub fn info_table_clear() {
-    unsafe {
-        INFO_TABLE = &[];
-    }
+    build_info_table().lock().unwrap().clear();
+    finalized_info_table().write().unwrap().clear();
 }
 
 pub fn info_table_print() {
-    unsafe {
-        println!("INFO_TABLE:\n\n{:?}", INFO_TABLE);
-    }
+    let info_table = finalized_info_table().read().unwrap();
+    println!("INFO_TABLE:\n\n{:?}", *info_table);
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2654,7 +2658,11 @@ impl ValueStats {
             }
 
             _ => unsafe {
-                let packed_info: &&[DataconInfo] = INFO_TABLE.get_unchecked(*ty as usize);
+                let info_table = finalized_info_table().read().unwrap();
+                let packed_info = info_table
+                    .get_unchecked(*ty as usize)
+                    .as_deref()
+                    .expect("missing packed info for datatype");
                 let DataconInfo { scalar_bytes, field_tys, num_shortcut, .. } =
                     packed_info.get_unchecked(tag as usize);
                 let src_after_shortcuts = src_after_tag.add(*num_shortcut * 8);
