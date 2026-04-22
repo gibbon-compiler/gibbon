@@ -6,6 +6,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: gcc # we use gcc's lto on the C side, so the rust side has to use gcc's linker as well (default Rust linker would go nuts)
 
 jobs:
   build_and_test:
