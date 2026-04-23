@@ -351,6 +351,61 @@ def svg_polyline(points: list[tuple[float, float]], color: str, width: int = 3) 
     )
 
 
+def compact_size_label(n: int) -> str:
+    def compact(value: float, suffix: str) -> str:
+        text = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{text}{suffix}"
+
+    if n < 1_000:
+        return str(n)
+    if n < 1_000_000:
+        if n % 1_000 == 0:
+            return f"{n // 1_000}k"
+        return compact(n / 1_000, "k")
+    if n < 1_000_000_000:
+        if n % 1_000_000 == 0:
+            return f"{n // 1_000_000}M"
+        return compact(n / 1_000_000, "M")
+    if n % 1_000_000_000 == 0:
+        return f"{n // 1_000_000_000}B"
+    return compact(n / 1_000_000_000, "B")
+
+
+def log_axis_ticks(sizes: list[int], max_ticks: int = 10) -> list[int]:
+    min_size = min(sizes)
+    max_size = max(sizes)
+    if min_size == max_size:
+        return [min_size]
+
+    min_pow = math.floor(math.log10(min_size))
+    max_pow = math.ceil(math.log10(max_size))
+    dense_ticks: list[int] = []
+    for power in range(min_pow, max_pow + 1):
+        for multiplier in (1, 2, 5):
+            tick = multiplier * (10 ** power)
+            if min_size <= tick <= max_size:
+                dense_ticks.append(tick)
+
+    dense_ticks = sorted(set([min_size, max_size, *dense_ticks]))
+    if len(dense_ticks) <= max_ticks:
+        return dense_ticks
+
+    decade_ticks = [
+        10 ** power
+        for power in range(min_pow, max_pow + 1)
+        if min_size <= 10 ** power <= max_size
+    ]
+    decade_ticks = sorted(set([min_size, max_size, *decade_ticks]))
+    if len(decade_ticks) <= max_ticks:
+        return decade_ticks
+
+    tick_set = {min_size, max_size}
+    for i in range(1, max_ticks - 1):
+        target = min_pow + (i / (max_ticks - 1)) * (max_pow - min_pow)
+        tick_set.add(int(round(10 ** target)))
+    return sorted(tick for tick in tick_set if min_size <= tick <= max_size)
+
+
 def write_sweep_csv(rows: list[SweepRow], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
@@ -388,11 +443,14 @@ def write_sweep_svg(rows: list[SweepRow],
                     inf_buffer_size: int | None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     width = 1180
-    height = 720
+    height = 760
+    sizes = [row.list_len for row in rows]
+    x_ticks = log_axis_ticks(sizes)
+    rotate_x_labels = len(rows) > len(x_ticks) or len(x_ticks) > 6
     margin_left = 92
     margin_right = 350
     margin_top = 58
-    margin_bottom = 78
+    margin_bottom = 122 if rotate_x_labels else 84
     plot_w = width - margin_left - margin_right
     plot_h = height - margin_top - margin_bottom
 
@@ -419,8 +477,8 @@ def write_sweep_svg(rows: list[SweepRow],
         ),
     ]
 
-    min_x = math.log10(min(row.list_len for row in rows))
-    max_x = math.log10(max(row.list_len for row in rows))
+    min_x = math.log10(min(sizes))
+    max_x = math.log10(max(sizes))
     max_y = max(max(vals) for _, _, vals in series)
     y_bottom = 0.0
     y_top = max(1.0, math.ceil((max_y + 0.20) * 10) / 10)
@@ -432,11 +490,6 @@ def write_sweep_svg(rows: list[SweepRow],
 
     def yscale(v: float) -> float:
         return margin_top + (1.0 - ((v - y_bottom) / (y_top - y_bottom))) * plot_h
-
-    def size_label(n: int) -> str:
-        if n < 1_000_000:
-            return f"{n // 1000}k"
-        return f"{n // 1_000_000}M"
 
     title = f"{program.label} Speedups by Input Size"
     parts: list[str] = [
@@ -463,17 +516,25 @@ def write_sweep_svg(rows: list[SweepRow],
         )
         y += y_step
 
-    for row in rows:
-        px = xscale(row.list_len)
+    for tick in x_ticks:
+        px = xscale(tick)
         parts.append(
             f'<line x1="{px:.1f}" y1="{margin_top}" '
             f'x2="{px:.1f}" y2="{margin_top + plot_h}" '
             f'stroke="#ececf1" stroke-width="1"/>'
         )
-        parts.append(
-            f'<text x="{px:.1f}" y="{margin_top + plot_h + 24}" '
-            f'text-anchor="middle" class="small">{size_label(row.list_len)}</text>'
-        )
+        label = compact_size_label(tick)
+        label_y = margin_top + plot_h + (64 if rotate_x_labels else 24)
+        if rotate_x_labels:
+            parts.append(
+                f'<text x="{px:.1f}" y="{label_y:.1f}" text-anchor="end" '
+                f'class="small" transform="rotate(-45 {px:.1f} {label_y:.1f})">{label}</text>'
+            )
+        else:
+            parts.append(
+                f'<text x="{px:.1f}" y="{label_y:.1f}" '
+                f'text-anchor="middle" class="small">{label}</text>'
+            )
 
     parts.append(
         f'<text x="{margin_left + plot_w / 2:.1f}" y="{height - 22}" '
@@ -487,7 +548,10 @@ def write_sweep_svg(rows: list[SweepRow],
     for name, color, vals in series:
         pts = [(xscale(row.list_len), yscale(val)) for row, val in zip(rows, vals)]
         parts.append(svg_polyline(pts, color))
-        for px, py in pts:
+        marker_step = max(1, math.ceil(len(pts) / 40))
+        for i, (px, py) in enumerate(pts):
+            if len(pts) > 80 and i not in (0, len(pts) - 1) and i % marker_step != 0:
+                continue
             parts.append(
                 f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" '
                 f'fill="{color}" stroke="white" stroke-width="1.5"/>'
@@ -503,7 +567,8 @@ def write_sweep_svg(rows: list[SweepRow],
         )
         parts.append(f'<text x="{legend_x + 44}" y="{y + 5}" class="small">{name}</text>')
 
-    parts.append(f'<text x="{legend_x}" y="{height - 96}" class="small">Max input: {size_label(max(row.list_len for row in rows))}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 118}" class="small">Points: {len(rows)}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 96}" class="small">Max input: {compact_size_label(max(sizes))}</text>')
     parts.append(f'<text x="{legend_x}" y="{height - 74}" class="small">Build: SSE2 manual SIMD</text>')
     chunk_label = (
         f"{inf_buffer_size:,} bytes"

@@ -105,3 +105,6 @@ python3 experiments/scalar_count_smoke/benchmark_scalar_count_smoke.py \
 
 The range includes `--sweep-max`; if the step does not land on it exactly, the
 driver adds the max size as the final point.
+
+Dense sweeps use sparse log-scale x-axis ticks, angled tick labels, and sampled
+point markers so small step sizes remain legible in the generated SVG.
