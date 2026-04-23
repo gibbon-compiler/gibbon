@@ -1347,9 +1347,11 @@ static void gib_bump_global_region_count(void);
 
 typedef struct gib_scalar_count_debug_state {
     uint64_t depth;
+#ifdef _GIBBON_DEBUG
     size_t length;
     size_t capacity;
     char **footers;
+#endif
 } GibScalarCountDebugState;
 
 typedef struct gib_scalar_count_region_state {
@@ -1361,9 +1363,11 @@ typedef struct gib_scalar_count_region_state {
 
 static GibScalarCountDebugState gib_global_scalar_count_debug_state = {
     .depth = 0,
+#ifdef _GIBBON_DEBUG
     .length = 0,
     .capacity = 0,
     .footers = NULL,
+#endif
 };
 
 static GibScalarCountRegionState *gib_global_scalar_count_region_states = NULL;
@@ -1385,43 +1389,11 @@ static GibScalarCountFooter *gib_scalar_count_footer_for_addr(char *footer_ptr)
     }
 }
 
-static size_t gib_scalar_count_slot_index(
-    uint64_t dcon_tag,
-    uint64_t field_index
-) {
-    if (dcon_tag > UINT32_MAX) {
-        fprintf(stderr,
-                "gib_scalar_count_slot_index: datacon tag %" PRIu64 " does not fit in footer metadata\n",
-                dcon_tag);
-        exit(1);
-    }
-
-    if (field_index >= GIB_SCALAR_COUNT_FIELD_STRIDE) {
-        fprintf(stderr,
-                "gib_scalar_count_slot_index: scalar field index %" PRIu64
-                " exceeds stride %d\n",
-                field_index,
-                GIB_SCALAR_COUNT_FIELD_STRIDE);
-        exit(1);
-    }
-
-    uint64_t slot = (dcon_tag * GIB_SCALAR_COUNT_FIELD_STRIDE) + field_index;
-    if (slot >= GIB_SCALAR_COUNT_MAX_SLOTS) {
-        fprintf(stderr,
-                "gib_scalar_count_slot_index: no fixed footer slot for datacon=%" PRIu64
-                " field=%" PRIu64 " (slot=%" PRIu64 ", max=%d)\n",
-                dcon_tag,
-                field_index,
-                slot,
-                GIB_SCALAR_COUNT_MAX_SLOTS);
-        exit(1);
-    }
-
-    return (size_t) slot;
-}
-
 static void gib_scalar_count_debug_touch(char *footer_ptr)
 {
+#ifndef _GIBBON_DEBUG
+    (void) footer_ptr;
+#else
     GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;
 
     for (size_t i = 0; i < state->length; i++) {
@@ -1443,58 +1415,41 @@ static void gib_scalar_count_debug_touch(char *footer_ptr)
 
     state->footers[state->length] = footer_ptr;
     state->length++;
+#endif
 }
 
 static void gib_scalar_count_footer_copy_fixed(
     GibScalarCountFooter *dst,
     const GibScalarCountFooter *src
 ) {
-    memcpy(dst->slots, src->slots, sizeof(dst->slots));
+    dst->count = src->count;
+    dst->is_touched = src->is_touched;
+    memcpy(dst->_padding, src->_padding, sizeof(dst->_padding));
 }
 
-static void gib_scalar_count_footer_bump_fixed(
-    GibScalarCountFooter *footer,
-    uint64_t dcon_tag,
-    uint64_t field_index
-) {
-    size_t slot_index = gib_scalar_count_slot_index(dcon_tag, field_index);
-    GibScalarCountFooterSlot *slot = &footer->slots[slot_index];
-
-    if (!slot->is_touched) {
-        slot->dcon_tag = (uint32_t) dcon_tag;
-        slot->field_index = (uint16_t) field_index;
-        slot->count = 0;
-        slot->is_touched = 1;
-        slot->_padding = 0;
+static void gib_scalar_count_footer_bump_fixed(GibScalarCountFooter *footer)
+{
+    if (!footer->is_touched) {
+        footer->count = 0;
+        footer->is_touched = 1;
+        memset(footer->_padding, 0, sizeof(footer->_padding));
     }
 
-    slot->count++;
+    footer->count++;
 }
 
-static uint64_t gib_scalar_count_footer_get_fixed(
-    const GibScalarCountFooter *footer,
-    uint64_t dcon_tag,
-    uint64_t field_index
-) {
-    size_t slot_index = gib_scalar_count_slot_index(dcon_tag, field_index);
-    const GibScalarCountFooterSlot *slot = &footer->slots[slot_index];
-
-    if (!slot->is_touched) {
+static uint64_t gib_scalar_count_footer_get_fixed(const GibScalarCountFooter *footer)
+{
+    if (!footer->is_touched) {
         return 0;
     }
 
-    return slot->count;
+    return footer->count;
 }
 
-static size_t gib_scalar_count_footer_touched_slots(const GibScalarCountFooter *footer)
+static bool gib_scalar_count_footer_is_touched(const GibScalarCountFooter *footer)
 {
-    size_t touched = 0;
-    for (size_t i = 0; i < GIB_SCALAR_COUNT_MAX_SLOTS; i++) {
-        if (footer->slots[i].is_touched) {
-            touched++;
-        }
-    }
-    return touched;
+    return footer->is_touched != 0;
 }
 
 static GibScalarCountRegionState *gib_scalar_count_region_state_for_footer(
@@ -1541,7 +1496,9 @@ void gib_scalar_count_footer_begin(void)
     GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;
 
     if (state->depth == 0) {
+#ifdef _GIBBON_DEBUG
         state->length = 0;
+#endif
         gib_global_scalar_count_region_states_length = 0;
     }
     state->depth++;
@@ -1570,12 +1527,12 @@ void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr)
     gib_scalar_count_footer_init(&old_footer->scalar_counts);
     gib_scalar_count_footer_copy_fixed(&new_footer->scalar_counts,
                                        &region_state->first_counts);
-    if (gib_scalar_count_footer_touched_slots(&region_state->first_counts) > 0) {
+    if (gib_scalar_count_footer_is_touched(&region_state->first_counts)) {
         gib_scalar_count_debug_touch(new_footer_ptr);
     }
 }
 
-void gib_scalar_count_footer_bump(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index)
+void gib_scalar_count_footer_bump(char *footer_ptr)
 {
     GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;
 
@@ -1589,7 +1546,7 @@ void gib_scalar_count_footer_bump(char *footer_ptr, uint64_t dcon_tag, uint64_t 
 
     if (gib_addr_in_nursery(footer_ptr)) {
         GibScalarCountFooter *footer = gib_scalar_count_footer_for_addr(footer_ptr);
-        gib_scalar_count_footer_bump_fixed(footer, dcon_tag, field_index);
+        gib_scalar_count_footer_bump_fixed(footer);
         gib_scalar_count_debug_touch(footer_ptr);
         return;
     }
@@ -1599,25 +1556,39 @@ void gib_scalar_count_footer_bump(char *footer_ptr, uint64_t dcon_tag, uint64_t 
         gib_scalar_count_region_state_for_footer(footer);
 
     if (region_state->write_footer == NULL) {
-        gib_scalar_count_footer_bump_fixed(&region_state->first_counts,
-                                           dcon_tag,
-                                           field_index);
-        gib_scalar_count_footer_bump_fixed(&region_state->current_footer->scalar_counts,
-                                           dcon_tag,
-                                           field_index);
+        gib_scalar_count_footer_bump_fixed(&region_state->first_counts);
+        gib_scalar_count_footer_bump_fixed(&region_state->current_footer->scalar_counts);
         gib_scalar_count_debug_touch((char *) region_state->current_footer);
     } else {
-        gib_scalar_count_footer_bump_fixed(&region_state->write_footer->scalar_counts,
-                                           dcon_tag,
-                                           field_index);
+        gib_scalar_count_footer_bump_fixed(&region_state->write_footer->scalar_counts);
         gib_scalar_count_debug_touch((char *) region_state->write_footer);
     }
 }
 
-uint64_t gib_scalar_count_footer_get(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index)
+uint64_t gib_scalar_count_footer_get(char *footer_ptr)
 {
     GibScalarCountFooter *footer = gib_scalar_count_footer_for_addr(footer_ptr);
-    return gib_scalar_count_footer_get_fixed(footer, dcon_tag, field_index);
+    return gib_scalar_count_footer_get_fixed(footer);
+}
+
+char *gib_scalar_count_first_footer(char *footer_ptr)
+{
+    if (footer_ptr == NULL || gib_addr_in_nursery(footer_ptr)) {
+        return NULL;
+    }
+
+    GibOldgenChunkFooter *footer = (GibOldgenChunkFooter *) footer_ptr;
+    return footer->reg_info->first_chunk_footer;
+}
+
+char *gib_scalar_count_footer_next(char *footer_ptr)
+{
+    if (footer_ptr == NULL || gib_addr_in_nursery(footer_ptr)) {
+        return NULL;
+    }
+
+    GibOldgenChunkFooter *footer = (GibOldgenChunkFooter *) footer_ptr;
+    return (char *) footer->next;
 }
 
 void gib_scalar_count_footer_end(const char *build_fun_name)
@@ -1634,36 +1605,37 @@ void gib_scalar_count_footer_end(const char *build_fun_name)
         return;
     }
 
+    // No final repair pass is needed here.  The cyclic invariant is maintained
+    // eagerly in gib_scalar_count_on_grow: each fresh final footer is seeded
+    // with first_counts, and the previous footer accumulates the next chunk.
+#ifdef _GIBBON_DEBUG
     printf("SCALAR_COUNT_FOOTERS %s touched=%zu\n", build_fun_name, state->length);
     for (size_t i = 0; i < state->length; i++) {
         gib_scalar_count_footer_print(state->footers[i]);
     }
+#else
+    (void) build_fun_name;
+#endif
     gib_global_scalar_count_region_states_length = 0;
 }
 
 void gib_scalar_count_footer_print(char *footer_ptr)
 {
+#ifndef _GIBBON_DEBUG
+    (void) footer_ptr;
+#else
     GibScalarCountFooter *footer = gib_scalar_count_footer_for_addr(footer_ptr);
     const char *kind = gib_addr_in_nursery(footer_ptr) ? "nursery" : "oldgen";
-    size_t touched = gib_scalar_count_footer_touched_slots(footer);
+    bool touched = gib_scalar_count_footer_is_touched(footer);
 
-    printf("SCALAR_COUNT_FOOTER footer=%p kind=%s entries=%zu slots=%d\n",
+    printf("SCALAR_COUNT_FOOTER footer=%p kind=%s touched=%u\n",
            (void *) footer_ptr,
            kind,
-           touched,
-           GIB_SCALAR_COUNT_MAX_SLOTS);
-    for (size_t i = 0; i < GIB_SCALAR_COUNT_MAX_SLOTS; i++) {
-        GibScalarCountFooterSlot *slot = &footer->slots[i];
-        if (!slot->is_touched) {
-            continue;
-        }
-        printf("SCALAR_COUNT dcon=%" PRIu64 " field=%" PRIu64
-               " count=%" PRIu64 " slot=%zu\n",
-               (uint64_t) slot->dcon_tag,
-               (uint64_t) slot->field_index,
-               slot->count,
-               i);
+           touched ? 1 : 0);
+    if (touched) {
+        printf("SCALAR_COUNT count=%" PRIu64 "\n", footer->count);
     }
+#endif
 }
 
 // Functions related to counting the number of allocated regions.

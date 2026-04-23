@@ -56,21 +56,21 @@ const COMPACT: bool = false;
 static mut GC_STATS: *mut GibGcStats = null_mut();
 
 unsafe fn init_scalar_count_footer(counts: *mut GibScalarCountFooter) {
-    write_bytes(
-        (*counts).slots.as_mut_ptr(),
-        0,
-        GIB_SCALAR_COUNT_MAX_SLOTS,
-    );
+    (*counts).count = 0;
+    (*counts).is_touched = 0;
+    write_bytes((*counts)._padding.as_mut_ptr(), 0, (*counts)._padding.len());
 }
 
 unsafe fn clone_scalar_count_footer(
     dst: *mut GibScalarCountFooter,
     src: *const GibScalarCountFooter,
 ) {
+    (*dst).count = (*src).count;
+    (*dst).is_touched = (*src).is_touched;
     copy_nonoverlapping(
-        (*src).slots.as_ptr(),
-        (*dst).slots.as_mut_ptr(),
-        GIB_SCALAR_COUNT_MAX_SLOTS,
+        (*src)._padding.as_ptr(),
+        (*dst)._padding.as_mut_ptr(),
+        (*src)._padding.len(),
     );
 }
 

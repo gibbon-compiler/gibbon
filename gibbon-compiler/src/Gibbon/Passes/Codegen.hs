@@ -1350,19 +1350,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                      error $ "ScalarCountFooterBegin expected no bindings/args: " ++ show (bnds, rnds)
                    pure [ C.BlockStm [cstm| gib_scalar_count_footer_begin(); |] ]
 
-                 ScalarCountBump dcon_tag field_idx -> do
-                   when (not (null bnds) || length rnds /= 1) $
-                     error $ "ScalarCountBump expected no bindings and one footer arg: " ++ show (bnds, rnds)
-                   let dcon_tag_i = fromIntegral dcon_tag :: Int
-                   let [footer] = rnds
-                   let footer_arg =
+                 ScalarCountBump -> do
+                   when (not (null bnds)) $
+                     error $ "ScalarCountBump expected no bindings: " ++ show (bnds, rnds)
+                   let footer_arg footer =
                          case footer of
                            VarTriv v ->
                              case M.lookup v mutEndEnv of
                                Just endVar -> [cexp| $id:endVar |]
                                Nothing -> codegenTriv venv footer
                            _ -> codegenTriv venv footer
-                   pure [ C.BlockStm [cstm| gib_scalar_count_footer_bump($exp:footer_arg, $int:dcon_tag_i, $int:field_idx); |] ]
+                   pure $
+                     L.map
+                       (\footer ->
+                           let footer_arg' = footer_arg footer
+                           in C.BlockStm [cstm| gib_scalar_count_footer_bump($exp:footer_arg'); |])
+                       rnds
 
                  ScalarCountFooterEnd fun_name -> do
                    when (not (null bnds) || not (null rnds)) $

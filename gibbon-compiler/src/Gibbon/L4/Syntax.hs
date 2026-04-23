@@ -330,7 +330,7 @@ data Prim
     | ReadScalar L3.Scalar
     | WriteScalar L3.Scalar
     | ScalarCountFooterBegin
-    | ScalarCountBump Tag Int
+    | ScalarCountBump
     | ScalarCountFooterEnd String
 
     | ReadList

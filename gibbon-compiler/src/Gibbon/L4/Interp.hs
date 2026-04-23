@@ -223,7 +223,7 @@ applyPrim ReadTag [BufVal is] = case Seq.viewl is of
 applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []
 applyPrim ScalarCountFooterBegin [] = pure []
-applyPrim ScalarCountBump{} [_footer] = pure []
+applyPrim ScalarCountBump _footers = pure []
 applyPrim ScalarCountFooterEnd{} [] = pure []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"

@@ -429,21 +429,13 @@ typedef struct gib_chunk {
     GibCursor end;
 } GibChunk;
 
-// Prototype scalar-count metadata for SoA field buffers.  A fixed slot table
-// keeps lookup/bump O(1) and avoids allocating from the footer path.
-#define GIB_SCALAR_COUNT_MAX_SLOTS 32
-#define GIB_SCALAR_COUNT_FIELD_STRIDE 8
-
-typedef struct gib_scalar_count_footer_slot {
-    uint64_t count;
-    uint32_t dcon_tag;
-    uint16_t field_index;
-    uint8_t is_touched;
-    uint8_t _padding;
-} GibScalarCountFooterSlot;
-
+// Prototype scalar-buffer count metadata for SoA chunks. Each footer stores a
+// single cyclic count for this region/buffer: non-final footers store the count
+// for the next chunk, and the final footer stores the count for the first chunk.
 typedef struct gib_scalar_count_footer {
-    GibScalarCountFooterSlot slots[GIB_SCALAR_COUNT_MAX_SLOTS];
+    uint64_t count;
+    uint8_t is_touched;
+    uint8_t _padding[7];
 } GibScalarCountFooter;
 
 typedef struct gib_shadowstack {
@@ -646,7 +638,7 @@ extern GibGcStats *gib_global_gc_stats;
 #if defined GIB_INIT_CHUNK_SIZE
 
 #if GIB_INIT_CHUNK_SIZE < 1024
-// The initial chunk must have room for the fixed scalar-count footer slots.
+// Keep a conservative lower bound for metadata, redirections, and small values.
 #define GIB_INIT_CHUNK_SIZE 1024
 #endif
 
@@ -770,10 +762,12 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
 void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
 void gib_scalar_count_footer_begin(void);
-void gib_scalar_count_footer_bump(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index);
+void gib_scalar_count_footer_bump(char *footer_ptr);
 void gib_scalar_count_footer_end(const char *build_fun_name);
 void gib_scalar_count_footer_print(char *footer_ptr);
-uint64_t gib_scalar_count_footer_get(char *footer_ptr, uint64_t dcon_tag, uint64_t field_index);
+uint64_t gib_scalar_count_footer_get(char *footer_ptr);
+char *gib_scalar_count_first_footer(char *footer_ptr);
+char *gib_scalar_count_footer_next(char *footer_ptr);
 void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr);
 void gib_scalar_count_register_chunk(char *chunk_start, char *footer_ptr);
 INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer);
@@ -821,7 +815,9 @@ INLINE_HEADER bool gib_addr_in_nursery(char *ptr);
 
 INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer)
 {
-    memset(footer->slots, 0, sizeof(footer->slots));
+    footer->count = 0;
+    footer->is_touched = 0;
+    memset(footer->_padding, 0, sizeof(footer->_padding));
 }
 
 

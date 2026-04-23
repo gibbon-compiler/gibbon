@@ -452,21 +452,11 @@ pub mod c {
     }
 
     #[repr(C)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct GibScalarCountFooterSlot {
-        pub count: u64,
-        pub dcon_tag: u32,
-        pub field_index: u16,
-        pub is_touched: u8,
-        pub _padding: u8,
-    }
-
-    pub const GIB_SCALAR_COUNT_MAX_SLOTS: usize = 32;
-
-    #[repr(C)]
     #[derive(Debug, Clone)]
     pub struct GibScalarCountFooter {
-        pub slots: [GibScalarCountFooterSlot; GIB_SCALAR_COUNT_MAX_SLOTS],
+        pub count: u64,
+        pub is_touched: u8,
+        pub _padding: [u8; 7],
     }
 
     #[repr(C)]

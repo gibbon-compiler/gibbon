@@ -2296,14 +2296,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                                            let ml_name = getVarNameFromFreeVar fvarenv' (fromLocVarToFreeVarsTy ml)
                                                            let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
                                                            return (bmp_bnd, mdc1i)
-                    interm_binds <-
-                      if emitScalarCountBumps
-                      then do
-                        scalar_count_bump <- gensym "scalar_count_bump"
-                        pure $
-                          LetE (scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon index write_scalars_at) $
-                            (mkLets bump_bnds) rest
-                      else pure $ (mkLets bump_bnds) rest
+                    let interm_binds = mkLets bump_bnds rest
                     return (let_assign_write_cur $ LetE (d', [], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') interm_binds, mdc1''', mdc2')
 
                   -- Write a pointer to a vector
@@ -2473,6 +2466,33 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
               )
               (additional_bnds, freeVarToVarEnv', 1)
               field_locs
+          let scalar_count_footer_vars =
+                if emitScalarCountBumps
+                then
+                  Mb.mapMaybe
+                    ( \(_, mb_floc, (_, MkTy2 ty)) ->
+                        case mb_floc of
+                          Just floc | isScalarTy ty ->
+                            Just $
+                              case M.lookup floc m2 of
+                                Just (oldv, _, _, _) -> oldv
+                                Nothing ->
+                                  case M.lookup (fromLocVarToFreeVarsTy floc) freeVarToVarEnv'' of
+                                    Just v -> v
+                                    Nothing ->
+                                      case floc of
+                                        Single l -> l
+                                        SoA _ _ -> error $ "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected scalar-count field location " ++ show floc
+                          _ -> Nothing
+                    )
+                    locs_tys
+                else []
+          scalar_count_bnds <-
+            if null scalar_count_footer_vars
+            then return []
+            else do
+              scalar_count_bump <- gensym "scalar_count_bump"
+              return [(scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon scalar_count_footer_vars)]
           let mut_loc_sloc_dcon = findMutableLocationPointingToVar sloc_dcon m1
           (mut_loc_ad_bnds, m1') <- dbgTrace (minChatLvl) "Print in SoA Dcon case: " dbgTrace (minChatLvl) (sdoc (m1, sloc_dcon)) dbgTrace (minChatLvl) "End in print dcon case SoA!!\n" case mut_loc_sloc_dcon of 
                                               Nothing -> return ([], m1)
@@ -2491,6 +2511,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
             mkLets additional_bnds'
             <$> LetE (start_tag_alloc, [], ProdTy [], Ext $ StartTagAllocation (sloc))
             <$> LetE (writetag, [], (getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc)), Ext $ WriteTag dcon (sloc_dcon))
+            <$> mkLets scalar_count_bnds
             <$> LetE (end_tag_alloc, [], ProdTy [], Ext $ EndTagAllocation (sloc))
             <$> LetE (start_scalars_alloc, [], ProdTy [], Ext $ StartScalarsAllocation (sloc))
             <$> LetE (after_tag, [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc), Ext $ AddCursor (sloc_dcon) (L3.LitE 1))

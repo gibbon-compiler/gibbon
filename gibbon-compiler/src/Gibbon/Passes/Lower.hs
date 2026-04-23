@@ -800,10 +800,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] (T.WriteScalar s) [triv sym_tbl "WriteTag arg" e, T.VarTriv c] <$>
          tail free_reg sym_tbl bod
 
-    LetE (_, _, _, Ext (ScalarCountBump dcon field_idx footer)) bod ->
-      let dcon_tag = getTagOfDataCon ddefs dcon
-       in T.LetPrimCallT [] (T.ScalarCountBump dcon_tag field_idx) [T.VarTriv footer] <$>
-             tail free_reg sym_tbl bod
+    LetE (_, _, _, Ext (ScalarCountBump _ footers)) bod ->
+      T.LetPrimCallT [] T.ScalarCountBump (L.map T.VarTriv footers) <$>
+        tail free_reg sym_tbl bod
 
 
     -- In Target, AddP is overloaded still:

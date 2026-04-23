@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="720" viewBox="0 0 1180 720">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:13px} .axis{font-size:14px} .title{font-size:24px;font-weight:700}</style>
+<text x="92" y="34" class="title">ScalarCountSmoke add1List Speedups by Input Size</text>
+<rect x="92" y="58" width="738" height="584" fill="#fbfbfd" stroke="#c7c7cc"/>
+<line x1="92" y1="642.0" x2="830" y2="642.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="646.0" text-anchor="end" class="small">0.0x</text>
+<line x1="92" y1="550.8" x2="830" y2="550.8" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="554.8" text-anchor="end" class="small">0.5x</text>
+<line x1="92" y1="459.5" x2="830" y2="459.5" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="463.5" text-anchor="end" class="small">1.0x</text>
+<line x1="92" y1="368.2" x2="830" y2="368.2" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="372.2" text-anchor="end" class="small">1.5x</text>
+<line x1="92" y1="277.0" x2="830" y2="277.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="281.0" text-anchor="end" class="small">2.0x</text>
+<line x1="92" y1="185.8" x2="830" y2="185.8" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="189.8" text-anchor="end" class="small">2.5x</text>
+<line x1="92" y1="94.5" x2="830" y2="94.5" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="98.5" text-anchor="end" class="small">3.0x</text>
+<line x1="92.0" y1="58" x2="92.0" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="92.0" y="666" text-anchor="middle" class="small">10k</text>
+<line x1="349.9" y1="58" x2="349.9" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="349.9" y="666" text-anchor="middle" class="small">50k</text>
+<line x1="461.0" y1="58" x2="461.0" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="461.0" y="666" text-anchor="middle" class="small">100k</text>
+<line x1="607.8" y1="58" x2="607.8" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="607.8" y="666" text-anchor="middle" class="small">250k</text>
+<line x1="718.9" y1="58" x2="718.9" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="718.9" y="666" text-anchor="middle" class="small">500k</text>
+<line x1="830.0" y1="58" x2="830.0" y2="642" stroke="#ececf1" stroke-width="1"/>
+<text x="830.0" y="666" text-anchor="middle" class="small">1M</text>
+<text x="461.0" y="698" text-anchor="middle" class="axis">Input size (log scale)</text>
+<text x="26" y="350.0" text-anchor="middle" class="axis" transform="rotate(-90 26 350.0)">Speedup vs recursive</text>
+<polyline points="92.0,402.2 349.9,378.9 461.0,371.4 607.8,368.7 718.9,411.5 830.0,427.4" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="402.2" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="349.9" cy="378.9" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="371.4" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="607.8" cy="368.7" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="718.9" cy="411.5" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="427.4" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,204.9 349.9,147.9 461.0,145.8 607.8,148.2 718.9,222.4 830.0,236.7" fill="none" stroke="#2ca02c" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="204.9" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="349.9" cy="147.9" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="145.8" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="607.8" cy="148.2" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="718.9" cy="222.4" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="236.7" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,200.8 349.9,123.4 461.0,121.5 607.8,114.5 718.9,179.3 830.0,196.2" fill="none" stroke="#9467bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="200.8" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="349.9" cy="123.4" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="121.5" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="607.8" cy="114.5" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="718.9" cy="179.3" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="196.2" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,183.1 349.9,106.6 461.0,115.5 607.8,110.6 718.9,156.6 830.0,175.8" fill="none" stroke="#d62728" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="183.1" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="349.9" cy="106.6" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="115.5" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="607.8" cy="110.6" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="718.9" cy="156.6" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="175.8" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<line x1="864" y1="76" x2="896" y2="76" stroke="#1f77b4" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="81" class="small">Copy scalar / recursive</text>
+<line x1="864" y1="110" x2="896" y2="110" stroke="#2ca02c" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="115" class="small">Indirection scalar / recursive</text>
+<line x1="864" y1="144" x2="896" y2="144" stroke="#9467bd" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="149" class="small">Indirection auto-vector / recursive</text>
+<line x1="864" y1="178" x2="896" y2="178" stroke="#d62728" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="183" class="small">Indirection SSE2 / recursive</text>
+<text x="864" y="624" class="small">Max input: 1M</text>
+<text x="864" y="646" class="small">Build: SSE2 manual SIMD</text>
+<text x="864" y="668" class="small">Chunk size: executable default</text>
+</svg>
