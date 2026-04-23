@@ -33,7 +33,7 @@ Follow the instructions below to get all dependencies or enter the Nix shell
 with `nix-shell` to get them via [Nix](https://nix.dev/).
 
 #### Nix
-Use `cachix` to pull OpenCilk build artifacts.
+Use [`cachix`](https://docs.cachix.org/installation) to pull OpenCilk build artifacts.
 - Run `cachix use opencilk` or if that fails add the following to `~/.config/nix/nix.conf`:
 ```
 extra-substituters = https://opencilk.cachix.org
