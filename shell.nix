@@ -6,7 +6,13 @@ let
         sha256 = "1zn1lsafn62sz6azx6j735fh4vwwghj8cc9x91g5sx2nrg23ap9k";
       })
       {
-        overlays = [ (import ./nix/overlay.nix) ];
+        overlays = [
+          (import
+            "${builtins.fetchGit {
+              url = "https://github.com/gibbon-compiler/opencilk.nix";
+              rev = "1f02d1fc273eea2638b981d9acfb2082ff18d3da";
+            }}/overlay.nix")
+        ];
       };
 
   clang = pkgs.llvmPackages_opencilk.clang;
