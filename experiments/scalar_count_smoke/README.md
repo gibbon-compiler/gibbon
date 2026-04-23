@@ -57,7 +57,7 @@ The driver only passes `--inf-buffer-size` to the generated executable when you
 specify it explicitly. If omitted, the executable uses its own default.
 Benchmark-mode output reports this as `Chunk size: executable default`.
 
-To generate a speedup graph across input sizes up to 1 million:
+To generate a speedup graph across the default input sizes:
 
 ```text
 python3 experiments/scalar_count_smoke/benchmark_scalar_count_smoke.py \
@@ -74,7 +74,7 @@ experiments/scalar_count_smoke/results/list_speedups.svg
 ```
 
 The SVG plots input size on the x axis and speedup over recursive `add1` on the
-y axis. The default sweep sizes are:
+y axis. The built-in default sweep sizes are:
 
 ```text
 10000,50000,100000,250000,500000,1000000

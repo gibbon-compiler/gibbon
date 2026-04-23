@@ -678,8 +678,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--sweep-sizes",
         default=None,
         help=(
-            "Comma-separated input sizes for --mode sweep. Defaults up to 1M "
-            "unless --sweep-start/--sweep-step/--sweep-max are used."
+            "Comma-separated input sizes for --mode sweep. Uses the built-in "
+            "default sizes unless --sweep-start/--sweep-step/--sweep-max are used."
         ),
     )
     parser.add_argument(
@@ -787,8 +787,6 @@ def main(argv: list[str]) -> int:
             raise SystemExit("sweep must contain at least one positive integer")
         if any(size <= 0 for size in sizes):
             raise SystemExit("sweep sizes must all be positive")
-        if max(sizes) > 1_000_000:
-            raise SystemExit("sweep sizes must stay at or below 1000000")
 
         csv_path = (
             args.sweep_csv
