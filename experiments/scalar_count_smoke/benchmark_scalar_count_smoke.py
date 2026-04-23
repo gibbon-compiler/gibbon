@@ -316,6 +316,33 @@ def parse_sizes(value: str) -> list[int]:
     return [int(x.strip()) for x in value.split(",") if x.strip()]
 
 
+def range_sweep_sizes(start: int, step: int, max_size: int) -> list[int]:
+    sizes = list(range(start, max_size + 1, step))
+    if not sizes or sizes[-1] != max_size:
+        sizes.append(max_size)
+    return sizes
+
+
+def sweep_sizes_from_args(args: argparse.Namespace) -> list[int]:
+    range_args = [args.sweep_start, args.sweep_step, args.sweep_max]
+    if any(value is not None for value in range_args):
+        if args.sweep_sizes is not None:
+            raise SystemExit(
+                "--sweep-sizes cannot be used together with "
+                "--sweep-start/--sweep-step/--sweep-max"
+            )
+        if any(value is None for value in range_args):
+            raise SystemExit(
+                "--sweep-start, --sweep-step, and --sweep-max must be "
+                "provided together"
+            )
+        return range_sweep_sizes(args.sweep_start, args.sweep_step, args.sweep_max)
+
+    if args.sweep_sizes is None:
+        return [*DEFAULT_SWEEP_SIZES]
+    return parse_sizes(args.sweep_sizes)
+
+
 def svg_polyline(points: list[tuple[float, float]], color: str, width: int = 3) -> str:
     pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
     return (
@@ -649,8 +676,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--iterations", "-n", type=int, default=100)
     parser.add_argument(
         "--sweep-sizes",
-        default=",".join(str(size) for size in DEFAULT_SWEEP_SIZES),
-        help="Comma-separated input sizes for --mode sweep. Defaults up to 1M.",
+        default=None,
+        help=(
+            "Comma-separated input sizes for --mode sweep. Defaults up to 1M "
+            "unless --sweep-start/--sweep-step/--sweep-max are used."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-start",
+        type=int,
+        default=None,
+        help=(
+            "First input size for range-based --mode sweep. Must be used with "
+            "--sweep-step and --sweep-max."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-step",
+        type=int,
+        default=None,
+        help=(
+            "Input-size step for range-based --mode sweep. Must be used with "
+            "--sweep-start and --sweep-max."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-max",
+        type=int,
+        default=None,
+        help=(
+            "Maximum input size for range-based --mode sweep. The maximum is "
+            "included even when the step does not land on it exactly."
+        ),
     )
     parser.add_argument(
         "--sweep-csv",
@@ -700,6 +757,18 @@ def main(argv: list[str]) -> int:
         raise SystemExit("--int-only-repeats must be positive")
     if args.inner_iterations is not None and args.inner_iterations <= 0:
         raise SystemExit("--inner-iterations must be positive")
+    if args.sweep_start is not None and args.sweep_start <= 0:
+        raise SystemExit("--sweep-start must be positive")
+    if args.sweep_step is not None and args.sweep_step <= 0:
+        raise SystemExit("--sweep-step must be positive")
+    if args.sweep_max is not None and args.sweep_max <= 0:
+        raise SystemExit("--sweep-max must be positive")
+    if (
+        args.sweep_start is not None and
+        args.sweep_max is not None and
+        args.sweep_start > args.sweep_max
+    ):
+        raise SystemExit("--sweep-start must be less than or equal to --sweep-max")
     if args.int_only_repeats is not None and program.int_only_repeats_define is None:
         raise SystemExit("--int-only-repeats is only supported with --program list")
     if args.inner_iterations is not None and program.inner_iterations_define is None:
@@ -713,13 +782,13 @@ def main(argv: list[str]) -> int:
     maybe_build_rts(args)
 
     if args.mode == "sweep":
-        sizes = parse_sizes(args.sweep_sizes)
+        sizes = sweep_sizes_from_args(args)
         if not sizes:
-            raise SystemExit("--sweep-sizes must contain at least one positive integer")
+            raise SystemExit("sweep must contain at least one positive integer")
         if any(size <= 0 for size in sizes):
-            raise SystemExit("--sweep-sizes must all be positive")
+            raise SystemExit("sweep sizes must all be positive")
         if max(sizes) > 1_000_000:
-            raise SystemExit("--sweep-sizes must stay at or below 1000000")
+            raise SystemExit("sweep sizes must stay at or below 1000000")
 
         csv_path = (
             args.sweep_csv

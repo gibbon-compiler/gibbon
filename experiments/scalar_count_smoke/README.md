@@ -91,3 +91,17 @@ python3 experiments/scalar_count_smoke/benchmark_scalar_count_smoke.py \
 ```
 
 Use `--sweep-sizes`, `--sweep-csv`, and `--sweep-svg` to customize the sweep.
+For evenly spaced input sizes, use the range form instead of `--sweep-sizes`:
+
+```text
+python3 experiments/scalar_count_smoke/benchmark_scalar_count_smoke.py \
+  --program list \
+  --mode sweep \
+  --iterations 20 \
+  --sweep-start 10000 \
+  --sweep-step 10000 \
+  --sweep-max 100000
+```
+
+The range includes `--sweep-max`; if the step does not land on it exactly, the
+driver adds the max size as the final point.
