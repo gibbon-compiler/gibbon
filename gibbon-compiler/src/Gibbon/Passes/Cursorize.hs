@@ -4384,13 +4384,22 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                             case fallback of
                               CursorArrayTy {} -> CursorTy
                               _ -> fallback
-                      mappedEndTy :: Var -> Ty3 -> Ty3
-                      mappedEndTy var fallback =
-                        case M.lookup var tenv of
-                          Just ty -> stripTyLocs (unTy2 ty)
-                          Nothing -> fallback
+                      mappedEndTy :: Ty3 -> Var -> Ty3 -> Ty3
+                      mappedEndTy locTy var fallback =
+                        case locTy of
+                          CursorArrayTy sz ->
+                            case M.lookup var tenv of
+                              Just ty ->
+                                case stripTyLocs (unTy2 ty) of
+                                  CursorArrayTy endSz -> CursorArrayTy endSz
+                                  _ -> CursorArrayTy sz
+                              Nothing -> CursorArrayTy sz
+                          _ ->
+                            case M.lookup var tenv of
+                              Just ty -> stripTyLocs (unTy2 ty)
+                              Nothing -> fallback
                       loc_ty = mappedLocTy lremLocToVar static_loc_ty
-                      end_ty = mappedEndTy lremEndRegToVar static_end_ty
+                      end_ty = mappedEndTy loc_ty lremEndRegToVar static_end_ty
                       cursorAt :: Ty3 -> Var -> Int -> Var -> PassM (Exp3, Exp3 -> Exp3)
                       cursorAt ty var i prefix =
                         case ty of
