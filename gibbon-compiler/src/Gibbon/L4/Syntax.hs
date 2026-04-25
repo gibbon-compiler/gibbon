@@ -167,6 +167,16 @@ data Tail
     | LetAvailT { vars :: [Var]
                 , bod :: Tail }
 
+    | ForLoopT { idx :: Var
+               , bound :: Triv
+               , loopBody :: Tail
+               , bod :: Tail
+               }
+    | WhileCursorT { ref :: Var
+                   , loopBody :: Tail
+                   , bod :: Tail
+                   }
+
     | IfT { tst  :: Triv,
             con  :: Tail,
             els  :: Tail }
@@ -313,10 +323,15 @@ data Prim
     | WriteTag
     -- ^ Write a static tag value, takes a cursor to target.
 
+    | WriteTagPacked
+    -- ^ Write a runtime tag byte that was read from the input stream.
+
     | TagCursor
     -- ^ Create a tagged a cursor
 
     | ReadTaggedCursor
+
+    | WriteCursorIndirection
 
     | WriteTaggedCursor
 
@@ -325,6 +340,8 @@ data Prim
     | ReadCursor
     -- ^ Read and return a cursor
 
+    | GrowRegion
+
     | WriteCursorMutable
 
     | ReadScalar L3.Scalar
@@ -332,6 +349,9 @@ data Prim
     | ScalarCountFooterBegin
     | ScalarCountBump
     | ScalarCountFooterEnd String
+    | ScalarCountGet
+    | ScalarCountFirstFooter
+    | ScalarCountNextFooter
 
     | ReadList
     | WriteList
@@ -437,6 +457,8 @@ withTail (tl0,retty) fn =
     (LetTimedT { isIter, binds, timed, bod })  -> LetTimedT isIter binds timed  <$> go bod
     (LetArenaT { lhs, bod })                   -> LetArenaT lhs                 <$> go bod
     (LetAvailT { vars, bod })                  -> LetAvailT vars                <$> go bod
+    (ForLoopT { idx, bound, loopBody, bod })   -> ForLoopT idx bound loopBody   <$> go bod
+    (WhileCursorT { ref, loopBody, bod })      -> WhileCursorT ref loopBody     <$> go bod
 
     -- We could DUPLICATE code in both branches or just let-bind the result instead:
     (IfT { tst, con, els }) -> IfT tst <$> go con <*> go els
@@ -510,6 +532,13 @@ inlineTrivL4 (Prog info_tbl sym_tbl fundefs mb_main) =
         LetAllocT{vals,bod} -> tl { vals = map (\(a,b) -> (a, inline env b)) vals
                                   , bod  = go bod }
         LetAvailT{bod}   -> tl { bod = go bod }
+        ForLoopT{idx,bound,loopBody,bod} ->
+          let env' = M.delete idx env
+          in ForLoopT idx (inline env bound) (inline_tail env' loopBody) (go bod)
+        WhileCursorT{loopBody,bod} ->
+          tl { loopBody = go loopBody
+             , bod = go bod
+             }
         IfT{tst,con,els} -> IfT (inline env tst) (go con) (go els)
         ErrT{} -> tl
         LetTimedT{timed,bod} -> tl { timed = go timed

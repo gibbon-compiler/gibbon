@@ -425,6 +425,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
           T.LetAllocT lhs vals (go bod)
         T.LetAvailT vars bod ->
           T.LetAvailT vars (go bod)
+        T.ForLoopT idx bound loopBody bod ->
+          T.ForLoopT idx bound loopBody (go bod)
+        T.WhileCursorT ref loopBody bod ->
+          T.WhileCursorT ref loopBody (go bod)
         T.IfT tst con els ->
           T.IfT tst (go con) (go els)
         T.ErrT{} -> tl
@@ -440,6 +444,50 @@ lower Prog{fundefs,ddefs,mainExp} = do
       go = endScalarCountFooter funName
       goAlts (T.TagAlts xs) = T.TagAlts $ L.map (\(tag, bod) -> (tag, go bod)) xs
       goAlts (T.IntAlts xs) = T.IntAlts $ L.map (\(tag, bod) -> (tag, go bod)) xs
+
+  unitTail :: T.Tail -> T.Tail
+  unitTail tl =
+      case tl of
+        T.RetValsT [] -> T.AssnValsT [] Nothing
+        T.RetValsT xs ->
+          error $ "unitTail: expected unit loop body, got return values " ++ sdoc xs
+        T.EndOfMain -> tl
+        T.AssnValsT upds bod_maybe ->
+          T.AssnValsT upds (fmap unitTail bod_maybe)
+        T.LetCallT async binds rator rands bod ->
+          T.LetCallT async binds rator rands (unitTail bod)
+        T.LetPrimCallT binds prim rands bod ->
+          T.LetPrimCallT binds prim rands (unitTail bod)
+        T.LetTrivT bnd bod ->
+          T.LetTrivT bnd (unitTail bod)
+        T.LetIfT binds (tst, con, els) bod ->
+          T.LetIfT binds (tst, unitTail con, unitTail els) (unitTail bod)
+        T.LetUnpackT binds ptr bod ->
+          T.LetUnpackT binds ptr (unitTail bod)
+        T.LetAllocT lhs vals bod ->
+          T.LetAllocT lhs vals (unitTail bod)
+        T.LetAvailT vars bod ->
+          T.LetAvailT vars (unitTail bod)
+        T.ForLoopT idx bound loopBody bod ->
+          T.ForLoopT idx bound (unitTail loopBody) (unitTail bod)
+        T.WhileCursorT ref loopBody bod ->
+          T.WhileCursorT ref (unitTail loopBody) (unitTail bod)
+        T.IfT tst con els ->
+          T.IfT tst (unitTail con) (unitTail els)
+        T.ErrT{} -> tl
+        T.LetTimedT isIter binds timed bod ->
+          T.LetTimedT isIter binds (unitTail timed) (unitTail bod)
+        T.Switch label trv alts def ->
+          T.Switch label trv (goAlts alts) (fmap unitTail def)
+        T.TailCall{} ->
+          error "unitTail: loop body should not contain a tail call"
+        T.Goto{} ->
+          error "unitTail: loop body should not contain goto"
+        T.LetArenaT lhs bod ->
+          T.LetArenaT lhs (unitTail bod)
+    where
+      goAlts (T.TagAlts xs) = T.TagAlts $ L.map (\(tag, bod) -> (tag, unitTail bod)) xs
+      goAlts (T.IntAlts xs) = T.IntAlts $ L.map (\(tag, bod) -> (tag, unitTail bod)) xs
 
   build_info_table :: T.InfoTable
   build_info_table =
@@ -490,6 +538,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       PrimAppE Gensym [] -> False
       PrimAppE RandP []  -> False
       PrimAppE FRandP []  -> False
+      Ext (ForE _ bound bod) -> ispure bound && ispure bod
+      Ext (WhileCursor _ bod) -> ispure bod
       LetE (_,_,_,rhs) bod -> ispure rhs && ispure bod
       IfE _ b c   -> ispure b && ispure c
       CaseE _ brs -> all id $ L.map (\(_,_,rhs) -> ispure rhs) brs
@@ -544,6 +594,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
               WriteTag{}     -> syms
+              WriteTagPacked{} -> syms
               ReadList{}     -> syms
               WriteList _ ex _ -> go ex
               ReadVector{}     -> syms
@@ -559,6 +610,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               BoundsCheck{}      -> syms
               BoundsCheckVector{} -> syms
               ReadCursor{}       -> syms
+              GrowRegion{}       -> syms
+              WriteCursorIndirection{} -> syms
               WriteTaggedCursor{}-> syms
               MemCpy{} -> syms
               ReadTaggedCursor{} -> syms
@@ -576,6 +629,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
               StartScalarsAllocation{} -> syms
               EndScalarsAllocation{} -> syms
               ScalarCountBump{} -> syms
+              ReadScalarCount{} -> syms
+              ReadScalarCountFirstFooter{} -> syms
+              ReadScalarCountNextFooter{} -> syms
+              ForE _ bound bod -> go bound <> go bod
+              WhileCursor _ bod -> go bod
               SSPush{} -> syms
               SSPop{} -> syms
               Assert ex -> go ex
@@ -804,6 +862,28 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [] T.ScalarCountBump (L.map T.VarTriv footers) <$>
         tail free_reg sym_tbl bod
 
+    LetE (v, _, _, Ext (ReadScalarCount footer)) bod ->
+      T.LetPrimCallT [(v, T.IntTy)] T.ScalarCountGet [T.VarTriv footer] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, Ext (ReadScalarCountFirstFooter footer)) bod ->
+      T.LetPrimCallT [(v, T.CursorTy)] T.ScalarCountFirstFooter [T.VarTriv footer] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, Ext (ReadScalarCountNextFooter footer)) bod ->
+      T.LetPrimCallT [(v, T.CursorTy)] T.ScalarCountNextFooter [T.VarTriv footer] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (_v, _, _, Ext (ForE idx bound rhs)) bod -> do
+      rhs' <- tail free_reg sym_tbl rhs
+      bod' <- tail free_reg sym_tbl bod
+      return $ T.ForLoopT idx (triv sym_tbl "loop bound" bound) (unitTail rhs') bod'
+
+    LetE (_v, _, _, Ext (WhileCursor ref rhs)) bod -> do
+      rhs' <- tail free_reg sym_tbl rhs
+      bod' <- tail free_reg sym_tbl bod
+      return $ T.WhileCursorT ref (unitTail rhs') bod'
+
 
     -- In Target, AddP is overloaded still:
     LetE (v,_, _,  (Ext (AddCursor c ( (Ext (MMapFileSize w)))))) bod -> do
@@ -821,6 +901,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, _, (Ext (BumpCursorMutable mutcur e))) bod ->
       T.LetPrimCallT [(v, T.ProdTy [])] T.BumpCursorMutable [triv sym_tbl "bumpMutCur base" (VarE mutcur), triv sym_tbl "bump offset" e] <$>
        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (GrowRegion cur end))) bod ->
+      T.LetPrimCallT [(v, T.ProdTy [])] T.GrowRegion
+        [ triv sym_tbl "grow region cursor ref" (VarE cur)
+        , triv sym_tbl "grow region end ref" (VarE end)
+        ] <$>
+        tail free_reg sym_tbl bod
 
     LetE (v, _, _, (Ext (IndexCursorArray cur idx))) bod ->
       T.LetPrimCallT [(v, T.CursorTy)] T.IndexCursorArray [ triv sym_tbl "base pointer" (VarE cur)  
@@ -879,6 +966,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (cursOut,_, _,  (Ext (WriteTag dcon cursIn))) bod -> do
       T.LetPrimCallT [(cursOut,T.CursorTy)] T.WriteTag
         [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv sym_tbl "WriteTag cursor" (VarE cursIn) ] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (cursOut, _, _, (Ext (WriteTagPacked cursIn tagExp))) bod -> do
+      T.LetPrimCallT [(cursOut, T.CursorTy)] T.WriteTagPacked
+        [ triv sym_tbl "WriteTagPacked tag" tagExp
+        , triv sym_tbl "WriteTagPacked cursor" (VarE cursIn)
+        ] <$>
         tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (NewBuffer mul endregmod))) bod -> do
@@ -966,6 +1060,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  bod
       T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
+
+    LetE (v, _, _, (Ext (WriteCursorIndirection cur to toEnd))) bod ->
+      T.LetPrimCallT [(v, T.CursorTy)] T.WriteCursorIndirection [T.VarTriv cur, T.VarTriv to, T.VarTriv toEnd] <$>
+        tail free_reg sym_tbl bod
 
     LetE (v, _, _,  (Ext (WriteTaggedCursor cur e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteTaggedCursor [triv sym_tbl "WriteTaggedCursor arg" e, T.VarTriv cur] <$>

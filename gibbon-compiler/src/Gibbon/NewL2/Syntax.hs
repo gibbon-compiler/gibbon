@@ -235,6 +235,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.AddFixed{}          -> error "Shouldn't enconter AddFixed in tail position"
       Old.GetCilkWorkerNum    -> MkTy2 $ IntTy
       Old.LetAvail _ bod      -> gRecoverType ddfs env2 bod
+      Old.SelectiveBufferShareE _ _ bod -> gRecoverType ddfs env2 bod
       Old.AllocateTagHere{}   -> MkTy2 $ ProdTy []
       Old.AllocateScalarsHere{} -> MkTy2 $ ProdTy []
       Old.SSPush{}              -> MkTy2 $ ProdTy []
@@ -258,6 +259,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
       Old.AddFixed{}          -> error "Shouldn't enconter AddFixed in tail position"
       Old.GetCilkWorkerNum    -> MkTy2 $ IntTy
       Old.LetAvail _ bod      -> gRecoverTypeLoc ddfs env2 bod
+      Old.SelectiveBufferShareE _ _ bod -> gRecoverTypeLoc ddfs env2 bod
       Old.AllocateTagHere{}   -> MkTy2 $ ProdTy []
       Old.AllocateScalarsHere{} -> MkTy2 $ ProdTy []
       Old.SSPush{}              -> MkTy2 $ ProdTy []
@@ -503,6 +505,7 @@ revertExp ex =
         Old.IndirectionE{}  -> error "revertExp: TODO IndirectionE"
         Old.GetCilkWorkerNum-> LitE 0
         Old.LetAvail _ bod  -> revertExp bod
+        Old.SelectiveBufferShareE _ _ bod -> revertExp bod
         Old.AllocateTagHere{} -> error "revertExp: TODO AddFixed."
         Old.AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
         Old.SSPush{} -> error "revertExp: TODO SSPush."
@@ -579,6 +582,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.AddFixed v _   -> M.insertWith (++) (fromVarToFreeVarsTy v) [(fromVarToFreeVarsTy v)] acc
               Old.GetCilkWorkerNum -> acc
               Old.LetAvail _ bod -> go acc bod
+              Old.SelectiveBufferShareE src _ bod ->
+                go (M.insertWith (++) (fromVarToFreeVarsTy src) [fromVarToFreeVarsTy src] acc) bod
               Old.AllocateTagHere{} -> acc
               Old.AllocateScalarsHere{} -> acc
               Old.SSPush{} -> acc
@@ -635,6 +640,7 @@ allFreeVars ex =
         Old.AddFixed v _    -> S.singleton (fromVarToFreeVarsTy v)
         Old.GetCilkWorkerNum-> S.empty
         Old.LetAvail vs bod -> S.fromList (L.map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
+        Old.SelectiveBufferShareE src _ bod -> S.insert (fromVarToFreeVarsTy src) (allFreeVars bod)
         Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
         Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
         Old.SSPush _ a b _ -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
@@ -746,6 +752,7 @@ isLocAlive loc exp accum = case exp of
                                                 Old.AddFixed _v _    -> accum
                                                 Old.GetCilkWorkerNum-> accum
                                                 Old.LetAvail _vs _bod -> accum
+                                                Old.SelectiveBufferShareE _ _ bod -> isLocAlive loc bod accum
                                                 Old.AllocateTagHere lct _ -> let lct'= toLocVar lct 
                                                                                in if lct' == loc 
                                                                                   then True 

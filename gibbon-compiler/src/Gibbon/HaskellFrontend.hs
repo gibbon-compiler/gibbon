@@ -972,6 +972,7 @@ collectTopLevel type_syns env decl =
             TypeAnn _ (Ident _ tycon) (Lit _ (String _ "Linear" _)) -> pure $ Just (MemLayoutTy tycon Linear)
             Ann _ (Ident _ fn) (Lit _ (String _ "OPT:CanVectorize" _)) -> pure $ Just (HFunAnnot (toVar fn) CanVectorize)
             Ann _ (Ident _ fn) (Lit _ (String _ "OPT:StoreScalarCounts" _)) -> pure $ Just (HFunAnnot (toVar fn) StoreScalarCounts)
+            Ann _ (Ident _ fn) (Lit _ (String _ "OPT:SelectiveBufferSharing" _)) -> pure $ Just (HFunAnnot (toVar fn) SelectiveBufferSharing)
             _ -> error "Memory Layout not yet supported!"
 
 

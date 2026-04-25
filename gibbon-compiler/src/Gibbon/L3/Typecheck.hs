@@ -55,6 +55,13 @@ tcExp isPacked ddfs env exp = do
           vty  <- lookupVar env v exp
           ensureEqualTyModCursor ddfs exp vty CursorTy
           return CursorTy
+
+        WriteTagPacked v rhs -> do
+          vty <- lookupVar env v exp
+          vrhs <- go rhs
+          ensureEqualTyModCursor ddfs exp vty CursorTy
+          ensureEqualTyModCursor ddfs exp vrhs IntTy
+          return CursorTy
         
         -- VS: the semantics of Tag cursor have changed.
         TagCursor a b -> do
@@ -76,6 +83,15 @@ tcExp isPacked ddfs env exp = do
           valty <- go val
           ensureEqualTyModCursor ddfs exp valty CursorTy
           return CursorTy
+
+        WriteCursorIndirection dst src srcEnd -> do
+          dstty <- lookupVar env dst exp
+          ensureCursorLikeTy ddfs exp dstty
+          srcty <- lookupVar env src exp
+          ensureCursorLikeTy ddfs exp srcty
+          srcEndTy <- lookupVar env srcEnd exp
+          ensureCursorLikeTy ddfs exp srcEndTy
+          return CursorTy
         
         -- does this require typecheking
         MemCpy{} -> do
@@ -87,10 +103,46 @@ tcExp isPacked ddfs env exp = do
             ensureEqualTyModCursor ddfs exp footer_ty CursorTy
           return $ ProdTy []
 
+        ReadScalarCount footer -> do
+          footer_ty <- lookupVar env footer exp
+          ensureCursorLikeTy ddfs exp footer_ty
+          return IntTy
+
+        ReadScalarCountFirstFooter footer -> do
+          footer_ty <- lookupVar env footer exp
+          ensureCursorLikeTy ddfs exp footer_ty
+          return CursorTy
+
+        ReadScalarCountNextFooter footer -> do
+          footer_ty <- lookupVar env footer exp
+          ensureCursorLikeTy ddfs exp footer_ty
+          return CursorTy
+
+        ForE idx bound body -> do
+          bound_ty <- go bound
+          _ <- ensureEqualTyModCursor ddfs bound bound_ty IntTy
+          body_ty <- tcExp isPacked ddfs (extendVEnv idx IntTy env) body
+          _ <- ensureEqualTy body (ProdTy []) body_ty
+          return (ProdTy [])
+
+        WhileCursor ref body -> do
+          refty <- lookupVar env ref exp
+          ensureEqualTyModCursor ddfs exp refty MutCursorTy
+          body_ty <- go body
+          _ <- ensureEqualTy body (ProdTy []) body_ty
+          return (ProdTy [])
+
         ReadCursor v -> do
           vty <- lookupVar env v exp
           ensureEqualTyModCursor ddfs exp vty CursorTy
           return $ ProdTy [CursorTy, CursorTy]
+
+        GrowRegion cur end -> do
+          curty <- lookupVar env cur exp
+          endty <- lookupVar env end exp
+          ensureEqualTyModCursor ddfs exp curty MutCursorTy
+          ensureEqualTyModCursor ddfs exp endty MutCursorTy
+          return $ ProdTy []
 
         WriteCursorMutable cur val -> do
           curty  <- lookupVar env cur exp
@@ -141,9 +193,9 @@ tcExp isPacked ddfs env exp = do
         -- Subtract something from a cursor variable
         SubPtr v w -> do
           vty  <- lookupVar env v exp
-          ensureEqualTyModCursor ddfs exp vty CursorTy
+          ensureCursorLikeTy ddfs exp vty
           wty  <- lookupVar env w exp
-          ensureEqualTyModCursor ddfs exp wty CursorTy
+          ensureCursorLikeTy ddfs exp wty
           return IntTy
 
         -- Create a new buffer, and return a cursor
@@ -1067,6 +1119,11 @@ ensureEqualTyModCursor _ddefs _exp CursorTy IntTy = return CursorTy
 ensureEqualTyModCursor ddefs exp (ProdTy ls1) (ProdTy ls2) =
   sequence_ [ ensureEqualTyModCursor ddefs exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor ddefs (ProdTy ls1))
 ensureEqualTyModCursor _ddefs exp a b = ensureEqualTy exp a b
+
+ensureCursorLikeTy :: DDefs3 -> Exp3 -> Ty3 -> TcM Ty3 Exp3
+ensureCursorLikeTy _ddefs _exp CursorTy = return CursorTy
+ensureCursorLikeTy _ddefs _exp MutCursorTy = return CursorTy
+ensureCursorLikeTy ddefs exp ty = ensureEqualTyModCursor ddefs exp ty CursorTy
 
 -- ensureEqualTyModCursor True _exp (CursorArrayTy sz) (PackedTy _ _) = return (CursorArrayTy sz)
 -- ensureEqualTyModCursor True _exp (PackedTy _ _) (CursorArrayTy sz) = return (CursorArrayTy sz)

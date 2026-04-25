@@ -218,6 +218,10 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           rhs' <- go locenv env2 rhs
           pure $ Ext $ LetAvail avail rhs'
 
+        SelectiveBufferShareE src tgts rhs -> do
+          rhs' <- go locenv env2 rhs
+          pure $ Ext $ SelectiveBufferShareE src tgts rhs'
+
         AllocateTagHere loc tycon -> do
           let locarg = locenv # loc
           pure $ Ext $ AllocateTagHere locarg tycon
@@ -435,6 +439,10 @@ toOldL2Exp ex =
         LetAvail avail rhs -> do
           rhs' <- go rhs
           pure $ Ext $ LetAvail avail rhs'
+
+        SelectiveBufferShareE src tgts rhs -> do
+          rhs' <- go rhs
+          pure $ Ext $ SelectiveBufferShareE src tgts rhs'
 
         AllocateTagHere loc tycon -> do
           pure $ Ext $ AllocateTagHere (New.toLocVar loc) tycon

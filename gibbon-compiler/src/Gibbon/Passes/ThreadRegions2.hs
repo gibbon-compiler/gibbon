@@ -909,6 +909,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         IndirectionE {} -> return ex
         GetCilkWorkerNum -> return ex
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
+        SelectiveBufferShareE src tgts bod -> Ext <$> SelectiveBufferShareE src tgts <$> go bod
         AllocateTagHere {} -> pure ex
         AllocateScalarsHere {} -> pure ex
         SSPush {} -> pure ex
@@ -1204,6 +1205,7 @@ findRetLocs e0 = go e0 []
             AddFixed {} -> acc
             GetCilkWorkerNum -> acc
             LetAvail _ bod -> go bod acc
+            SelectiveBufferShareE _ _ bod -> go bod acc
             AllocateTagHere {} -> acc
             AllocateScalarsHere {} -> acc
             SSPush {} -> acc
@@ -1317,6 +1319,7 @@ allFreeVars_sans_datacon_args ex =
         AddFixed v _ -> S.singleton (fromVarToFreeVarsTy v)
         GetCilkWorkerNum -> S.empty
         LetAvail vs bod -> S.fromList (map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
+        SelectiveBufferShareE src _ bod -> S.insert (fromVarToFreeVarsTy src) (allFreeVars_sans_datacon_args bod)
         AllocateTagHere loc _ -> S.singleton (fromLocVarToFreeVarsTy (toLocVar loc))
         AllocateScalarsHere loc -> S.singleton (fromLocVarToFreeVarsTy (toLocVar loc))
         SSPush _ a b _ -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
@@ -1350,6 +1353,7 @@ substEndReg loc_or_reg end_reg ex =
         IndirectionE tycon dcon (a, b) (c, d) e ->
           Ext $ IndirectionE tycon dcon (gosubst a, gosubst b) (gosubst c, gosubst d) e
         LetAvail vs bod -> Ext $ LetAvail vs (go bod)
+        SelectiveBufferShareE src tgts bod -> Ext $ SelectiveBufferShareE src tgts (go bod)
         StartOfPkdCursor {} -> ex
         TagCursor {} -> ex
         AddFixed {} -> ex

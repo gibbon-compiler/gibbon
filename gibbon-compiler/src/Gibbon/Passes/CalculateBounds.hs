@@ -173,6 +173,9 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
                 when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
                 return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
+              SelectiveBufferShareE src tgts bod -> do
+                (bod', re, rt) <- go bod
+                return (Ext $ SelectiveBufferShareE src tgts bod', re, rt)
               LetLocE loc locExp ex1 -> do
                 -- * NOTE: jumps are only necessary for route ends, skipping them.
                 if "jump_" `L.isPrefixOf` fromVar (unwrapLocVar loc)

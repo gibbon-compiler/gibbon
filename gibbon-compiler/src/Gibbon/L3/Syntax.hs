@@ -97,11 +97,18 @@ data E3Ext loc dec =
   | WriteScalar Scalar Var (PreExp E3Ext loc dec) -- ^ Write int at cursor, and return a cursor
   | ReadTag Var                            -- ^ One cursor in, (tag,cursor) out
   | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
+  | WriteTagPacked Var (PreExp E3Ext loc dec)
+    -- ^ Write a runtime tag byte at Cursor, and return a cursor.
   | TagCursor Var Var                      -- ^ Create a tagged cursor
+  | WriteCursorIndirection Var Var Var     -- ^ Write an indirection node at the
+                                           -- first cursor pointing to the second,
+                                           -- using the third as the pointed-to
+                                           -- chunk footer/end cursor.
   | WriteTaggedCursor Var (PreExp E3Ext loc dec) -- ^ Write a tagged cursor
   | MemCpy Var Var dec                           -- ^ Do a mem copy from right address into left address of type dec
   | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
+  | GrowRegion Var Var                     -- ^ Grow an output region given mutable cursor and mutable end refs
   | WriteCursorMutable Var (PreExp E3Ext loc dec) -- ^ Write some value to a Mutable cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
   | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
@@ -150,6 +157,17 @@ data E3Ext loc dec =
   | ScalarCountBump DataCon [Var]
     -- ^ Constructor-level scalar-buffer count instrumentation.  The DataCon is
     -- the semantic event; the Vars are the affected SoA scalar-buffer cursors.
+  | ReadScalarCount Var
+    -- ^ Read the scalar-count value stored in a footer/end cursor.
+  | ReadScalarCountFirstFooter Var
+    -- ^ Recover the footer holding the first chunk's count.
+  | ReadScalarCountNextFooter Var
+    -- ^ Recover the footer holding the next chunk's count.
+  | ForE Var (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ A statement-like counted loop. The body should evaluate to unit.
+  | WhileCursor Var (PreExp E3Ext loc dec)
+    -- ^ A statement-like loop that repeats while the mutable cursor ref is
+    -- non-null. The body should evaluate to unit.
   | SSPush SSModality Var Var TyCon
   | SSPop SSModality Var Var
   | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
@@ -194,11 +212,14 @@ instance FreeVars (E3Ext l d) where
       WriteScalar _ v ex  -> S.insert v (gFreeVars ex)
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
+      WriteTagPacked v ex -> S.insert v (gFreeVars ex)
       TagCursor a b      -> S.fromList [a,b]
+      WriteCursorIndirection a b c -> S.fromList [a,b,c]
       ReadTaggedCursor v -> S.singleton v
       WriteTaggedCursor v ex -> S.insert v (gFreeVars ex)
       MemCpy a b _ -> S.fromList [a, b]
       ReadCursor v       -> S.singleton v
+      GrowRegion v w     -> S.fromList [v, w]
       WriteCursorMutable c ex   -> S.insert c (gFreeVars ex)
       ReadList v _       -> S.singleton v
       WriteList c ex  _  -> S.insert c (gFreeVars ex)
@@ -230,6 +251,13 @@ instance FreeVars (E3Ext l d) where
       StartScalarsAllocation v -> S.singleton v
       EndScalarsAllocation v -> S.singleton v
       ScalarCountBump _ footers -> S.fromList footers
+      ReadScalarCount v -> S.singleton v
+      ReadScalarCountFirstFooter v -> S.singleton v
+      ReadScalarCountNextFooter v -> S.singleton v
+      ForE idx bound bod ->
+        gFreeVars bound `S.union` S.delete idx (gFreeVars bod)
+      WhileCursor ref bod ->
+        S.insert ref (gFreeVars bod)
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
       Assert a -> gFreeVars a
@@ -253,6 +281,13 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverType _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
     gRecoverType _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverType _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
+    gRecoverType _ _ (ReadScalarCount {}) = IntTy
+    gRecoverType _ _ (ReadScalarCountFirstFooter {}) = CursorTy
+    gRecoverType _ _ (ReadScalarCountNextFooter {}) = CursorTy
+    gRecoverType _ _ (ForE {}) = ProdTy []
+    gRecoverType _ _ (WhileCursor {}) = ProdTy []
+    gRecoverType _ _ (WriteTagPacked {}) = CursorTy
+    gRecoverType _ _ (GrowRegion {}) = ProdTy []
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
 
@@ -262,6 +297,13 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverTypeLoc _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
     gRecoverTypeLoc _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverTypeLoc _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
+    gRecoverTypeLoc _ _ (ReadScalarCount {}) = IntTy
+    gRecoverTypeLoc _ _ (ReadScalarCountFirstFooter {}) = CursorTy
+    gRecoverTypeLoc _ _ (ReadScalarCountNextFooter {}) = CursorTy
+    gRecoverTypeLoc _ _ (ForE {}) = ProdTy []
+    gRecoverTypeLoc _ _ (WhileCursor {}) = ProdTy []
+    gRecoverTypeLoc _ _ (WriteTagPacked {}) = CursorTy
+    gRecoverTypeLoc _ _ (GrowRegion {}) = ProdTy []
     gRecoverTypeLoc _ _ _ = error "L3.gRecoverTypeLoc"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
@@ -280,10 +322,16 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
   gSubstExt old new ext =
     case ext of
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
+      WriteTagPacked v bod -> WriteTagPacked v (gSubst old new bod)
+      GrowRegion v w       -> GrowRegion v w
       WriteCursorMutable v bod    -> WriteCursorMutable v (gSubst old new bod)
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
       SubPtr v w           -> SubPtr v w
       LetAvail ls bod      -> LetAvail ls (gSubst old new bod)
+      ForE idx bound bod
+        | idx == old -> ForE idx (gSubst old new bound) bod
+        | otherwise  -> ForE idx (gSubst old new bound) (gSubst old new bod)
+      WhileCursor ref bod  -> WhileCursor ref (gSubst old new bod)
       MakeCursorArray{}    -> ext
       IndexCursorArray{}   -> ext
       CastPtr{}            -> ext
@@ -293,10 +341,14 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
   gSubstEExt old new ext =
     case ext of
       WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
+      WriteTagPacked v bod   -> WriteTagPacked v (gSubstE old new bod)
+      GrowRegion v w         -> GrowRegion v w
       WriteCursorMutable v bod -> WriteCursorMutable v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
       SubPtr v w        -> SubPtr v w
       LetAvail ls b     -> LetAvail ls (gSubstE old new b)
+      ForE idx bound bod -> ForE idx (gSubstE old new bound) (gSubstE old new bod)
+      WhileCursor ref bod -> WhileCursor ref (gSubstE old new bod)
       MakeCursorArray{}    -> ext
       IndexCursorArray{}   -> ext
       CastPtr{}            -> ext
@@ -309,10 +361,12 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ReadScalar s v     -> ReadScalar s (go v)
       WriteScalar s v bod-> WriteScalar s (go v) (go bod)
       TagCursor a b      -> TagCursor (go a) (go b)
+      WriteCursorIndirection a b c -> WriteCursorIndirection (go a) (go b) (go c)
       ReadTaggedCursor v -> ReadTaggedCursor (go v)
       WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
       MemCpy a b ty -> MemCpy (go a) (go b) ty 
       ReadCursor v       -> ReadCursor (go v)
+      GrowRegion v w     -> GrowRegion (go v) (go w)
       WriteCursorMutable v bod  -> WriteCursorMutable (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
       WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty
@@ -320,6 +374,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       WriteVector v bod el_ty -> WriteVector (go v) (go bod) el_ty
       ReadTag v          -> ReadTag (go v)
       WriteTag dcon v    -> WriteTag dcon (go v)
+      WriteTagPacked v bod -> WriteTagPacked (go v) (go bod)
       AddCursor v bod    -> AddCursor (go v) (go bod)
       BumpCursorMutable v bod -> BumpCursorMutable (go v) (go bod)
       SubPtr v w         -> SubPtr (go v) (go w)
@@ -347,6 +402,13 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       StartScalarsAllocation v -> StartScalarsAllocation (go v)
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
       ScalarCountBump dcon footers -> ScalarCountBump dcon (L.map go footers)
+      ReadScalarCount v -> ReadScalarCount (go v)
+      ReadScalarCountFirstFooter v -> ReadScalarCountFirstFooter (go v)
+      ReadScalarCountNextFooter v -> ReadScalarCountNextFooter (go v)
+      ForE idx bound bod ->
+        let env' = M.delete idx env
+        in ForE idx (go bound) (gRename env' bod)
+      WhileCursor ref bod -> WhileCursor (go ref) (go bod)
       SSPush a b c d -> SSPush a (go b) (go c) d
       SSPop a b c -> SSPop a (go b) (go c)
       Assert e -> Assert (go e)
@@ -891,6 +953,11 @@ updateAvailVars froms tos ex =
           let n o = if o `elem` froms then tos else [o]
               vs' = foldr (\v acc -> n v ++ acc) [] vs
           in Ext $ LetAvail vs' (go bod)
+        ForE idx bound bod ->
+          let pairs = [ (from, to) | (from, to) <- zip froms tos, from /= idx ]
+              froms' = map fst pairs
+              tos' = map snd pairs
+          in Ext $ ForE idx (go bound) (updateAvailVars froms' tos' bod)
         _ -> ex
   where
     go = updateAvailVars froms tos

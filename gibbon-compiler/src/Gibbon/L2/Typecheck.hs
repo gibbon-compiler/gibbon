@@ -930,6 +930,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       Ext (LetAvail _ e) -> recur tstatein e
 
+      Ext (SelectiveBufferShareE _ _ e) -> recur tstatein e
+
       Ext (AllocateTagHere{}) -> do
         -- (ty,tstate1) <- recur tstatein (VarE v)
         -- ensureEqualTy (VarE v) ty CursorTy

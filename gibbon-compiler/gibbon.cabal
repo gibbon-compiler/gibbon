@@ -75,6 +75,7 @@ library
                        Gibbon.Passes.InferLocations
                        Gibbon.Passes.RegionsInwards
                        Gibbon.Passes.RemoveCopies
+                       Gibbon.Passes.SelectiveBufferSharing
                        Gibbon.Passes.InferEffects
                        Gibbon.Passes.ParAlloc
                        Gibbon.Passes.InferRegionScope
@@ -87,6 +88,7 @@ library
                        Gibbon.Passes.ShakeTree
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.ReorderScalarWrites
+                       Gibbon.Passes.LoopifyTraversals
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
                        Gibbon.Passes.RearrangeFree
@@ -184,6 +186,8 @@ test-suite test-gibbon
                        InferRegionScope
                        HoistBoundsCheck
                        AddRAN
+                       LoopifyTraversals
+                       SelectiveBufferSharing
                        L1.Typecheck
                        L1.Interp
                        L2.Typecheck

@@ -160,6 +160,8 @@ inferRegScopeExp env ex =
             -- SoAR dcr fieldRegs -> reti
             MMapR{} -> Ext . LetRegionE r sz endmut ty <$> go rhs
             _ -> inferRegScopeExpHelper ex rhs r env
+        SelectiveBufferShareE src tgts bod ->
+          Ext . SelectiveBufferShareE src tgts <$> go bod
 
         LetParRegionE r sz ty rhs ->
           case r of

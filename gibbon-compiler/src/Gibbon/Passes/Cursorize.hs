@@ -178,6 +178,42 @@ markNoDeadFieldElim denv = M.insert noDeadFieldElimMarkerKey [] denv
 isNoDeadFieldElim :: DepEnv -> Bool
 isNoDeadFieldElim denv = M.member noDeadFieldElimMarkerKey denv
 
+selectiveShareMarkerKey :: L2.SelectiveShareTarget -> FreeVarsTy
+selectiveShareMarkerKey tgt =
+  fromVarToFreeVarsTy . toVar $
+    case tgt of
+      L2.ShareDConBuffer ->
+        "__cursorize_internal_selective_share_dcon__"
+      L2.ShareScalarFieldBuffer dcon idx ->
+        "__cursorize_internal_selective_share_"
+          ++ dcon
+          ++ "_"
+          ++ show idx
+          ++ "__"
+
+enableSelectiveShare :: Var -> [L2.SelectiveShareTarget] -> DepEnv -> DepEnv
+enableSelectiveShare src tgts denv =
+  foldr
+    (\tgt acc -> M.insert (selectiveShareMarkerKey tgt) [(src, [], CursorTy, VarE src)] acc)
+    denv
+    tgts
+
+lookupSelectiveShareSource :: L2.SelectiveShareTarget -> DepEnv -> Maybe Var
+lookupSelectiveShareSource tgt denv =
+  case M.lookup (selectiveShareMarkerKey tgt) denv of
+    Just ((src, _, _, _) : _) -> Just src
+    _ -> Nothing
+
+hasSelectiveShareEnabled :: DepEnv -> Bool
+hasSelectiveShareEnabled denv =
+  any
+    (\key ->
+        case key of
+          V v -> "__cursorize_internal_selective_share_" `L.isPrefixOf` fromVar v
+          _ -> False
+    )
+    (M.keys denv)
+
 usesTraverseCall :: Exp2 -> Bool
 usesTraverseCall = go
   where
@@ -460,6 +496,18 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
       freeVarToVarEnv
       freeVarsInScope
 
+  let freeVarToVarEnv'' =
+        foldr
+          ( \(LRM l r _) acc ->
+              let actualEndKey = fromRegVarToFreeVarsTy (toEndVRegVar (regionToVar r))
+                  locEndKey = fromRegVarToFreeVarsTy (toEndVRegVar (fromLocVarToRegVar l))
+               in case M.lookup actualEndKey acc of
+                    Just v -> M.insert locEndKey v acc
+                    Nothing -> acc
+          )
+          freeVarToVarEnv'
+          (locVars funTy)
+
   -- Then the input cursors. Bind an input cursor for every packed argument.
   let (inCurBinds, m1, m2) = case inLocA of
         [] -> (mkLets [], M.empty, M.empty)
@@ -471,7 +519,7 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                       let loc = toLocVar loca
                           reg = toRegVar loca
                           modality = getModality loca
-                          var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv') of
+                          var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv'') of
                             Just v -> v
                             Nothing -> error "cursorizeFunDef: unexpected location variable"
                           needs_to_be_mutable = isMutModality' modality
@@ -501,12 +549,12 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
           (map (\(a, b) -> (a, MkTy2 (cursorizeInTy useMutableCursors Nothing (unTy2 b)))) $ zip funArgs in_tys)
             ++ ( concatMap
                    ( \(LRM l r m) ->
-                       let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv') of
+                       let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv'') of
                              Just v -> v
                              Nothing -> error "cursorizeFunDef: unexpected location variable"
                            packed_cursor_ty = getCursorizeTyFromLocVar' (Just m) False l
                            loc_entry = (var_for_loc, packed_cursor_ty)
-                           var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv') of
+                           var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv'') of
                              Just v -> v
                              Nothing -> error "cursorizeFunDef: unexpected region variable"
                            reg_entry = (var_for_reg, packed_cursor_ty)
@@ -526,14 +574,14 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
           )
             ++ ( concatMap
                    ( \(LRM l r _) ->
-                       let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv') of
+                       let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv'') of
                              Just v -> v
                              Nothing -> error "cursorizeFunDef: unexpected location variable"
                            packed_cursor_ty = case l of
                              Single _ -> Just l
                              SoA _ fields -> Just l
                            loc_entry = (var_for_loc, packed_cursor_ty)
-                           var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv') of
+                           var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv'') of
                              Just v -> v
                              Nothing -> error "cursorizeFunDef: unexpected region variable"
                            reg_entry = (var_for_reg, packed_cursor_ty)
@@ -573,10 +621,10 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
     if hasPacked (unTy2 out_ty)
       then
         do 
-          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
           return $ fromDi funBody'
       else do 
-        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
         return funBody'
 
   let bod' = inCurBinds bod
@@ -2087,6 +2135,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
               dcon_loc = getDconLoc sloc_loc
               modality_sloc = getModality slocarg
               field_locs = getAllFieldLocsSoA sloc_loc
+              selective_share_enabled = hasSelectiveShareEnabled denv
               -- sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of
               --  Just v -> v
               --  Nothing -> error $ "cursorizeExp(1056): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
@@ -2102,9 +2151,15 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                                                                                       Just (oldv, oldl, _, _) -> case oldl of
                                                                                                                                   Nothing -> (Nothing, oldv)
                                                                                                                                   Just ol -> (Just ol, oldv)
-                                                                                dcon_var = case M.lookup dcon_loc m2 of
-                                                                                                        Nothing -> error "Expected to have the data con location in the env!"
-                                                                                                        Just (oldv, _, _, _) -> oldv
+                                                                                dcon_var = if selective_share_enabled
+                                                                                           then case M.lookup dcon_loc m1 of
+                                                                                                  Just ((curv, _, _, _) : _) -> curv
+                                                                                                  _ -> case M.lookup dcon_loc m2 of
+                                                                                                         Nothing -> error "Expected to have the data con location in the env!"
+                                                                                                         Just (oldv, _, _, _) -> oldv
+                                                                                           else case M.lookup dcon_loc m2 of
+                                                                                                  Nothing -> error "Expected to have the data con location in the env!"
+                                                                                                  Just (oldv, _, _, _) -> oldv
                                                                                 (present, freeVarToVarEnv_inner) = case (M.lookup (fromLocVarToFreeVarsTy dcon_loc) freeVarToVarEnv) of 
                                                                                                                   Just v -> (True, freeVarToVarEnv)
                                                                                                                   Nothing -> case dcon_loc of 
@@ -2169,6 +2224,66 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
               --       LetE (d',[], CursorTy, Ext $ WriteTaggedCursor d rnd') <$>
               --         go2 marker_added d' rst
               --     _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
+
+              lookupLocVarName :: String -> M.Map FreeVarsTy Var -> LocVar -> Var
+              lookupLocVarName msg env loc =
+                case M.lookup (fromLocVarToFreeVarsTy loc) env of
+                  Just v -> v
+                  Nothing ->
+                    case loc of
+                      Single l -> l
+                      SoA _ _ ->
+                        error $
+                          "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected "
+                            ++ msg
+                            ++ " location variable "
+                            ++ show loc
+
+              lookupRegVarName :: String -> M.Map FreeVarsTy Var -> RegVar -> Var
+              lookupRegVarName msg env reg =
+                case M.lookup (fromRegVarToFreeVarsTy reg) env of
+                  Just v -> v
+                  Nothing ->
+                    case reg of
+                      SingleR l -> l
+                      SoARv _ _ ->
+                        error $
+                          "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected "
+                            ++ msg
+                            ++ " region variable "
+                            ++ show reg
+
+              lookupSelectiveShareInfo :: M.Map FreeVarsTy Var -> DataCon -> Int -> Maybe (Var, Var, Int)
+              lookupSelectiveShareInfo env currDcon currIdx =
+                case lookupSelectiveShareSource (L2.ShareScalarFieldBuffer currDcon currIdx) denv of
+                  Nothing -> Nothing
+                  Just src ->
+                    case M.lookup src lenv of
+                      Just (Just srcLoc@(SoA _ _)) ->
+                        let srcFieldLoc =
+                              case L.lookup (currDcon, currIdx) (getAllFieldLocsSoA srcLoc) of
+                                Just l -> l
+                                Nothing ->
+                                  error $
+                                    "cursorizePackedExp: DataConE(" ++ show currDcon ++ ") : missing selective-share source field "
+                                      ++ show (currDcon, currIdx)
+                            srcFieldVar = lookupLocVarName "selective-share source" env srcFieldLoc
+                            srcFieldEndArray =
+                              case M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar (fromLocVarToRegVar srcLoc))) env of
+                                Just v -> v
+                                Nothing ->
+                                  error $
+                                    "cursorizePackedExp: DataConE(" ++ show currDcon ++ ") : missing selective-share source end array for "
+                                      ++ show srcLoc
+                            srcFieldEndIx =
+                              case L.elemIndex (currDcon, currIdx) (map fst (getAllFieldLocsSoA srcLoc)) of
+                                Just i -> i + 1
+                                Nothing ->
+                                  error $
+                                    "cursorizePackedExp: DataConE(" ++ show currDcon ++ ") : missing selective-share source field index "
+                                      ++ show (currDcon, currIdx)
+                         in Just (srcFieldVar, srcFieldEndArray, srcFieldEndIx)
+                      _ -> Nothing
 
               dummy :: PassM Exp3
               dummy = return $ VarE (sloc)
@@ -2250,16 +2365,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                         else return (id res', mdc1', mdc2')
                     
                   _ | isScalarTy ty -> do
-                    (rnd', fvarenv', m1', m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
                     -- get the location variable where the scalar must be written
                     let floc_loc = case floc of
                           Just l -> l
                           Nothing -> error $  "cursorizeExp: DataConE: expected a location for scalar buffer" ++ show (dcon, index)
-                    let floc_var = case (M.lookup (fromLocVarToFreeVarsTy $ floc_loc) fvarenv') of
-                          Just v -> v
-                          Nothing -> case floc_loc of
-                            Single l -> l
-                            SoA _ _ -> error $ "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected location variable " ++ ":" ++ show floc_loc ++ "\n\n" ++ show fvarenv
+                    let floc_var = lookupLocVarName "output scalar" fvarenv floc_loc
                     write_scalars_at <- gensym "write_scalars_at"
                     -- In case it exists in the mutable environment and has an old value associated with it.
                     let (floc_loc', floc_var') = case M.lookup floc_loc m2 of 
@@ -2274,30 +2384,81 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                               Just ml -> do
                                                           let mdc1i = updateMutableLocPtsToEnv ml mdc1 (write_scalars_at, Just ml, Nothing, S.singleton floc_var') True
                                                           return mdc1i 
-                    {- Update, aft_flocs with the correct location for the scalar field -}
-                    {- TODO: Audit aft_flocs'  and fvarenv'-}
-                    {- TODO: Check if its fine to use singleLocVar d' here!! -}
-                    let aft_flocs' =
-                          map
-                            ( \((d, idx'), l) ->
-                                if d == dcon && idx' == index
-                                  then ((d, idx'), singleLocVar d')
-                                  else ((d, idx'), l)
-                            )
-                            aft_flocs
-                    let fvarenv'' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv'
-                    (rest, mdc1'', mdc2') <- go2 marker_added mdc1' mdc2 fvarenv'' aft_dloc from_rec_end aft_flocs' rst
-                    let mut_loc_pointing_at_write_scalar = findMutableLocationPointingToVar write_scalars_at mdc1''
-                    (bump_bnds, mdc1''') <- case mut_loc_pointing_at_write_scalar of 
-                                               Nothing -> return ([], mdc1'') 
-                                               Just ml -> do 
-                                                           let mdc1i = updateMutableLocPtsToEnv ml mdc1'' (d', Just ml, Nothing, S.empty) False
-                                                           void_var <- gensym "void"
-                                                           let ml_name = getVarNameFromFreeVar fvarenv' (fromLocVarToFreeVarsTy ml)
-                                                           let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
-                                                           return (bmp_bnd, mdc1i)
-                    let interm_binds = mkLets bump_bnds rest
-                    return (let_assign_write_cur $ LetE (d', [], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') interm_binds, mdc1''', mdc2')
+                    let mb_share_src = lookupSelectiveShareInfo fvarenv dcon index
+                    let output_field_region_start =
+                          floc_loc' >>= \loc ->
+                            Just $ lookupRegVarName "selective-share output start" fvarenv (fromLocVarToRegVar loc)
+                    case (mb_share_src, output_field_region_start, floc_loc') of
+                      (Just (share_src_cur, share_src_end_arr, share_src_end_ix), Just out_reg_start, Just _) -> do
+                        let aft_flocs' =
+                              map
+                                ( \((d, idx'), l) ->
+                                    if d == dcon && idx' == index
+                                      then ((d, idx'), singleLocVar d')
+                                      else ((d, idx'), l)
+                                )
+                                aft_flocs
+                        let fvarenv'' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv
+                        (rest, mdc1'', mdc2') <- go2 marker_added mdc1' mdc2 fvarenv'' aft_dloc from_rec_end aft_flocs' rst
+                        let mut_loc_pointing_at_write_scalar = findMutableLocationPointingToVar write_scalars_at mdc1''
+                        (bump_bnds, mdc1''') <- case mut_loc_pointing_at_write_scalar of 
+                                                   Nothing -> return ([], mdc1'') 
+                                                   Just ml -> do 
+                                                               let mdc1i = updateMutableLocPtsToEnv ml mdc1'' (d', Just ml, Nothing, S.empty) False
+                                                               void_var <- gensym "void"
+                                                               let ml_name = getVarNameFromFreeVar fvarenv (fromLocVarToFreeVarsTy ml)
+                                                               let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
+                                                               return (bmp_bnd, mdc1i)
+                        let interm_binds = mkLets bump_bnds rest
+                        ptr_delta <- gensym "share_ptr_delta"
+                        should_share <- gensym "should_share"
+                        share_src_end <- gensym "share_src_end"
+                        share_write <- gensym "share_write"
+                        let share_branch =
+                              LetE
+                                (share_write, [], CursorTy, Ext $ WriteCursorIndirection write_scalars_at share_src_cur share_src_end)
+                                (VarE share_write)
+                        return
+                          ( let_assign_write_cur
+                              $ LetE (share_src_end, [], CursorTy, Ext $ IndexCursorArray share_src_end_arr share_src_end_ix)
+                              $ LetE (ptr_delta, [], IntTy, Ext $ SubPtr write_scalars_at out_reg_start)
+                              $ LetE (should_share, [], BoolTy, PrimAppE EqIntP [VarE ptr_delta, LitE 0])
+                              $ LetE
+                                  ( d'
+                                  , []
+                                  , CursorTy
+                                  , IfE
+                                      (VarE should_share)
+                                      share_branch
+                                      (VarE write_scalars_at)
+                                  )
+                                  interm_binds
+                          , mdc1'''
+                          , mdc2'
+                          )
+                      _ -> do
+                        (rnd', fvarenv', _m1', _m2') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit fvarenv lenv ddfs fundefs denv tenv senv rnd
+                        let aft_flocs' =
+                              map
+                                ( \((d, idx'), l) ->
+                                    if d == dcon && idx' == index
+                                      then ((d, idx'), singleLocVar d')
+                                      else ((d, idx'), l)
+                                )
+                                aft_flocs
+                        let fvarenv'' = M.insert (fromLocVarToFreeVarsTy $ singleLocVar $ d') d' fvarenv'
+                        (rest, mdc1'', mdc2') <- go2 marker_added mdc1' mdc2 fvarenv'' aft_dloc from_rec_end aft_flocs' rst
+                        let mut_loc_pointing_at_write_scalar = findMutableLocationPointingToVar write_scalars_at mdc1''
+                        (bump_bnds, mdc1''') <- case mut_loc_pointing_at_write_scalar of 
+                                                   Nothing -> return ([], mdc1'') 
+                                                   Just ml -> do 
+                                                               let mdc1i = updateMutableLocPtsToEnv ml mdc1'' (d', Just ml, Nothing, S.empty) False
+                                                               void_var <- gensym "void"
+                                                               let ml_name = getVarNameFromFreeVar fvarenv' (fromLocVarToFreeVarsTy ml)
+                                                               let bmp_bnd = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE (fromJust $ sizeOfTy ty)))]
+                                                               return (bmp_bnd, mdc1i)
+                        let interm_binds = mkLets bump_bnds rest
+                        return (let_assign_write_cur $ LetE (d', [], CursorTy, Ext $ WriteScalar (mkScalar ty) write_scalars_at rnd') interm_binds, mdc1''', mdc2')
 
                   -- Write a pointer to a vector
                   VectorTy el_ty -> do
@@ -2493,33 +2654,54 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
             else do
               scalar_count_bump <- gensym "scalar_count_bump"
               return [(scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon scalar_count_footer_vars)]
-          let mut_loc_sloc_dcon = findMutableLocationPointingToVar sloc_dcon m1
-          (mut_loc_ad_bnds, m1') <- dbgTrace (minChatLvl) "Print in SoA Dcon case: " dbgTrace (minChatLvl) (sdoc (m1, sloc_dcon)) dbgTrace (minChatLvl) "End in print dcon case SoA!!\n" case mut_loc_sloc_dcon of 
-                                              Nothing -> return ([], m1)
-                                              Just ml -> do 
-                                                          void <- gensym "void"
-                                                          let ml_name = getVarNameFromFreeVar freeVarToVarEnv'' (fromLocVarToFreeVarsTy ml)
-                                                          let bnd = [(void, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE 1))]
-                                                          let mi1 = updateMutableLocPtsToEnv ml m1 (after_tag, Just ml, Nothing, S.empty) False
-                                                          return (bnd, mi1)
+          (dcon_write_cur, dcon_write_prep_bnds, mut_loc_ad_bnds, m1') <-
+            if selective_share_enabled
+            then
+              case M.lookup sloc_dcon tenv of
+                Just (MkTy2 MutCursorTy) -> do
+                  dcon_cur_after_bump <- gensym "dcon_cur_after_bump"
+                  dcon_write_cur <- gensym "dcon_write_cur"
+                  let prep_bnds =
+                        [ (dcon_cur_after_bump, [], CursorTy, Ext $ DerefMutCursor sloc_dcon)
+                        , (dcon_write_cur, [], CursorTy, Ext $ AddCursor dcon_cur_after_bump (LitE (-1)))
+                        ]
+                  let mi1 = updateMutableLocPtsToEnv dcon_loc m1 (dcon_cur_after_bump, Just dcon_loc, Nothing, S.empty) False
+                  return (dcon_write_cur, prep_bnds, [], mi1)
+                _ -> do
+                  let mut_loc_sloc_dcon = findMutableLocationPointingToVar sloc_dcon m1
+                  (mut_loc_ad_bnds, m1') <- dbgTrace (minChatLvl) "Print in SoA Dcon case: " dbgTrace (minChatLvl) (sdoc (m1, sloc_dcon)) dbgTrace (minChatLvl) "End in print dcon case SoA!!\n" case mut_loc_sloc_dcon of
+                                                      Nothing -> return ([], m1)
+                                                      Just ml -> do
+                                                                  void <- gensym "void"
+                                                                  let ml_name = getVarNameFromFreeVar freeVarToVarEnv'' (fromLocVarToFreeVarsTy ml)
+                                                                  let bnd = [(void, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE 1))]
+                                                                  let mi1 = updateMutableLocPtsToEnv ml m1 (after_tag, Just ml, Nothing, S.empty) False
+                                                                  return (bnd, mi1)
+                  return (sloc_dcon, [], mut_loc_ad_bnds, m1')
+            else do
+              let mut_loc_sloc_dcon = findMutableLocationPointingToVar sloc_dcon m1
+              (mut_loc_ad_bnds, m1') <- dbgTrace (minChatLvl) "Print in SoA Dcon case: " dbgTrace (minChatLvl) (sdoc (m1, sloc_dcon)) dbgTrace (minChatLvl) "End in print dcon case SoA!!\n" case mut_loc_sloc_dcon of
+                                                  Nothing -> return ([], m1)
+                                                  Just ml -> do
+                                                              void <- gensym "void"
+                                                              let ml_name = getVarNameFromFreeVar freeVarToVarEnv'' (fromLocVarToFreeVarsTy ml)
+                                                              let bnd = [(void, [], ProdTy [], Ext $ BumpCursorMutable ml_name (LitE 1))]
+                                                              let mi1 = updateMutableLocPtsToEnv ml m1 (after_tag, Just ml, Nothing, S.empty) False
+                                                              return (bnd, mi1)
+              return (sloc_dcon, [], mut_loc_ad_bnds, m1')
           (go2expr, m1'', m2') <- go2 False m1' m2 freeVarToVarEnv'' after_tag Nothing field_locs locs_tys
-          (,,,) <$> dl
-            <$>
-            -- Make sure that the field locations and data locations are released here
-            -- We can clean them up later.
-            -- data con location
-            mkLets additional_bnds'
-            <$> LetE (start_tag_alloc, [], ProdTy [], Ext $ StartTagAllocation (sloc))
-            <$> LetE (writetag, [], (getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc)), Ext $ WriteTag dcon (sloc_dcon))
-            <$> mkLets scalar_count_bnds
-            <$> LetE (end_tag_alloc, [], ProdTy [], Ext $ EndTagAllocation (sloc))
-            <$> LetE (start_scalars_alloc, [], ProdTy [], Ext $ StartScalarsAllocation (sloc))
-            <$> LetE (after_tag, [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc), Ext $ AddCursor (sloc_dcon) (L3.LitE 1))
-            <$> mkLets mut_loc_ad_bnds
-            <$> return go2expr
-            <*> return freeVarToVarEnv''
-            <*> return m1''
-            <*> return m2'
+          let resultExpr =
+                mkLets additional_bnds' $
+                  LetE (start_tag_alloc, [], ProdTy [], Ext $ StartTagAllocation (sloc)) $
+                    mkLets dcon_write_prep_bnds $
+                      LetE (writetag, [], (getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc)), Ext $ WriteTag dcon (dcon_write_cur)) $
+                        LetE (after_tag, [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall (getDconLoc sloc_loc), Ext $ AddCursor (dcon_write_cur) (L3.LitE 1)) $
+                          mkLets mut_loc_ad_bnds $
+                            mkLets scalar_count_bnds $
+                              LetE (end_tag_alloc, [], ProdTy [], Ext $ EndTagAllocation (sloc)) $
+                                LetE (start_scalars_alloc, [], ProdTy [], Ext $ StartScalarsAllocation (sloc)) $
+                                  go2expr
+          return (dl resultExpr, freeVarToVarEnv'', m1'', m2')
 
     -- go2 :: Bool -> M.Map FreeVarsTy Var -> Var -> [((DataCon, Int), Location, (Exp2, Ty2))] -> [((DataCon, Int), Location, (Exp2, Ty2))] -> PassM Exp3
     -- go2 False after_tag (zip args (lookupDataCon ddfs dcon))
@@ -2958,6 +3140,21 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
         AllocateScalarsHere varg -> do
           let v = toLocVar varg
           pure (dl <$> Ext $ L3.AllocateScalarsHere (unwrapLocVar v), freeVarToVarEnv, m1, m2)
+        SelectiveBufferShareE src tgts bod ->
+          cursorizePackedExp
+            m1
+            m2
+            useMutableCursorsCall
+            emitScalarCountBumps
+            insideTimeit
+            freeVarToVarEnv
+            lenv
+            ddfs
+            fundefs
+            (enableSelectiveShare src tgts denv)
+            tenv
+            senv
+            bod
         SSPush a b c d -> pure (dl <$> Ext $ L3.SSPush a (unwrapLocVar b) (unwrapLocVar c) d, freeVarToVarEnv, m1, m2)
         SSPop a b c -> pure (dl <$> Ext $ L3.SSPop a (unwrapLocVar b) (unwrapLocVar c), freeVarToVarEnv, m1, m2)
     MapE {} -> error $ "TODO: cursorizePackedExp MapE"

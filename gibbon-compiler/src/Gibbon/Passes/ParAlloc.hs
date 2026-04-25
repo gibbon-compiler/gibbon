@@ -303,6 +303,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
         AddFixed{}     -> pure ex
         GetCilkWorkerNum->pure ex
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
+        SelectiveBufferShareE src tgts bod -> Ext <$> SelectiveBufferShareE src tgts <$> go bod
         AllocateTagHere{} -> pure ex
         AllocateScalarsHere{} -> pure ex
         SSPush{} -> pure ex

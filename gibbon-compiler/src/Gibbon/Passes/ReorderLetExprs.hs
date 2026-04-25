@@ -275,6 +275,10 @@ reorderLetExprsFunBody definedVars delayedExprMap ex = do
 
         Ext (LetAvail _ bod) -> pure (ex, delayedExprMap)
 
+        Ext (SelectiveBufferShareE src tgts bod) -> do
+            (bod', delayedExprMap') <- reorderLetExprsFunBody definedVars delayedExprMap bod
+            pure (Ext (SelectiveBufferShareE src tgts bod'), delayedExprMap')
+
         Ext (AllocateTagHere{}) -> pure (ex, delayedExprMap)
 
         Ext (AllocateScalarsHere{}) -> pure (ex, delayedExprMap)
@@ -425,6 +429,10 @@ releaseExprsFunBody definedVars delayedExprMap ex = do
         Ext GetCilkWorkerNum -> pure ex
 
         Ext (LetAvail _ bod) -> pure ex
+
+        Ext (SelectiveBufferShareE src tgts bod) -> do
+            bod' <- releaseExprsFunBody definedVars delayedExprMap bod
+            pure $ Ext $ SelectiveBufferShareE src tgts bod'
 
         Ext (AllocateTagHere{}) -> pure ex
 
@@ -590,6 +598,10 @@ ensureLocationsAreDefinedForWrite definedVars ex = do
 
         Ext (LetAvail _ bod) -> pure ex
 
+        Ext (SelectiveBufferShareE src tgts bod) -> do
+            bod' <- go bod
+            pure $ Ext $ SelectiveBufferShareE src tgts bod'
+
         Ext (AllocateTagHere{}) -> pure ex
 
         Ext (AllocateScalarsHere{}) -> pure ex
@@ -687,6 +699,10 @@ removeDuplicateLocations definedLocs ex = case ex of
         Ext GetCilkWorkerNum -> pure ex
 
         Ext (LetAvail _ bod) -> pure ex
+
+        Ext (SelectiveBufferShareE src tgts bod) -> do
+            bod' <- go bod
+            pure $ Ext $ SelectiveBufferShareE src tgts bod'
 
         Ext (AllocateTagHere{}) -> pure ex
 

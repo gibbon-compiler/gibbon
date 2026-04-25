@@ -132,6 +132,8 @@ harvestStructTys (Prog _ _ funs mtal) =
        (LetUnpackT binds _ bod)    -> ProdTy (map snd binds) : go bod
        (LetAllocT _ vals bod)      -> ProdTy (map fst vals) : go bod
        (LetAvailT _ bod)           -> go bod
+       (ForLoopT _ _ loopBody bod) -> go loopBody ++ go bod
+       (WhileCursorT _ loopBody bod) -> go loopBody ++ go bod
 
        (IfT _ a b) -> go a ++ go b
        ErrT{} -> []
@@ -172,6 +174,12 @@ tailFreeVars tl =
         `S.difference` S.singleton lhs
     LetAvailT {bod} ->
       tailFreeVars bod
+    ForLoopT {idx, bound, loopBody, bod} ->
+      trivFreeVars bound
+        `S.union` ((tailFreeVars loopBody `S.difference` S.singleton idx)
+                    `S.union` tailFreeVars bod)
+    WhileCursorT {ref, loopBody, bod} ->
+      S.singleton ref `S.union` tailFreeVars loopBody `S.union` tailFreeVars bod
     IfT {tst, con, els} ->
       trivFreeVars tst `S.union` tailFreeVars con `S.union` tailFreeVars els
     ErrT _ ->
@@ -271,6 +279,8 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
         LetUnpackT{bod} -> go acc bod
         LetAllocT{bod}  -> go acc bod
         LetAvailT{bod}  -> go acc bod
+        ForLoopT{loopBody,bod} -> go (go acc loopBody) bod
+        WhileCursorT{loopBody,bod} -> go (go acc loopBody) bod
         IfT{con,els}    -> go (go acc con) els
         ErrT{} -> acc
         LetTimedT{timed,bod} -> go (go acc timed) bod
@@ -595,9 +605,8 @@ rewriteReturns tl bnds =
    (RetValsT ls) -> AssnValsT [ (v,t,e) | (v,t) <- bnds | e <- ls ] Nothing
    (Goto _) -> tl
 
-   -- Here we've already rewritten the tail to assign values
-   -- somewhere.. and now we want to REREWRITE it?
-   (AssnValsT _ _) -> error$ "rewriteReturns: Internal invariant broken:\n "++sdoc tl
+   -- Statement-like loop bodies can already be normalized to unit assignments.
+   (AssnValsT upds mb_bod) -> AssnValsT upds (fmap go mb_bod)
    (e@LetCallT{bod})     -> e{bod = go bod }
    (e@LetPrimCallT{bod}) -> e{bod = go bod }
    (e@LetTrivT{bod})     -> e{bod = go bod }
@@ -609,6 +618,8 @@ rewriteReturns tl bnds =
    (LetUnpackT bs scrt body) -> LetUnpackT bs scrt (go body)
    (LetAllocT lhs vals body) -> LetAllocT lhs vals (go body)
    (LetAvailT vs body)       -> LetAvailT vs (go body)
+   (ForLoopT idx bound loopBody body) -> ForLoopT idx bound loopBody (go body)
+   (WhileCursorT ref loopBody body) -> WhileCursorT ref loopBody (go body)
    (IfT a b c) -> IfT a (go b) (go c)
    (ErrT s) -> (ErrT s)
    (Switch lbl tr alts def) -> Switch lbl tr (mapAlts go alts) (fmap go def)
@@ -795,6 +806,23 @@ codegenTail venv mutEndEnv fenv sort_fns (LetAvailT vs body) ty sync_deps =
     do let (avail, sync_deps') = L.partition (\(v,_) -> elem v vs) sync_deps
        tl <- codegenTail venv mutEndEnv fenv sort_fns body ty sync_deps'
        pure $ (map snd avail) ++ tl
+
+codegenTail venv mutEndEnv fenv sort_fns (ForLoopT idx bound loopBody body) ty sync_deps =
+    do let venv' = M.insert idx IntTy venv
+       loop' <- codegenTail venv' mutEndEnv fenv sort_fns loopBody (ProdTy []) sync_deps
+       body' <- codegenTail venv mutEndEnv fenv sort_fns body ty sync_deps
+       let idx_ty = codegenTy IntTy
+           bound' = codegenTriv venv bound
+       pure $
+         [ C.BlockStm [cstm| for ($ty:idx_ty $id:idx = 0; $id:idx < $exp:bound'; $id:idx++) { $items:loop' } |] ]
+         ++ body'
+
+codegenTail venv mutEndEnv fenv sort_fns (WhileCursorT ref loopBody body) ty sync_deps =
+    do loop' <- codegenTail venv mutEndEnv fenv sort_fns loopBody (ProdTy []) sync_deps
+       body' <- codegenTail venv mutEndEnv fenv sort_fns body ty sync_deps
+       pure $
+         [ C.BlockStm [cstm| while (*$id:ref != NULL) { $items:loop' } |] ]
+         ++ body'
 
 codegenTail venv mutEndEnv fenv sort_fns (LetUnpackT bs scrt body) ty sync_deps =
     do let mkFld :: Int -> C.Id
@@ -1157,8 +1185,15 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                           [pleft,pright] = rnds in pure
                                       [C.BlockStm [cstm| *($(codegenTriv venv pleft)) += $(codegenTriv venv pright); |]] 
                  SubP -> let (outV,outT) = Sf.headErr bnds
-                             [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) - $(codegenTriv venv pright); |] ]
+                             [pleft,pright] = rnds
+                             ptrExp trv =
+                               case trv of
+                                 VarTriv v | M.lookup v venv == Just MutCursorTy ->
+                                   [cexp| *$id:v |]
+                                 _ ->
+                                   codegenTriv venv trv
+                         in pure
+                              [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $exp:(ptrExp pleft) - $exp:(ptrExp pright); |] ]
                  MulP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) * $(codegenTriv venv pright); |]]
@@ -1335,6 +1370,10 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                  [t@(TagTriv{}),(VarTriv cur)] = rnds in pure
                              [ C.BlockStm [cstm| *($ty:(codegenTy TagTyPacked) *) ($id:cur) = $(codegenTriv venv t); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:cur + 1; |] ]
+                 WriteTagPacked -> let [(outV,CursorTy)] = bnds
+                                       [tagv,(VarTriv cur)] = rnds in pure
+                                   [ C.BlockStm [cstm| *($ty:(codegenTy TagTyPacked) *) ($id:cur) = $(codegenTriv venv tagv); |]
+                                   , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:cur + 1; |] ]
                  ReadTag -> let [(tagV,TagTyPacked),(curV,CursorTy)] = bnds
                                 [(VarTriv cur)] = rnds in pure
                             [ C.BlockDecl [cdecl| $ty:(codegenTy TagTyPacked) $id:tagV = *($ty:(codegenTy TagTyPacked) *) ($id:cur); |]
@@ -1372,6 +1411,21 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                      error $ "ScalarCountFooterEnd expected no bindings/args: " ++ show (bnds, rnds)
                    pure [ C.BlockStm [cstm| gib_scalar_count_footer_end($string:fun_name); |] ]
 
+                 ScalarCountGet -> do
+                   let [(outV, outTy)] = bnds
+                       [footer] = rnds
+                   pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = gib_scalar_count_footer_get($(codegenTriv venv footer)); |] ]
+
+                 ScalarCountFirstFooter -> do
+                   let [(outV, outTy)] = bnds
+                       [footer] = rnds
+                   pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = gib_scalar_count_first_footer($(codegenTriv venv footer)); |] ]
+
+                 ScalarCountNextFooter -> do
+                   let [(outV, outTy)] = bnds
+                       [footer] = rnds
+                   pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = gib_scalar_count_footer_next($(codegenTriv venv footer)); |] ]
+
                  ReadScalar s -> let [(valV,valTy),(curV,CursorTy)] = bnds
                                      [(VarTriv cur)] = rnds in pure
                                      [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
@@ -1385,6 +1439,32 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                      pure
                                        [ C.BlockDecl [cdecl| $ty:tag_t $id:offset = $id:b - $id:a; |]
                                        , C.BlockDecl [cdecl| $ty:tagged_ptr_t $id:taggedV = GIB_STORE_TAG($id:a, $id:offset); |]
+                                       ]
+
+                 WriteCursorIndirection ->
+                               let [(outV,CursorTy)] = bnds
+                                   [(VarTriv cur), (VarTriv to), (VarTriv toEnd)] = rnds
+                                   cursorLikeExp v =
+                                     case M.lookup v venv of
+                                       Just MutCursorTy ->
+                                         [cexp| *$id:v |]
+                                       _ ->
+                                         [cexp| $id:v |]
+                                   cur' = cursorLikeExp cur
+                                   to' = cursorLikeExp to
+                                   toEnd' = cursorLikeExp toEnd
+                                   tag_t = [cty| typename uint16_t |]
+                                   tagged_ptr_t = [cty| typename uintptr_t |]
+                               in do offset <- gensym "offset"
+                                     tagged <- gensym "tagged"
+                                     writeloc <- gensym "writeloc"
+                                     pure
+                                       [ C.BlockDecl [cdecl| $ty:tag_t $id:offset = $exp:toEnd' - $exp:to'; |]
+                                       , C.BlockDecl [cdecl| $ty:tagged_ptr_t $id:tagged = GIB_STORE_TAG($exp:to', $id:offset); |]
+                                       , assn [cty| char * |] writeloc [cexp| (char *) $exp:cur' |]
+                                       , C.BlockStm [cstm| *$id:writeloc = GIB_INDIRECTION_TAG; |]
+                                       , C.BlockStm [cstm| gib_store_taggedptr_unaligned($exp:cur' + sizeof(GibPackedTag), $id:tagged); |]
+                                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($exp:cur') + 9; |]
                                        ]
 
                  ReadTaggedCursor -> do
@@ -1418,6 +1498,10 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = *($ty:(codegenTy CursorTy) *) ($id:cur); |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
                                ]
+
+                 GrowRegion -> let [(_outV,ProdTy [])] = bnds
+                                   [(VarTriv cur), (VarTriv end)] = rnds in pure
+                               [ C.BlockStm [cstm| gib_grow_region($id:cur, $id:end); |] ]
 
                  WriteCursorMutable -> let [(_outV,CursorTy)] = bnds
                                            [val,(VarTriv cur)] = rnds in pure

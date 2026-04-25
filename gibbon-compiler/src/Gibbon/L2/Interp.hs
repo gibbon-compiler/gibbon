@@ -355,6 +355,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
     IndirectionE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     GetCilkWorkerNum{} -> pure $ (VInt 1, SOne (fromJust $ byteSizeOfTy IntTy))
     LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    SelectiveBufferShareE _ _ bod -> go env sizeEnv bod
     AllocateTagHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AllocateScalarsHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     SSPush{} -> error $ "L2.Interp: TODO: " ++ sdoc ext

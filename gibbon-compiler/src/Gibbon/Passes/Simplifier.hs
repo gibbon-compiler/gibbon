@@ -302,6 +302,11 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                        L4.LetTimedT isiter binds (go env timed) (go env bod)
                    L4.Switch lbl trv alts mb_tl ->
                        L4.Switch lbl trv (goalts env alts) (fmap (go env) mb_tl)
+                   L4.ForLoopT idx bound loopBody bod ->
+                       let env' = M.delete idx env
+                       in L4.ForLoopT idx (gotriv env bound) (go env' loopBody) (go env bod)
+                   L4.WhileCursorT ref loopBody bod ->
+                       L4.WhileCursorT ref (go env loopBody) (go env bod)
                    L4.TailCall var trvs ->
                        L4.TailCall var (map (gotriv env) trvs)
                    L4.Goto lbl -> L4.Goto lbl

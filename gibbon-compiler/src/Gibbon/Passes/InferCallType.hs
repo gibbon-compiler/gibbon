@@ -284,6 +284,9 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                 Old.LetRegE reg regexp bod -> do 
                                                (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod 
                                                return $ (Ext $ Old.LetRegE reg regexp bod', mutlocs)
+                Old.SelectiveBufferShareE src tgts bod -> do
+                                               (bod', mutlocs) <- inferCallTypeMainExp mutLocs fundefs bod
+                                               return $ (Ext $ Old.SelectiveBufferShareE src tgts bod', mutlocs)
                 Old.BoundsCheckVector _bounds -> pure (exp2, mutLocs) 
                 Old.RetE{} -> pure (exp2, mutLocs)
                 Old.StartOfPkdCursor{} -> pure (exp2, mutLocs)
@@ -570,6 +573,9 @@ inferCallTypeExp useMutableCursors funName env exp2 = case exp2 of
             Old.LetRegE reg regexp bod -> 
                 let (bod', env', t) = inferCallTypeExp useMutableCursors funName env bod
                  in (Ext $ Old.LetRegE reg regexp bod', env', t)
+            Old.SelectiveBufferShareE src tgts bod ->
+                let (bod', env', t) = inferCallTypeExp useMutableCursors funName env bod
+                 in (Ext $ Old.SelectiveBufferShareE src tgts bod', env', t)
             Old.BoundsCheckVector _bounds -> (exp2, env, Nothing)
             Old.RetE{} -> (exp2, env, Nothing)
             Old.StartOfPkdCursor{} -> (exp2, env, Nothing)

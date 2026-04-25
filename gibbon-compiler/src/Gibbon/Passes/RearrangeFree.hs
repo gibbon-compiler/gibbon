@@ -77,6 +77,14 @@ rearrangeFreeExp is_main frees tail =
       LetAllocT lhs vals <$> go bod
     LetAvailT vs bod -> do
       LetAvailT vs <$> go bod
+    ForLoopT idx bound loopBody bod -> do
+      loopBody' <- go loopBody
+      bod' <- go bod
+      return $ ForLoopT idx bound loopBody' bod'
+    WhileCursorT ref loopBody bod -> do
+      loopBody' <- go loopBody
+      bod' <- go bod
+      return $ WhileCursorT ref loopBody' bod'
     IfT tst con els ->
       IfT tst <$> go con <*> go els
     ErrT{} -> return tail

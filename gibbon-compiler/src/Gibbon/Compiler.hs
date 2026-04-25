@@ -89,6 +89,7 @@ import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.ReorderScalarWrites  ( reorderScalarWrites, writeOrderMarkers )
+import           Gibbon.Passes.LoopifyTraversals (loopifyTraversals)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
@@ -928,6 +929,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2'
               l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
+              l3 <- go "loopifyTraversals" loopifyTraversals l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               -- l3 <- go "addCasts"         addCasts      l3

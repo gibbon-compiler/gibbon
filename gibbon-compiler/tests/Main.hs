@@ -24,6 +24,8 @@ import InferEffects
 import InferRegionScope
 import Unariser
 import AddRAN
+import LoopifyTraversals
+import SelectiveBufferSharing
 import L1.Typecheck
 import L1.Interp
 import L2.Typecheck
@@ -37,6 +39,8 @@ main = defaultMain allTests
   where allTests = testGroup "All"
                    [ tests
                    , addRANTests
+                   , loopifyTraversalsTests
+                   , selectiveBufferSharingTests
                    , routeEnds2Tests
                    , inferLocations2Tests
                    , inferEffects2Tests

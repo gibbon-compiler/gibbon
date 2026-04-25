@@ -88,6 +88,7 @@ type IsBoxed = Bool
 
 data FunOpt = CanVectorize
             | StoreScalarCounts
+            | SelectiveBufferSharing
         deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data MemoryLayout = 

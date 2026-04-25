@@ -201,6 +201,8 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.IndirectionE{} -> pure ex
             L2.GetCilkWorkerNum{} -> pure ex
             L2.LetAvail vars bod -> Ext <$> (L2.LetAvail vars) <$> recur bod
+            L2.SelectiveBufferShareE src tgts bod ->
+              Ext <$> (L2.SelectiveBufferShareE src tgts) <$> recur bod
             L2.AllocateTagHere{} -> pure ex
             L2.AllocateScalarsHere{} -> pure ex
             L2.SSPush{} -> pure ex
@@ -280,6 +282,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                 L2.LetParRegionE _ _ _ bod -> (findTyCon want bod)
                 L2.LetLocE _ _ bod -> (findTyCon want bod)
                 L2.LetAvail _ bod -> (findTyCon want bod)
+                L2.SelectiveBufferShareE _ _ bod -> (findTyCon want bod)
                 _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
             _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
 
@@ -353,6 +356,9 @@ checkScalarDeps ddefs in_scope tag_loc ex0 =
               let (dep_env',move_set',move') = go dep_env move_set move bod
               in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
             L2.LetAvail _ bod ->
+              let (dep_env',move_set',move') = go dep_env move_set move bod
+              in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
+            L2.SelectiveBufferShareE _ _ bod ->
               let (dep_env',move_set',move') = go dep_env move_set move bod
               in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
             _ -> (dep_env, move_set, move)

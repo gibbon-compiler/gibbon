@@ -478,6 +478,8 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                                  doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
                                 pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
+          L2.SelectiveBufferShareE src tgts e ->
+            text "selectivebuffershare" <+> doc src <+> text (show tgts) <+> text "in" $+$ pprint e
           --LetSoALocE loc e -> text "letSoAloc" <+>
           --                      pprint loc <+> text "in" $+$ pprint e
           L2.RetE ls v -> text "return" <+>

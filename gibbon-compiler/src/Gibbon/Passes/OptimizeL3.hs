@@ -96,8 +96,13 @@ removeReDefsExp env ex =
       pure (Ext $ ReadTag v)
     Ext (WriteTag dcon v) -> do
       pure (Ext $ WriteTag dcon v)
+    Ext (WriteTagPacked v e) -> do
+      e' <- go e
+      pure (Ext $ WriteTagPacked v e')
     Ext (TagCursor a b) -> do
       pure (Ext $ TagCursor a b)
+    Ext (WriteCursorIndirection a b c) -> do
+      pure (Ext $ WriteCursorIndirection a b c)
     Ext (WriteTaggedCursor v e) -> do
       e' <- go e
       pure (Ext $ WriteTaggedCursor v e')
@@ -106,6 +111,8 @@ removeReDefsExp env ex =
       pure (Ext $ ReadTaggedCursor v)
     Ext (ReadCursor v) -> do
       pure (Ext $ ReadCursor v)
+    Ext (GrowRegion cur end) -> do
+      pure (Ext $ GrowRegion cur end)
     Ext (WriteCursorMutable v e) -> do
       e' <- go e
       pure (Ext $ WriteCursorMutable v e')
@@ -161,6 +168,19 @@ removeReDefsExp env ex =
     Ext (EndScalarsAllocation v) -> do
       pure $ (Ext $ EndScalarsAllocation v)
     Ext ScalarCountBump{} -> pure ex
+    Ext (ReadScalarCount v) ->
+      pure $ Ext $ ReadScalarCount v
+    Ext (ReadScalarCountFirstFooter v) ->
+      pure $ Ext $ ReadScalarCountFirstFooter v
+    Ext (ReadScalarCountNextFooter v) ->
+      pure $ Ext $ ReadScalarCountNextFooter v
+    Ext (ForE idx bound bod) -> do
+      bound' <- go bound
+      bod' <- go bod
+      pure $ Ext $ ForE idx bound' bod'
+    Ext (WhileCursor ref bod) -> do
+      bod' <- go bod
+      pure $ Ext $ WhileCursor ref bod'
     Ext (SSPush _ _ _ _) -> pure ex
     Ext (SSPop _ _ _) -> pure ex
     Ext (Assert e) -> do

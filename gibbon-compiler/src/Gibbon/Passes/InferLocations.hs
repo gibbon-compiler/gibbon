@@ -2003,6 +2003,9 @@ finishExp e =
       Ext (LetRegionE r sz endmut ty e1) -> do
              e1' <- finishExp e1
              return $ Ext (LetRegionE r sz endmut ty e1')
+      Ext (SelectiveBufferShareE src tgts e1) -> do
+             e1' <- finishExp e1
+             return $ Ext (SelectiveBufferShareE src tgts e1')
       Ext (LetLocE loc lex e1) -> do
              loc' <- finalLocVar loc
              e1' <- finishExp e1
@@ -2184,6 +2187,9 @@ cleanExp e =
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.empty)
       Ext (L2.StartOfPkdCursor cur) -> (Ext (L2.StartOfPkdCursor cur), S.empty)
       Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.empty)
+      Ext (SelectiveBufferShareE src tgts e1) ->
+                        let (e1', s1') = cleanExp e1
+                        in (Ext (SelectiveBufferShareE src tgts e1'), s1')
       Ext (RetE{})                -> err $ "todo: " ++ sdoc e
       Ext (FromEndE{})            -> err $ "todo: " ++ sdoc e
       Ext (BoundsCheck{})         -> err $ "todo: " ++ sdoc e
@@ -2836,6 +2842,10 @@ fixRANs prg@(Prog defs funs main) = do
                      LetAvail vs bod -> do
                        (bnds,bod') <- go bod
                        return (bnds, Ext $ LetAvail vs bod')
+
+                     SelectiveBufferShareE src tgts bod -> do
+                       (bnds,bod') <- go bod
+                       return (bnds, Ext $ SelectiveBufferShareE src tgts bod')
 
                      RetE{}        -> return ([],e0)
                      FromEndE{}    -> return ([],e0)

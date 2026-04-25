@@ -30,6 +30,7 @@ module Gibbon.L2.Syntax
   , RegExp
   , PreLocExp(..)
   , PreRegExp(..)
+  , SelectiveShareTarget(..)
 
 -- * Regions and locations
   , LocVar
@@ -208,8 +209,18 @@ data E2Ext loc dec
     -- before any of the subsequent packed fields.
   | SSPush SSModality LocVar LocVar TyCon
   | SSPop SSModality LocVar LocVar
+  | SelectiveBufferShareE Var [SelectiveShareTarget] (E2 loc dec)
+    -- ^ Internal marker inserted by SelectiveBufferSharing.  The wrapped
+    -- expression still computes the same packed value, but cursorize may
+    -- lower some output buffers as indirections to the corresponding buffers
+    -- of the source packed value.
     -- ^ Spill and restore from the shadow-stack.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+data SelectiveShareTarget
+  = ShareDConBuffer
+  | ShareScalarFieldBuffer DataCon FieldIndex
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfRegionLE Region
@@ -276,6 +287,7 @@ instance FreeVars (E2Ext l d) where
      AllocateScalarsHere{}  -> S.empty
      SSPush{} -> S.empty
      SSPop{} -> S.empty
+     SelectiveBufferShareE src _ bod -> S.insert src (gFreeVars bod)
      LetRegE{} -> error "gFreeVars: LetRegE not implemented yet"
      BoundsCheckVector{} -> error "gFreeVars: BoundsCheckVector not implemented yet"
 
@@ -312,6 +324,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       AllocateScalarsHere{} -> False
       SSPush{} -> False
       SSPop{} -> False
+      SelectiveBufferShareE{} -> False
       LetRegE{} -> error "isTrivial: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "isTrivial: BoundsCheckVector not implemented yet"
 
@@ -336,6 +349,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       AllocateScalarsHere{} -> ProdTy []
       SSPush{} -> ProdTy []
       SSPop{} -> ProdTy []
+      SelectiveBufferShareE _ _ bod -> gRecoverType ddfs env2 bod
       LetRegE{} -> error "gRecoverType: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gRecoverType: BoundsCheckVector not implemented yet"
 
@@ -359,6 +373,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       AllocateScalarsHere{} -> ProdTy []
       SSPush{} -> ProdTy []
       SSPop{} -> ProdTy []
+      SelectiveBufferShareE _ _ bod -> gRecoverTypeLoc ddfs env2 bod
       LetRegE{} -> error "gRecoverTypeLoc: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gRecoverTypeLoc: BoundsCheckVector not implemented yet"
 
@@ -385,6 +400,9 @@ instance (Typeable (E2Ext l d),
           RetE{}        -> return ([],ex)
           FromEndE{}    -> return ([],ex)
           AddFixed{}    -> return ([],ex)
+          SelectiveBufferShareE src tgts bod -> do
+                                (bnds,bod') <- go bod
+                                return ([], SelectiveBufferShareE src tgts (flatLets bnds bod'))
           BoundsCheck{} -> return ([],ex)
           IndirectionE{}-> return ([],ex)
           GetCilkWorkerNum-> return ([],ex)
@@ -422,6 +440,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      SelectiveBufferShareE src tgts bod -> SelectiveBufferShareE src tgts (gInlineTrivExp env bod)
       LetRegE{} -> error "gInlineTrivExt: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gInlineTrivExt: BoundsCheckVector not implemented yet"
 
@@ -445,6 +464,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      SelectiveBufferShareE src tgts bod -> SelectiveBufferShareE src tgts (gSubst old new bod)
       LetRegE{} -> error "gSubstExt: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gSubstExt: BoundsCheckVector not implemented yet"
 
@@ -466,6 +486,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      SelectiveBufferShareE src tgts bod -> SelectiveBufferShareE src tgts (gSubstE old new bod)
       LetRegE{} -> error "gSubstEExt: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gSubstEExt: BoundsCheckVector not implemented yet"
 
@@ -488,6 +509,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       AllocateScalarsHere{} -> ext
       SSPush{} -> ext
       SSPop{} -> ext
+      SelectiveBufferShareE src tgts bod -> SelectiveBufferShareE (gRename env src) tgts (gRename env bod)
       LetRegE{} -> error "gRename: LetRegE not implemented yet"
       BoundsCheckVector{} -> error "gRename: BoundsCheckVector not implemented yet"
 
@@ -972,6 +994,7 @@ revertExp ex =
         IndirectionE{}  -> error "revertExp: TODO IndirectionE"
         GetCilkWorkerNum-> LitE 0
         LetAvail _ bod  -> revertExp bod
+        SelectiveBufferShareE _ _ bod -> revertExp bod
         AllocateTagHere{} -> error "revertExp: TODO AddFixed."
         AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
         SSPush{} -> error "revertExp: TODO SSPush."
@@ -1034,6 +1057,7 @@ occurs w ex =
             FromEndLE{}         -> oc_bod
             _ -> oc_bod
         StartOfPkdCursor v -> v `S.member` w
+        SelectiveBufferShareE src _ bod -> src `S.member` w || go bod
         TagCursor _a _b -> False --a `S.member` w || b `S.member` w
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
@@ -1174,6 +1198,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               AddFixed v _   -> M.insertWith (++) (fromVarToFreeVarsTy v) [fromVarToFreeVarsTy v] acc
               GetCilkWorkerNum -> acc
               LetAvail _ bod -> go acc bod
+              SelectiveBufferShareE _ _ bod -> go acc bod
               AllocateTagHere{} -> acc
               AllocateScalarsHere{} -> acc
               SSPush{} -> acc
@@ -1255,6 +1280,7 @@ allFreeVars ex =
         AddFixed v _    -> S.singleton (V v)
         GetCilkWorkerNum -> S.empty
         LetAvail vs bod -> S.fromList (L.map V vs) `S.union` (S.map V (gFreeVars bod))
+        SelectiveBufferShareE src _ bod -> S.insert (V src) (allFreeVars bod)
         AllocateTagHere loc _ -> S.singleton (fromLocVarToFreeVarsTy loc)
         AllocateScalarsHere loc -> S.singleton (fromLocVarToFreeVarsTy loc)
         SSPush _ a b _ -> S.fromList [(fromLocVarToFreeVarsTy a), (fromLocVarToFreeVarsTy b)]
@@ -1315,6 +1341,7 @@ changeAppToSpawn v args2 ex1 =
         IndirectionE{}    -> ex1
         AddFixed{}        -> ex1
         GetCilkWorkerNum  -> ex1
+        SelectiveBufferShareE src tgts rhs -> Ext $ SelectiveBufferShareE src tgts (go rhs)
         LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
         AllocateTagHere{} -> ex1
         AllocateScalarsHere{} -> ex1

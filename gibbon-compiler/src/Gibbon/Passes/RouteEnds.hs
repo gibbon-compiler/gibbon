@@ -172,6 +172,9 @@ bindReturns ex =
         LetAvail a bod  -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetAvail a bod'
+        SelectiveBufferShareE src tgts bod -> do
+          bod' <- bindReturns bod
+          pure $ Ext $ SelectiveBufferShareE src tgts bod'
         AllocateTagHere{} -> pure ex
         AllocateScalarsHere{} -> pure ex
         SSPush{} -> pure ex
@@ -732,6 +735,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           Ext (IndirectionE{}) -> return e
 
           Ext (LetAvail vs e)  -> Ext <$> LetAvail vs <$> go e
+          Ext (SelectiveBufferShareE src tgts e) ->
+            Ext <$> SelectiveBufferShareE src tgts <$> go e
 
           Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
 
