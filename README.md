@@ -32,6 +32,15 @@ Gibbon is implemented in Haskell, and is set up to be built with
 Follow the instructions below to get all dependencies or enter the Nix shell
 with `nix-shell` to get them via [Nix](https://nix.dev/).
 
+#### Nix
+Use [`cachix`](https://docs.cachix.org/installation) to pull OpenCilk build artifacts.
+- Run `cachix use opencilk` or if that fails add the following to `~/.config/nix/nix.conf`:
+```
+extra-substituters = https://opencilk.cachix.org
+extra-trusted-public-keys = opencilk.cachix.org-1:Mn07EJFLcPVB87uo9BtARGiMm7WoQ3oMbp8etu5N3bI=
+```
+- Then run `nix-shell`!
+
 - Ubuntu 22.04:
 (Parallelism support temporarily not available with ubuntu 22.04 as Cilk support is not avaiable with newer gcc)
 
