@@ -1,0 +1,5 @@
+list_len,auto_hot_loop_speedup_vs_scalar,sse2_hot_loop_speedup_vs_scalar,avx2_hot_loop_speedup_vs_scalar
+1,0.866667,0.951220,0.847826
+1001,3.072351,1.743402,3.368272
+2001,2.258721,2.354545,2.242424
+3001,3.573563,2.266035,3.852540

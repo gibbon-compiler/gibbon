@@ -70,6 +70,12 @@ PROGRAMS = {
         source=EXPERIMENT_DIR / "simple2.c",
         result_prefix="simple2",
     ),
+    "simple3": ProgramConfig(
+        key="simple3",
+        label="Simple Flat In-Place add1",
+        source=EXPERIMENT_DIR / "simple3.c",
+        result_prefix="simple3",
+    ),
 }
 
 
@@ -297,6 +303,7 @@ def write_series_svg(rows: list[SweepRow],
                      path: Path,
                      title: str,
                      y_axis_label: str,
+                     source_name: str,
                      series: list[tuple[str, str, list[float]]],
                      reference_lines: list[tuple[str, float, str, str | None]],
                      y_bottom: float,
@@ -426,7 +433,7 @@ def write_series_svg(rows: list[SweepRow],
 
     parts.append(f'<text x="{legend_x}" y="{height - 118}" class="small">Points: {len(rows)}</text>')
     parts.append(f'<text x="{legend_x}" y="{height - 96}" class="small">Max input: {compact_size_label(max(sizes))}</text>')
-    parts.append(f'<text x="{legend_x}" y="{height - 74}" class="small">Source: simple.c</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 74}" class="small">Source: {source_name}</text>')
     parts.append(f'<text x="{legend_x}" y="{height - 52}" class="small">Auto build: -O3 -march=native</text>')
     parts.append("</svg>")
 
@@ -490,6 +497,7 @@ def write_runtime_svg(rows: list[SweepRow], path: Path, program: ProgramConfig) 
         path,
         title=f"{program.label} Runtimes by Input Size",
         y_axis_label="Avg runtime (ms)",
+        source_name=program.source.name,
         series=series,
         reference_lines=[],
         y_bottom=0.0,
@@ -510,6 +518,7 @@ def write_speedup_svg(rows: list[SweepRow], path: Path, program: ProgramConfig) 
         path,
         title=f"{program.label} Speedups by Input Size",
         y_axis_label="Speedup vs scalar",
+        source_name=program.source.name,
         series=series,
         reference_lines=[("Baseline 1.0x", 1.0, "#d62728", None)],
         y_bottom=0.0,
@@ -535,6 +544,7 @@ def write_hot_loop_speedup_svg(rows: list[SweepRow], path: Path, program: Progra
         path,
         title=f"{program.label} Hot Loop Speedups by Input Size",
         y_axis_label="Hot loop speedup vs scalar",
+        source_name=program.source.name,
         series=series,
         reference_lines=[
             ("Baseline 1.0x", 1.0, "#d62728", None),
