@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:13px} .axis{font-size:14px} .title{font-size:24px;font-weight:700}</style>
+<text x="92" y="34" class="title">ScalarCountMultiIntSmoke add1MultiList Speedups by Input Size</text>
+<rect x="92" y="58" width="738" height="618" fill="#fbfbfd" stroke="#c7c7cc"/>
+<line x1="92" y1="676.0" x2="830" y2="676.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="680.0" text-anchor="end" class="small">0.0x</text>
+<line x1="92" y1="569.4" x2="830" y2="569.4" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="573.4" text-anchor="end" class="small">0.5x</text>
+<line x1="92" y1="462.9" x2="830" y2="462.9" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="466.9" text-anchor="end" class="small">1.0x</text>
+<line x1="92" y1="356.3" x2="830" y2="356.3" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="360.3" text-anchor="end" class="small">1.5x</text>
+<line x1="92" y1="249.8" x2="830" y2="249.8" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="253.8" text-anchor="end" class="small">2.0x</text>
+<line x1="92" y1="143.2" x2="830" y2="143.2" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="147.2" text-anchor="end" class="small">2.5x</text>
+<line x1="92.0" y1="58" x2="92.0" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="92.0" y="700.0" text-anchor="middle" class="small">1k</text>
+<line x1="830.0" y1="58" x2="830.0" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="830.0" y="700.0" text-anchor="middle" class="small">2k</text>
+<text x="461.0" y="738" text-anchor="middle" class="axis">Input size (log scale)</text>
+<text x="26" y="367.0" text-anchor="middle" class="axis" transform="rotate(-90 26 367.0)">Speedup vs recursive</text>
+<polyline points="92.0,250.5 830.0,275.9" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="250.5" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="275.9" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,182.5 830.0,133.4" fill="none" stroke="#2ca02c" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="182.5" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="133.4" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,177.6 830.0,192.9" fill="none" stroke="#9467bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="177.6" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="192.9" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<polyline points="92.0,115.7 830.0,143.6" fill="none" stroke="#d62728" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="92.0" cy="115.7" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="830.0" cy="143.6" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<line x1="864" y1="76" x2="896" y2="76" stroke="#1f77b4" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="81" class="small">Copy scalar / recursive</text>
+<line x1="864" y1="110" x2="896" y2="110" stroke="#2ca02c" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="115" class="small">Indirection scalar / recursive</text>
+<line x1="864" y1="144" x2="896" y2="144" stroke="#9467bd" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="149" class="small">Indirection auto-vector / recursive</text>
+<line x1="864" y1="178" x2="896" y2="178" stroke="#d62728" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="183" class="small">Indirection SSE2 / recursive</text>
+<text x="864" y="642" class="small">Points: 2</text>
+<text x="864" y="664" class="small">Max input: 2k</text>
+<text x="864" y="686" class="small">Build: SSE2 manual SIMD</text>
+<text x="864" y="708" class="small">Chunk size: executable default</text>
+</svg>

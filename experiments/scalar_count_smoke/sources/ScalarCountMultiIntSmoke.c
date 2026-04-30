@@ -22,7 +22,7 @@
 #include <errno.h>
 #include <uthash.h>
 
-#include <emmintrin.h>
+#include <immintrin.h>
 
 #ifndef SCALAR_COUNT_MULTI_LIST_LEN
 #define SCALAR_COUNT_MULTI_LIST_LEN 8000
@@ -231,6 +231,124 @@ static inline double manual_now_seconds(void)
     return (double) ts.tv_sec + ((double) ts.tv_nsec / 1000000000.0);
 }
 
+typedef struct ManualLoopTiming_struct {
+    double seconds;
+    uint64_t calls;
+    uint64_t elements;
+} ManualLoopTiming;
+
+static void manual_loop_timing_reset(ManualLoopTiming *timing)
+{
+    timing->seconds = 0.0;
+    timing->calls = 0;
+    timing->elements = 0;
+}
+
+static void manual_loop_timing_record(ManualLoopTiming *timing,
+                                      double seconds,
+                                      uint64_t elements)
+{
+    timing->seconds += seconds;
+    timing->calls += 1;
+    timing->elements += elements;
+}
+
+static double manual_measure_empty_timing_overhead(uint64_t samples)
+{
+    double best = INFINITY;
+
+    for (uint64_t i = 0; i < samples; i++) {
+        double start = manual_now_seconds();
+        double delta = manual_now_seconds() - start;
+
+        if (delta > 0.0 && delta < best) {
+            best = delta;
+        }
+    }
+
+    return isfinite(best) ? best : 0.0;
+}
+
+static double manual_loop_timing_adjusted_seconds(const ManualLoopTiming *timing,
+                                                  double measurement_overhead)
+{
+    double adjusted =
+        timing->seconds - ((double) timing->calls * measurement_overhead);
+
+    return adjusted > 0.0 ? adjusted : 0.0;
+}
+
+static double manual_loop_timing_ns_per_elem(const ManualLoopTiming *timing)
+{
+    if (timing->elements == 0) {
+        return 0.0;
+    }
+
+    return (timing->seconds * 1000000000.0) / (double) timing->elements;
+}
+
+static double manual_loop_timing_ns_per_elem_for_seconds(
+    const ManualLoopTiming *timing,
+    double seconds)
+{
+    if (timing->elements == 0) {
+        return 0.0;
+    }
+
+    return (seconds * 1000000000.0) / (double) timing->elements;
+}
+
+#define MANUAL_MULTI_INT_FIELDS 4
+
+static void manual_loop_timing_reset_many(ManualLoopTiming timings[],
+                                          size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        manual_loop_timing_reset(&timings[i]);
+    }
+}
+
+static double manual_loop_timing_total_seconds(const ManualLoopTiming timings[],
+                                               size_t len)
+{
+    double total = 0.0;
+
+    for (size_t i = 0; i < len; i++) {
+        total += timings[i].seconds;
+    }
+
+    return total;
+}
+
+static uint64_t manual_loop_timing_total_calls(const ManualLoopTiming timings[],
+                                               size_t len)
+{
+    uint64_t total = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        total += timings[i].calls;
+    }
+
+    return total;
+}
+
+static uint64_t manual_loop_timing_total_elements(const ManualLoopTiming timings[],
+                                                  size_t len)
+{
+    uint64_t total = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        total += timings[i].elements;
+    }
+
+    return total;
+}
+
+static ManualLoopTiming loop_scalar_hot_loop_timings[MANUAL_MULTI_INT_FIELDS] = {{0}};
+static ManualLoopTiming indir_loop_scalar_hot_loop_timings[MANUAL_MULTI_INT_FIELDS] = {{0}};
+static ManualLoopTiming indir_loop_auto_hot_loop_timings[MANUAL_MULTI_INT_FIELDS] = {{0}};
+static ManualLoopTiming indir_loop_vectorized_hot_loop_timings[MANUAL_MULTI_INT_FIELDS] = {{0}};
+
 static void manual_alloc_multilist_output(GibCursor reg_ptr[6],
                                           GibCursor reg_cursor_ptr[6],
                                           GibCursor cursor_ptr[6])
@@ -317,6 +435,29 @@ manual_add1_int_chunk_auto(GibCursor in, GibCursor out, uint64_t count)
 static void __attribute__((noinline))
 manual_add1_int_chunk_sse2(GibCursor in, GibCursor out, uint64_t count)
 {
+#ifdef MANUAL_USE_AVX2
+    uint64_t i = 0;
+    __m256i ones256 = _mm256_set1_epi64x(1);
+    __m128i ones128 = _mm_set1_epi64x(1);
+
+    for (; i + 4 <= count; i += 4) {
+        __m256i vals = _mm256_loadu_si256((const __m256i *) (const void *)
+                                          ((const GibInt *) in + i));
+        vals = _mm256_add_epi64(vals, ones256);
+        _mm256_storeu_si256((__m256i *) (void *) ((GibInt *) out + i), vals);
+    }
+
+    for (; i + 2 <= count; i += 2) {
+        __m128i vals = _mm_loadu_si128((const __m128i *) (const void *)
+                                       ((const GibInt *) in + i));
+        vals = _mm_add_epi64(vals, ones128);
+        _mm_storeu_si128((__m128i *) (void *) ((GibInt *) out + i), vals);
+    }
+
+    for (; i < count; i++) {
+        ((GibInt *) out)[i] = ((const GibInt *) in)[i] + 1;
+    }
+#else
     uint64_t i = 0;
     __m128i ones = _mm_set1_epi64x(1);
 
@@ -341,6 +482,7 @@ manual_add1_int_chunk_sse2(GibCursor in, GibCursor out, uint64_t count)
     for (; i < count; i++) {
         ((GibInt *) out)[i] = ((const GibInt *) in)[i] + 1;
     }
+#endif
 }
 
 static void manual_add1_int_chunk_mode(GibCursor in,
@@ -384,7 +526,8 @@ static void manual_add1_scalar_field_chunks(GibCursor input_end,
                                             GibCursor *output_end,
                                             GibCursor input_cursor,
                                             GibCursor *output_cursor,
-                                            ManualAddMode mode)
+                                            ManualAddMode mode,
+                                            ManualLoopTiming *int_loop_timing)
 {
     GibCursor out_data_cursor = *output_cursor + sizeof(GibPackedTag) + sizeof(GibTaggedPtr);
     char *next_count_footer = gib_scalar_count_first_footer(input_end);
@@ -393,7 +536,11 @@ static void manual_add1_scalar_field_chunks(GibCursor input_end,
     manual_write_indirection_header(*output_cursor, out_data_cursor, *output_end);
 
     while (true) {
+        double int_loop_start = manual_now_seconds();
         manual_add1_int_chunk_mode(input_cursor, out_data_cursor, count, mode);
+        manual_loop_timing_record(int_loop_timing,
+                                  manual_now_seconds() - int_loop_start,
+                                  count);
         input_cursor += count * sizeof(GibInt);
         out_data_cursor += count * sizeof(GibInt);
 
@@ -414,7 +561,8 @@ static unsigned char manual_indirect_add1MultiList(GibCursor cursor_ptr_1685[6],
                                                    GibCursor cursor_ptr_1684[6],
                                                    GibCursor cursor_ptr_1686[6],
                                                    GibCursor xs_29_147_224[6],
-                                                   ManualAddMode mode)
+                                                   ManualAddMode mode,
+                                                   ManualLoopTiming int_loop_timings[MANUAL_MULTI_INT_FIELDS])
 {
     manual_write_indirection_header(cursor_ptr_1686[0],
                                     xs_29_147_224[0],
@@ -425,22 +573,26 @@ static unsigned char manual_indirect_add1MultiList(GibCursor cursor_ptr_1685[6],
                                     &cursor_ptr_1684[1],
                                     xs_29_147_224[1],
                                     &cursor_ptr_1686[1],
-                                    mode);
+                                    mode,
+                                    &int_loop_timings[0]);
     manual_add1_scalar_field_chunks(cursor_ptr_1685[2],
                                     &cursor_ptr_1684[2],
                                     xs_29_147_224[2],
                                     &cursor_ptr_1686[2],
-                                    mode);
+                                    mode,
+                                    &int_loop_timings[1]);
     manual_add1_scalar_field_chunks(cursor_ptr_1685[3],
                                     &cursor_ptr_1684[3],
                                     xs_29_147_224[3],
                                     &cursor_ptr_1686[3],
-                                    mode);
+                                    mode,
+                                    &int_loop_timings[2]);
     manual_add1_scalar_field_chunks(cursor_ptr_1685[4],
                                     &cursor_ptr_1684[4],
                                     xs_29_147_224[4],
                                     &cursor_ptr_1686[4],
-                                    mode);
+                                    mode,
+                                    &int_loop_timings[3]);
 
     manual_write_indirection_header(cursor_ptr_1686[5],
                                     xs_29_147_224[5],
@@ -530,10 +682,26 @@ static unsigned char manual_copy_scalar_add1MultiList(GibCursor cursor_ptr_1685[
         in_dcon += count;
         out_dcon += count;
 
+        double int0_loop_start = manual_now_seconds();
         manual_add1_int_chunk_scalar(in_int0, out_int0, count);
+        manual_loop_timing_record(&loop_scalar_hot_loop_timings[0],
+                                  manual_now_seconds() - int0_loop_start,
+                                  count);
+        double int1_loop_start = manual_now_seconds();
         manual_add1_int_chunk_scalar(in_int1, out_int1, count);
+        manual_loop_timing_record(&loop_scalar_hot_loop_timings[1],
+                                  manual_now_seconds() - int1_loop_start,
+                                  count);
+        double int2_loop_start = manual_now_seconds();
         manual_add1_int_chunk_scalar(in_int2, out_int2, count);
+        manual_loop_timing_record(&loop_scalar_hot_loop_timings[2],
+                                  manual_now_seconds() - int2_loop_start,
+                                  count);
+        double int3_loop_start = manual_now_seconds();
         manual_add1_int_chunk_scalar(in_int3, out_int3, count);
+        manual_loop_timing_record(&loop_scalar_hot_loop_timings[3],
+                                  manual_now_seconds() - int3_loop_start,
+                                  count);
         in_int0 += int_bytes;
         in_int1 += int_bytes;
         in_int2 += int_bytes;
@@ -614,7 +782,8 @@ unsigned char manual_indir_scalar_add1MultiList(GibCursor cursor_ptr_1685[6],
 {
     return manual_indirect_add1MultiList(cursor_ptr_1685, cursor_ptr_1684,
                                          cursor_ptr_1686, xs_29_147_224,
-                                         MANUAL_ADD_SCALAR);
+                                         MANUAL_ADD_SCALAR,
+                                         indir_loop_scalar_hot_loop_timings);
 }
 
 unsigned char manual_indir_auto_add1MultiList(GibCursor cursor_ptr_1685[6],
@@ -624,7 +793,8 @@ unsigned char manual_indir_auto_add1MultiList(GibCursor cursor_ptr_1685[6],
 {
     return manual_indirect_add1MultiList(cursor_ptr_1685, cursor_ptr_1684,
                                          cursor_ptr_1686, xs_29_147_224,
-                                         MANUAL_ADD_AUTO);
+                                         MANUAL_ADD_AUTO,
+                                         indir_loop_auto_hot_loop_timings);
 }
 
 unsigned char manual_vectorized_add1MultiList(GibCursor cursor_ptr_1685[6],
@@ -634,7 +804,8 @@ unsigned char manual_vectorized_add1MultiList(GibCursor cursor_ptr_1685[6],
 {
     return manual_indirect_add1MultiList(cursor_ptr_1685, cursor_ptr_1684,
                                          cursor_ptr_1686, xs_29_147_224,
-                                         MANUAL_ADD_SSE2);
+                                         MANUAL_ADD_SSE2,
+                                         indir_loop_vectorized_hot_loop_timings);
 }
 
 typedef unsigned char (*ManualMultiAdd1Fn)(GibCursor end_in[6],
@@ -3337,6 +3508,8 @@ int main(int argc, char **argv)
                                    add1_iters,
                                    recursive_reg_ptr,
                                    recursive_reg_end);
+    manual_loop_timing_reset_many(loop_scalar_hot_loop_timings,
+                                  MANUAL_MULTI_INT_FIELDS);
     double loop_scalar_add1_seconds =
         manual_time_add1_multilist(manual_copy_scalar_add1MultiList,
                                    reg_cursor_ptr_2643,
@@ -3344,6 +3517,8 @@ int main(int argc, char **argv)
                                    add1_iters,
                                    loop_scalar_reg_ptr,
                                    loop_scalar_reg_end);
+    manual_loop_timing_reset_many(indir_loop_scalar_hot_loop_timings,
+                                  MANUAL_MULTI_INT_FIELDS);
     double indir_loop_scalar_add1_seconds =
         manual_time_add1_multilist(manual_indir_scalar_add1MultiList,
                                    reg_cursor_ptr_2643,
@@ -3351,6 +3526,8 @@ int main(int argc, char **argv)
                                    add1_iters,
                                    indir_loop_scalar_reg_ptr,
                                    indir_loop_scalar_reg_end);
+    manual_loop_timing_reset_many(indir_loop_auto_hot_loop_timings,
+                                  MANUAL_MULTI_INT_FIELDS);
     double indir_auto_add1_seconds =
         manual_time_add1_multilist(manual_indir_auto_add1MultiList,
                                    reg_cursor_ptr_2643,
@@ -3358,6 +3535,8 @@ int main(int argc, char **argv)
                                    add1_iters,
                                    indir_auto_reg_ptr,
                                    indir_auto_reg_end);
+    manual_loop_timing_reset_many(indir_loop_vectorized_hot_loop_timings,
+                                  MANUAL_MULTI_INT_FIELDS);
     double indir_vector_add1_seconds =
         manual_time_add1_multilist(manual_vectorized_add1MultiList,
                                    reg_cursor_ptr_2643,
@@ -3404,6 +3583,104 @@ int main(int argc, char **argv)
         indir_vector_add1_seconds > 0.0
             ? indir_loop_scalar_add1_seconds / indir_vector_add1_seconds
             : 0.0;
+    double hot_loop_measurement_overhead_seconds =
+        manual_measure_empty_timing_overhead(20000);
+    double loop_scalar_hot_loop_total_raw_seconds =
+        manual_loop_timing_total_seconds(loop_scalar_hot_loop_timings,
+                                         MANUAL_MULTI_INT_FIELDS);
+    double indir_loop_scalar_hot_loop_total_raw_seconds =
+        manual_loop_timing_total_seconds(indir_loop_scalar_hot_loop_timings,
+                                         MANUAL_MULTI_INT_FIELDS);
+    double indir_auto_hot_loop_total_raw_seconds =
+        manual_loop_timing_total_seconds(indir_loop_auto_hot_loop_timings,
+                                         MANUAL_MULTI_INT_FIELDS);
+    double indir_vectorized_hot_loop_total_raw_seconds =
+        manual_loop_timing_total_seconds(indir_loop_vectorized_hot_loop_timings,
+                                         MANUAL_MULTI_INT_FIELDS);
+    uint64_t loop_scalar_hot_loop_total_calls =
+        manual_loop_timing_total_calls(loop_scalar_hot_loop_timings,
+                                       MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_loop_scalar_hot_loop_total_calls =
+        manual_loop_timing_total_calls(indir_loop_scalar_hot_loop_timings,
+                                       MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_auto_hot_loop_total_calls =
+        manual_loop_timing_total_calls(indir_loop_auto_hot_loop_timings,
+                                       MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_vectorized_hot_loop_total_calls =
+        manual_loop_timing_total_calls(indir_loop_vectorized_hot_loop_timings,
+                                       MANUAL_MULTI_INT_FIELDS);
+    uint64_t loop_scalar_hot_loop_total_elements =
+        manual_loop_timing_total_elements(loop_scalar_hot_loop_timings,
+                                          MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_loop_scalar_hot_loop_total_elements =
+        manual_loop_timing_total_elements(indir_loop_scalar_hot_loop_timings,
+                                          MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_auto_hot_loop_total_elements =
+        manual_loop_timing_total_elements(indir_loop_auto_hot_loop_timings,
+                                          MANUAL_MULTI_INT_FIELDS);
+    uint64_t indir_vectorized_hot_loop_total_elements =
+        manual_loop_timing_total_elements(indir_loop_vectorized_hot_loop_timings,
+                                          MANUAL_MULTI_INT_FIELDS);
+    double loop_scalar_hot_loop_total_seconds =
+        loop_scalar_hot_loop_total_raw_seconds -
+        ((double) loop_scalar_hot_loop_total_calls *
+         hot_loop_measurement_overhead_seconds);
+    double indir_loop_scalar_hot_loop_total_seconds =
+        indir_loop_scalar_hot_loop_total_raw_seconds -
+        ((double) indir_loop_scalar_hot_loop_total_calls *
+         hot_loop_measurement_overhead_seconds);
+    double indir_auto_hot_loop_total_seconds =
+        indir_auto_hot_loop_total_raw_seconds -
+        ((double) indir_auto_hot_loop_total_calls *
+         hot_loop_measurement_overhead_seconds);
+    double indir_vectorized_hot_loop_total_seconds =
+        indir_vectorized_hot_loop_total_raw_seconds -
+        ((double) indir_vectorized_hot_loop_total_calls *
+         hot_loop_measurement_overhead_seconds);
+
+    if (loop_scalar_hot_loop_total_seconds < 0.0) {
+        loop_scalar_hot_loop_total_seconds = 0.0;
+    }
+    if (indir_loop_scalar_hot_loop_total_seconds < 0.0) {
+        indir_loop_scalar_hot_loop_total_seconds = 0.0;
+    }
+    if (indir_auto_hot_loop_total_seconds < 0.0) {
+        indir_auto_hot_loop_total_seconds = 0.0;
+    }
+    if (indir_vectorized_hot_loop_total_seconds < 0.0) {
+        indir_vectorized_hot_loop_total_seconds = 0.0;
+    }
+
+    ManualLoopTiming loop_scalar_hot_loop_total = {
+        loop_scalar_hot_loop_total_seconds,
+        loop_scalar_hot_loop_total_calls,
+        loop_scalar_hot_loop_total_elements,
+    };
+    ManualLoopTiming indir_loop_scalar_hot_loop_total = {
+        indir_loop_scalar_hot_loop_total_seconds,
+        indir_loop_scalar_hot_loop_total_calls,
+        indir_loop_scalar_hot_loop_total_elements,
+    };
+    ManualLoopTiming indir_auto_hot_loop_total = {
+        indir_auto_hot_loop_total_seconds,
+        indir_auto_hot_loop_total_calls,
+        indir_auto_hot_loop_total_elements,
+    };
+    ManualLoopTiming indir_vectorized_hot_loop_total = {
+        indir_vectorized_hot_loop_total_seconds,
+        indir_vectorized_hot_loop_total_calls,
+        indir_vectorized_hot_loop_total_elements,
+    };
+    double indir_auto_hot_loop_over_indir_loop_scalar =
+        indir_auto_hot_loop_total_seconds > 0.0
+            ? indir_loop_scalar_hot_loop_total_seconds /
+                  indir_auto_hot_loop_total_seconds
+            : 0.0;
+    double indir_vectorized_hot_loop_over_indir_loop_scalar =
+        indir_vectorized_hot_loop_total_seconds > 0.0
+            ? indir_loop_scalar_hot_loop_total_seconds /
+                  indir_vectorized_hot_loop_total_seconds
+            : 0.0;
 
     printf("program=multi-list\n");
     printf("multi_add1_len=%d\n", SCALAR_COUNT_MULTI_LIST_LEN);
@@ -3414,14 +3691,56 @@ int main(int argc, char **argv)
     printf("indir_loop_scalar_sum=%ld\n", indir_loop_scalar_sum);
     printf("indir_loop_auto_sum=%ld\n", indir_auto_sum);
     printf("indir_loop_vectorized_sum=%ld\n", indir_vector_sum);
+    printf("hot_loop_measurement_overhead_seconds=%.12f\n",
+           hot_loop_measurement_overhead_seconds);
     printf("recursive_add1_seconds=%.9f\n", scalar_add1_seconds);
     printf("loop_scalar_add1_seconds=%.9f\n", loop_scalar_add1_seconds);
+    printf("loop_scalar_hot_loop_total_raw_seconds=%.9f\n",
+           loop_scalar_hot_loop_total_raw_seconds);
+    printf("loop_scalar_hot_loop_total_seconds=%.9f\n",
+           loop_scalar_hot_loop_total_seconds);
+    printf("loop_scalar_hot_loop_total_calls=%" PRIu64 "\n",
+           loop_scalar_hot_loop_total_calls);
+    printf("loop_scalar_hot_loop_total_elements=%" PRIu64 "\n",
+           loop_scalar_hot_loop_total_elements);
+    printf("loop_scalar_hot_loop_total_ns_per_element=%.3f\n",
+           manual_loop_timing_ns_per_elem(&loop_scalar_hot_loop_total));
     printf("indir_loop_scalar_add1_seconds=%.9f\n",
            indir_loop_scalar_add1_seconds);
+    printf("indir_loop_scalar_hot_loop_total_raw_seconds=%.9f\n",
+           indir_loop_scalar_hot_loop_total_raw_seconds);
+    printf("indir_loop_scalar_hot_loop_total_seconds=%.9f\n",
+           indir_loop_scalar_hot_loop_total_seconds);
+    printf("indir_loop_scalar_hot_loop_total_calls=%" PRIu64 "\n",
+           indir_loop_scalar_hot_loop_total_calls);
+    printf("indir_loop_scalar_hot_loop_total_elements=%" PRIu64 "\n",
+           indir_loop_scalar_hot_loop_total_elements);
+    printf("indir_loop_scalar_hot_loop_total_ns_per_element=%.3f\n",
+           manual_loop_timing_ns_per_elem(&indir_loop_scalar_hot_loop_total));
     printf("indir_loop_auto_add1_seconds=%.9f\n",
            indir_auto_add1_seconds);
+    printf("indir_loop_auto_hot_loop_total_raw_seconds=%.9f\n",
+           indir_auto_hot_loop_total_raw_seconds);
+    printf("indir_loop_auto_hot_loop_total_seconds=%.9f\n",
+           indir_auto_hot_loop_total_seconds);
+    printf("indir_loop_auto_hot_loop_total_calls=%" PRIu64 "\n",
+           indir_auto_hot_loop_total_calls);
+    printf("indir_loop_auto_hot_loop_total_elements=%" PRIu64 "\n",
+           indir_auto_hot_loop_total_elements);
+    printf("indir_loop_auto_hot_loop_total_ns_per_element=%.3f\n",
+           manual_loop_timing_ns_per_elem(&indir_auto_hot_loop_total));
     printf("indir_loop_vectorized_add1_seconds=%.9f\n",
            indir_vector_add1_seconds);
+    printf("indir_loop_vectorized_hot_loop_total_raw_seconds=%.9f\n",
+           indir_vectorized_hot_loop_total_raw_seconds);
+    printf("indir_loop_vectorized_hot_loop_total_seconds=%.9f\n",
+           indir_vectorized_hot_loop_total_seconds);
+    printf("indir_loop_vectorized_hot_loop_total_calls=%" PRIu64 "\n",
+           indir_vectorized_hot_loop_total_calls);
+    printf("indir_loop_vectorized_hot_loop_total_elements=%" PRIu64 "\n",
+           indir_vectorized_hot_loop_total_elements);
+    printf("indir_loop_vectorized_hot_loop_total_ns_per_element=%.3f\n",
+           manual_loop_timing_ns_per_elem(&indir_vectorized_hot_loop_total));
     printf("speedup_loop_scalar_over_recursive=%.3fx\n",
            loop_scalar_over_recursive);
     printf("speedup_indir_loop_scalar_over_recursive=%.3fx\n",
@@ -3430,10 +3749,84 @@ int main(int argc, char **argv)
            indir_auto_over_recursive);
     printf("speedup_indir_loop_auto_over_indir_loop_scalar=%.3fx\n",
            indir_auto_over_indir_loop_scalar);
+    printf("speedup_indir_loop_auto_hot_loop_over_indir_loop_scalar=%.3fx\n",
+           indir_auto_hot_loop_over_indir_loop_scalar);
     printf("speedup_indir_loop_vectorized_over_recursive=%.3fx\n",
            indir_vectorized_over_recursive);
     printf("speedup_indir_loop_vectorized_over_indir_loop_scalar=%.3fx\n",
            indir_vectorized_over_indir_loop_scalar);
+    printf("speedup_indir_loop_vectorized_hot_loop_over_indir_loop_scalar=%.3fx\n",
+           indir_vectorized_hot_loop_over_indir_loop_scalar);
+    for (int field_ix = 0; field_ix < MANUAL_MULTI_INT_FIELDS; field_ix++) {
+        double loop_scalar_field_seconds =
+            manual_loop_timing_adjusted_seconds(
+                &loop_scalar_hot_loop_timings[field_ix],
+                hot_loop_measurement_overhead_seconds);
+        double indir_loop_scalar_field_seconds =
+            manual_loop_timing_adjusted_seconds(
+                &indir_loop_scalar_hot_loop_timings[field_ix],
+                hot_loop_measurement_overhead_seconds);
+        double indir_loop_auto_field_seconds =
+            manual_loop_timing_adjusted_seconds(
+                &indir_loop_auto_hot_loop_timings[field_ix],
+                hot_loop_measurement_overhead_seconds);
+        double indir_loop_vectorized_field_seconds =
+            manual_loop_timing_adjusted_seconds(
+                &indir_loop_vectorized_hot_loop_timings[field_ix],
+                hot_loop_measurement_overhead_seconds);
+        printf("loop_scalar_hot_loop_field%d_raw_seconds=%.9f\n",
+               field_ix, loop_scalar_hot_loop_timings[field_ix].seconds);
+        printf("loop_scalar_hot_loop_field%d_seconds=%.9f\n",
+               field_ix, loop_scalar_field_seconds);
+        printf("loop_scalar_hot_loop_field%d_calls=%" PRIu64 "\n",
+               field_ix, loop_scalar_hot_loop_timings[field_ix].calls);
+        printf("loop_scalar_hot_loop_field%d_elements=%" PRIu64 "\n",
+               field_ix, loop_scalar_hot_loop_timings[field_ix].elements);
+        printf("loop_scalar_hot_loop_field%d_ns_per_element=%.3f\n",
+               field_ix,
+               manual_loop_timing_ns_per_elem_for_seconds(
+                   &loop_scalar_hot_loop_timings[field_ix],
+                   loop_scalar_field_seconds));
+        printf("indir_loop_scalar_hot_loop_field%d_raw_seconds=%.9f\n",
+               field_ix, indir_loop_scalar_hot_loop_timings[field_ix].seconds);
+        printf("indir_loop_scalar_hot_loop_field%d_seconds=%.9f\n",
+               field_ix, indir_loop_scalar_field_seconds);
+        printf("indir_loop_scalar_hot_loop_field%d_calls=%" PRIu64 "\n",
+               field_ix, indir_loop_scalar_hot_loop_timings[field_ix].calls);
+        printf("indir_loop_scalar_hot_loop_field%d_elements=%" PRIu64 "\n",
+               field_ix, indir_loop_scalar_hot_loop_timings[field_ix].elements);
+        printf("indir_loop_scalar_hot_loop_field%d_ns_per_element=%.3f\n",
+               field_ix,
+               manual_loop_timing_ns_per_elem_for_seconds(
+                   &indir_loop_scalar_hot_loop_timings[field_ix],
+                   indir_loop_scalar_field_seconds));
+        printf("indir_loop_auto_hot_loop_field%d_raw_seconds=%.9f\n",
+               field_ix, indir_loop_auto_hot_loop_timings[field_ix].seconds);
+        printf("indir_loop_auto_hot_loop_field%d_seconds=%.9f\n",
+               field_ix, indir_loop_auto_field_seconds);
+        printf("indir_loop_auto_hot_loop_field%d_calls=%" PRIu64 "\n",
+               field_ix, indir_loop_auto_hot_loop_timings[field_ix].calls);
+        printf("indir_loop_auto_hot_loop_field%d_elements=%" PRIu64 "\n",
+               field_ix, indir_loop_auto_hot_loop_timings[field_ix].elements);
+        printf("indir_loop_auto_hot_loop_field%d_ns_per_element=%.3f\n",
+               field_ix,
+               manual_loop_timing_ns_per_elem_for_seconds(
+                   &indir_loop_auto_hot_loop_timings[field_ix],
+                   indir_loop_auto_field_seconds));
+        printf("indir_loop_vectorized_hot_loop_field%d_raw_seconds=%.9f\n",
+               field_ix, indir_loop_vectorized_hot_loop_timings[field_ix].seconds);
+        printf("indir_loop_vectorized_hot_loop_field%d_seconds=%.9f\n",
+               field_ix, indir_loop_vectorized_field_seconds);
+        printf("indir_loop_vectorized_hot_loop_field%d_calls=%" PRIu64 "\n",
+               field_ix, indir_loop_vectorized_hot_loop_timings[field_ix].calls);
+        printf("indir_loop_vectorized_hot_loop_field%d_elements=%" PRIu64 "\n",
+               field_ix, indir_loop_vectorized_hot_loop_timings[field_ix].elements);
+        printf("indir_loop_vectorized_hot_loop_field%d_ns_per_element=%.3f\n",
+               field_ix,
+               manual_loop_timing_ns_per_elem_for_seconds(
+                   &indir_loop_vectorized_hot_loop_timings[field_ix],
+                   indir_loop_vectorized_field_seconds));
+    }
     printf("sums_match=%s\n",
            scalar_sum == expected_sum &&
            loop_scalar_sum == expected_sum &&

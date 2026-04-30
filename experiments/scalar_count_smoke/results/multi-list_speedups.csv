@@ -1,0 +1,3 @@
+list_len,recursive_seconds,loop_scalar_copy_seconds,indir_loop_scalar_seconds,indir_loop_auto_seconds,indir_loop_explicit_vector_seconds,loop_scalar_copy_speedup_vs_recursive,indir_loop_scalar_speedup_vs_recursive,indir_loop_auto_speedup_vs_recursive,indir_loop_explicit_vector_speedup_vs_recursive
+1000,0.000071301,0.000035711,0.000030788,0.000030488,0.000027116,1.996570,2.315816,2.338603,2.629462
+2000,0.000129321,0.000068878,0.000050786,0.000057043,0.000051761,1.877558,2.546401,2.267088,2.498459

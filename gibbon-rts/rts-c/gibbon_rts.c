@@ -1506,9 +1506,7 @@ void gib_scalar_count_footer_begin(void)
 
 void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr)
 {
-    GibScalarCountDebugState *debug_state = &gib_global_scalar_count_debug_state;
-
-    if (debug_state->depth == 0 || old_footer_ptr == NULL || new_footer_ptr == NULL) {
+    if (old_footer_ptr == NULL || new_footer_ptr == NULL) {
         return;
     }
 
@@ -1534,12 +1532,6 @@ void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr)
 
 void gib_scalar_count_footer_bump(char *footer_ptr)
 {
-    GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;
-
-    if (state->depth == 0) {
-        return;
-    }
-
     if (footer_ptr == NULL) {
         return;
     }

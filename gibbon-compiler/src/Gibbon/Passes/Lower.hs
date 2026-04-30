@@ -389,9 +389,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
           storeScalarCounts =
             gopt Opt_StoreScalarFieldCounts dflags &&
             StoreScalarCounts `elem` funOpt funMeta
+          debugScalarCounts = storeScalarCounts && gopt Opt_RtsDebug dflags
       bod' <- tail (not (hasCursorTy outty)) sym_tbl bod
       let bod'' =
-            if storeScalarCounts
+            if debugScalarCounts
             then T.LetPrimCallT [] T.ScalarCountFooterBegin [] $
                    endScalarCountFooter funName bod'
             else bod'

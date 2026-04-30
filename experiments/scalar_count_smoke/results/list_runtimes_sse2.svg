@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:13px} .axis{font-size:14px} .title{font-size:24px;font-weight:700}</style>
+<text x="92" y="34" class="title">ScalarCountSmoke add1List Runtimes by Input Size (SSE2)</text>
+<rect x="92" y="58" width="738" height="618" fill="#fbfbfd" stroke="#c7c7cc"/>
+<line x1="92" y1="676.0" x2="830" y2="676.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="680.0" text-anchor="end" class="small">0.00 ms</text>
+<line x1="92" y1="367.0" x2="830" y2="367.0" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="371.0" text-anchor="end" class="small">0.50 ms</text>
+<line x1="92" y1="58.0" x2="830" y2="58.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="62.0" text-anchor="end" class="small">1.00 ms</text>
+<line x1="112.9" y1="58" x2="112.9" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="112.9" y="700.0" text-anchor="middle" class="small">1k</text>
+<line x1="252.1" y1="58" x2="252.1" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="252.1" y="700.0" text-anchor="middle" class="small">1.2k</text>
+<line x1="391.4" y1="58" x2="391.4" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="391.4" y="700.0" text-anchor="middle" class="small">1.4k</text>
+<line x1="530.6" y1="58" x2="530.6" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="530.6" y="700.0" text-anchor="middle" class="small">1.6k</text>
+<line x1="669.9" y1="58" x2="669.9" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="669.9" y="700.0" text-anchor="middle" class="small">1.8k</text>
+<line x1="809.1" y1="58" x2="809.1" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="809.1" y="700.0" text-anchor="middle" class="small">2k</text>
+<text x="461.0" y="738" text-anchor="middle" class="axis">Input size (linear scale)</text>
+<text x="26" y="367.0" text-anchor="middle" class="axis" transform="rotate(-90 26 367.0)">Avg runtime (ms)</text>
+<polyline points="112.9,656.6 809.1,656.0" fill="none" stroke="#7f7f7f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="656.6" r="4" fill="#7f7f7f" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="656.0" r="4" fill="#7f7f7f" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,656.3 809.1,660.0" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="656.3" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="660.0" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,660.3 809.1,665.6" fill="none" stroke="#2ca02c" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="660.3" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="665.6" r="4" fill="#2ca02c" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,666.5 809.1,668.3" fill="none" stroke="#9467bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="666.5" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="668.3" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,665.8 809.1,668.2" fill="none" stroke="#d62728" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="665.8" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="668.2" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<line x1="864" y1="76" x2="896" y2="76" stroke="#7f7f7f" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="81" class="small">Recursive add1</text>
+<line x1="864" y1="110" x2="896" y2="110" stroke="#1f77b4" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="115" class="small">Loopified add1, copy dead buffers, vectorization off</text>
+<line x1="864" y1="144" x2="896" y2="144" stroke="#2ca02c" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="149" class="small">Loopified add1, dead-buffer indirections, vectorization off</text>
+<line x1="864" y1="178" x2="896" y2="178" stroke="#9467bd" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="183" class="small">Loopified add1, dead-buffer indirections, auto-vectorized</text>
+<line x1="864" y1="212" x2="896" y2="212" stroke="#d62728" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="217" class="small">Loopified add1, dead-buffer indirections, manual SSE2 vectorized</text>
+<text x="864" y="620" class="small">Points: 2</text>
+<text x="864" y="642" class="small">Max input: 2k</text>
+<text x="864" y="664" class="small">Build: SSE2 manual SIMD</text>
+<text x="864" y="686" class="small">X scale: linear</text>
+<text x="864" y="708" class="small">Chunk size: executable default</text>
+</svg>

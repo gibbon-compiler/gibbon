@@ -1,0 +1,3 @@
+list_len,indir_loop_scalar_hot_loop_total_seconds,indir_loop_auto_hot_loop_total_seconds,indir_loop_auto_hot_loop_total_seconds_speedup_vs_scalar,indir_loop_scalar_hot_loop_total_seconds,indir_loop_vectorized_hot_loop_total_seconds,indir_loop_vectorized_hot_loop_total_seconds_speedup_vs_scalar
+1000,0.000011949,0.000007852,1.521938,0.000011949,0.000015252,0.783471
+2000,0.000046748,0.000046277,1.010178,0.000046748,0.000046992,0.994808
