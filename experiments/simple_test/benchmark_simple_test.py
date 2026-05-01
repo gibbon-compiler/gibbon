@@ -46,10 +46,10 @@ class SweepRow:
     avx2_supported: bool
 
     def speedup_vs_scalar(self, key: str) -> float:
-        return self.averages["scalar"] / self.averages[key]
+        return safe_ratio(self.averages["scalar"], self.averages[key])
 
     def hot_loop_speedup_vs_scalar(self, key: str) -> float:
-        return self.hot_loop_averages["scalar"] / self.hot_loop_averages[key]
+        return safe_ratio(self.hot_loop_averages["scalar"], self.hot_loop_averages[key])
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,16 @@ PROGRAMS = {
         result_prefix="simple3",
     ),
 }
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    if (
+        numerator != numerator or
+        denominator != denominator or
+        denominator <= 0.0
+    ):
+        return float("nan")
+    return numerator / denominator
 
 
 def run_command(cmd: list[str], *, cwd: Path, verbose: bool = False) -> subprocess.CompletedProcess[str]:
@@ -224,11 +234,21 @@ def run_benchmark(args: argparse.Namespace, exe_path: Path, list_len: int) -> di
 
 
 def fmt_seconds(value: float) -> str:
+    if value != value:
+        return "n/a"
     return f"{value:.9f}"
 
 
 def fmt_speedup(value: float) -> str:
+    if value != value:
+        return "n/a"
     return f"{value:.3f}x"
+
+
+def fmt_speedup_csv(value: float) -> str:
+    if value != value:
+        return ""
+    return f"{value:.6f}"
 
 
 def markdown_table(headers: list[str], rows: list[list[str]]) -> str:
@@ -568,9 +588,9 @@ def write_speedup_csv(rows: list[SweepRow], path: Path) -> None:
         for row in rows:
             writer.writerow([
                 row.list_len,
-                f"{row.speedup_vs_scalar('auto'):.6f}",
-                f"{row.speedup_vs_scalar('sse2'):.6f}",
-                f"{row.speedup_vs_scalar('avx2'):.6f}" if row.avx2_supported else "",
+                fmt_speedup_csv(row.speedup_vs_scalar("auto")),
+                fmt_speedup_csv(row.speedup_vs_scalar("sse2")),
+                fmt_speedup_csv(row.speedup_vs_scalar("avx2")) if row.avx2_supported else "",
             ])
 
 
@@ -582,9 +602,9 @@ def write_hot_loop_speedup_csv(rows: list[SweepRow], path: Path) -> None:
         for row in rows:
             writer.writerow([
                 row.list_len,
-                f"{row.hot_loop_speedup_vs_scalar('auto'):.6f}",
-                f"{row.hot_loop_speedup_vs_scalar('sse2'):.6f}",
-                f"{row.hot_loop_speedup_vs_scalar('avx2'):.6f}" if row.avx2_supported else "",
+                fmt_speedup_csv(row.hot_loop_speedup_vs_scalar("auto")),
+                fmt_speedup_csv(row.hot_loop_speedup_vs_scalar("sse2")),
+                fmt_speedup_csv(row.hot_loop_speedup_vs_scalar("avx2")) if row.avx2_supported else "",
             ])
 
 
@@ -675,7 +695,7 @@ def print_report(parsed: dict[str, object], program: ProgramConfig) -> None:
         if key == "avx2" and not avx2_supported:
             continue
         seconds = float(parsed[output_key])
-        rows.append([label, fmt_seconds(seconds), fmt_speedup(scalar / seconds)])
+        rows.append([label, fmt_seconds(seconds), fmt_speedup(safe_ratio(scalar, seconds))])
     print(markdown_table(["Variant", "Median seconds", "Speedup vs scalar"], rows))
     print()
 
@@ -690,7 +710,7 @@ def print_report(parsed: dict[str, object], program: ProgramConfig) -> None:
             f"{float(parsed[f'{key}_hot_loop_ns_per_element']):.3f}",
             f"{int(round(float(parsed[f'{key}_hot_loop_calls'])))}",
             f"{int(round(float(parsed[f'{key}_hot_loop_elements'])))}",
-            fmt_speedup(scalar_hot / float(parsed[output_key])),
+            fmt_speedup(safe_ratio(scalar_hot, float(parsed[output_key]))),
         ])
     print(markdown_table(
         ["Hot loop", "Median seconds", "Ns/elem", "Calls/run", "Elems/run", "Speedup vs scalar"],
@@ -733,17 +753,17 @@ def run_sweep(args: argparse.Namespace, exe_path: Path, sizes: list[int]) -> lis
 
         msg = (
             f"size={size} scalar={row.averages['scalar']:.9f}s "
-            f"auto={row.speedup_vs_scalar('auto'):.3f}x "
-            f"sse2={row.speedup_vs_scalar('sse2'):.3f}x"
+            f"auto={fmt_speedup(row.speedup_vs_scalar('auto'))} "
+            f"sse2={fmt_speedup(row.speedup_vs_scalar('sse2'))}"
         )
         if row.avx2_supported:
-            msg += f" avx2={row.speedup_vs_scalar('avx2'):.3f}x"
+            msg += f" avx2={fmt_speedup(row.speedup_vs_scalar('avx2'))}"
         msg += (
-            f" hot-auto={row.hot_loop_speedup_vs_scalar('auto'):.3f}x "
-            f"hot-sse2={row.hot_loop_speedup_vs_scalar('sse2'):.3f}x"
+            f" hot-auto={fmt_speedup(row.hot_loop_speedup_vs_scalar('auto'))} "
+            f"hot-sse2={fmt_speedup(row.hot_loop_speedup_vs_scalar('sse2'))}"
         )
         if row.avx2_supported:
-            msg += f" hot-avx2={row.hot_loop_speedup_vs_scalar('avx2'):.3f}x"
+            msg += f" hot-avx2={fmt_speedup(row.hot_loop_speedup_vs_scalar('avx2'))}"
         print(msg, flush=True)
 
     return sorted(rows, key=lambda row: row.list_len)
