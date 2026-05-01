@@ -462,8 +462,21 @@ def write_series_svg(rows: list[SweepRow],
             min_x_value -= x_pad
             max_x_value += x_pad
 
-    max_series_y = max(max(vals) for _name, _color, vals in series) if series else y_bottom
-    max_reference_y = max((value for _label, value, _color, _dash in reference_lines), default=y_bottom)
+    finite_series = [
+        (name, color, vals)
+        for name, color, vals in series
+        if any(math.isfinite(val) for val in vals)
+    ]
+    finite_references = [
+        (label, value, color, dasharray)
+        for label, value, color, dasharray in reference_lines
+        if math.isfinite(value)
+    ]
+    max_series_y = max(
+        (val for _name, _color, vals in finite_series for val in vals if math.isfinite(val)),
+        default=y_bottom,
+    )
+    max_reference_y = max((value for _label, value, _color, _dash in finite_references), default=y_bottom)
     max_y = max(max_series_y, max_reference_y)
     y_top = max(1.0, math.ceil((max_y + 0.20) * 10) / 10)
 
@@ -497,7 +510,7 @@ def write_series_svg(rows: list[SweepRow],
         )
         y += y_step
 
-    for _label, value, color, dasharray in reference_lines:
+    for _label, value, color, dasharray in finite_references:
         py = yscale(value)
         dash_attr = f' stroke-dasharray="{dasharray}"' if dasharray is not None else ""
         parts.append(
@@ -527,11 +540,26 @@ def write_series_svg(rows: list[SweepRow],
         f'<text x="26" y="{margin_top + plot_h / 2:.1f}" text-anchor="middle" class="axis" transform="rotate(-90 26 {margin_top + plot_h / 2:.1f})">{y_axis_label}</text>'
     )
 
-    for name, color, vals in series:
-        points = [(xscale(row.list_len), yscale(val)) for row, val in zip(rows, vals)]
-        parts.append(svg_polyline(points, color))
+    for name, color, vals in finite_series:
+        points = [
+            (xscale(row.list_len), yscale(val), math.isfinite(val))
+            for row, val in zip(rows, vals)
+        ]
+        segment: list[tuple[float, float]] = []
+        for px, py, is_finite in points:
+            if is_finite:
+                segment.append((px, py))
+                continue
+            if len(segment) >= 2:
+                parts.append(svg_polyline(segment, color))
+            segment = []
+        if len(segment) >= 2:
+            parts.append(svg_polyline(segment, color))
+
         marker_step = max(1, math.ceil(len(points) / 40))
-        for i, (px, py) in enumerate(points):
+        for i, (px, py, is_finite) in enumerate(points):
+            if not is_finite:
+                continue
             if len(points) > 80 and i not in (0, len(points) - 1) and i % marker_step != 0:
                 continue
             parts.append(
@@ -540,15 +568,15 @@ def write_series_svg(rows: list[SweepRow],
 
     legend_x = margin_left + plot_w + 34
     legend_y = margin_top + 18
-    for i, (name, color, _vals) in enumerate(series):
+    for i, (name, color, _vals) in enumerate(finite_series):
         y = legend_y + i * 34
         parts.append(
             f'<line x1="{legend_x}" y1="{y}" x2="{legend_x + 32}" y2="{y}" stroke="{color}" stroke-width="4" stroke-linecap="round"/>'
         )
         parts.append(f'<text x="{legend_x + 44}" y="{y + 5}" class="small">{name}</text>')
 
-    ref_y0 = legend_y + len(series) * 34
-    for i, (label, _value, color, dasharray) in enumerate(reference_lines):
+    ref_y0 = legend_y + len(finite_series) * 34
+    for i, (label, _value, color, dasharray) in enumerate(finite_references):
         y = ref_y0 + i * 34
         dash_attr = f' stroke-dasharray="{dasharray}"' if dasharray is not None else ""
         parts.append(
