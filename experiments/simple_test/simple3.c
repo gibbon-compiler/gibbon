@@ -5,8 +5,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(SIMPLE_INT_WIDTH) && SIMPLE_INT_WIDTH == 32
 typedef int IntTy;
-typedef char *CursorTy;
+#else
+typedef long IntTy;
+#endif
 
 typedef struct config {
     long list_len;
@@ -227,10 +230,8 @@ static NOINLINE NO_TREE_VECTORIZE void add1_scalar_kernel(IntTy *in,
 
 static NOINLINE void add1_auto_kernel(IntTy *in,
                                       size_t length) {
-    CursorTy k1 = (CursorTy) in;
     for (size_t i = 0; i < length; i++) {
-        *((IntTy*) k1) = *((IntTy*) k1) + 1;
-        k1 += sizeof(IntTy);
+        in[i] += 1;
     }
 }
 
@@ -454,6 +455,7 @@ int main(int argc, char **argv) {
 
     printf("list_len=%ld\n", cfg.list_len);
     printf("iterations=%d\n", cfg.iterations);
+    printf("int_size_bits=%zu\n", sizeof(IntTy) * 8);
     printf("expected_sum=%ld\n", expected_sum);
     printf("avx2_supported=%s\n", avx2_supported ? "yes" : "no");
     printf("scalar_seconds=%.9f\n", scalar_result.avg_seconds);

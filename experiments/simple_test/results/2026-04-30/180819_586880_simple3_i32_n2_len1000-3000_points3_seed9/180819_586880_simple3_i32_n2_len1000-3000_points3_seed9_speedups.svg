@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:13px} .axis{font-size:14px} .title{font-size:24px;font-weight:700}</style>
+<text x="92" y="34" class="title">Simple Flat In-Place add1 Speedups by Input Size</text>
+<rect x="92" y="58" width="738" height="618" fill="#fbfbfd" stroke="#c7c7cc"/>
+<line x1="92" y1="676.0" x2="830" y2="676.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="680.0" text-anchor="end" class="small">0.0x</text>
+<line x1="92" y1="547.2" x2="830" y2="547.2" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="551.2" text-anchor="end" class="small">0.5x</text>
+<line x1="92" y1="418.5" x2="830" y2="418.5" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="422.5" text-anchor="end" class="small">1.0x</text>
+<line x1="92" y1="289.8" x2="830" y2="289.8" stroke="#d8d8dd" stroke-width="1"/>
+<text x="80" y="293.8" text-anchor="end" class="small">1.5x</text>
+<line x1="92" y1="161.0" x2="830" y2="161.0" stroke="#b8b8c0" stroke-width="1"/>
+<text x="80" y="165.0" text-anchor="end" class="small">2.0x</text>
+<line x1="92" y1="418.5" x2="830" y2="418.5" stroke="#d62728" stroke-width="2"/>
+<line x1="112.9" y1="58" x2="112.9" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="112.9" y="700.0" text-anchor="middle" class="small">1k</text>
+<line x1="286.9" y1="58" x2="286.9" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="286.9" y="700.0" text-anchor="middle" class="small">1.5k</text>
+<line x1="461.0" y1="58" x2="461.0" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="461.0" y="700.0" text-anchor="middle" class="small">2k</text>
+<line x1="635.1" y1="58" x2="635.1" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="635.1" y="700.0" text-anchor="middle" class="small">2.5k</text>
+<line x1="809.1" y1="58" x2="809.1" y2="676" stroke="#ececf1" stroke-width="1"/>
+<text x="809.1" y="700.0" text-anchor="middle" class="small">3k</text>
+<text x="461.0" y="738" text-anchor="middle" class="axis">Input size (linear scale)</text>
+<text x="26" y="367.0" text-anchor="middle" class="axis" transform="rotate(-90 26 367.0)">Speedup vs scalar</text>
+<polyline points="112.9,184.8 461.0,196.0 809.1,168.3" fill="none" stroke="#9467bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="184.8" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="196.0" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="168.3" r="4" fill="#9467bd" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,171.2 461.0,137.2 809.1,121.7" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="171.2" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="137.2" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="121.7" r="4" fill="#1f77b4" stroke="white" stroke-width="1.5"/>
+<polyline points="112.9,160.2 461.0,163.6 809.1,133.3" fill="none" stroke="#d62728" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="112.9" cy="160.2" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="461.0" cy="163.6" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<circle cx="809.1" cy="133.3" r="4" fill="#d62728" stroke="white" stroke-width="1.5"/>
+<line x1="864" y1="76" x2="896" y2="76" stroke="#9467bd" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="81" class="small">Auto-vectorized / scalar</text>
+<line x1="864" y1="110" x2="896" y2="110" stroke="#1f77b4" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="115" class="small">Manual SSE2 / scalar</text>
+<line x1="864" y1="144" x2="896" y2="144" stroke="#d62728" stroke-width="4" stroke-linecap="round"/>
+<text x="908" y="149" class="small">Manual AVX2 / scalar</text>
+<line x1="864" y1="178" x2="896" y2="178" stroke="#d62728" stroke-width="3" stroke-linecap="round"/>
+<text x="908" y="183" class="small">Baseline 1.0x</text>
+<text x="864" y="642" class="small">Points: 3</text>
+<text x="864" y="664" class="small">Max input: 3k</text>
+<text x="864" y="686" class="small">Source: simple3.c</text>
+<text x="864" y="708" class="small">Auto build: -O3 -march=native</text>
+</svg>

@@ -1,0 +1,2 @@
+list_len,scalar_seconds,auto_seconds,sse2_seconds,avx2_seconds
+1000,0.000003408,0.000001816,0.000001944,0.000001752

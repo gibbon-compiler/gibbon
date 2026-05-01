@@ -6,7 +6,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(SIMPLE_INT_WIDTH) && SIMPLE_INT_WIDTH == 32
+typedef int IntType;
+#else
 typedef long IntType;
+#endif
 
 typedef struct footer {
     IntType length;
@@ -35,7 +39,7 @@ typedef struct benchmark_result {
     double hot_loop_ns_per_element;
     double hot_loop_calls;
     double hot_loop_elements;
-    IntType sum;
+    long sum;
     bool ok;
     bool enabled;
 } BenchmarkResult;
@@ -69,12 +73,12 @@ typedef struct variant_spec {
 static void parse_args(int argc, char **argv, Config *cfg);
 static void print_usage(const char *progname);
 static double now_seconds(void);
-static IntType expected_sum_after_add1(IntType list_len);
+static long expected_sum_after_add1(IntType list_len);
 static size_t chunk_payload_bytes(size_t elem_count);
 static Prod2 *build_chunked_array(IntType total_list_size);
 static void free_chunked_array(Prod2 *prod);
 static void print_chunked_array(const Prod2 *prod);
-static IntType sum_chunked_array(const Prod2 *prod);
+static long sum_chunked_array(const Prod2 *prod);
 static Prod2 *map_chunked_array(const Prod2 *prod,
                                 ChunkKernel kernel,
                                 BenchmarkResult *result,
@@ -90,7 +94,7 @@ static TARGET_AVX2 NOINLINE void add1_avx2_kernel(IntType *out, const IntType *i
 static bool run_variant_once(BenchmarkResult *result,
                              Add1Fn fn,
                              const Prod2 *input,
-                             IntType expected_sum,
+                             long expected_sum,
                              bool record_time);
 static void finalize_benchmark_results(BenchmarkResult *results, size_t count, int iterations);
 static double measure_empty_timing_overhead(size_t calls);
@@ -104,8 +108,9 @@ static double now_seconds(void) {
     return (double) ts.tv_sec + ((double) ts.tv_nsec / 1000000000.0);
 }
 
-static IntType expected_sum_after_add1(IntType list_len) {
-    return (list_len * (list_len + 1)) / 2;
+static long expected_sum_after_add1(IntType list_len) {
+    long n = (long) list_len;
+    return (n * (n + 1)) / 2;
 }
 
 static size_t chunk_payload_bytes(size_t elem_count) {
@@ -263,7 +268,7 @@ static void print_chunked_array(const Prod2 *prod) {
     IntType size = prod->end->length;
     while (current_chunk != NULL) {
         for (IntType i = 0; i < size; i++) {
-            printf("%ld ", current_chunk[i]);
+            printf("%ld ", (long) current_chunk[i]);
         }
         printf("--F--");
         const Footer *footer = (const Footer *) (current_chunk + size);
@@ -273,14 +278,14 @@ static void print_chunked_array(const Prod2 *prod) {
     printf("\n");
 }
 
-static IntType sum_chunked_array(const Prod2 *prod) {
+static long sum_chunked_array(const Prod2 *prod) {
     if (prod == NULL || prod->start == NULL) {
         return 0;
     }
 
     const IntType *current_chunk = prod->start;
     IntType size = prod->end->length;
-    IntType sum = 0;
+    long sum = 0;
 
     while (current_chunk != NULL) {
         for (IntType i = 0; i < size; i++) {
@@ -392,12 +397,20 @@ static TARGET_SSE2 NOINLINE void add1_sse2_kernel(IntType *out,
                                                   const IntType *in,
                                                   size_t count) {
     size_t i = 0;
-    const __m128i ones = _mm_set1_epi64x(1);
-
-    for (; i + 1 < count; i += 2) {
-        __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
-        vals = _mm_add_epi64(vals, ones);
-        _mm_storeu_si128((__m128i *) (out + i), vals);
+    if (sizeof(IntType) == sizeof(int)) {
+        const __m128i ones = _mm_set1_epi32(1);
+        for (; i + 3 < count; i += 4) {
+            __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
+            vals = _mm_add_epi32(vals, ones);
+            _mm_storeu_si128((__m128i *) (out + i), vals);
+        }
+    } else {
+        const __m128i ones = _mm_set1_epi64x(1);
+        for (; i + 1 < count; i += 2) {
+            __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
+            vals = _mm_add_epi64(vals, ones);
+            _mm_storeu_si128((__m128i *) (out + i), vals);
+        }
     }
 
     for (; i < count; i++) {
@@ -409,12 +422,20 @@ static TARGET_AVX2 NOINLINE void add1_avx2_kernel(IntType *out,
                                                   const IntType *in,
                                                   size_t count) {
     size_t i = 0;
-    const __m256i ones = _mm256_set1_epi64x(1);
-
-    for (; i + 3 < count; i += 4) {
-        __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
-        vals = _mm256_add_epi64(vals, ones);
-        _mm256_storeu_si256((__m256i *) (out + i), vals);
+    if (sizeof(IntType) == sizeof(int)) {
+        const __m256i ones = _mm256_set1_epi32(1);
+        for (; i + 7 < count; i += 8) {
+            __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
+            vals = _mm256_add_epi32(vals, ones);
+            _mm256_storeu_si256((__m256i *) (out + i), vals);
+        }
+    } else {
+        const __m256i ones = _mm256_set1_epi64x(1);
+        for (; i + 3 < count; i += 4) {
+            __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
+            vals = _mm256_add_epi64(vals, ones);
+            _mm256_storeu_si256((__m256i *) (out + i), vals);
+        }
     }
 
     for (; i < count; i++) {
@@ -437,7 +458,7 @@ static double measure_empty_timing_overhead(size_t calls) {
 static bool run_variant_once(BenchmarkResult *result,
                              Add1Fn fn,
                              const Prod2 *input,
-                             IntType expected_sum,
+                             long expected_sum,
                              bool record_time) {
     double start = 0.0;
     double end = 0.0;
@@ -464,7 +485,7 @@ static bool run_variant_once(BenchmarkResult *result,
         return false;
     }
 
-    IntType sum = sum_chunked_array(out);
+    long sum = sum_chunked_array(out);
     if (sum != expected_sum) {
         result->ok = false;
     }
@@ -521,7 +542,7 @@ int main(int argc, char **argv) {
         free_chunked_array(preview);
     }
 
-    const IntType expected_sum = expected_sum_after_add1(cfg.list_len);
+    const long expected_sum = expected_sum_after_add1(cfg.list_len);
     const bool avx2_supported = __builtin_cpu_supports("avx2");
 
     VariantSpec specs[] = {
@@ -598,8 +619,9 @@ int main(int argc, char **argv) {
         sse2_result.sum == expected_sum &&
         (!avx2_supported || avx2_result.sum == expected_sum);
 
-    printf("list_len=%ld\n", cfg.list_len);
+    printf("list_len=%ld\n", (long) cfg.list_len);
     printf("iterations=%d\n", cfg.iterations);
+    printf("int_size_bits=%zu\n", sizeof(IntType) * 8);
     printf("expected_sum=%ld\n", expected_sum);
     printf("avx2_supported=%s\n", avx2_supported ? "yes" : "no");
     printf("scalar_seconds=%.9f\n", scalar_result.avg_seconds);
@@ -608,11 +630,11 @@ int main(int argc, char **argv) {
     if (avx2_supported) {
         printf("avx2_seconds=%.9f\n", avx2_result.avg_seconds);
     }
-    printf("scalar_sum=%ld\n", scalar_result.sum);
-    printf("auto_sum=%ld\n", auto_result.sum);
-    printf("sse2_sum=%ld\n", sse2_result.sum);
+    printf("scalar_sum=%ld\n", (long) scalar_result.sum);
+    printf("auto_sum=%ld\n", (long) auto_result.sum);
+    printf("sse2_sum=%ld\n", (long) sse2_result.sum);
     if (avx2_supported) {
-        printf("avx2_sum=%ld\n", avx2_result.sum);
+        printf("avx2_sum=%ld\n", (long) avx2_result.sum);
     }
     printf("scalar_hot_loop_measurement_overhead_seconds=%.9f\n",
            scalar_result.hot_loop_measurement_overhead_seconds / (double) cfg.iterations);

@@ -2,7 +2,7 @@
 """Benchmark the manual scalar-count vectorization experiment suite.
 
 This script compiles a saved generated/manual C smoke test, runs it repeatedly,
-parses the timing output, and prints compact tables of averages and speedups.
+parses the timing output, and prints compact tables of medians and speedups.
 The reported variants are the five add1 experiments we care about:
 recursive, loopified with dead-buffer copies and vectorization disabled,
 loopified with dead-buffer indirections and vectorization disabled,
@@ -19,12 +19,14 @@ import argparse
 import csv
 import math
 import os
+import random
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from statistics import mean
+from statistics import median
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -176,6 +178,37 @@ def run_command(cmd: list[str], *, cwd: Path, verbose: bool = False) -> subproce
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+    )
+
+
+def benchmark_cpu_from_args(args: argparse.Namespace) -> int | None:
+    if not args.pin_cpu:
+        return None
+    if args.cpu is not None:
+        return args.cpu
+    if hasattr(os, "sched_getaffinity"):
+        return min(os.sched_getaffinity(0))
+    return 0
+
+
+def run_benchmark_command(cmd: list[str],
+                          *,
+                          cwd: Path,
+                          cpu: int | None) -> subprocess.CompletedProcess[str]:
+    preexec_fn = None
+    if cpu is not None and hasattr(os, "sched_setaffinity"):
+        def pin_child() -> None:
+            os.sched_setaffinity(0, {cpu})
+        preexec_fn = pin_child
+
+    return subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        preexec_fn=preexec_fn,
     )
 
 
@@ -362,11 +395,12 @@ def run_benchmark(args: argparse.Namespace,
     sums_ok = 0
     failures = 0
     exe_cmd = [str(exe)]
+    benchmark_cpu = benchmark_cpu_from_args(args)
     if args.inf_buffer_size is not None:
         exe_cmd.extend(["--inf-buffer-size", str(args.inf_buffer_size)])
 
     for i in range(args.iterations):
-        proc = run_command(exe_cmd, cwd=REPO_ROOT)
+        proc = run_benchmark_command(exe_cmd, cwd=REPO_ROOT, cpu=benchmark_cpu)
         output = proc.stdout + proc.stderr
         if proc.returncode != 0:
             failures += 1
@@ -399,19 +433,20 @@ def run_benchmark(args: argparse.Namespace,
             )
 
     averages = {
-        key: mean(vals) if vals else float("nan")
+        key: median(vals) if vals else float("nan")
         for key, vals in samples.items()
     }
     return {
         "build": build,
         "averages": averages,
         "hot_loop_averages": {
-            key: mean(vals) if vals else float("nan")
+            key: median(vals) if vals else float("nan")
             for key, vals in hot_loop_samples.items()
         },
         "runs": args.iterations,
         "sums_ok": sums_ok,
         "failures": failures,
+        "cpu": benchmark_cpu,
     }
 
 
@@ -509,6 +544,42 @@ def compact_size_label(n: int) -> str:
     if n % 1_000_000_000 == 0:
         return f"{n // 1_000_000_000}B"
     return compact(n / 1_000_000_000, "B")
+
+
+def sanitize_path_part(value: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in value)
+    return cleaned.strip("._-") or "run"
+
+
+def sweep_size_label(sizes: list[int]) -> str:
+    ordered = sorted(sizes)
+    if len(ordered) == 1:
+        return f"len{ordered[0]}"
+    return f"len{ordered[0]}-{ordered[-1]}_points{len(ordered)}"
+
+
+def default_sweep_output_base(args: argparse.Namespace,
+                              program: ProgramConfig,
+                              build: BuildConfig,
+                              sizes: list[int]) -> Path:
+    now = datetime.now()
+    stamp = now.strftime("%H%M%S_%f")
+    date = now.strftime("%Y-%m-%d")
+    parts = [
+        stamp,
+        program.key,
+        build.key,
+        f"n{args.iterations}",
+        sweep_size_label(sizes),
+    ]
+    if args.inf_buffer_size is not None:
+        parts.append(f"buf{args.inf_buffer_size}")
+    if args.inner_iterations is not None:
+        parts.append(f"inner{args.inner_iterations}")
+    if args.sweep_seed is not None:
+        parts.append(f"seed{args.sweep_seed}")
+    run_name = sanitize_path_part("_".join(parts))
+    return DEFAULT_RESULTS_DIR / date / run_name / run_name
 
 
 def log_axis_ticks(sizes: list[int], max_ticks: int = 10) -> list[int]:
@@ -774,7 +845,7 @@ def write_runtime_sweep_svg(rows: list[SweepRow],
         rows,
         path,
         title=f"{program.label} Runtimes by Input Size ({manual_simd_name(build)})",
-        y_axis_label="Avg runtime (ms)",
+        y_axis_label="Median runtime (ms)",
         series=series,
         reference_lines=[],
         build=build,
@@ -985,9 +1056,14 @@ def print_report(results: list[dict[str, object]],
     print(f"- Chunk size: {chunk_label}")
     for result in results:
         build: BuildConfig = result["build"]  # type: ignore[assignment]
+        cpu_label = (
+            result["cpu"]
+            if result["cpu"] is not None
+            else "not pinned"
+        )
         print(
             f"- {build.label}: runs={result['runs']} sums_ok={result['sums_ok']} "
-            f"failures={result['failures']}"
+            f"failures={result['failures']} cpu={cpu_label}"
         )
     print()
 
@@ -1004,7 +1080,7 @@ def print_report(results: list[dict[str, object]],
                 fmt_speedup(rec / avgs[key]),
             ])
         print(f"## {labels[build.key]}\n")
-        print(markdown_table(["Variant", "Avg seconds", "Speedup vs recursive"], rows))
+        print(markdown_table(["Variant", "Median seconds", "Speedup vs recursive"], rows))
         print()
 
         rows = [
@@ -1054,7 +1130,7 @@ def print_report(results: list[dict[str, object]],
             print("## Hot Loop Timings\n")
             print(
                 markdown_table(
-                    ["Loop", "Avg seconds", "Avg ns/elem", "Avg calls", "Avg elems"],
+                    ["Loop", "Median seconds", "Median ns/elem", "Median calls", "Median elems"],
                     hot_rows,
                 )
             )
@@ -1088,7 +1164,7 @@ def print_report(results: list[dict[str, object]],
             print("## Hot Loop Totals\n")
             print(
                 markdown_table(
-                    ["Loop family", "Avg seconds", "Avg ns/elem", "Avg calls", "Avg elems"],
+                    ["Loop family", "Median seconds", "Median ns/elem", "Median calls", "Median elems"],
                     hot_rows,
                 )
             )
@@ -1150,8 +1226,17 @@ def run_sweep(args: argparse.Namespace,
               build: BuildConfig,
               sizes: list[int]) -> list[SweepRow]:
     rows: list[SweepRow] = []
+    sweep_order = [*sizes]
+    rng = random.Random(args.sweep_seed)
+    rng.shuffle(sweep_order)
 
-    for size in sizes:
+    if sweep_order != sizes:
+        print(
+            "Sweep order: " + ", ".join(str(size) for size in sweep_order),
+            flush=True,
+        )
+
+    for size in sweep_order:
         size_args = argparse.Namespace(**vars(args))
         size_args.list_len = size
         exe = compile_variant(size_args, build, program)
@@ -1187,7 +1272,7 @@ def run_sweep(args: argparse.Namespace,
             flush=True,
         )
 
-    return rows
+    return sorted(rows, key=lambda row: row.list_len)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -1250,6 +1335,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--iterations", "-n", type=int, default=100)
     parser.add_argument(
+        "--pin-cpu",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Pin each benchmark executable run to one CPU. Enabled by default; "
+            "use --no-pin-cpu to disable."
+        ),
+    )
+    parser.add_argument(
+        "--cpu",
+        type=int,
+        default=None,
+        help=(
+            "CPU id to pin benchmark executable runs to. Defaults to the first "
+            "CPU available to this process."
+        ),
+    )
+    parser.add_argument(
         "--sweep-sizes",
         default=None,
         help=(
@@ -1282,6 +1385,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "Maximum input size for range-based --mode sweep. The maximum is "
             "included even when the step does not land on it exactly."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-seed",
+        type=int,
+        default=None,
+        help=(
+            "Seed for randomized sweep execution order. Omit for a fresh random "
+            "order each run."
         ),
     )
     parser.add_argument(
@@ -1353,6 +1465,15 @@ def main(argv: list[str]) -> int:
 
     if args.iterations <= 0:
         raise SystemExit("--iterations must be positive")
+    if args.cpu is not None and args.cpu < 0:
+        raise SystemExit("--cpu must be non-negative")
+    if args.pin_cpu and not hasattr(os, "sched_setaffinity"):
+        raise SystemExit("--pin-cpu requires os.sched_setaffinity; pass --no-pin-cpu to disable")
+    if args.pin_cpu and args.cpu is not None and hasattr(os, "sched_getaffinity"):
+        allowed_cpus = os.sched_getaffinity(0)
+        if args.cpu not in allowed_cpus:
+            allowed = ",".join(str(cpu) for cpu in sorted(allowed_cpus))
+            raise SystemExit(f"--cpu {args.cpu} is not in this process's allowed CPU set: {allowed}")
     if args.list_len is not None and args.list_len <= 0:
         raise SystemExit("--list-len must be positive")
     if args.inf_buffer_size is not None and args.inf_buffer_size <= 0:
@@ -1394,37 +1515,37 @@ def main(argv: list[str]) -> int:
             raise SystemExit("sweep must contain at least one positive integer")
         if any(size <= 0 for size in sizes):
             raise SystemExit("sweep sizes must all be positive")
-        backend_suffix = selected[0].key
+        output_base = default_sweep_output_base(args, program, selected[0], sizes)
 
         csv_path = (
             args.sweep_csv
             if args.sweep_csv is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_speedups_{backend_suffix}.csv"
+            else output_base.with_name(f"{output_base.name}_speedups.csv")
         )
         svg_path = (
             args.sweep_svg
             if args.sweep_svg is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_speedups_{backend_suffix}.svg"
+            else output_base.with_name(f"{output_base.name}_speedups.svg")
         )
         hot_loop_csv_path = (
             args.hot_loop_sweep_csv
             if args.hot_loop_sweep_csv is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_hot_loop_speedups_{backend_suffix}.csv"
+            else output_base.with_name(f"{output_base.name}_hot_loop_speedups.csv")
         )
         hot_loop_svg_path = (
             args.hot_loop_sweep_svg
             if args.hot_loop_sweep_svg is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_hot_loop_speedups_{backend_suffix}.svg"
+            else output_base.with_name(f"{output_base.name}_hot_loop_speedups.svg")
         )
         runtime_csv_path = (
             args.runtime_sweep_csv
             if args.runtime_sweep_csv is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_runtimes_{backend_suffix}.csv"
+            else output_base.with_name(f"{output_base.name}_runtimes.csv")
         )
         runtime_svg_path = (
             args.runtime_sweep_svg
             if args.runtime_sweep_svg is not None
-            else DEFAULT_RESULTS_DIR / f"{program.key}_runtimes_{backend_suffix}.svg"
+            else output_base.with_name(f"{output_base.name}_runtimes.svg")
         )
 
         rows = run_sweep(args, program, selected[0], sorted(sizes))

@@ -5,7 +5,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(SIMPLE_INT_WIDTH) && SIMPLE_INT_WIDTH == 32
+typedef int IntTy;
+#else
 typedef long IntTy;
+#endif
 
 typedef struct config {
     long list_len;
@@ -162,7 +166,7 @@ static IntTy *generate_array(size_t length) {
 
 static void print_array(const IntTy *in, size_t length) {
     for (size_t i = 0; i < length; i++) {
-        printf("%ld ", in[i]);
+        printf("%ld ", (long) in[i]);
     }
     printf("END\n");
 }
@@ -236,11 +240,20 @@ static TARGET_SSE2 NOINLINE void add1_sse2_kernel(IntTy *out,
                                                   const IntTy *in,
                                                   size_t length) {
     size_t i = 0;
-    const __m128i ones = _mm_set1_epi64x(1);
-    for (; i + 1 < length; i += 2) {
-        __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
-        vals = _mm_add_epi64(vals, ones);
-        _mm_storeu_si128((__m128i *) (out + i), vals);
+    if (sizeof(IntTy) == sizeof(int)) {
+        const __m128i ones = _mm_set1_epi32(1);
+        for (; i + 3 < length; i += 4) {
+            __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
+            vals = _mm_add_epi32(vals, ones);
+            _mm_storeu_si128((__m128i *) (out + i), vals);
+        }
+    } else {
+        const __m128i ones = _mm_set1_epi64x(1);
+        for (; i + 1 < length; i += 2) {
+            __m128i vals = _mm_loadu_si128((const __m128i *) (in + i));
+            vals = _mm_add_epi64(vals, ones);
+            _mm_storeu_si128((__m128i *) (out + i), vals);
+        }
     }
     for (; i < length; i++) {
         out[i] = in[i] + 1;
@@ -251,11 +264,20 @@ static TARGET_AVX2 NOINLINE void add1_avx2_kernel(IntTy *out,
                                                   const IntTy *in,
                                                   size_t length) {
     size_t i = 0;
-    const __m256i ones = _mm256_set1_epi64x(1);
-    for (; i + 3 < length; i += 4) {
-        __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
-        vals = _mm256_add_epi64(vals, ones);
-        _mm256_storeu_si256((__m256i *) (out + i), vals);
+    if (sizeof(IntTy) == sizeof(int)) {
+        const __m256i ones = _mm256_set1_epi32(1);
+        for (; i + 7 < length; i += 8) {
+            __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
+            vals = _mm256_add_epi32(vals, ones);
+            _mm256_storeu_si256((__m256i *) (out + i), vals);
+        }
+    } else {
+        const __m256i ones = _mm256_set1_epi64x(1);
+        for (; i + 3 < length; i += 4) {
+            __m256i vals = _mm256_loadu_si256((const __m256i *) (in + i));
+            vals = _mm256_add_epi64(vals, ones);
+            _mm256_storeu_si256((__m256i *) (out + i), vals);
+        }
     }
     for (; i < length; i++) {
         out[i] = in[i] + 1;
@@ -436,6 +458,7 @@ int main(int argc, char **argv) {
 
     printf("list_len=%ld\n", cfg.list_len);
     printf("iterations=%d\n", cfg.iterations);
+    printf("int_size_bits=%zu\n", sizeof(IntTy) * 8);
     printf("expected_sum=%ld\n", expected_sum);
     printf("avx2_supported=%s\n", avx2_supported ? "yes" : "no");
     printf("scalar_seconds=%.9f\n", scalar_result.avg_seconds);
