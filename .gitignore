@@ -49,6 +49,7 @@ stack*.yaml.lock
 __pycache__/
 *.pyc
 *.pyo
+experiments/.plot_venv/
 *.a
 *.log
 *.pdf

@@ -518,12 +518,40 @@ def sweep_sizes_from_args(args: argparse.Namespace) -> list[int]:
     return parse_sizes(args.sweep_sizes)
 
 
-def svg_polyline(points: list[tuple[float, float]], color: str, width: int = 3) -> str:
+def svg_polyline(points: list[tuple[float, float]], color: str, width: int = 5) -> str:
     pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
     return (
         f'<polyline points="{pts}" fill="none" stroke="{color}" '
         f'stroke-width="{width}" stroke-linejoin="round" stroke-linecap="round"/>'
     )
+
+
+def nice_linear_ticks(y_bottom: float, max_y: float, max_ticks: int = 8) -> tuple[float, list[float]]:
+    if not math.isfinite(max_y) or max_y <= y_bottom:
+        y_top = max(1.0, y_bottom + 1.0)
+        return y_top, [y_bottom, y_top]
+
+    raw_step = (max_y - y_bottom) / max(1, max_ticks - 1)
+    magnitude = 10 ** math.floor(math.log10(raw_step))
+    step = magnitude
+    for multiplier in (1, 2, 2.5, 5, 10):
+        candidate = multiplier * magnitude
+        if (max_y - y_bottom) / candidate <= max_ticks - 1:
+            step = candidate
+            break
+
+    y_top = math.ceil(max_y / step) * step
+    y_top = max(y_top, y_bottom + step)
+    ticks: list[float] = []
+    tick = math.ceil(y_bottom / step) * step
+    if tick > y_bottom + 1e-9:
+        ticks.append(y_bottom)
+    while tick <= y_top + 1e-9:
+        ticks.append(0.0 if abs(tick) < 1e-12 else tick)
+        tick += step
+    if not ticks or abs(ticks[-1] - y_top) > 1e-9:
+        ticks.append(y_top)
+    return y_top, ticks
 
 
 def compact_size_label(n: int) -> str:
@@ -888,16 +916,16 @@ def write_series_svg(rows: list[SweepRow],
                      y_bottom: float,
                      y_tick_label_fn) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = 1180
-    height = 760
+    width = 2200
+    height = 1400
     sizes = [row.list_len for row in rows]
     x_scale_mode = choose_x_axis_scale(sizes)
     x_ticks = axis_ticks_for_scale(sizes, x_scale_mode)
     rotate_x_labels = len(rows) > len(x_ticks) or len(x_ticks) > 6
-    margin_left = 92
-    margin_right = 350
-    margin_top = 58
-    margin_bottom = 122 if rotate_x_labels else 84
+    margin_left = 170
+    margin_right = 560
+    margin_top = 96
+    margin_bottom = 190 if rotate_x_labels else 140
     plot_w = width - margin_left - margin_right
     plot_h = height - margin_top - margin_bottom
 
@@ -915,12 +943,23 @@ def write_series_svg(rows: list[SweepRow],
             x_pad = 0.03 * (max_x_value - min_x_value)
             min_x_value -= x_pad
             max_x_value += x_pad
-    max_series_y = max(max(vals) for _, _, vals in series) if series else y_bottom
-    max_reference_y = (
-        max((value for _label, value, _color, _dash in reference_lines), default=y_bottom)
+    finite_series = [
+        (name, color, vals)
+        for name, color, vals in series
+        if any(math.isfinite(val) for val in vals)
+    ]
+    finite_references = [
+        (label, value, color, dasharray)
+        for label, value, color, dasharray in reference_lines
+        if math.isfinite(value)
+    ]
+    max_series_y = max(
+        (val for _name, _color, vals in finite_series for val in vals if math.isfinite(val)),
+        default=y_bottom,
     )
+    max_reference_y = max((value for _label, value, _color, _dash in finite_references), default=y_bottom)
     max_y = max(max_series_y, max_reference_y)
-    y_top = max(1.0, math.ceil((max_y + 0.20) * 10) / 10)
+    y_top, y_ticks = nice_linear_ticks(y_bottom, max_y)
 
     def xscale(n: int) -> float:
         if max_x_value == min_x_value:
@@ -934,34 +973,31 @@ def write_series_svg(rows: list[SweepRow],
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="white"/>',
-        '<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:13px} .axis{font-size:14px} .title{font-size:24px;font-weight:700}</style>',
-        f'<text x="{margin_left}" y="34" class="title">{title}</text>',
-        f'<rect x="{margin_left}" y="{margin_top}" width="{plot_w}" height="{plot_h}" fill="#fbfbfd" stroke="#c7c7cc"/>',
+        '<style>text{font-family:Arial,Helvetica,sans-serif;fill:#202124} .small{font-size:24px} .axis{font-size:30px;font-weight:600} .title{font-size:38px;font-weight:700}</style>',
+        f'<text x="{margin_left}" y="58" class="title">{title}</text>',
+        f'<rect x="{margin_left}" y="{margin_top}" width="{plot_w}" height="{plot_h}" fill="#fbfbfd" stroke="#c7c7cc" stroke-width="2"/>',
     ]
 
-    y_step = 0.5 if y_top <= 8 else 1.0
-    y = y_bottom
-    while y <= y_top + 1e-9:
+    for y in y_ticks:
         py = yscale(y)
         stroke = "#b8b8c0" if abs(y - round(y)) < 1e-9 else "#d8d8dd"
         parts.append(
             f'<line x1="{margin_left}" y1="{py:.1f}" '
             f'x2="{margin_left + plot_w}" y2="{py:.1f}" '
-            f'stroke="{stroke}" stroke-width="1"/>'
+            f'stroke="{stroke}" stroke-width="2"/>'
         )
         parts.append(
-            f'<text x="{margin_left - 12}" y="{py + 4:.1f}" '
+            f'<text x="{margin_left - 18}" y="{py + 8:.1f}" '
             f'text-anchor="end" class="small">{y_tick_label_fn(y)}</text>'
         )
-        y += y_step
 
-    for _label, value, color, dasharray in reference_lines:
+    for _label, value, color, dasharray in finite_references:
         ref_y = yscale(value)
         dash_attr = f' stroke-dasharray="{dasharray}"' if dasharray is not None else ""
         parts.append(
             f'<line x1="{margin_left}" y1="{ref_y:.1f}" '
             f'x2="{margin_left + plot_w}" y2="{ref_y:.1f}" '
-            f'stroke="{color}" stroke-width="2"{dash_attr}/>'
+            f'stroke="{color}" stroke-width="4"{dash_attr}/>'
         )
 
     for tick in x_ticks:
@@ -969,10 +1005,10 @@ def write_series_svg(rows: list[SweepRow],
         parts.append(
             f'<line x1="{px:.1f}" y1="{margin_top}" '
             f'x2="{px:.1f}" y2="{margin_top + plot_h}" '
-            f'stroke="#ececf1" stroke-width="1"/>'
+            f'stroke="#ececf1" stroke-width="2"/>'
         )
         label = compact_size_label(tick)
-        label_y = margin_top + plot_h + (64 if rotate_x_labels else 24)
+        label_y = margin_top + plot_h + (104 if rotate_x_labels else 44)
         if rotate_x_labels:
             parts.append(
                 f'<text x="{px:.1f}" y="{label_y:.1f}" text-anchor="end" '
@@ -985,59 +1021,74 @@ def write_series_svg(rows: list[SweepRow],
             )
 
     parts.append(
-        f'<text x="{margin_left + plot_w / 2:.1f}" y="{height - 22}" '
+        f'<text x="{margin_left + plot_w / 2:.1f}" y="{height - 38}" '
         f'text-anchor="middle" class="axis">Input size ({x_scale_mode} scale)</text>'
     )
     parts.append(
-        f'<text x="26" y="{margin_top + plot_h / 2:.1f}" text-anchor="middle" '
-        f'class="axis" transform="rotate(-90 26 {margin_top + plot_h / 2:.1f})">{y_axis_label}</text>'
+        f'<text x="46" y="{margin_top + plot_h / 2:.1f}" text-anchor="middle" '
+        f'class="axis" transform="rotate(-90 46 {margin_top + plot_h / 2:.1f})">{y_axis_label}</text>'
     )
 
-    for name, color, vals in series:
-        pts = [(xscale(row.list_len), yscale(val)) for row, val in zip(rows, vals)]
-        parts.append(svg_polyline(pts, color))
+    for name, color, vals in finite_series:
+        pts = [
+            (xscale(row.list_len), yscale(val), math.isfinite(val))
+            for row, val in zip(rows, vals)
+        ]
+        segment: list[tuple[float, float]] = []
+        for px, py, is_finite in pts:
+            if is_finite:
+                segment.append((px, py))
+                continue
+            if len(segment) >= 2:
+                parts.append(svg_polyline(segment, color))
+            segment = []
+        if len(segment) >= 2:
+            parts.append(svg_polyline(segment, color))
+
         marker_step = max(1, math.ceil(len(pts) / 40))
-        for i, (px, py) in enumerate(pts):
+        for i, (px, py, is_finite) in enumerate(pts):
+            if not is_finite:
+                continue
             if len(pts) > 80 and i not in (0, len(pts) - 1) and i % marker_step != 0:
                 continue
             parts.append(
-                f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" '
-                f'fill="{color}" stroke="white" stroke-width="1.5"/>'
+                f'<circle cx="{px:.1f}" cy="{py:.1f}" r="7" '
+                f'fill="{color}" stroke="white" stroke-width="2"/>'
             )
 
     legend_x = margin_left + plot_w + 34
     legend_y = margin_top + 18
-    for i, (name, color, _vals) in enumerate(series):
+    for i, (name, color, _vals) in enumerate(finite_series):
         y = legend_y + i * 34
         parts.append(
             f'<line x1="{legend_x}" y1="{y}" x2="{legend_x + 32}" y2="{y}" '
-            f'stroke="{color}" stroke-width="4" stroke-linecap="round"/>'
+            f'stroke="{color}" stroke-width="7" stroke-linecap="round"/>'
         )
-        parts.append(f'<text x="{legend_x + 44}" y="{y + 5}" class="small">{name}</text>')
+        parts.append(f'<text x="{legend_x + 56}" y="{y + 8}" class="small">{name}</text>')
 
-    reference_legend_start_y = legend_y + len(series) * 34
-    for i, (label, _value, color, dasharray) in enumerate(reference_lines):
+    reference_legend_start_y = legend_y + len(finite_series) * 34
+    for i, (label, _value, color, dasharray) in enumerate(finite_references):
         ref_y = reference_legend_start_y + i * 34
         dash_attr = f' stroke-dasharray="{dasharray}"' if dasharray is not None else ""
         parts.append(
             f'<line x1="{legend_x}" y1="{ref_y}" '
             f'x2="{legend_x + 32}" y2="{ref_y}" '
-            f'stroke="{color}" stroke-width="3" stroke-linecap="round"{dash_attr}/>'
+            f'stroke="{color}" stroke-width="6" stroke-linecap="round"{dash_attr}/>'
         )
         parts.append(
-            f'<text x="{legend_x + 44}" y="{ref_y + 5}" class="small">{label}</text>'
+            f'<text x="{legend_x + 56}" y="{ref_y + 8}" class="small">{label}</text>'
         )
 
-    parts.append(f'<text x="{legend_x}" y="{height - 140}" class="small">Points: {len(rows)}</text>')
-    parts.append(f'<text x="{legend_x}" y="{height - 118}" class="small">Max input: {compact_size_label(max(sizes))}</text>')
-    parts.append(f'<text x="{legend_x}" y="{height - 96}" class="small">Build: {build.label}</text>')
-    parts.append(f'<text x="{legend_x}" y="{height - 74}" class="small">X scale: {x_scale_mode}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 210}" class="small">Points: {len(rows)}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 170}" class="small">Max input: {compact_size_label(max(sizes))}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 130}" class="small">Build: {build.label}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 90}" class="small">X scale: {x_scale_mode}</text>')
     chunk_label = (
         f"{inf_buffer_size:,} bytes"
         if inf_buffer_size is not None
         else "executable default"
     )
-    parts.append(f'<text x="{legend_x}" y="{height - 52}" class="small">Chunk size: {chunk_label}</text>')
+    parts.append(f'<text x="{legend_x}" y="{height - 50}" class="small">Chunk size: {chunk_label}</text>')
     parts.append("</svg>")
     path.write_text("\n".join(parts))
 
