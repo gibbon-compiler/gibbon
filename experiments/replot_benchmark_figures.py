@@ -62,7 +62,56 @@ def read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
         return list(reader.fieldnames or []), rows
 
 
-def prettify_column(name: str) -> str:
+def backend_from_path(path: Path) -> str | None:
+    text = "/".join(path.parts).lower()
+    if "avx2" in text:
+        return "AVX2"
+    if "sse2" in text:
+        return "SSE2"
+    return None
+
+
+def is_scalar_smoke_list(path: Path) -> bool:
+    path_text = "/".join(path.parts)
+    return (
+        "scalar_count_smoke/results" in path_text and
+        "multi-list" not in path.name and
+        ("list_" in path.name or "_list_" in path.name)
+    )
+
+
+def scalar_smoke_list_title(style: PlotStyle) -> str:
+    if style.kind == "runtime":
+        return "Runtime: Manual Optimization Of Gibbon Generated add1 on List Code"
+    if style.kind == "hot_loop_speedup":
+        return "Speedup Vector Loop: Manual Optimization of Gibbon Generated add1 on List Code"
+    return "Speedup: Manual Optimization of Gibbon Generated add1 on List Code"
+
+
+def scalar_smoke_list_column_label(name: str, backend: str | None) -> str | None:
+    simd = backend or "SIMD"
+    labels = {
+        "recursive_seconds": "Recursive baseline",
+        "loop_scalar_copy_seconds": "Loopified scalar, copy buffers",
+        "indir_loop_scalar_seconds": "Loopified scalar, indirection buffers",
+        "indir_loop_auto_seconds": "Loopified auto-vectorized, indirection buffers",
+        "indir_loop_explicit_vector_seconds": f"Loopified manual {simd}, indirection buffers",
+        "loop_scalar_copy_speedup_vs_recursive": "Loopified scalar, copy buffers / recursive",
+        "indir_loop_scalar_speedup_vs_recursive": "Loopified scalar, indirection buffers / recursive",
+        "indir_loop_auto_speedup_vs_recursive": "Loopified auto-vectorized, indirection buffers / recursive",
+        "indir_loop_explicit_vector_speedup_vs_recursive": f"Loopified manual {simd}, indirection buffers / recursive",
+        "indir_loop_auto_hot_loop_seconds_speedup_vs_scalar": "Auto-vector hot loop / scalar hot loop",
+        "indir_loop_vectorized_hot_loop_seconds_speedup_vs_scalar": f"Manual {simd} vector hot loop / scalar hot loop",
+    }
+    return labels.get(name)
+
+
+def prettify_column(name: str, *, path: Path | None = None) -> str:
+    if path is not None and is_scalar_smoke_list(path):
+        label = scalar_smoke_list_column_label(name, backend_from_path(path))
+        if label is not None:
+            return label
+
     cleaned = name
     replacements = [
         ("_speedup_vs_recursive", " / recursive"),
@@ -85,6 +134,9 @@ def prettify_column(name: str) -> str:
 
 
 def title_from_path(path: Path, style: PlotStyle) -> str:
+    if is_scalar_smoke_list(path):
+        return scalar_smoke_list_title(style)
+
     run_name = path.parent.name
     if run_name in ("results", "2026-04-30", "2026-05-01", "2026-05-02"):
         run_name = path.stem
@@ -227,7 +279,8 @@ def axis_ticks_for_scale(sizes: list[int], scale: str) -> list[int]:
 
 def series_from_csv(headers: list[str],
                     rows: list[dict[str, str]],
-                    style: PlotStyle) -> list[tuple[str, str, list[float]]]:
+                    style: PlotStyle,
+                    path: Path) -> list[tuple[str, str, list[float]]]:
     if style.kind == "runtime":
         data_columns = [
             header for header in headers
@@ -245,7 +298,7 @@ def series_from_csv(headers: list[str],
             vals = [1000.0 * value if math.isfinite(value) else value for value in vals]
         if not any(math.isfinite(value) for value in vals):
             continue
-        series.append((prettify_column(column), COLORS[i % len(COLORS)], vals))
+        series.append((prettify_column(column, path=path), COLORS[i % len(COLORS)], vals))
     return series
 
 
@@ -290,7 +343,7 @@ def replot_csv(path: Path, *, plt, FuncFormatter, MaxNLocator, formats: list[str
         return []
 
     rows = [PlotRow(int(row["list_len"])) for row in raw_rows]
-    series = series_from_csv(headers, raw_rows, style)
+    series = series_from_csv(headers, raw_rows, style, path)
     if not series:
         return []
 
