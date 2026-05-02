@@ -58,6 +58,12 @@ experiments/.plot_venv/
 *.jpeg
 *.gif
 *.webp
+!experiments/**/*.pdf
+!experiments/**/*.png
+!experiments/**/*.jpg
+!experiments/**/*.jpeg
+!experiments/**/*.gif
+!experiments/**/*.webp
 gibbon-compiler/examples/soa_examples/benchmark_output/
 gibbon-compiler/examples/soa_examples/figures/
 microbench/parallel/measurements/

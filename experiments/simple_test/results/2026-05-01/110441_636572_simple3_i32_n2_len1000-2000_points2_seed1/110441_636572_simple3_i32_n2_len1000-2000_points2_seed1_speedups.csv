@@ -1,0 +1,3 @@
+list_len,auto_speedup_vs_scalar,sse2_speedup_vs_scalar,avx2_speedup_vs_scalar
+1000,2.109895,1.952845,2.290219
+2000,2.068711,1.981599,2.025316
