@@ -1,41 +1,25 @@
-cabal-version:       >=1.10
+cabal-version:       2.0
 
 name:                gibbon-examples
 version:             0.1.0.0
 build-type:          Simple
 
-library
+executable run-gibbon-examples
   hs-source-dirs:      src
-  exposed-modules:     BinTree
-  build-depends:       base == 4.17.*
-                     , plugin0
-                     , plugin1
+  main-is:             Main.hs
+  other-modules:       BinTree, Measure
+  build-depends:       base
                      , inline-c
                      , binary
-  ghc-options: -Wall -Wcompat -fdefer-typed-holes
+                     , deepseq, time, bytestring
+                     , gibbon-plugin
+  ghc-options:
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
+                       -O2
                        -fplugin=Gibbon.Plugin
-                       -fplugin=Gibbon.Plugin1
-
                        "-optl-Wl,--allow-multiple-definition"
-                       -- "-optl-Wl,--whole-archive"
-                       -- "-optl-Wl,-Bstatic"
-                       -- "-optl-Wl,-L/home/ckoparka/chai/tree-velocity/gibbon-ghc-integration/plugin1/cbits/"
-                       -- "-optl-Wl,-ltest2"
-                       -- "-optl-Wl,-Bdynamic"
-                       -- "-optl-Wl,--no-whole-archive"
+                       "-optl-Wl,-rpath,/home/artem/data/Dev/gibbon/gibbon/gibbon-rts/build"
 
-                       -dcore-lint
-                       -ddump-simpl -dsuppress-all -ddump-to-file
-
-
-executable run-gibbon-examples
-  hs-source-dirs:      app
-  default-language:    Haskell2010
-  main-is:             Main.hs
-  build-depends:       base, gibbon-examples, binary, bytestring
-  ghc-options:
-                       -- "-with-rtsopts=-T"
-                       -- "-with-rtsopts=-s"
-                       -dcore-lint
+  extra-libraries: gibbon_rts_ng
+  extra-lib-dirs: /home/artem/data/Dev/gibbon/gibbon/gibbon-rts/build

@@ -1,7 +1,11 @@
+{-# LANGUAGE BangPatterns #-}
+
 module Main ( main ) where
 
 import BinTree -- ( fast_print_double, fast_print_double2 )
+import Measure
 
+import Control.Exception
 import Data.Binary
 import Data.ByteString.Lazy ( unpack )
 import Data.Word
@@ -33,10 +37,28 @@ instance Binary Exp where
 
 main :: IO ()
 main = do
+{-
   let expr = OpE (IntE 10) (IntE 11)
   print (unpack (encode expr))
-  let tr = Node 10 (Leaf 10 10) (Leaf 20 20) :: Tree Int
+  let tr = Node 10 (Leaf 10) (Leaf 20)
   print (unpack (encode tr))
+-}
+{-
   _ <- fast_print_double  3.0
   _ <- fast_print_double2 10.0
+-}
+
+  -- !n <- evaluate $ bench1 10
+  -- print n
+  -- !fastn <- fastbench1 10
+  -- print fastn
+
+  let size = 25
+  let iters = 9
+  (res0, t0, t_all_0) <- bench bench1 size iters
+
+  (res1, t1, t_all_1) <- benchIO fastbench1 size iters
+
+  print (res0,t0)
+  print (res1,t1)
   pure ()

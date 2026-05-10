@@ -26,6 +26,7 @@ module Gibbon.Common
          -- * Gibbon configuration
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
        , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
+       , isBench, isLibrary
 
          -- * Misc helpers
        , SSModality(..), (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv
@@ -299,7 +300,16 @@ data Mode = ToParse  -- ^ Parse and then stop
           | RunMPL   -- ^ Compile to SML & compile with MPL & run
           | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
           | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
+          | Library Var -- ^ Compile as a library, with its main entry point given.
   deriving (Show, Read, Eq, Ord)
+
+isBench :: Mode -> Bool
+isBench (Bench _) = True
+isBench _ = False
+
+isLibrary :: Mode -> Bool
+isLibrary (Library _) = True
+isLibrary _ = False
 
 -- | Compilation backend used
 data Backend = C | LLVM

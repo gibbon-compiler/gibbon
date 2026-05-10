@@ -4,7 +4,8 @@
 
 module BinTree where
 
-import Gibbon.Plugin ( PackedAnn(..) )
+-- import Gibbon.Plugin0 ( PackedAnn(..) )
+import Gibbon.Plugin ( liftPacked, Packed, PackedAnn(..) )
 import Foreign
 import Foreign.C.Types
 import GHC.Generics
@@ -14,47 +15,62 @@ import qualified Language.C.Inline as C
 
 --------------------------------------------------------------------------------
 
-data Tree a = Leaf Int a
-            | Node Int (Tree a) (Tree a)
+data Tree = Leaf Int
+          | Node Int Tree Tree
   deriving (Generic)
 
-instance Binary a => Binary (Tree a)
+instance Binary Tree
 
-{-# ANN mkTree_seq LiftPacked #-}
-mkTree_seq :: Int -> Tree Bool
+-- {-# ANN mkTree_seq LiftPacked #-}
+mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf 1 True
+  then Leaf 1
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)
       in Node i x y
 
-{-# ANN sumTree_seq LiftPacked #-}
-sumTree_seq :: Tree a -> Int
-sumTree_seq foo =
-  case foo of
-    Leaf i _   -> i
+-- {-# ANN sumTree_seq LiftPacked #-}
+sumTree_seq :: Tree -> Int
+sumTree_seq tr =
+  case tr of
+    Leaf i     -> i
     Node _ a b ->
       let x = sumTree_seq a
           y = sumTree_seq b
       in x + y
 
-{-# ANN bench1 LiftPacked #-}
 bench1 :: Int -> Int
 bench1 n = sumTree_seq (mkTree_seq n)
 
---------------------------------------------------------------------------------
+{-# ANN liftbench1 LiftPacked #-}
+liftbench1 :: Int -> Int
+liftbench1 n = sumTree_seq (mkTree_seq n)
 
-foreign import ccall "print_double"
-  c_print_double :: CDouble -> IO CInt
 
-fast_print_double :: Double -> IO Int
-fast_print_double x = do
-  y <- c_print_double (realToFrac x)
+foreign import ccall unsafe "c_liftbench1"
+  cfastbench1 :: CInt -> IO CInt
+
+fastbench1 :: Int -> IO Int
+fastbench1 x = do
+  y <- cfastbench1 (fromIntegral x)
   pure $ fromIntegral y
 
 --------------------------------------------------------------------------------
+
+-- foreign import ccall "print_double"
+--   c_print_double :: CDouble -> IO CInt
+
+-- fast_print_double :: Double -> IO Int
+-- fast_print_double x = do
+--   y <- c_print_double (realToFrac x)
+--   pure $ fromIntegral y
+
+--------------------------------------------------------------------------------
+
+
+{-
 
 C.include "<stdlib.h>"
 C.include "<stdio.h>"
@@ -67,5 +83,7 @@ foreign import ccall "print_double2"
 
 fast_print_double2 :: Double -> IO Int
 fast_print_double2 x = do
-  y <- c_print_double2 (realToFrac x)
-  pure $ fromIntegral y
+   y <- c_print_double2 (realToFrac x)
+   pure $ fromIntegral y
+
+-}

@@ -28,7 +28,7 @@
 
 CC        := gcc
 AR        := gcc-ar
-CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -Werror -std=gnu11 -flto
+CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -Werror -std=gnu11 # -flto
 RSC       := cargo
 RSFLAGS   := -v
 VERBOSITY := 1
