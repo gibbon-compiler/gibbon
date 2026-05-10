@@ -108,7 +108,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                         then (LetE (v,locs,ty,rhs)) <$> (go reg_env' alloc_env' store_env env2' bod)
                         else do
                           let tag_loc = Sf.headErr locs_before
-                          let tag_tycon = findTyCon tag_loc bod
+                          let tag_tycon = dbgTrace (minChatLvl) "Print Tag_Loc reorder scalars: " dbgTrace (minChatLvl) (sdoc (tag_loc, locs_before, one, ex)) dbgTrace (minChatLvl) "End printing tag_loc!!\n" findTyCon tag_loc bod
                           let in_scope = M.keysSet (vEnv env2) `S.union` M.keysSet (fEnv env2)
                               (move_set,move_scalars) = checkScalarDeps ddefs in_scope tag_loc ex
                               move_scalars_easy = move_scalars && S.null move_set
@@ -130,7 +130,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
 
         Ext ext ->
           case ext of
-            L2.LetRegionE reg sz ty bod -> do
+            L2.LetRegionE reg sz endmut ty bod -> do
               let alloc_env' = M.insert reg (RegionLocs [] S.empty) alloc_env
               case reg of 
                   L2.SoAR dcr fieldRegs -> do
@@ -139,10 +139,10 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                                                                  let acc' = M.insert freg (RegionLocs [] S.empty) acc
                                                                  return acc'
                                                                  ) alloc_env'' fieldRegs
-                                           Ext <$> (L2.LetRegionE reg sz ty) <$> go reg_env alloc_env''' store_env env2 bod
+                                           Ext <$> (L2.LetRegionE reg sz endmut ty) <$> go reg_env alloc_env''' store_env env2 bod
                                            -- dbgTraceIt "Print allocEnv " dbgTraceIt (sdoc alloc_env''') dbgTraceIt "End allocEnv\n"
                                            
-                  _ -> Ext <$> (L2.LetRegionE reg sz ty) <$> go reg_env alloc_env' store_env env2 bod
+                  _ -> Ext <$> (L2.LetRegionE reg sz endmut ty) <$> go reg_env alloc_env' store_env env2 bod
               --alloc_env'' <- foldrM () alloc_env' reg
               --Ext <$> (L2.LetRegionE reg sz ty) <$> go reg_env alloc_env' store_env env2 bod
             L2.LetParRegionE reg sz ty bod -> do
@@ -248,11 +248,11 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
                             let locs_before = takeWhile (/= loc) locs in
                               case locs_before of
                                 [] -> let ret = (True, locs_before, reg, rloc) 
-                                        in ret
+                                        in dbgTrace (minChatLvl) "Print in isAllocationOK [] : " dbgTrace (minChatLvl) (sdoc (loc, locs, locs_before)) dbgTrace (minChatLvl) "End isAllocationOK\n" ret
                                 _  ->
                                   let freev = L2.allFreeVars rhs `S.union` L2.allFreeVars bod
                                       locs_before' = filter (\x -> S.member (fromLocVarToFreeVarsTy x) freev) locs_before
-                                  in (S.isProperSubsetOf (S.fromList locs_before') allocated_to, locs_before', reg, rloc)
+                                  in dbgTrace (minChatLvl) "Print in isAllocationOK _: " dbgTrace (minChatLvl) (sdoc (loc, locs, locs_before)) dbgTrace (minChatLvl) "End isAllocationOK\n" (S.isProperSubsetOf (S.fromList locs_before') allocated_to, locs_before', reg, rloc)
                                   -- dbgTraceIt "Print in isAllocationOk: " dbgTraceIt (sdoc (loc, rhs, locs_before, locs_before', allocated_to)) dbgTraceIt "End isAllocationOk.\n"
 
         findTyCon :: LocVar -> L2.Exp2 -> TyCon
@@ -276,7 +276,7 @@ writeOrderMarkers (Prog ddefs fundefs mainExp) = do
             TimeIt e0 _ty _b -> (findTyCon want e0)
             Ext ext ->
               case ext of
-                L2.LetRegionE _ _ _ bod -> (findTyCon want bod)
+                L2.LetRegionE _ _ _ _ bod -> (findTyCon want bod)
                 L2.LetParRegionE _ _ _ bod -> (findTyCon want bod)
                 L2.LetLocE _ _ bod -> (findTyCon want bod)
                 L2.LetAvail _ bod -> (findTyCon want bod)
@@ -343,7 +343,7 @@ checkScalarDeps ddefs in_scope tag_loc ex0 =
         FoldE{}  -> (dep_env,move_set,move)
         Ext ext  ->
           case ext of
-            L2.LetRegionE _ _ _ bod ->
+            L2.LetRegionE _ _ _ _ bod ->
               let (dep_env',move_set',move') = go dep_env move_set move bod
               in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
             L2.LetParRegionE _ _ _ bod ->

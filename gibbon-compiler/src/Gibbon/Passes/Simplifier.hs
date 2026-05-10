@@ -44,7 +44,7 @@ inlineFuns (Prog ddefs fundefs main) = do
     go :: PreExpF E1Ext () (UrTy ()) Exp1 -> PassM Exp1
     go ex =
       case ex of
-        AppEF f [] args -> do
+        AppEF f cty [] args -> do
             let fn = fundefs M.! f
             if funInline (funMeta fn) == Inline && funRec (funMeta fn) == NotRec
               then do
@@ -54,7 +54,7 @@ inlineFuns (Prog ddefs fundefs main) = do
                 pure $ mkLets binds funBody
               else do
                 args' <- mapM (go . project) args
-                pure $ AppE f [] args'
+                pure $ AppE f cty [] args'
         _ -> pure $ embed ex
 
 deadFunElim :: Prog1 -> PassM Prog1
@@ -119,7 +119,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go :: M.Map LocVar (LocVar,Int) -> Exp2 -> Exp2
     go env ex =
       case ex of
-        AppE f locs args -> AppE f locs (map (go env) args)
+        AppE f cty locs args -> AppE f cty locs (map (go env) args)
         PrimAppE p args -> PrimAppE p (map (go env) args)
         LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go env rhs)) (go env bod)
         IfE a b c -> IfE (go env a) (go env b) (go env c)
@@ -132,7 +132,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map (go env) args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go env bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go env bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go env bod))
             {- TODO VS: fix for SOA case -}
             LetLocE loc (AfterConstantLE i loc2) bod ->
@@ -152,7 +152,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go2 :: Exp2 -> Exp2
     go2 ex =
       case ex of
-        AppE f locs args -> AppE f locs (map go2 args)
+        AppE f cty locs args -> AppE f cty locs (map go2 args)
         PrimAppE p args -> PrimAppE p (map go2 args)
         LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty,(go2 rhs)) (go2 bod)
         IfE a b c -> IfE (go2 a) (go2 b) (go2 c)
@@ -165,7 +165,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map go2 args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go2 bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go2 bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go2 bod))
             LetLocE loc rhs bod ->
               let bod' = go2 bod
@@ -173,7 +173,7 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
               in
                 if ((fromLocVarToFreeVarsTy loc) `elem` free_vars)
                 then Ext (LetLocE loc rhs bod')
-                else dbgTrace (minChatLvl) "Print freeVars: " dbgTrace (minChatLvl) (sdoc (rhs, free_vars))  dbgTrace (minChatLvl) "End\n"  bod'
+                else dbgTrace (minChatLvl) "Print freeVars: " dbgTrace (minChatLvl) (sdoc (rhs, free_vars))  dbgTrace (minChatLvl) "End in go2 in simplify loc binds\n"  bod'
             LetAvail vars bod -> Ext (LetAvail vars (go2 bod))
             _ -> Ext ext
         _ -> ex
@@ -182,9 +182,9 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
     go0 :: M.Map LocExp LocVar -> M.Map LocVar LocVar -> Exp2 -> Exp2
     go0 env1 env2 ex =
       case ex of
-        AppE f locs args -> AppE f (map (substloc env2) locs) (map (go0 env1 env2) args)
+        AppE f cty locs args -> AppE f cty (map (substloc env2) (map (fixloc env2) locs)) (map (go0 env1 env2) args)
         PrimAppE p args -> PrimAppE p (map (go0 env1 env2) args)
-        LetE (v,locs,ty,rhs) bod -> LetE (v,locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
+        LetE (v,locs,ty,rhs) bod -> LetE (v,map (fixloc env2) locs,substLoc env2 ty,(go0 env1 env2 rhs)) (go0 env1 env2 bod)
         IfE a b c -> IfE (go0 env1 env2 a) (go0 env1 env2 b) (go0 env1 env2 c)
         MkProdE args -> MkProdE (map (go0 env1 env2) args)
         ProjE i bod -> ProjE i (go0 env1 env2 bod)
@@ -195,15 +195,31 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f (map (substloc env2) locs) (map (go0 env1 env2) args)
         Ext ext ->
           case ext of
-            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go0 env1 env2 bod))
+            LetRegionE reg sz endmut ty bod -> Ext (LetRegionE reg sz endmut ty (go0 env1 env2 bod))
             LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go0 env1 env2 bod))
             LetLocE loc rhs bod ->
               let rhs' = case rhs of
-                           AfterConstantLE i loc2 -> AfterConstantLE i (substloc env2 loc2)
-                           AfterVariableLE v loc2 b -> AfterVariableLE v (substloc env2 loc2) b
-                           _ -> rhs
+                           AfterConstantLE i loc2 -> AfterConstantLE i (fixloc env2 loc2)
+                           AfterVariableLE v loc2 b -> AfterVariableLE v (fixloc env2 loc2) b
+                           -- we need to implement the other cases here for SoA locations
+                           StartOfRegionLE{} -> rhs
+                           InRegionLE{} -> rhs
+                           FreeLE -> rhs
+                           FromEndLE loc2 -> FromEndLE (fixloc env2 loc2) 
+                           GenSoALoc dl flocs -> let 
+                                                   flocs' = map (\(k, fl) -> (k, (fixloc env2 fl))) flocs
+                                                   dl' = (substloc env2 dl)
+                                                  in GenSoALoc dl' flocs'
+                           GetDataConLocSoA loc2 -> GetDataConLocSoA (fixloc env2 loc2)
+                           GetFieldLocSoA key loc2 -> GetFieldLocSoA key (fixloc env2 loc2)
+                           AssignLE loc2 -> AssignLE (fixloc env2 loc2)
               in case M.lookup rhs' env1 of
-                Nothing  -> Ext (LetLocE loc rhs' (go0 (M.insert rhs' loc env1) env2 bod))
+                Nothing  -> let loc' = case loc of 
+                                            Single{} -> (substloc env2 loc)
+                                            SoA dl flocs -> let flocs' = map (\(k, fl) -> (k, (substloc env2 fl))) flocs
+                                                                dl' = (substloc env2 (Single dl))
+                                                              in SoA (unwrapLocVar dl') flocs'
+                              in Ext (LetLocE loc' rhs' (go0 (M.insert rhs' loc env1) env2 bod))
                 Just new -> go0 env1 (M.insert loc new env2) bod
             LetAvail vars bod -> Ext (LetAvail vars (go0 env1 env2 bod))
             _ -> Ext ext
@@ -212,6 +228,12 @@ simplifyLocBinds only_cse (Prog ddefs fundefs mainExp) = do
         substloc env loc = case M.lookup loc env of
                              Nothing  -> loc
                              Just new -> new
+        fixloc env l = case l of 
+                           Single{} -> (substloc env l)
+                           SoA dl flocs -> let 
+                                             dl' = (substloc env (Single dl))
+                                             flocs' = map (\(k, fl) -> (k, (substloc env fl))) flocs
+                                            in SoA (unwrapLocVar dl') flocs'
 
 --------------------------------------------------------------------------------
 
@@ -239,6 +261,8 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                                  Just t2 -> t2
                 L4.ProdTriv ls -> L4.ProdTriv (map (gotriv env) ls)
                 L4.ProjTriv i t -> L4.ProjTriv i (gotriv env t)
+                L4.UninitTriv v _ _ -> L4.VarTriv v
+                L4.IndexCursorArrayTriv i idxtrv -> L4.IndexCursorArrayTriv i (gotriv env idxtrv)  
                 _ -> trv
 
         goalts env alts =
@@ -261,6 +285,7 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                            L4.VarTriv w -> case M.lookup w env of
                                             Nothing -> go (M.insert v trv env) bod
                                             Just trv' -> go (M.insert v trv' env) bod
+                           L4.UninitTriv _ _ _ -> L4.LetTrivT (v, _ty, trv) (go env bod)
                            _ -> go (M.insert v (gotriv env trv) env) bod
                    L4.LetIfT binds (trv,tl1,tl2) bod ->
                        L4.LetIfT binds (gotriv env trv, go env tl1, go env tl2) (go env bod)

@@ -1,0 +1,15 @@
+{
+  "compile_cmd": [
+    "mlton",
+    "-default-type",
+    "int64",
+    "-output",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.mlton.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.mlton.mlb"
+  ],
+  "compile_cmd_signature": "mlton -default-type int64 -output /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.mlton.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.mlton.mlb",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/MLTON/OctTree_sumEnergy.sml",
+  "c_file": null,
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.mlton.exe",
+  "compiled_at": "2026-02-21T19:05:46"
+}

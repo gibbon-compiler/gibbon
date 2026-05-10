@@ -1,0 +1,323 @@
+BENCHMARK SCRIPT UPDATE NOTES
+============================
+
+Date: February 10, 2026
+Version: 1.1
+
+IMPORTANT FIX: Output Extraction & Comparison
+==============================================
+
+PROBLEM IDENTIFIED
+-----------------
+
+The original scripts assumed program output would always be in a tuple format like:
+  '#(8571429 1428571 1071429 535714 25714287 #t 17142858)
+
+However, programs can output various formats:
+  • Simple numbers: 500000500000
+  • Multi-line text
+  • Other data structures
+
+Additionally, the scripts were comparing raw outputs including timing data,
+which could cause false mismatches.
+
+SOLUTION IMPLEMENTED
+-------------------
+
+Both scripts now use an improved output extraction method that:
+
+1. **Filters out ALL timing data** before comparison:
+   - itertime: lines
+   - ITER TIMES: arrays
+   - ITERS, SIZE, BATCHTIME, SELFTIMED
+   - Running pass/program headers
+   - End markers
+   - Empty lines
+
+2. **Extracts pure program output** regardless of format:
+   - Tuple outputs: '#(...)
+   - Number outputs: 500000500000
+   - Multi-line outputs
+   - Any other format
+
+3. **Normalizes whitespace** for reliable comparison:
+   - Handles different line endings
+   - Ignores extra spaces
+   - Compares semantic content
+
+CHANGES MADE
+-----------
+
+### Python Script (gibbon_benchmark.py):
+
+1. Added new function `extract_program_output()`:
+   - Uses regex patterns to filter out timing lines
+   - Preserves all non-timing output
+   - Returns normalized result
+
+2. Updated `parse_benchmark_output()`:
+   - Now calls extract_program_output() instead of regex for tuples
+   - Handles any output format automatically
+
+3. Enhanced `compare_outputs()`:
+   - Normalizes whitespace before comparison
+   - More robust matching
+
+4. Improved report generation:
+   - Shows detailed mismatch information
+   - Displays both outputs when they differ
+
+### Bash Script (gibbon_benchmark.sh):
+
+1. Rewrote `extract_output()`:
+   - Uses grep with extended regex to filter timing lines
+   - Normalizes whitespace
+   - Returns clean program output
+
+2. Enhanced `compare_outputs()`:
+   - Normalizes whitespace for both outputs
+   - Shows actual outputs when they differ
+   - Better error reporting
+
+3. Updated report generation:
+   - Shows mismatch details
+   - Points to full output files for investigation
+
+TESTING
+-------
+
+A test script (test_output_extraction.py) is included that demonstrates
+the new extraction working correctly with:
+
+1. Tuple output (Compiler.hs style)
+2. Simple number output (LinearListReduction.hs style)  
+3. Multi-line output
+
+Run the test with:
+  python3 test_output_extraction.py
+
+EXAMPLES
+--------
+
+### Example 1: LinearListReduction Output
+
+Input (with timing data):
+```
+Running program recution on List with 10 Integer elements: 
+Running pass reduction: 
+itertime: 0.001705
+ITER TIMES: [0.001705]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 1.705300e-03
+SELFTIMED: 1.705300e-03
+End
+500000500000
+```
+
+Extracted output:
+```
+500000500000
+```
+
+### Example 2: Compiler.hs Output
+
+Input (with timing data):
+```
+Running the Compiler IR Program: 
+Running pass instCountPass: 
+itertime: 0.003521
+ITER TIMES: [0.003193, 0.003205]
+ITERS: 20
+BATCHTIME: 6.565849e-02
+SELFTIMED: 3.269139e-03
+End
+'#(8571429 1428571 1071429 535714 25714287 #t 17142858)
+```
+
+Extracted output:
+```
+'#(8571429 1428571 1071429 535714 25714287 #t 17142858)
+```
+
+### Example 3: Comparison Test
+
+AoS output (3ms timing):
+```
+Running pass test: 
+itertime: 0.003000
+SELFTIMED: 3.000000e-03
+End
+500000500000
+```
+
+SoA output (5ms timing):
+```
+Running pass test: 
+itertime: 0.005000
+SELFTIMED: 5.000000e-03
+End
+500000500000
+```
+
+Both extract to: `500000500000`
+Result: ✓ MATCH (despite different timing)
+
+BENEFITS
+--------
+
+✓ Handles any program output format automatically
+✓ Compares actual results, not timing data
+✓ More reliable correctness verification
+✓ Better error reporting when outputs differ
+✓ No false mismatches due to timing variations
+✓ Backward compatible with existing programs
+
+USAGE
+-----
+
+No changes needed to how you run the scripts!
+
+The improvements are automatic:
+
+```bash
+# Python script (recommended)
+./gibbon_benchmark.py
+
+# Bash script
+./gibbon_benchmark.sh
+```
+
+The scripts will now correctly handle:
+- Programs outputting tuples (like Compiler.hs)
+- Programs outputting numbers (like LinearListReduction.hs)
+- Programs with any other output format
+
+VERIFICATION
+-----------
+
+To verify the fix works for your programs:
+
+1. Run the test script:
+   python3 test_output_extraction.py
+
+2. Run a benchmark:
+   ./gibbon_benchmark.py --programs LinearListReduction.hs
+
+3. Check the report:
+   cat benchmark_report.txt
+
+You should see:
+- Clean output values (no timing data)
+- Correct match detection
+- Clear mismatch details if outputs differ
+
+BACKWARD COMPATIBILITY
+---------------------
+
+✓ All existing functionality preserved
+✓ Works with programs outputting tuples
+✓ Works with programs outputting numbers
+✓ Works with any output format
+✓ No breaking changes to command-line interface
+✓ Existing benchmark reports remain valid
+
+TECHNICAL DETAILS
+----------------
+
+### Extraction Algorithm:
+
+1. Split output into lines
+2. For each line, check against exclude patterns:
+   - Line starts with timing keywords
+   - Line is a benchmark header
+   - Line is "End" marker
+   - Line is empty/whitespace only
+3. Keep all other lines (the actual program output)
+4. Join kept lines and normalize whitespace
+
+### Comparison Algorithm:
+
+1. Extract output from both AoS and SoA runs
+2. Normalize whitespace (collapse multiple spaces, trim)
+3. Compare normalized strings
+4. Report match/mismatch with details
+
+### Regex Patterns Used:
+
+Python:
+- r'^itertime:'
+- r'^ITER TIMES:'
+- r'^ITERS:'
+- r'^SIZE:'
+- r'^BATCHTIME:'
+- r'^SELFTIMED:'
+- r'^Running pass'
+- r'^Running program'
+- r'^Running the Compiler'
+- r'^End$'
+- r'^\s*$'
+
+Bash:
+- '^(itertime:|ITER TIMES:|ITERS:|SIZE:|BATCHTIME:|SELFTIMED:|Running pass|Running program|Running the Compiler|End$|^[[:space:]]*$)'
+
+TROUBLESHOOTING
+--------------
+
+If you encounter issues:
+
+1. **Outputs not matching when they should:**
+   - Check for hidden characters or encoding issues
+   - Review the full output files in benchmark_output/
+   - Run diff manually on the output files
+
+2. **Timing data appearing in extracted output:**
+   - This shouldn't happen with the new code
+   - Report as a bug if you see this
+
+3. **Empty extracted output:**
+   - Program may not be producing output
+   - Check if program runs successfully
+   - Review raw output in benchmark_output/*.output.txt
+
+MIGRATION FROM v1.0
+------------------
+
+If you were using the original scripts:
+
+1. Replace with new versions (no config changes needed)
+2. Re-run benchmarks to regenerate reports
+3. Old reports are still valid for timing data
+4. Output comparisons in new reports will be more accurate
+
+FILES UPDATED
+------------
+
+✓ gibbon_benchmark.py  - Python benchmarking script
+✓ gibbon_benchmark.sh  - Bash benchmarking script
+✓ test_output_extraction.py - New test/demo script
+✓ UPDATE_NOTES.txt - This file
+
+FILES UNCHANGED
+--------------
+
+• README.md - Still accurate (no interface changes)
+• QUICKSTART.sh - Still works as documented
+• benchmark.config - All options still valid
+
+SUMMARY
+-------
+
+This update makes the benchmarking scripts more robust and reliable
+by properly extracting and comparing program outputs regardless of
+format, while filtering out timing data that should not affect
+correctness verification.
+
+The scripts now work seamlessly with:
+- Your original Compiler.hs (tuple output)
+- LinearListReduction.hs (number output)
+- Any future programs with different output formats
+
+No action needed on your part - just use the updated scripts!
+
+For questions or issues, refer to README.md or run the test script.

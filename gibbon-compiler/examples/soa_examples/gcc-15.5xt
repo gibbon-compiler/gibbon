@@ -1,0 +1,79 @@
+Running the Compiler IR Program: 
+Running pass verifyIR (fold, uses=9): 
+ITER TIMES: [0.003648]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.647608e-03
+SELFTIMED: 3.647608e-03
+End
+Running pass instCountPass (fold, uses=2): 
+ITER TIMES: [0.002081]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 2.081002e-03
+SELFTIMED: 2.081002e-03
+End
+Running pass blockCountPass (fold, uses=2): 
+ITER TIMES: [0.001983]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 1.982688e-03
+SELFTIMED: 1.982688e-03
+End
+Running pass memoryOpStatsPass (fold, uses=3): 
+ITER TIMES: [0.003908]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.907786e-03
+SELFTIMED: 3.907786e-03
+End
+Running pass castInstCountPass (fold, uses=3): 
+ITER TIMES: [0.001308]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 1.308012e-03
+SELFTIMED: 1.308012e-03
+End
+Running pass branchStatsPass (fold, uses=2): 
+ITER TIMES: [0.003487]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.486641e-03
+SELFTIMED: 3.486641e-03
+End
+Running pass latencyModelPass (fold, uses=3): 
+ITER TIMES: [0.003030]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.029966e-03
+SELFTIMED: 3.029966e-03
+End
+Running pass has cycle (fold, uses=4): 
+ITER TIMES: [0.032103]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.210301e-02
+SELFTIMED: 3.210301e-02
+End
+Running pass throughputModelPass (fold, uses=3): 
+ITER TIMES: [0.003023]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 3.022878e-03
+SELFTIMED: 3.022878e-03
+End: 
+Running pass targetReturnPass (map, uses=9): 
+ITER TIMES: [0.089399]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 8.939873e-02
+SELFTIMED: 8.939873e-02
+End
+Running pass stripSideEffectsPass (map, uses=7): 
+ITER TIMES: [0.088260]
+ITERS: 1
+SIZE: 1
+BATCHTIME: 8.825996e-02
+SELFTIMED: 8.825996e-02
+End
+'#(5714285 714285 535714 267857 14285715 #t 10000001)

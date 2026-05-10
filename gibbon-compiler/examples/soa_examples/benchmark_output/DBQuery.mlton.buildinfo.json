@@ -1,0 +1,15 @@
+{
+  "compile_cmd": [
+    "mlton",
+    "-default-type",
+    "int64",
+    "-output",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.mlton.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.mlton.mlb"
+  ],
+  "compile_cmd_signature": "mlton -default-type int64 -output /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.mlton.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.mlton.mlb",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/MLTON/DBQuery.sml",
+  "c_file": null,
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.mlton.exe",
+  "compiled_at": "2026-02-21T19:19:30"
+}

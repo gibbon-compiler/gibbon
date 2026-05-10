@@ -88,7 +88,7 @@ inferExp ddfs fenv env dps expr =
     FloatE{}  -> (S.empty, Nothing)
     LitSymE _ -> (S.empty, Nothing)
 
-    AppE v locs _e ->
+    AppE v _ locs _e ->
       -- Substitue locations used at this particular call-site in the function
       -- effects computed so far
       let orgLocs = allLocVars (fenv # v)
@@ -163,7 +163,7 @@ inferExp ddfs fenv env dps expr =
     MapE{} -> error "inferEffects: MapE not handled."
     FoldE{} -> error "inferEffects: FoldE not handled."
 
-    Ext (LetRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetRegionE _ _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetParRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (StartOfPkdCursor{}) -> (S.empty, Nothing)

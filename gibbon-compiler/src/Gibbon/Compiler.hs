@@ -35,10 +35,12 @@ import           System.Environment
 import           System.Exit
 import           System.FilePath
 import           System.IO
-import           System.IO.Error (isDoesNotExistError)
+import           System.IO.Error (isDoesNotExistError, catchIOError)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
+import           Data.List (isInfixOf, stripPrefix)
+import           Data.Char (isDigit, isSpace)
 import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Language
@@ -82,6 +84,7 @@ import           Gibbon.NewL2.FromOldL2       (fromOldL2)
 import           Gibbon.Passes.ThreadRegions2  (threadRegions2)
 import           Gibbon.Passes.InferFunAllocs (inferFunAllocs)
 import           Gibbon.Passes.Cursorize      (cursorize)
+import           Gibbon.Passes.OptimizeL3      (removeReDefs)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
@@ -90,10 +93,10 @@ import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
-import           Gibbon.Passes.AddCastInstructions (addCasts)
 import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Passes.HoistBoundsCheck (hoistBoundsCheckProg)
 import           Gibbon.Passes.ReorderLetExprs (reorderLetExprs)
+import           Gibbon.Passes.InferCallType (inferCallType)
 import           Gibbon.Pretty
 import           Gibbon.L1.GenSML
 -- Configuring and launching the compiler.
@@ -369,10 +372,30 @@ withPrintInterpProg l0 =
     return Nothing
 
 compileRTS :: Config -> IO ()
-compileRTS Config{verbosity,optc,dynflags} = do
+compileRTS Config{verbosity,optc,dynflags,cc=ccCmd} = do
   gibbon_dir <- getGibbonDir
+  archiver <- chooseArchiver ccCmd
+  when (isClangCompiler ccCmd && not ("llvm-ar" `isInfixOf` takeFileName archiver)) $
+    hPutStrLn stderr $
+      "[compiler] clang detected but llvm-ar not found; using '" ++ archiver ++ "' instead."
+  when (isClangCompiler ccCmd && "llvm-ar" `isInfixOf` takeFileName archiver) $ do
+    clangVer <- toolVersionMajor ccCmd
+    arVer    <- toolVersionMajor archiver
+    case (clangVer, arVer) of
+      (Just clangMajor, Just arMajor)
+        | clangMajor /= arMajor ->
+            die $ unlines
+              [ "[compiler] clang/llvm-ar version mismatch detected."
+              , "  requested compiler : " ++ ccCmd
+              , "  selected archiver  : " ++ archiver
+              , "  clang major version: " ++ show clangMajor
+              , "  archiver major ver : " ++ show arMajor
+              , "Please adjust PATH so clang and llvm-ar versions align."
+              ]
+      _ -> pure ()
   let rtsmk = gibbon_dir </> "gibbon-rts/Makefile"
-  let rtsmkcmd = "make -f " ++ rtsmk ++ " "
+      userCFlags = optc
+      rtsmkcmd = "make -f " ++ rtsmk ++ " "
                  ++ (if rts_debug then " MODE=debug " else " MODE=release ")
                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                  ++ (if not genGC then " GC=nongen " else " GC=gen ")
@@ -380,8 +403,11 @@ compileRTS Config{verbosity,optc,dynflags} = do
                  ++ (if pointer then " POINTER=1 " else "")
                  ++ (if parallel then " PARALLEL=1 " else "")
                  ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
-                 ++ (" USER_CFLAGS=\"" ++ optc ++ "\"")
+                 ++ (if papi || papi_native then " PAPI=1 " else "")
+                 ++ (" USER_CFLAGS=\"" ++ userCFlags ++ "\"")
                  ++ (" VERBOSITY=" ++ show verbosity)
+                 ++ (" CC=\"" ++ ccCmd ++ "\"")
+                 ++ (" AR=\"" ++ archiver ++ "\"")
   execCmd
     Nothing
     rtsmkcmd
@@ -395,6 +421,8 @@ compileRTS Config{verbosity,optc,dynflags} = do
     rts_debug = gopt Opt_RtsDebug dynflags
     print_gc_stats = gopt Opt_PrintGcStats dynflags
     genGC = gopt Opt_GenGc dynflags
+    papi = gopt Opt_PapiInstrumentation dynflags
+    papi_native = gopt Opt_PapiNativeInstrumentation dynflags
 
 
 -- | Compile and run the generated code if appropriate
@@ -429,17 +457,22 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         links = if pointer
                 then " -lgc -lm "
                 else " -lm "
+        papi = gopt Opt_PapiInstrumentation (dynflags cfg)
+        papi_native = gopt Opt_PapiNativeInstrumentation (dynflags cfg)
+        links' = if papi || papi_native
+                 then links ++ "-l:libpapi.a "
+                 else links
         compile_program = do
             compileRTS cfg
             lib_dir <- getRTSBuildDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
-            let compile_prog_cmd = compilationCmd backend cfg
+                compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
                                    ++" -L" ++ lib_dir
                                    ++ " -Wl,-rpath=" ++ lib_dir ++ " "
                                    ++ outfile ++ " " ++ rts_o_path
-                                   ++ links ++ " -lgibbon_rts_ng"
+                                   ++ links' ++ " -lgibbon_rts_ng"
 
             execCmd
               Nothing
@@ -464,6 +497,52 @@ getRTSBuildDir =
      unless exists (error "RTS build not found.")
      pure build_dir
 
+chooseArchiver :: String -> IO String
+chooseArchiver ccCmd = pick candidates
+  where
+    candidates
+      | isClangCompiler ccCmd = ["llvm-ar", "ar"]
+      | otherwise             = ["gcc-ar", "ar"]
+    pick [] = pure "ar"
+    pick (tool:rest) = do
+      found <- findExecutable tool
+      case found of
+        Just path -> pure path
+        Nothing   -> pick rest
+
+isClangCompiler :: String -> Bool
+isClangCompiler = ("clang" `isInfixOf`) . takeFileName
+
+toolVersionMajor :: String -> IO (Maybe Int)
+toolVersionMajor toolString = do
+  let exe = takeWhile (not . isSpace) (dropWhile isSpace toolString)
+      base = takeFileName exe
+      marker
+        | "llvm-ar" `isInfixOf` base = Just "LLVM version "
+        | "clang"   `isInfixOf` base = Just "clang version "
+        | otherwise                  = Nothing
+  case marker of
+    Nothing -> pure Nothing
+    Just mk -> do
+      outcome <- catchIOError (Just <$> readProcessWithExitCode exe ["--version"] "") (const (pure Nothing))
+      case outcome of
+        Just (ExitSuccess, stdoutText, _) -> pure (parseMajorAfter mk stdoutText)
+        _ -> pure Nothing
+
+parseMajorAfter :: String -> String -> Maybe Int
+parseMajorAfter marker txt = do
+  rest <- findMarker marker txt
+  let digits = takeWhile isDigit rest
+  if null digits
+     then Nothing
+     else Just (read digits)
+
+findMarker :: String -> String -> Maybe String
+findMarker _ [] = Nothing
+findMarker marker str =
+  case stripPrefix marker str of
+    Just rest -> Just rest
+    Nothing   -> findMarker marker (drop 1 str)
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
 execCmd dir cmd msg errmsg = do
@@ -527,6 +606,8 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++ (if not genGC then " -D_GIBBON_GENGC=0 " else " -D_GIBBON_GENGC=1 ")
                           ++ (if simpleWriteBarrier then " -D_GIBBON_SIMPLE_WRITE_BARRIER=1 " else " -D_GIBBON_SIMPLE_WRITE_BARRIER=0 ")
                           ++ (if lazyPromote then " -D_GIBBON_EAGER_PROMOTION=0 " else " -D_GIBBON_EAGER_PROMOTION=1 ")
+                          ++ (if papi || papi_native then " -D_GIBBON_ENABLE_PAPI " else "")
+                          ++ (if papi_native then " -D_GIBBON_ENABLE_PAPI_NATIVE " else "")
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
@@ -537,6 +618,8 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         genGC = gopt Opt_GenGc dflags
         simpleWriteBarrier = gopt Opt_SimpleWriteBarrier dflags
         lazyPromote = gopt Opt_NoEagerPromote dflags
+        papi = gopt Opt_PapiInstrumentation dflags
+        papi_native = gopt Opt_PapiNativeInstrumentation dflags
 
 -- |
 isBench :: Mode -> Bool
@@ -612,7 +695,7 @@ benchMainExp l1 = do
                                  (L1.ReadPackedFile benchInput tyc Nothing arg) [])
                         $ L1.LetE (toVar "benchres", [],
                                       ret,
-                                      L1.AppE fnname [] [L1.VarE (toVar tmp)])
+                                      L1.AppE fnname UnknownTailType [] [L1.VarE (toVar tmp)])
                         -- FIXME: should actually return the result,
                         -- as soon as we are able to print it.
                         (if gopt Opt_BenchPrint dynflags
@@ -703,7 +786,7 @@ passes config@Config{dynflags} l0 = do
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               
               --l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              l2 <- goE2 "reorderLetExprs" reorderLetExprs l2
+              l2 <- goE2 "reorderLetExprs1" reorderLetExprs l2
               l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
               l2 <- go   "fixRANs"         fixRANs      l2
               l2 <- goE2 "reorderLetExprs2" reorderLetExprs l2
@@ -762,16 +845,17 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   -- l1 <- goE1 "copyOutOfOrderPacked" copyOutOfOrderPacked l1
                   -- l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- go "regionsInwards2"    regionsInwards l2
+                  l2 <- go "simplifyLocBinds_1" (simplifyLocBinds True) l2
                   l2 <- goE2 "reorderLetExprs3" reorderLetExprs l2
-                  l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
                   l2 <- go "fixRANs"         fixRANs       l2
-                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
-                  l2 <- go "regionsInwards" regionsInwards l2
-                  l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
-                  l2 <- goE2 "+" reorderLetExprs l2
+                  --l2 <- go   "L2.typecheck"  L2.tcProg     l2
+                  --l2 <- go "regionsInwards" regionsInwards l2
+                  --l2 <- go "simplifyLocBinds" (simplifyLocBinds True) l2
+                  l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   -- VS : This pass is causing a bug 
-                  --l2 <- go "L2.flatten"      flattenL2     l2
+                  l2 <- go "L2.flatten"      flattenL2     l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
@@ -805,20 +889,20 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck" L2.tcProg l2
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
+              l2 <- goE2 "simplifyLocBinds_2" (simplifyLocBinds True) l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- goE2 "L2.flatten" flattenL2 l2
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2
-              l2 <- goE2 "reorderLetExprs4" reorderLetExprs l2
+              l2 <- goE2 "simplifyLocBinds_3" (simplifyLocBinds True) l2
+              l2 <- goE2 "reorderLetExprs5" reorderLetExprs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "inferFunAllocs"   inferFunAllocs l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- L2 program no longer typechecks while these next passes run
               {- VS: The Argument to simplify loc binds used to be False, why doesn't true work ? -}
-              l2 <- goE2 "simplifyLocBinds" (simplifyLocBinds True) l2 
+              l2 <- goE2 "simplifyLocBinds_4" (simplifyLocBinds True) l2 
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               -- l2 <- if gibbon1
               --      then pure l2
@@ -835,13 +919,18 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2' <- go "threadRegions2" threadRegions2 l2'
               l2' <- go "hoistBoundsCheck" hoistBoundsCheckProg l2'
 
+
+              --Infer the type of AppE call
+              -- This can either be a tail call, a tail mod cons call or unknown
+              l2' <- go "inferCallType" inferCallType l2'
+
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2'
               l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
-              l3 <- go "addCasts"         addCasts      l3
+              -- l3 <- go "addCasts"         addCasts      l3
               l3 <- go "L3.typecheck"     tcProg3       l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               l3 <- go "L3.typecheck"     tcProg3       l3
@@ -852,6 +941,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               return l3
 
       l3 <- go "unariser"       unariser                l3
+      l3 <- go "removeReDefinitions"     removeReDefs            l3 
       l3 <- go "L3.typecheck"   tcProg3                 l3
       l3 <- go "L3.flatten"     flattenL3               l3
       l3 <- go "L3.typecheck"   tcProg3                 l3

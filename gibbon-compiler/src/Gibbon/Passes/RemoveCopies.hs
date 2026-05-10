@@ -19,7 +19,8 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
                     -- RemoveCopies might run more than once (b/c repairProgram), so
                     -- we ensure that we add the Indirection constructor only once.
                     let datacons = filter (not . isIndirectionTag . fst) dataCons
-                    return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]} )
+                    let ty_of_indirection = getCursorTypeForDataCon ddefs ddf  
+                    return ddf {dataCons = datacons ++ [(dcon, [(False, ty_of_indirection)])]} )
             ddefs
   -- Don't process copy* functions
   fds' <- mapM (\fn -> if isCopyFunName (funName fn)
@@ -50,7 +51,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
   case ex of
     -- This AppE copies data from 'lin' to 'lout'. When this becomes an
     -- indirection node, 'lout' is the _pointer_, and 'lin' the _pointee_.
-    AppE f [lin,lout] [arg] | isCopyFunName f -> do
+    AppE f _cty [lin,lout] [arg] | isCopyFunName f -> do
       indirection <- gensym "indirection"
       let (PackedTy tycon _) = gRecoverType ddefs env2 ex
           -- the indirection datacon for this type
@@ -59,30 +60,30 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
           let reg_lout = case (lenv # lout) of 
-                                  SingleR v -> v
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+                                  SingleR v -> fromRegVarToLocVar $ (SingleR v)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
           let reg_lin = case (lenv # lin) of 
-                                  SingleR v -> v
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+                                  SingleR v -> fromRegVarToLocVar $ (SingleR v)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
           return $
             mkLets ([(indirection,[],PackedTy tycon lout,
-                      Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg)])
+                      Ext $ IndirectionE tycon dcon (lout , reg_lout) (lin, reg_lin) arg)])
             (VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    LetE (v,locs,ty@(PackedTy tycon _), (AppE f [lin,lout] [arg])) bod | isCopyFunName f -> do
+    LetE (v,locs,ty@(PackedTy tycon _), (AppE f _cty [lin,lout] [arg])) bod | isCopyFunName f -> do
       -- Get the indirection datacon for this type
       let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
           let reg_lout = case (lenv # lout) of 
-                                  SingleR v' -> v'
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
+                                  SingleR vr -> fromRegVarToLocVar $ (SingleR vr)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
           let reg_lin = case (lenv # lin) of 
-                                  SingleR v' -> v'
-                                  SoARv _ _ -> error "removeCopies: structure of arrays not implemented yet."
-          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , singleLocVar $ reg_lout) (lin, singleLocVar $ reg_lin) arg) <$>
+                                  SingleR vr -> fromRegVarToLocVar $ (SingleR vr)
+                                  r@(SoARv _ _) -> fromRegVarToLocVar r
+          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , reg_lout) (lin, reg_lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
@@ -101,12 +102,25 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
                       AfterConstantLE _ lc   -> lenv # lc
                       AfterVariableLE _ lc _ -> lenv # lc
                       FromEndLE lc           -> lenv # lc -- TODO: This needs to be fixed
+                      GetDataConLocSoA lc -> 
+                        let rlc = lenv # lc
+                         in getDataConRegFromRegVar rlc
+                      GetFieldLocSoA (dcon, idx) lc -> 
+                        let rlc = lenv # lc
+                         in getFieldRegFromRegVar (dcon, idx) rlc 
+                      AssignLE lc -> lenv # lc
+                      GenSoALoc dconLoc fieldLocs -> 
+                         let dconReg = lenv # dconLoc
+                             fldRegs = map (\((dcon, idx), fl) -> let rl = lenv # fl
+                                                                   in ((dcon, idx), rl)
+                                           ) fieldLocs
+                           in SoARv dconReg fldRegs
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion
         RetE{} -> return ex
         AddFixed{} -> return ex
-        LetRegionE r sz ty bod -> Ext <$> LetRegionE r sz ty <$> go bod
+        LetRegionE r sz endmut ty bod -> Ext <$> LetRegionE r sz endmut ty <$> go bod
         LetParRegionE r sz ty bod -> Ext <$> LetParRegionE r sz ty <$> go bod
         FromEndE{}       -> return ex
         BoundsCheck{}    -> return ex

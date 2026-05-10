@@ -161,7 +161,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | Colobus
+data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1 | MPL | GibbonNoCopies | GibbonNoRan
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -179,13 +179,15 @@ readMode s =
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
-        "colobus" -> Colobus
+        "nocopies" -> GibbonNoCopies
+        "noran" -> GibbonNoRan
         "mpl" -> MPL
         _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
 modeRunFlags :: Mode -> [String]
-modeRunFlags Colobus  = ["--run", "--packed", "--gibbon1", "--SoA"]
+modeRunFlags GibbonNoCopies  = ["--run", "--packed", "--no-rcopies"]
+modeRunFlags GibbonNoRan  = ["--run", "--packed", "--no-ran"]
 modeRunFlags Gibbon3  = ["--run", "--packed", "--gen-gc"]
 modeRunFlags Gibbon2  = ["--run", "--packed"]
 modeRunFlags Pointer = ["--run", "--pointer"]
@@ -195,7 +197,8 @@ modeRunFlags MPL = ["--mpl-run"]
 
 -- Must match the flag expected by Gibbon.
 modeExeFlags :: Mode -> [String]
-modeExeFlags Colobus  = ["--to-exe", "--packed", "--gibbon1", "--SoA"]
+modeExeFlags GibbonNoCopies  = ["--to-exe", "--packed", "--no-rcopies"]
+modeExeFlags GibbonNoRan  = ["--to-exe", "--packed", "--no-ran"]
 modeExeFlags Gibbon3 = ["--to-exe", "--packed", "--gen-gc"]
 modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
@@ -203,8 +206,12 @@ modeExeFlags Interp1 = error "Cannot compile in Interp1 mode."
 modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
 modeExeFlags MPL = ["--mpl-exe"]
 
+ccFlags :: TestConfig -> [String]
+ccFlags tc = maybe [] (\cc -> ["--cc=" ++ cc]) (ccOverride tc)
+
 modeFileSuffix :: Mode -> String
-modeFileSuffix Colobus =  "_colobus"
+modeFileSuffix GibbonNoCopies =  "_gibbonNoCopies"
+modeFileSuffix GibbonNoRan =  "_gibbonNoRan"
 modeFileSuffix Gibbon3  = "_gibbon3"
 modeFileSuffix Gibbon2  = "_gibbon2"
 modeFileSuffix Pointer = "_ptr"
@@ -335,6 +342,7 @@ data TestConfig = TestConfig
                               --   It's a global parameter i.e it affects ALL tests.
                               --   However, if a corresponding parameter is specified
                               --   for a particular test, that has higher precedence.
+    , ccOverride  :: Maybe String -- ^ If set, pass --cc=<value> to all gibbon invocations.
     , checkPerf   :: Bool     -- ^ Should we also run the performance tests ?
     , onlyPerf    :: Bool     -- ^ If true, only run the benchmarks.
     , recordBenchmarks :: Bool -- ^ If true, record the results of running fresh benchmarks. Used via BenchRunner.
@@ -349,6 +357,7 @@ defaultTestConfig = TestConfig
     , testSummaryFile = "gibbon-test-summary.txt"
     , tempdir     = "examples/build_tmp"
     , gRunModes   = []
+    , ccOverride  = Nothing
     , checkPerf   = False
     , onlyPerf    = False
     , recordBenchmarks = False
@@ -362,6 +371,7 @@ instance FromJSON TestConfig where
                                  o .:? "test-summary-file" .!= (testSummaryFile defaultTestConfig) <*>
                                  o .:? "tempdir"      .!= (tempdir defaultTestConfig)     <*>
                                  o .:? "run-modes"    .!= (gRunModes defaultTestConfig)   <*>
+                                 o .:? "cc"           .!= (ccOverride defaultTestConfig)  <*>
                                  o .:? "check-perf"   .!= (checkPerf defaultTestConfig)   <*>
                                  o .:? "only-perf"    .!= (onlyPerf defaultTestConfig)    <*>
                                  o .:? "run-benchmarks"   .!= (recordBenchmarks defaultTestConfig) <*>
@@ -390,6 +400,9 @@ configParser dtc = TestConfig
                    <*> option readM_modes (long "run-modes" <>
                                            help "Only run the tests in these modes" <>
                                            value (gRunModes dtc))
+                   <*> fmap (\mb -> maybe (ccOverride dtc) Just mb)
+                             (OA.optional (strOption (long "cc" <>
+                                                   help "C compiler to use for all tests")))
                    <*> switch (long "check-perf" <>
                                help "Run performance tests." <>
                                showDefault)
@@ -517,7 +530,7 @@ runTest tc Test{name,dir,expectedResults,runModes,mb_anspath,test_flags} = do
             exepath  = replaceExtension basename ".exe"
             cmd = "gibbon"
             -- The order of (++) is important. The PATH to the test file must always be at the end.
-            cmd_flags = modeRunFlags mode ++ test_flags ++
+            cmd_flags = modeRunFlags mode ++ ccFlags tc ++ test_flags ++
                         [ "--cfile=" ++ cpath ,
                           "--exefile=" ++ exepath ,
                           compiler_dir </> dir </> name ]
@@ -590,7 +603,7 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
 
 
         -- The order of (++) is important. The PATH to the test file must always be at the end.
-        cmd_flags = modeExeFlags mode ++ test_flags ++
+        cmd_flags = modeExeFlags mode ++ ccFlags tc ++ test_flags ++
                       [ "--cfile=" ++ cpath ,
                         "--exefile=" ++ exepath ,
                         compiler_dir </> dir </> name ]

@@ -1,0 +1,19 @@
+======================================================================
+✓ Text report saved to: benchmark_report.txt
+✓ JSON results saved to: benchmark_results.json
+
+======================================================================
+Generating conference paper materials...
+======================================================================
+Traceback (most recent call last):
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1688, in <module>
+    main()
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 1642, in main
+    generate_latex_table(all_results, args.latex_table, args.programs_dir)
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 601, in generate_latex_table
+    generate_per_program_tables(f, all_results, fold_map_class)
+  File "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/./gibbon_benchmark.py", line 754, in generate_per_program_tables
+    with open(output_file, 'w') as f:
+              ^^^^^^^^^^^
+NameError: name 'output_file' is not defined
+

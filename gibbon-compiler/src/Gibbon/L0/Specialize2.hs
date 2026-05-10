@@ -149,7 +149,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         CharE n   -> L1.CharE n
         FloatE n  -> L1.FloatE n
         LitSymE v -> L1.LitSymE v
-        AppE f [] args   -> AppE f [] (map toL1Exp args)
+        AppE f cty [] args   -> AppE f cty [] (map toL1Exp args)
         AppE{}   -> err1 (sdoc ex)
         PrimAppE pr args ->
           case pr of
@@ -462,14 +462,14 @@ monoOblsTy ddefs1 t = do
 collectMonoObls :: DDefs0 -> Env2 Var Ty0 -> S.Set Var -> Exp0 -> MonoM Exp0
 collectMonoObls ddefs env2 toplevel ex =
   case ex of
-    AppE f [] args -> do
+    AppE f cty [] args -> do
       args' <- mapM (collectMonoObls ddefs env2 toplevel) args
-      pure $ AppE f [] args'
-    AppE f tyapps args -> do
+      pure $ AppE f cty [] args'
+    AppE f cty tyapps args -> do
       args'   <- mapM (collectMonoObls ddefs env2 toplevel) args
       tyapps' <- mapM (monoOblsTy ddefs) tyapps
       f' <- addFnObl f tyapps'
-      pure $ AppE f' [] args'
+      pure $ AppE f' cty [] args'
     LetE (v, [], ty@ArrowTy{}, rhs) bod ->do
       let env2' = (extendVEnv v ty env2)
       case rhs of
@@ -692,10 +692,10 @@ monoLambdas ex =
     CharE{}   -> pure ex
     FloatE{}  -> pure ex
     LitSymE{} -> pure ex
-    AppE f tyapps args ->
+    AppE f cty tyapps args ->
       case tyapps of
         [] -> do args' <- mapM monoLambdas args
-                 pure $ AppE f [] args'
+                 pure $ AppE f cty [] args'
         _  -> error $ "monoLambdas: Expression probably not processed by collectMonoObls: " ++ sdoc ex
     PrimAppE pr args -> do args' <- mapM monoLambdas args
                            pure $ PrimAppE pr args'
@@ -787,7 +787,7 @@ updateTyConsExp ddefs mono_st ex =
     CharE{}   -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
-    AppE f tyapps args    -> AppE f tyapps (map go args)
+    AppE f cty tyapps args -> AppE f cty tyapps (map go args)
     PrimAppE pr args  -> PrimAppE pr (map go args)
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, updateTyConsTy ddefs mono_st ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)
@@ -1002,7 +1002,7 @@ specLambdasExp :: DDefs0 -> Env2 Var Ty0 -> Exp0 -> SpecM Exp0
 specLambdasExp ddefs env2 ex =
   case ex of
     -- TODO, docs.
-    AppE f [] args -> do
+    AppE f cty [] args -> do
       args' <- mapM go args
       let args'' = dropFunRefs f env2 args'
           refs   = foldr collectFunRefs [] args'
@@ -1010,11 +1010,11 @@ specLambdasExp ddefs env2 ex =
       case refs of
         [] ->
             case M.lookup f (sp_extra_args sp_state) of
-              Nothing -> pure $ AppE f [] args''
+              Nothing -> pure $ AppE f cty [] args''
               Just extra_args -> do
                   let (vars,_) = unzip extra_args
                       args''' = args'' ++ map VarE vars
-                  pure $ AppE f [] args'''
+                  pure $ AppE f cty [] args'''
         _  -> do
           let extra_args = foldr (\fnref acc ->
                                           case M.lookup fnref (sp_extra_args sp_state) of
@@ -1040,10 +1040,10 @@ specLambdasExp ddefs env2 ex =
                                        , sp_extra_args = sp_extra_args'
                                        }
               put sp_state'
-              pure $ AppE f' [] args'''
-            (Just f', _) -> pure $ AppE f' [] args'''
-            (_, Just f') -> pure $ AppE f' [] args'''
-    AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
+              pure $ AppE f' cty [] args'''
+            (Just f', _) -> pure $ AppE f' cty [] args'''
+            (_, Just f') -> pure $ AppE f' cty [] args'''
+    AppE _ _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, (Ext (LambdaE args lam_bod))) bod -> do
@@ -1144,9 +1144,9 @@ specLambdasExp ddefs env2 ex =
        e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
     SpawnE fn tyapps args -> do
-      e' <- specLambdasExp ddefs env2 (AppE fn tyapps args)
+      e' <- specLambdasExp ddefs env2 (AppE fn UnknownTailType tyapps args)
       case e' of
-        AppE fn' tyapps' args' -> pure $ SpawnE fn' tyapps' args'
+        AppE fn' _ tyapps' args' -> pure $ SpawnE fn' tyapps' args'
         _ -> error "specLambdasExp: SpawnE"
     SyncE   -> pure SyncE
     MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
@@ -1180,7 +1180,7 @@ specLambdasExp ddefs env2 ex =
                                                     , funCanTriggerGC = False
                                                     }
                                 }
-                pure (Just fn, binds, AppE fnname [] (map VarE args))
+                pure (Just fn, binds, AppE fnname UnknownTailType [] (map VarE args))
           let mb_insert mb_fn mp = case mb_fn of
                                      Just fn -> M.insert (funName fn) fn mp
                                      Nothing -> mp
@@ -1218,7 +1218,7 @@ specLambdasExp ddefs env2 ex =
         CharE{}   -> acc
         FloatE{}  -> acc
         LitSymE{} -> acc
-        AppE _ _ args   -> foldr collectFunRefs acc args
+        AppE _ _ _ args   -> foldr collectFunRefs acc args
         PrimAppE _ args -> foldr collectFunRefs acc args
         LetE (_,_,_, rhs) bod -> foldr collectFunRefs acc [bod, rhs]
         IfE a b c  -> foldr collectFunRefs acc [c, b, a]
@@ -1260,7 +1260,7 @@ specLambdasExp ddefs env2 ex =
         CharE{}   -> acc
         FloatE{}  -> acc
         LitSymE{} -> acc
-        AppE f _ args   -> f : foldr collectAllFuns acc args
+        AppE f _ _ args   -> f : foldr collectAllFuns acc args
         PrimAppE _ args -> foldr collectAllFuns acc args
         LetE (_,_,_, rhs) bod -> foldr collectAllFuns acc [bod, rhs]
         IfE a b c  -> foldr collectAllFuns acc [c, b, a]
@@ -1366,9 +1366,9 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (LitSymE _)   -> pure ([], e0)
         (VarE _)      -> pure ([], e0)
         (PrimAppE{})  -> pure ([], e0)
-        (AppE f tyapps args) -> do
+        (AppE f cty tyapps args) -> do
           (ltss,args') <- unzip <$> mapM go args
-          pure (concat ltss, AppE f tyapps args')
+          pure (concat ltss, AppE f cty tyapps args')
         (MapE _ _)    -> error "bindLambdas: FINISHME MapE"
         (FoldE _ _ _) -> error "bindLambdas: FINISHME FoldE"
         (LetE (v,tyapps,t,rhs) bod) -> do
@@ -1433,7 +1433,7 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
         CharE {} -> pure ex
         FloatE {} -> pure ex
         LitSymE {} -> pure ex
-        AppE f tyapps args -> AppE f tyapps <$> mapM go args
+        AppE f cty tyapps args -> AppE f cty tyapps <$> mapM go args
         PrimAppE pr args -> do
           -- This is always going to have a function reference which
           -- we cannot eliminate.
@@ -1458,7 +1458,7 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
               spawns = init xs
               (a,b,c) = last xs
               ls' = foldr
-                      (\(w,ty1,(AppE fn tyapps1 args)) acc ->
+                      (\(w,ty1,(AppE fn UnknownTailType tyapps1 args)) acc ->
                          (w,[],ty1,(SpawnE fn tyapps1 args)) : acc)
                       []
                       spawns
@@ -1545,17 +1545,17 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
             PrintPacked ty arg
               | (PackedTy tycon _) <- ty -> do
                   let f = mkPrinterName tycon
-                  pure $ AppE f [] [arg]
+                  pure $ AppE f UnknownTailType [] [arg]
               | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
             CopyPacked ty arg
               | (PackedTy tycon _) <- ty -> do
                   let f = mkCopyFunName tycon
-                  pure $ AppE f [] [arg]
+                  pure $ AppE f UnknownTailType [] [arg]
               | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
             TravPacked ty arg
               | (PackedTy tycon _) <- ty -> do
                   let f = mkTravFunName tycon
-                  pure $ AppE f [] [arg]
+                  pure $ AppE f UnknownTailType [] [arg]
               | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
             L p e   -> Ext <$> (L p) <$> (go e)
             LinearExt{} -> err1 (sdoc ex)
@@ -1568,10 +1568,12 @@ addRepairFns (Prog dfs fds me) = do
   newFns <- concat <$>
               mapM (\d -> do
                     copy_fn  <- genCopyFn d
-                    copy2_fn <- genCopySansPtrsFn d
+                    --copy2_fn <- genCopySansPtrsFn d
                     trav_fn  <- genTravFn d
                     print_fn <- genPrintFn d
-                    return [copy_fn, copy2_fn, trav_fn, print_fn])
+                    -- copy2_fn
+                    return [copy_fn, trav_fn, print_fn])
+                    --return [trav_fn, print_fn])
               (filter (not . isVoidDDef) (M.elems dfs))
   let fds' = fds `M.union` (M.fromList $ map (\f -> (funName f, f)) newFns)
   pure $ Prog dfs fds' me
@@ -1589,7 +1591,7 @@ genCopyFn DDef{tyName, dataCons} = do
                 -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
                 let bod = foldr (\(ty,x,y) acc ->
                                      case ty of
-                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopyFunName tycon) [] [VarE x]) acc
+                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopyFunName tycon) UnknownTailType [] [VarE x]) acc
                                        _ -> LetE (y, [], ty, VarE x) acc)
                             (DataConE (ProdTy []) dcon $ map VarE ys) (zip3 tys xs ys)
                 return (dcon, map (\x -> (x,(ProdTy []))) xs, bod)
@@ -1613,7 +1615,7 @@ genCopySansPtrsFn DDef{tyName,dataCons} = do
                 -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
                 let bod = foldr (\(ty,x,y) acc ->
                                      case ty of
-                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopySansPtrsFunName tycon) [] [VarE x]) acc
+                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopySansPtrsFunName tycon) UnknownTailType [] [VarE x]) acc
                                        _ -> LetE (y, [], ty, VarE x) acc)
                             (DataConE (ProdTy []) dcon $ map VarE ys) (zip3 tys xs ys)
                 return (dcon, map (\x -> (x,(ProdTy []))) xs, bod)
@@ -1639,7 +1641,7 @@ genTravFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
                                      case ty of
-                                       PackedTy tycon _ -> LetE (y, [], ProdTy [], AppE (mkTravFunName tycon) [] [VarE x]) acc
+                                       PackedTy tycon _ -> LetE (y, [], ProdTy [], AppE (mkTravFunName tycon) UnknownTailType [] [VarE x]) acc
                                        _ -> acc)
                           (MkProdE [])
                           (zip3 (map snd tys) xs ys)
@@ -1668,7 +1670,7 @@ genPrintFn DDef{tyName, dataCons} = do
                                        FloatTy -> (y, [], ProdTy [], PrimAppE PrintFloat [VarE x]) : acc
                                        SymTy0  -> (y, [], ProdTy [], PrimAppE PrintSym [VarE x]) : acc
                                        BoolTy  -> (y, [], ProdTy [], PrimAppE PrintBool [VarE x]) : acc
-                                       PackedTy tycon _ -> (y, [], ProdTy [], AppE (mkPrinterName tycon) [] [VarE x]) : acc
+                                       PackedTy tycon _ -> (y, [], ProdTy [], AppE (mkPrinterName tycon) UnknownTailType [] [VarE x]) : acc
                                        SymDictTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "SymDict")]) : acc
                                        VectorTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "Vector")]) : acc
                                        PDictTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "PDict")]) : acc
@@ -1750,7 +1752,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
       args <- mapM (\x -> lift $ gensym x) free
       let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
       let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False)
-      state (\s -> ((AppE fn_name [] (map VarE free)), M.insert fn_name fn s))
+      state (\s -> ((AppE fn_name UnknownTailType [] (map VarE free)), M.insert fn_name fn s))
 
     go :: Bool -> Env2 Var Ty0 -> Exp0 -> FloatM Exp0
     go float env2 ex =
@@ -1760,7 +1762,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
         CharE{}   -> pure ex
         FloatE{}  -> pure ex
         LitSymE{} -> pure ex
-        AppE f tyapps args-> AppE f tyapps <$> mapM recur args
+        AppE f cty tyapps args-> AppE f cty tyapps <$> mapM recur args
         PrimAppE pr args  -> do
           args' <- mapM recur args
           pure $ PrimAppE pr args'

@@ -1,0 +1,340 @@
+[
+  {
+    "program": "Compiler.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "DBQuery.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "DecisionTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "DomTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "KDTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "LinearListReduction.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "List.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "MonoTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "ObjectGraph.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "OctTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "PiecewiseFunctions.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "TernaryTree.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  },
+  {
+    "program": "Trie.hs",
+    "aos": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "soa": {
+      "compile_success": false,
+      "run_success": false,
+      "error": "source not found",
+      "adt_fields": null,
+      "adt_type": null,
+      "aos_buffers": 1,
+      "soa_total_buffers": null,
+      "nonrec_field_slots": null,
+      "passes": {}
+    },
+    "output_match": false
+  }
+]

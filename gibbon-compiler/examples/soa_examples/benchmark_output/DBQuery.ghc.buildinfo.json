@@ -1,0 +1,22 @@
+{
+  "compile_cmd": [
+    "ghc",
+    "-O2",
+    "-rtsopts",
+    "-fno-full-laziness",
+    "-fno-cse",
+    "-fno-strictness",
+    "-XNoImplicitPrelude",
+    "-XPackageImports",
+    "-i/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC",
+    "-i/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC",
+    "-o",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.ghc.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC/DBQuery.hs"
+  ],
+  "compile_cmd_signature": "ghc -O2 -rtsopts -fno-full-laziness -fno-cse -fno-strictness -XNoImplicitPrelude -XPackageImports -i/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC -i/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC -o /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.ghc.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC/DBQuery.hs",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/GHC/DBQuery.hs",
+  "c_file": null,
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/DBQuery.ghc.exe",
+  "compiled_at": "2026-02-21T20:22:51"
+}

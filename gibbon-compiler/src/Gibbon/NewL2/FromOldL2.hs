@@ -41,10 +41,10 @@ fromOldL2Fn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
 fromOldL2Exp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Var Ty2 -> Exp2 -> PassM New.Exp2
 fromOldL2Exp ddefs fundefs locenv env2 ex =
   case ex of
-    AppE f locs args -> do
+    AppE f cty locs args -> do
       args' <- mapM (go locenv env2) args
       let locargs = map (locenv # ) locs
-      pure $ AppE f locargs args'
+      pure $ AppE f cty locargs args'
 
     SpawnE f locs args -> do
       args' <- mapM (go locenv env2) args
@@ -60,12 +60,12 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
       | SpawnE f applocs args <- rhs
       , not (null ewitnesses) ->
-          do let e = LetE (v, ewitnesses, ty, AppE f applocs args) bod
-             (LetE (v', ewitnesses', ty', AppE f' applocs' args') bod') <-
+          do let e = LetE (v, ewitnesses, ty, AppE f NotTailRec applocs args) bod
+             (LetE (v', ewitnesses', ty', AppE f' NotTailRec applocs' args') bod') <-
                go locenv env2 e
              pure $ LetE (v', ewitnesses', ty', SpawnE f' applocs' args') bod'
 
-      | AppE f _applocs args <- rhs
+      | AppE f _cty _applocs args <- rhs
       , not (null ewitnesses) ->
           do let fty = lookupFEnv f env2
                  effs = arrEffs fty
@@ -87,6 +87,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                                                PackedTy _ loc -> (loc:acc)
                                                -- For indirection/redirection pointers.
                                                CursorTy -> ((Single w):acc)
+                                               CursorArrayTy{} -> ((Single w):acc)
                                                _ -> acc
                                            _ -> acc)
                                       []
@@ -168,19 +169,19 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
     Ext ext ->
       case ext of
-        LetRegionE reg reg_size mb_ty bod -> do
+        LetRegionE reg reg_size endmut mb_ty bod -> do
           bod' <- go locenv env2 bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size endmut mb_ty bod'
 
         LetParRegionE reg reg_size mb_ty bod -> do
           bod' <- go locenv env2 bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size RegionImmutable mb_ty bod'
 
         LetLocE loc rhs bod -> do
           let rhs' = fmap (locenv #) rhs
               locarg = toLocArg loc rhs locenv
           bod' <- go (M.insert loc locarg locenv) env2 bod
-          pure $ Ext $ LetLocE loc rhs' bod'
+          pure $ Ext $ LetLocE locarg rhs' bod'
 
         RetE locs v -> do
           let locargs = map (locenv #) locs
@@ -195,7 +196,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
         AddFixed v i -> pure $ Ext $ AddFixed v i
 
-        TagCursor a b -> pure $ Ext $ TagCursor a b
+        TagCursor a b -> pure $ Ext $ TagCursor (locenv # a) (locenv # b)
 
         StartOfPkdCursor cur -> pure $ Ext $ StartOfPkdCursor cur
 
@@ -218,10 +219,12 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           pure $ Ext $ LetAvail avail rhs'
 
         AllocateTagHere loc tycon -> do
-          -- let locarg = locenv # loc
-          pure $ Ext $ AllocateTagHere loc tycon
+          let locarg = locenv # loc
+          pure $ Ext $ AllocateTagHere locarg tycon
 
-        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere loc
+        AllocateScalarsHere loc -> do
+          let locarg = locenv # loc          
+          pure $ Ext $ AllocateScalarsHere locarg
 
         SSPush mode loc end_loc tycon -> do
           pure $ Ext $ SSPush mode loc end_loc tycon
@@ -256,10 +259,14 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
       StartOfRegionLE reg -> New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       AfterConstantLE _ loc2 ->
         let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+            modal = case lrem of 
+                          New.LREM _ _ _ m -> m
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) modal)
       AfterVariableLE _ loc2 _ ->
         let (New.Loc lrem) = locenv0 # loc2
-        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
+            modal = case lrem of 
+                          New.LREM _ _ _ m -> m
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) modal)
       InRegionLE reg ->
         New.Loc (New.LREM loc (regionToVar reg) (toEndVRegVar (regionToVar reg)) Output)
       FreeLE ->
@@ -342,10 +349,10 @@ toOldL2Fn f@FunDef{funTy,funBody} = do
 toOldL2Exp :: New.Exp2 -> PassM Exp2
 toOldL2Exp ex =
   case ex of
-    AppE f locs args -> do
+    AppE f cty locs args -> do
       args' <- mapM go args
       let locargs = map New.toLocVar locs
-      pure $ AppE f locargs args'
+      pure $ AppE f cty locargs args'
 
     SpawnE f locs args -> do
       args' <- mapM go args
@@ -383,24 +390,24 @@ toOldL2Exp ex =
 
     Ext ext ->
       case ext of
-        LetRegionE reg reg_size mb_ty bod -> do
+        LetRegionE reg reg_size endmut mb_ty bod -> do
           bod' <- go bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size endmut mb_ty bod'
 
         LetParRegionE reg reg_size mb_ty bod -> do
           bod' <- go bod
-          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+          pure $ Ext $ LetRegionE reg reg_size RegionImmutable mb_ty bod'
 
         LetLocE loc rhs bod -> do
           let rhs' = fmap New.toLocVar rhs
           bod' <- go bod
-          pure $ Ext $ LetLocE loc rhs' bod'
+          pure $ Ext $ LetLocE (New.toLocVar loc) rhs' bod'
 
         StartOfPkdCursor cur -> do
           pure $ Ext $ StartOfPkdCursor cur
 
         TagCursor a b -> do
-          pure $ Ext $ TagCursor a b
+          pure $ Ext $ TagCursor (New.toLocVar a) (New.toLocVar b)
 
         RetE locs v -> do
           let locargs = map New.toLocVar locs
@@ -430,9 +437,9 @@ toOldL2Exp ex =
           pure $ Ext $ LetAvail avail rhs'
 
         AllocateTagHere loc tycon -> do
-          pure $ Ext $ AllocateTagHere loc tycon
+          pure $ Ext $ AllocateTagHere (New.toLocVar loc) tycon
 
-        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere loc
+        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere (New.toLocVar loc)
 
         SSPush mode loc end_loc tycon -> do
           pure $ Ext $ SSPush mode loc end_loc tycon

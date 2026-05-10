@@ -103,7 +103,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
             SyncE{}             -> pass
             MapE{}              -> pass
             FoldE{}             -> pass
-            AppE _v _locs _args -> do
+            AppE _v _ _locs _args -> do
               -- TODO traversals
               return (ex, regSzEnv, regTyEnv)
             PrimAppE{}             -> return (ex, regSzEnv, regTyEnv)
@@ -159,13 +159,13 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                         cases
               return (CaseE ex2 cases', M.unionsWith max res, M.unions rts)
             Ext ext -> case ext of
-              LetRegionE reg _ _ bod -> do
+              LetRegionE reg _ endmut _ bod -> do
                 (bod', re, rt) <- go bod
                 let regVar = regionToVar reg
                 let regSz  = re # regVar
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
                 when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
-                return (Ext $ LetRegionE reg regSz regTy bod', re, rt)
+                return (Ext $ LetRegionE reg regSz endmut regTy bod', re, rt)
               LetParRegionE reg _ _ bod -> do
                 (bod', re, rt) <- go bod
                 let regVar = regionToVar reg

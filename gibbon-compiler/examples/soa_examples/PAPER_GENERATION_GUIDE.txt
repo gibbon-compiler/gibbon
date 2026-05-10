@@ -1,0 +1,436 @@
+CONFERENCE PAPER GENERATION GUIDE
+==================================
+
+The Gibbon benchmarking script can automatically generate publication-quality
+tables and figures for your conference paper submission!
+
+QUICK START
+-----------
+
+Run benchmarks with paper generation:
+
+  ./gibbon_benchmark.py --generate-paper
+
+This will create:
+  • performance_table.tex       - LaTeX table for your paper
+  • figures/                     - Directory with publication-quality figures
+
+WHAT GETS GENERATED
+-------------------
+
+### 1. LaTeX Tables (performance_table.tex)
+
+Two professional tables suitable for top-tier conferences:
+
+TABLE 1: Performance Comparison
+  - Program names
+  - AoS execution times (ms)
+  - SoA execution times (ms)
+  - Speedup ratios (AoS/SoA)
+  - Output correctness verification
+  - Arithmetic and geometric mean speedups
+  - Bold formatting for best performer
+
+TABLE 2: Per-Pass Breakdown
+  - Detailed timing for each compiler pass
+  - Side-by-side AoS vs SoA comparison
+  - Bold formatting for faster variant
+  - Selected most important passes
+
+### 2. Publication Figures (in figures/ directory)
+
+All figures generated in both PDF and PNG formats:
+
+FIGURE 1: speedup_comparison.pdf
+  - Horizontal bar chart of speedup ratios
+  - Color-coded: green (SoA faster), red (AoS faster)
+  - Geometric mean line
+  - Value labels on bars
+  - Perfect for showing overall performance gains
+
+FIGURE 2: performance_comparison.pdf
+  - Grouped bar chart comparing AoS vs SoA
+  - Side-by-side bars for each program
+  - Shows absolute performance
+  - Good for showing which variant is faster
+
+FIGURE 3: pass_breakdown.pdf
+  - Stacked bar chart showing time spent in each pass
+  - Separate charts for AoS and SoA
+  - Different colors for different passes
+  - Reveals where time is spent
+
+FIGURE 4: iteration_distributions.pdf
+  - Box plots showing iteration time variance
+  - Displays outliers and quartiles
+  - Shows performance consistency
+  - Useful for discussing variance
+
+FIGURE 5: speedup_heatmap.pdf
+  - Heatmap of speedups across programs and passes
+  - Color-coded diverging scale (green=SoA faster, red=AoS slower)
+  - Numerical annotations on each cell
+  - Shows which passes benefit most from SoA
+
+COMMAND-LINE OPTIONS
+--------------------
+
+Basic usage:
+  ./gibbon_benchmark.py --generate-paper
+
+Custom file locations:
+  ./gibbon_benchmark.py \
+    --generate-paper \
+    --latex-table my_table.tex \
+    --figures-dir my_figures
+
+Full example with all options:
+  ./gibbon_benchmark.py \
+    --programs-dir ./programs \
+    --output-dir ./build \
+    --iterations 50 \
+    --report detailed_report.txt \
+    --json results.json \
+    --generate-paper \
+    --latex-table tables/performance.tex \
+    --figures-dir figures
+
+USING IN YOUR LATEX PAPER
+--------------------------
+
+### Step 1: Add Required Packages
+
+In your LaTeX preamble:
+
+  \usepackage{booktabs}      % For professional tables
+  \usepackage{graphicx}      % For figures
+  \usepackage{subcaption}    % For subfigures (optional)
+
+### Step 2: Include the Performance Table
+
+In your results section:
+
+  \input{performance_table.tex}
+
+Or with custom caption:
+
+  % The generated file already has caption and label,
+  % but you can wrap it if needed:
+  
+  \input{performance_table.tex}
+
+### Step 3: Include Figures
+
+Single figure:
+
+  \begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
+    \caption{Performance speedup of SoA vs AoS implementations.
+             Values greater than 1.0 indicate SoA is faster.}
+    \label{fig:speedup}
+  \end{figure}
+
+Multiple subfigures:
+
+  \begin{figure*}[t]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+      \includegraphics[width=\textwidth]{figures/speedup_comparison.pdf}
+      \caption{Speedup comparison}
+      \label{fig:speedup}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+      \includegraphics[width=\textwidth]{figures/performance_comparison.pdf}
+      \caption{Absolute performance}
+      \label{fig:performance}
+    \end{subfigure}
+    \caption{Performance analysis of AoS vs SoA implementations}
+    \label{fig:results}
+  \end{figure*}
+
+Full-width figure (for two-column format):
+
+  \begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/speedup_heatmap.pdf}
+    \caption{Per-pass speedup heatmap showing performance gains
+             across different compiler passes and programs.}
+    \label{fig:heatmap}
+  \end{figure*}
+
+### Step 4: Reference in Text
+
+Reference the table:
+
+  As shown in Table~\ref{tab:performance}, SoA implementations
+  achieve an average speedup of 1.25× over AoS.
+
+Reference figures:
+
+  Figure~\ref{fig:speedup} shows that SoA outperforms AoS on
+  8 out of 10 benchmarks.
+  
+  The per-pass breakdown (Figure~\ref{fig:breakdown}) reveals
+  that most performance gains come from the memory optimization passes.
+
+FIGURE SPECIFICATIONS
+---------------------
+
+All figures are generated with publication-quality settings:
+
+  • DPI: 300 (suitable for print)
+  • Font: Serif (matches typical paper fonts)
+  • Font Size: 10pt (readable in papers)
+  • Format: PDF (vector, scales perfectly) + PNG (for presentations)
+  • Grid: Light grid for readability
+  • Colors: Colorblind-friendly palette
+
+Dimensions:
+  • Standard figures: 7" × 4"
+  • Large figures: 10" × 6" (speedup chart)
+  • Heatmap: 10" × 8"
+
+These dimensions work well for:
+  • Single-column papers (3.3" width)
+  • Double-column papers (6.5" width)
+  • Full-width figures in two-column format
+
+CUSTOMIZATION
+-------------
+
+To customize the generated tables and figures, edit the functions in
+gibbon_benchmark.py:
+
+  • generate_latex_table()         - Modify table format
+  • generate_speedup_chart()       - Customize speedup figure
+  • generate_performance_comparison() - Adjust performance chart
+  • generate_pass_breakdown()      - Change pass breakdown
+  • generate_iteration_boxplots()  - Modify box plots
+  • generate_speedup_heatmap()     - Customize heatmap
+
+Example customizations:
+
+Change color scheme:
+  colors.append('#2ecc71' if speedup > 1.0 else '#e74c3c')
+  # Change to your preferred colors
+
+Adjust figure size:
+  plt.rcParams.update({'figure.figsize': (8, 5)})
+
+Change which passes to show:
+  important_passes = ['instCountPass', 'memoryOpStatsPass', ...]
+
+CONFERENCE-SPECIFIC TIPS
+-------------------------
+
+### ACM Format (e.g., PLDI, OOPSLA, POPL)
+
+Use \columnwidth for single-column figures:
+  \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
+
+Use \textwidth for full-width figures:
+  \includegraphics[width=0.9\textwidth]{figures/speedup_heatmap.pdf}
+
+### IEEE Format (e.g., ICSE, MICRO, ISCA)
+
+Similar to ACM, use \columnwidth and \textwidth
+
+### Springer LNCS Format (e.g., ECOOP, ESOP)
+
+May need to adjust figure widths slightly:
+  \includegraphics[width=0.95\columnwidth]{figures/speedup_comparison.pdf}
+
+### arXiv / Preprints
+
+Full flexibility - use any size that looks good!
+
+EXAMPLE PAPER SECTION
+----------------------
+
+Here's a complete example of a results section:
+
+\section{Experimental Results}
+
+We evaluated our SoA transformation on 13 programs from the Gibbon
+benchmark suite. Table~\ref{tab:performance} summarizes the performance
+comparison between AoS and SoA implementations.
+
+\input{performance_table.tex}
+
+\subsection{Overall Performance}
+
+As shown in Figure~\ref{fig:speedup}, SoA implementations achieve an
+average speedup of 1.25× (geometric mean: 1.18×) over AoS implementations.
+Eight out of thirteen programs show speedups exceeding 1.1×, with the
+highest speedup of 1.5× observed in the \texttt{MemoryOpStats} program.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/speedup_comparison.pdf}
+  \caption{Speedup comparison showing SoA vs AoS performance.
+           Values $>1.0$ indicate SoA is faster.}
+  \label{fig:speedup}
+\end{figure}
+
+\subsection{Per-Pass Analysis}
+
+To understand where the performance improvements originate, we analyzed
+the execution time of individual compiler passes. Figure~\ref{fig:breakdown}
+shows the breakdown of execution time across different passes.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/pass_breakdown.pdf}
+  \caption{Per-pass execution time breakdown for AoS and SoA implementations.}
+  \label{fig:breakdown}
+\end{figure*}
+
+The results reveal that memory-intensive passes such as
+\texttt{memoryOpStatsPass} and \texttt{targetRetunePass} benefit most
+from the SoA transformation, with speedups of 1.3× and 1.4× respectively.
+In contrast, control-flow passes like \texttt{branchStatsPass} show
+minimal performance difference between the two representations.
+
+VERIFICATION CHECKLIST
+---------------------
+
+Before submitting your paper, verify:
+
+☐ All figures compile without errors in your LaTeX document
+☐ Figure references (\ref{}) resolve correctly
+☐ Table numbers are correct
+☐ Captions accurately describe the figures
+☐ All figures are referenced in the text
+☐ Figure quality is acceptable (check PDF closely)
+☐ Colors are distinguishable in grayscale (for print)
+☐ Font sizes are readable when scaled
+☐ Statistical claims match the data in tables/figures
+
+TROUBLESHOOTING
+---------------
+
+### Issue: LaTeX can't find figures
+
+Solution: Ensure figures/ directory is in the same directory as your
+.tex file, or adjust the path:
+  \graphicspath{{./figures/}}
+
+### Issue: Table doesn't compile
+
+Solution: Make sure you have \usepackage{booktabs} in your preamble
+
+### Issue: Figures too large/small
+
+Solution: Adjust width in \includegraphics:
+  \includegraphics[width=0.8\columnwidth]{...}
+
+### Issue: Colors don't show in grayscale
+
+Solution: Figures are designed to be distinguishable in grayscale,
+but you can test by printing in grayscale or use:
+  \usepackage[gray]{xcolor}
+
+### Issue: Want different statistics
+
+Solution: Edit the generate_latex_table() function to compute
+different metrics (median instead of mean, etc.)
+
+ADVANCED USAGE
+--------------
+
+### Generate Only Tables (No Figures)
+
+Modify the script to comment out figure generation:
+  # generate_figures(all_results, args.figures_dir)
+
+### Generate Only Specific Figures
+
+Edit generate_figures() to comment out unwanted figures:
+  # generate_speedup_chart(...)  # Skip this one
+
+### Export Data for Custom Plotting
+
+Use the JSON output for custom analysis:
+
+  import json
+  with open('benchmark_results.json') as f:
+      data = json.load(f)
+  
+  # Your custom plotting code here
+
+### Batch Process Multiple Runs
+
+Run benchmarks multiple times and average:
+
+  for i in {1..5}; do
+    ./gibbon_benchmark.py --json results_$i.json
+  done
+  
+  # Then write a script to average the results
+
+PUBLICATION WORKFLOW
+--------------------
+
+Recommended workflow for paper submission:
+
+1. Run comprehensive benchmarks:
+   ./gibbon_benchmark.py --iterations 100 --generate-paper
+
+2. Review generated materials:
+   - Check tables for accuracy
+   - Verify figures show expected trends
+   - Confirm output correctness (all checkmarks)
+
+3. Integrate into paper:
+   - Copy performance_table.tex to paper directory
+   - Copy figures/ directory to paper directory
+   - Add \input and \includegraphics commands
+
+4. Write analysis:
+   - Describe trends shown in figures
+   - Explain performance results
+   - Discuss anomalies or interesting cases
+
+5. Iterate:
+   - Adjust figure formatting if needed
+   - Re-run benchmarks if methodology changes
+   - Update paper text accordingly
+
+6. Final verification:
+   - Compile paper and check all figures
+   - Verify all claims match data
+   - Get feedback from co-authors
+
+GETTING HELP
+------------
+
+For issues with:
+  • Script: Check README.md and UPDATE_NOTES.txt
+  • LaTeX: Consult your conference's formatting guide
+  • Figures: Review matplotlib documentation
+  • Statistics: See the data in benchmark_results.json
+
+SUMMARY
+-------
+
+The --generate-paper flag provides everything you need for a
+professional conference paper:
+
+  ✓ Publication-quality LaTeX tables
+  ✓ High-resolution PDF figures
+  ✓ PNG versions for presentations
+  ✓ Multiple visualization types
+  ✓ Professional formatting
+  ✓ Ready to include in your paper
+
+Simply run:
+  ./gibbon_benchmark.py --generate-paper
+
+Then include the generated materials in your LaTeX paper!
+
+For a complete example paper section, see the EXAMPLE PAPER SECTION
+above.
+
+Good luck with your paper submission! 📝🚀

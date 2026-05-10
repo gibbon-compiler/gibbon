@@ -29,6 +29,7 @@ import           Gibbon.DynFlags
 import           Gibbon.L3.Syntax
 import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as T
+import qualified Gibbon.L2.Syntax as L2
 
 -- Generating unpack functions from Packed->Pointer representation:
 -------------------------------------------------------------------------------
@@ -470,7 +471,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           CharE{}   -> syms
           FloatE{}  -> syms
           LitSymE v -> S.insert (fromVar v) syms
-          AppE _ _ args   -> gol args
+          AppE _ _ _ args   -> gol args
           PrimAppE _ args -> gol args
           LetE (_,_,_,rhs) bod -> go rhs <> go bod
           IfE a b c  -> go a <> go b <> go c
@@ -487,8 +488,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
             case ext of
               WriteScalar _ _ ex -> go ex
               AddCursor _ ex   -> go ex
+              BumpCursorMutable _ ex -> go ex
               SubPtr{}         -> syms
-              WriteCursor _ ex -> go ex
+              WriteCursorMutable _ ex -> go ex
               TagCursor{}    -> syms
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
@@ -509,9 +511,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
               BoundsCheckVector{} -> syms
               ReadCursor{}       -> syms
               WriteTaggedCursor{}-> syms
+              MemCpy{} -> syms
               ReadTaggedCursor{} -> syms
               IndirectionBarrier{} -> syms
               NullCursor         -> syms
+              InitCursor{}       -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
               RetE ls -> gol ls
               GetCilkWorkerNum -> syms
@@ -528,7 +532,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               MakeCursorArray _len _vars -> syms
               IndexCursorArray _var _idx -> syms
               CastPtr _var _ty -> syms
-              
+              AddrOfCursor rhs -> go rhs
+              DerefMutCursor{} -> syms
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -759,10 +764,28 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                              , triv sym_tbl "addCursor offset" e] <$>
          tail free_reg sym_tbl bod
 
+    LetE (v, _, _, (Ext (BumpCursorMutable mutcur e))) bod ->
+      T.LetPrimCallT [(v, T.ProdTy [])] T.BumpCursorMutable [triv sym_tbl "bumpMutCur base" (VarE mutcur), triv sym_tbl "bump offset" e] <$>
+       tail free_reg sym_tbl bod
+
     LetE (v, _, _, (Ext (IndexCursorArray cur idx))) bod ->
       T.LetPrimCallT [(v, T.CursorTy)] T.IndexCursorArray [ triv sym_tbl "base pointer" (VarE cur)  
                                                           , triv sym_tbl "index_into_base_pointer" (LitE idx)] <$>
         tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (AddrOfCursor i@(Ext (IndexCursorArray _cur _idx))))) bod -> do
+      --i' <- tail free_reg sym_tbl i  
+      T.LetPrimCallT [(v, T.MutCursorTy)] T.AddrOfCursor [triv sym_tbl "addofexpr" i ] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (AddrOfCursor i@(VarE _cur)))) bod -> do
+      T.LetPrimCallT [(v, T.MutCursorTy)] T.AddrOfCursor [triv sym_tbl "addrofvar" i] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (DerefMutCursor cur))) bod -> 
+      T.LetPrimCallT [(v, T.CursorTy)] T.DerefMutCursor [triv sym_tbl "deref address" (VarE cur)] <$>
+       tail free_reg sym_tbl bod
+    
 
     LetE (v, _, _, (Ext (CastPtr cur ty))) bod ->
       T.LetPrimCallT [(v, T.fromL3Ty ty)] T.CastPtr [triv sym_tbl "cast pointer" (VarE cur)] <$>
@@ -804,9 +827,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
         [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv sym_tbl "WriteTag cursor" (VarE cursIn) ] <$>
         tail free_reg sym_tbl bod
 
-    LetE (v,_,_,  (Ext (NewBuffer mul))) bod -> do
+    LetE (v,_,_,  (Ext (NewBuffer mul endregmod))) bod -> do
       reg <- gensym "region"
-      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(toEndV v,T.CursorTy)] (T.NewBuffer mul) [] <$>
+      end_var <- if endregmod == L2.RegionMutable
+                       then do 
+                             ev <- gensym "end_tmp"
+                             return ev
+                       else return $ toEndV v 
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(end_var, T.CursorTy)] (T.NewBuffer mul endregmod) [] <$>
                tail free_reg sym_tbl bod
       if gopt Opt_DisableGC dflags -- -- || not free_reg
          then pure tl'
@@ -838,8 +866,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedParBuffer mul) [] <$>
          tail free_reg sym_tbl bod
 
-    LetE (v,_,_,  (Ext (EndOfBuffer mul))) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul) [] <$>
+    LetE (v,_,_,  (Ext (EndOfBuffer mul endregmod))) bod -> do
+      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul endregmod) [] <$>
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do
@@ -851,15 +879,20 @@ lower Prog{fundefs,ddefs,mainExp} = do
         tail free_reg sym_tbl bod
 
     -- Just a side effect
-    LetE(_,_,_,  (Ext (BoundsCheck i bound cur))) bod -> do
-      let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
-      T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
+    LetE(_,_,_,  (Ext (BoundsCheck i bound cur mb mode))) bod -> do
+      let args = if mode == L2.Output 
+                 then [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
+                 else
+                   let Just (mutbound, mutcur) = mb 
+                    in [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur, T.VarTriv mutbound, T.VarTriv mutcur]
+      T.LetPrimCallT [] (T.BoundsCheck mode) args <$> tail free_reg sym_tbl bod
 
     LetE(_,_,_, (Ext (BoundsCheckVector bounds))) bod -> do 
-      let args = map (\(i, bound, cur) -> 
+      let args = map (\(i, bound, cur, (b', c')) -> 
                         T.ProdTriv [ T.IntTriv (fromIntegral i)
                               , T.VarTriv bound
                               , T.VarTriv cur
+                              , T.ProdTriv [T.VarTriv b', T.VarTriv c']
                               ]
                      ) bounds
       T.LetPrimCallT [] T.BoundsCheckVector args <$> tail free_reg sym_tbl bod
@@ -883,6 +916,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, _,  (Ext (WriteTaggedCursor cur e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteTaggedCursor [triv sym_tbl "WriteTaggedCursor arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
+
+    LetE (_, _, _, (Ext (MemCpy a b (CursorArrayTy sz)))) bod ->
+      T.LetPrimCallT [] T.MemCpy [T.VarTriv a, T.VarTriv b, T.SizeOf (T.CursorArrayTy sz)] <$> tail free_reg sym_tbl bod
+    
+    LetE (_, _, _, (Ext (MemCpy a b (CursorTy)))) bod ->
+      T.LetPrimCallT [] T.MemCpy [T.VarTriv a, T.VarTriv b, T.SizeOf (T.CursorTy)] <$> tail free_reg sym_tbl bod
 
     LetE(v,_,_,  (Ext (ReadCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
@@ -923,8 +962,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteVector [triv sym_tbl "WriteVector arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
-    LetE (v, _, _,  (Ext (WriteCursor cur e))) bod ->
-      T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursor [triv sym_tbl "WriteCursor arg" e, T.VarTriv cur] <$>
+    LetE (v, _, _,  (Ext (WriteCursorMutable cur e))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursorMutable [triv sym_tbl "WriteCursorMutable arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
     LetE (_, _, _,  (Ext (IndirectionBarrier tycon (l1, end_r1, l2, end_r2)))) bod ->
@@ -937,6 +976,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v, _, _,  (Ext NullCursor)) bod ->
       T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (InitCursor (CursorArrayTy sz)))) bod -> 
+      T.LetTrivT (v, T.CursorArrayTy sz, T.UninitTriv v (T.CursorArrayTy sz) sz) <$> tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (InitCursor (CursorTy)))) bod -> 
+      T.LetTrivT (v, T.CursorTy, T.UninitTriv v (T.CursorTy) 1) <$> tail free_reg sym_tbl bod
 
     LetE (v, _, ty, (Ext GetCilkWorkerNum)) bod ->
       T.LetPrimCallT [(v,typ ty)] T.GetCilkWorkerNum [] <$> tail free_reg sym_tbl bod
@@ -974,27 +1019,27 @@ lower Prog{fundefs,ddefs,mainExp} = do
              (tail free_reg sym_tbl bod)
     --------------------------------End PrimApps----------------------------------
 
-    AppE v _ ls -> return $ T.TailCall v (map (triv sym_tbl "operand") ls)
+    AppE v _ _ ls -> return $ T.TailCall v (map (triv sym_tbl "operand") ls)
 
     SpawnE{} -> error "lower: Unbound SpanwnE"
     SyncE    -> error "lower: Unbound SpanwnE"
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
-    ProjE ix ( (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
+    ProjE ix ( (AppE f _cty _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
         let (inTs, _) = funTy (fundefs # f)
         tail free_reg sym_tbl $
           LetE ( tmp
                   , []
                   , fmap (const ()) (inTs !! ix)
-                  , ProjE ix (AppE f [] e))
+                  , ProjE ix (AppE f _cty [] e))
              (VarE tmp)
 
-    LetE (_,_,_, ( (L3.AppE f _ _))) _
+    LetE (_,_,_, ( (L3.AppE f _cty _ _))) _
         | M.notMember f fundefs -> error $ "Application of unbound function: "++show f
 
     -- Non-tail free_reg call:
-    LetE (vr, _,t, projOf -> (stk, ( (L3.AppE f _ ls)))) bod -> do
+    LetE (vr, _,t, projOf -> (stk, ( (L3.AppE f _cty _ ls)))) bod -> do
         let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
@@ -1016,7 +1061,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail free_reg sym_tbl bod')
 
     LetE (v, _,ty, L3.SpawnE fn locs args) bod -> do
-      T.LetCallT{..} <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
+      T.LetCallT{..} <- tail free_reg sym_tbl (LetE (v,_,ty, AppE fn UnknownTailType locs args) bod)
       pure $ T.LetCallT  { T.async = True, .. }
 
     LetE (_,_,_,  SyncE) bod -> do
@@ -1096,6 +1141,7 @@ triv sym_tbl msg ( e0) =
     (MkProdE []) -> T.IntTriv 0
     (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
     (ProjE ix e) -> T.ProjTriv ix (triv sym_tbl "proje argument" e)
+    (Ext (IndexCursorArray cur idx)) -> T.IndexCursorArrayTriv idx (triv sym_tbl "index_into" (VarE cur))
     _ | isTrivial e0 -> error $ "lower/triv: this function is written wrong.  "++
                          "It won't handle the following, which satisfies 'isTriv':\n "++sdoc e0++
                          "\nMessage: "++msg
@@ -1124,6 +1170,7 @@ typ t =
     SymSetTy  -> T.SymSetTy
     SymHashTy -> T.SymHashTy
     IntHashTy -> T.IntHashTy
+    MutCursorTy -> T.MutCursorTy
 
 typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t

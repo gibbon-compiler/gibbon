@@ -1,0 +1,19 @@
+{
+  "compile_cmd": [
+    "gibbon",
+    "--enable-papi-native",
+    "--no-ran",
+    "--packed",
+    "--to-exe",
+    "--cfile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.c",
+    "--exefile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/LinearListReduction.hs"
+  ],
+  "compile_cmd_signature": "gibbon --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/LinearListReduction.hs",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/AOS/LinearListReduction.hs",
+  "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.c",
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/LinearListReduction.aos_imm.exe",
+  "compiled_at": "2026-03-17T16:22:12"
+}

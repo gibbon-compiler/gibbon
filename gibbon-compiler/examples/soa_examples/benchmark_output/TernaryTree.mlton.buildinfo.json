@@ -1,0 +1,15 @@
+{
+  "compile_cmd": [
+    "mlton",
+    "-default-type",
+    "int64",
+    "-output",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.mlton.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.mlton.mlb"
+  ],
+  "compile_cmd_signature": "mlton -default-type int64 -output /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.mlton.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.mlton.mlb",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/MLTON/TernaryTree.sml",
+  "c_file": null,
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/TernaryTree.mlton.exe",
+  "compiled_at": "2026-02-21T16:57:50"
+}

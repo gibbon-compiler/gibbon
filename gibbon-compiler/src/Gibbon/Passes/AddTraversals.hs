@@ -49,7 +49,6 @@ addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
             tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> case (lrmReg lrm) of 
-                                                      SoAR _ _ -> error "TODO: addTraversalsFn structure of arrays not implemented yet."
                                                       _ -> (lrmLoc lrm, regionToVar (lrmReg lrm))
 
                                       )
@@ -74,7 +73,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
     CharE{}   -> return ex
     FloatE{}  -> return ex
     LitSymE{} -> return ex
-    AppE f locs args -> AppE f locs <$> mapM go args
+    AppE f _cty locs args -> AppE f _cty locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args
     WithArenaE v e -> WithArenaE v <$> addTraversalsExp ddefs fundefs (extendVEnv v ArenaTy env2) renv context e
     LetE (v,loc,ty,rhs) bod -> do
@@ -91,7 +90,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
     SyncE    -> pure ex -- error "addTraversalsExp: Cannot compile SyncE"
     Ext ext ->
       case ext of
-        LetRegionE reg sz ty bod -> Ext . LetRegionE reg sz ty <$> go bod
+        LetRegionE reg sz endmut ty bod -> Ext . LetRegionE reg sz endmut ty <$> go bod
         LetParRegionE reg sz ty bod -> Ext . LetParRegionE reg sz ty <$> go bod
         L2.StartOfPkdCursor cur -> pure $ Ext $ L2.StartOfPkdCursor cur
         LetLocE loc FreeLE  bod ->
@@ -104,10 +103,19 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                      GenSoALoc {}           -> error "addTraversalsExp: GenSoALoc not handled"
-                      GetDataConLocSoA {}    -> error "addTraversalsExp: GetDataConLocSoA not handled"
-                      GetFieldLocSoA {}      -> error "addTraversalsExp: GetFieldLocSoA not handled"
-                      AssignLE {}            -> error "addTraversalsExp: AssignLE not handled"
+                      GetDataConLocSoA lc -> 
+                        let rlc = renv # lc
+                         in getDataConRegFromRegVar rlc
+                      GetFieldLocSoA (dcon, idx) lc -> 
+                        let rlc = renv # lc
+                         in getFieldRegFromRegVar (dcon, idx) rlc 
+                      AssignLE lc -> renv # lc
+                      GenSoALoc dconLoc fieldLocs -> 
+                         let dconReg = renv # dconLoc
+                             fldRegs = L.map (\((dcon, idx), fl) -> let rl = renv # fl
+                                                                   in ((dcon, idx), rl)
+                                           ) fieldLocs
+                           in SoARv dconReg fldRegs
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod
         _ -> return ex
@@ -129,11 +137,52 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
 
           when dump_op $
             dbgTrace 2 ("Adding traversals: " ++ sdoc context) (return ())
-          -- Generate traversals: assuming that InferLocs has already generated
-          -- the traversal functions, we only use it here.
-          trav_binds <- genTravBinds (L.map (\(p_var, _p_loc) -> (VarE p_var, lookupVEnv p_var env21)) ls)
-          (dcon,vlocs,) <$> mkLets trav_binds <$>
-            addTraversalsExp ddefs fundefs env21 renv1 context rhs
+          let mkTravBindsFrom ls' =
+                genTravBinds (L.map (\(p_var, _p_loc) -> (VarE p_var, lookupVEnv p_var env21)) ls')
+
+              pushTravIntoIf env e =
+                case e of
+                  LetE (v, l, ty, rhs_let) bod -> do
+                    mb <- pushTravIntoIf (extendVEnv v ty env) bod
+                    case mb of
+                      Nothing -> pure Nothing
+                      Just bod' -> pure $ Just $ LetE (v, l, ty, rhs_let) bod'
+
+                  IfE a b c -> do
+                    mb <- pushTravIntoIf env b
+                    mc <- pushTravIntoIf env c
+                    let b' = case mb of
+                               Nothing -> b
+                               Just bb -> bb
+                        c' = case mc of
+                               Nothing -> c
+                               Just cc -> cc
+
+                    cond_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, a) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    then_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, b) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    else_trav_binds <- case needsTraversalCase ddefs fundefs env (dcon, vlocs, c) of
+                                         Nothing -> pure []
+                                         Just ls' -> mkTravBindsFrom ls'
+                    let hasAny = not (L.null cond_trav_binds && L.null then_trav_binds && L.null else_trav_binds)
+                    if hasAny
+                      then pure $ Just $ mkLets cond_trav_binds $
+                                        IfE a (mkLets then_trav_binds b') (mkLets else_trav_binds c')
+                      else pure Nothing
+
+                  _ -> pure Nothing
+          rhs1 <- addTraversalsExp ddefs fundefs env21 renv1 context rhs
+          pushed <- pushTravIntoIf env21 rhs1
+          rhs' <- case pushed of
+                    Just rhs2 -> pure rhs2
+                    Nothing -> do
+                      -- Fallback: keep old behavior when there is no suitable `if` to sink into.
+                      trav_binds <- mkTravBindsFrom ls
+                      pure $ mkLets trav_binds rhs1
+          pure (dcon, vlocs, rhs')
 
 
 -- | Collect all non-static items that need to be traversed (uses InferEffects).
@@ -199,7 +248,7 @@ genTravBinds ls = concat <$>
         PackedTy tycon loc1 -> do
           w <- gensym "trav"
           let fn_name = mkTravFunName tycon
-          return [(w,[],ProdTy [], AppE fn_name [loc1] [e])]
+          return [(w,[],ProdTy [], AppE fn_name NotTailRec [loc1] [e])]
         -- TODO: Write a testcase for this path.
         ProdTy tys -> do
           -- So that we don't have to make assumptions about the 'e' being a VarE

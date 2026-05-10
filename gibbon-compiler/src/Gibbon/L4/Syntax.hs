@@ -31,6 +31,7 @@ import           Gibbon.Common
 import qualified Gibbon.Language  as L
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L2.Syntax (EndRegionModality)
 
 
 --------------------------------------------------------------------------------
@@ -61,11 +62,16 @@ data Triv
     | SymTriv Word16    -- ^ An index into the symbol table.
     | ProdTriv [Triv]   -- ^ Tuples
     | ProjTriv Int Triv -- ^ Projections
+    | IndexCursorArrayTriv Int Triv -- ^ Indexing operation
+    | UninitTriv Var Ty Int -- ^ uninitialized values
+    | SizeOf Ty         -- ^ Size of a type
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 typeOfTriv :: M.Map Var Ty -> Triv -> Ty
 typeOfTriv env trv =
   case trv of
+    SizeOf{} -> IntTy
+    UninitTriv _ ty _ -> ty
     VarTriv v   -> env M.! v
     IntTriv{}   -> IntTy
     CharTriv{}  -> CharTy
@@ -73,6 +79,7 @@ typeOfTriv env trv =
     BoolTriv{}  -> BoolTy
     TagTriv{}   -> TagTyPacked
     SymTriv{}   -> SymTy
+    IndexCursorArrayTriv{} -> CursorTy
     ProdTriv ts -> ProdTy (map (typeOfTriv env) ts)
     ProjTriv i trv1 -> case typeOfTriv env trv1 of
                          ProdTy tys -> tys !! i
@@ -201,6 +208,8 @@ data Ty
     | RegionTy -- ^ Region start and a refcount
     | ChunkTy  -- ^ Start and end pointers
     | CursorArrayTy Int
+    | MutCursorTy
+
 
 -- TODO: Make Ptrs more type safe like this:
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
@@ -280,7 +289,7 @@ data Prim
     | WritePackedFile FilePath TyCon
     | ReadArrayFile (Maybe (FilePath, Int)) Ty
 
-    | NewBuffer L2.Multiplicity
+    | NewBuffer L2.Multiplicity EndRegionModality
     -- ^ Allocate a new buffer, return a cursor.
 
     | NewParBuffer L2.Multiplicity
@@ -294,7 +303,7 @@ data Prim
     | ScopedParBuffer L2.Multiplicity
     -- ^ Like ScopedBuffer, but for parallel allocations.
 
-    | EndOfBuffer L2.Multiplicity
+    | EndOfBuffer L2.Multiplicity EndRegionModality
 
     | MMapFileSize Var
 
@@ -311,10 +320,12 @@ data Prim
 
     | WriteTaggedCursor
 
+    | MemCpy
+
     | ReadCursor
     -- ^ Read and return a cursor
 
-    | WriteCursor
+    | WriteCursorMutable
 
     | ReadScalar L3.Scalar
     | WriteScalar L3.Scalar
@@ -325,7 +336,7 @@ data Prim
     | ReadVector
     | WriteVector
 
-    | BoundsCheck
+    | BoundsCheck L2.Modality
 
     | BoundsCheckVector
 
@@ -369,6 +380,9 @@ data Prim
     | IndexCursorArray 
     | MakeCursorArray
     | CastPtr
+    | AddrOfCursor 
+    | DerefMutCursor
+    | BumpCursorMutable
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
@@ -449,6 +463,7 @@ fromL3Ty ty =
     L.PtrTy      -> PtrTy
     L.CursorTy   -> CursorTy
     L.CursorArrayTy size -> CursorArrayTy size
+    L.MutCursorTy -> MutCursorTy
     -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
     L.VectorTy el_ty  -> VectorTy (fromL3Ty el_ty)
     _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
@@ -480,6 +495,7 @@ inlineTrivL4 (Prog info_tbl sym_tbl fundefs mb_main) =
             VarTriv w -> case M.lookup w env of
                            Nothing -> inline_tail (M.insert v trv env) bod
                            Just pr -> inline_tail (M.insert v pr env) bod
+            UninitTriv{} -> inline_tail env bod 
             _         -> inline_tail (M.insert v trv env) bod
         LetIfT{ife,bod} -> tl { ife = (\(a,b,c) -> (inline env a,
                                                     go b,

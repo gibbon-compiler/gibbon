@@ -29,7 +29,7 @@ ppE e0 = case e0 of
   CharE c -> char c
   FloatE x -> double x
   LitSymE var -> doubleQuotes $ ppVar var
-  AppE var _ pes -> ppAp (ppVar var) pes
+  AppE var _cty _ pes -> ppAp (ppVar var) pes
   PrimAppE pr pes -> ppPrim pr pes
   LetE (v, _, _, e) pe' ->
     hsep
@@ -71,7 +71,7 @@ ppE e0 = case e0 of
       , parens $ interleave comma $ ppE <$> pes
       ]
 
-  TimeIt _pe' _ty0 _b -> _
+  TimeIt pe' _ty0 _b -> ppE pe'
   WithArenaE _var _pe' -> error "WithArenaE"
   SpawnE _var _ty0s _pes -> error "SpawnE"
   SyncE -> error "SyncE"
@@ -383,49 +383,72 @@ printerTy1 ty1 d = case ty1 of
     parens $ hsep
       [ "case", d, "of"
       , parens $ interleave comma $ ("x__" <>) . int . fst <$> zip [1..] uts
-      , "-> let"
+      , "=> let"
       , "val _ = print \"#(\""
       , foldMap ppSub $ zip [1..] uts
       , "val _ = print \")\""
-      , "in ()"
+      , "in () end"
       ]
     where
-      ppSub (i, x) = hsep
-        [ "val _ ="
-        , printerTy1 x $ "x__" <> int i
-        , "val _ = print \" \""
-        ]
+      ppSub (i, x) =
+        let isLast = i == length uts in
+        if isLast
+        then hsep
+          [ "val _ ="
+          , printerTy1 x $ "x__" <> int i
+          ]
+        else hsep
+          [ "val _ ="
+          , printerTy1 x $ "x__" <> int i
+          , "val _ = print \" \""
+          ]
   SymDictTy _m_var _ut -> _
   PackedTy s () -> "internal_print_" <> text s <> parens d
   VectorTy ut -> 
     parens $ hsep
-      [ quotePrint "#["
-      , toss $ hsep 
-        [ "case length", d, "of"
-        , "0 -> ()"
-        , "1 ->", printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
-        , "_ ->"
-        , toss $ printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
-        , "ArraySlice.app", parens $ 
-          "fn y__ => " <> printerTy1 ut "y__"
-        , "xs__"
+      [ "let"
+      , "val _ = print \"#[\""
+      , "val _ ="
+      , parens $ hsep
+        [ "case ArraySlice.length", d, "of"
+        , "0 => ()"
+        , "| _ =>"
+        , parens $ hsep
+          [ "let"
+          , "val _ ="
+          , printerTy1 ut $ "ArraySlice.sub" <> parens (d <> ", 0")
+          , "val _ ="
+          , "ArraySlice.app"
+          , parens $ "fn y__ => (print \" \"; " <> printerTy1 ut "y__" <> ")"
+          , parens $ "ArraySlice.subslice" <> parens (d <> ", 1, NONE")
+          , "in () end"
+          ]
         ]
-      , "print \"]\""
+      , "val _ = print \"]\""
+      , "in () end"
       ]
   PDictTy _ut _ut' -> _
   ListTy ut -> 
     parens $ hsep
-      [ quotePrint "["
-      , toss $ hsep [ "case", d, "of"
-        , "[] -> ()"
-        , "| [x__] ->", printerTy1 ut "x__"
-        , "| [x__ :: xs__] ->"
-        , toss $ printerTy1 ut "x__"
-        , "list.app", parens $ 
-          "fn y__ => " <> quotePrint ", " <> printerTy1 ut "y__"
-        , "xs__"
+      [ "let"
+      , "val _ = print \"[\""
+      , "val _ ="
+      , parens $ hsep
+        [ "case", d, "of"
+        , "[] => ()"
+        , "| x__ :: xs__ =>"
+        , parens $ hsep
+          [ "let"
+          , "val _ =", printerTy1 ut "x__"
+          , "val _ ="
+          , "List.app"
+          , parens $ "fn y__ => (print \", \"; " <> printerTy1 ut "y__" <> ")"
+          , "xs__"
+          , "in () end"
+          ]
         ]
-      , "print \"]\""
+      , "val _ = print \"]\""
+      , "in () end"
       ]
   ArenaTy -> _
   SymSetTy -> _
@@ -494,7 +517,7 @@ varsE :: Set.Set String -> Exp1 -> Set.Set String
 varsE vs pe0 = case pe0 of
   -- VarE var -> collect var
   VarE _ -> mempty
-  AppE var _ pes -> vpes pes <> collect var
+  AppE var _cty _ pes -> vpes pes <> collect var
   PrimAppE _ pes -> vpes pes
   LetE (_, _, _, pe') pe -> vpe pe <> vpe pe'
   IfE pe pe' pe3 -> vpes [pe, pe', pe3]

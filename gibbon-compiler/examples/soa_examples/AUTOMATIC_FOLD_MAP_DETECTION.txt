@@ -1,0 +1,217 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║              VERSION 2.3 - AUTOMATIC FOLD/MAP DETECTION                      ║
+║                     NO MANUAL ANNOTATION NEEDED!                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+GREAT NEWS!
+===========
+
+The script now AUTOMATICALLY detects fold vs map classification from your
+existing print statements! No need to add annotations!
+
+HOW IT WORKS
+============
+
+The script parses your print statements that look like:
+
+  printsym (quote "Running pass SumArea (fold): ")
+  printsym (quote "Running pass scaleLayout (map): ")
+  printsym (quote "Running pass Find nearest Neighbour (fold like): ")
+
+Pattern: "Running pass <PassName> (<type>): "
+
+Automatically extracts:
+  ✓ Pass name: SumArea, scaleLayout, Find nearest Neighbour
+  ✓ Pass type: fold, map, fold like
+
+EXAMPLES FROM YOUR CODE
+========================
+
+DomTree.hs:
+-----------
+printsym (quote "Running pass SumArea (fold): ")
+  → Detected: SumArea = fold ✓
+
+printsym (quote "Running pass scaleLayout (map): ")
+  → Detected: scaleLayout = map ✓
+
+printsym (quote "Running pass find max Bottom (fold): ")
+  → Detected: findmaxBottom = fold ✓
+
+OctTree.hs:
+-----------
+printsym (quote "Running pass Find nearest Neighbour (fold like): ")
+  → Detected: FindnearestNeighbour = fold ✓
+
+WHAT YOU NEED TO DO
+===================
+
+NOTHING! Just run:
+
+  ./gibbon_benchmark.py --generate-paper
+
+The script will:
+1. Read your .hs files
+2. Find all printsym statements
+3. Parse pass names and types
+4. Generate tables with fold/map classification
+5. Generate figures separated by fold/map
+
+PASS NAME MATCHING
+==================
+
+The script is smart about matching pass names!
+
+It tries multiple variations:
+  ✓ Exact match: "SumArea"
+  ✓ Without spaces: "findmaxBottom"
+  ✓ Lowercase: "sumarea"
+  ✓ Without "Pass" suffix: "instCount" (if benchmark shows "instCountPass")
+
+So even if your print statement says "Sum Area" and the benchmark
+reports "SumAreaPass", it will still match! ✓
+
+SUPPORTED TYPE KEYWORDS
+=======================
+
+The script recognizes:
+  ✓ "fold" → classified as fold
+  ✓ "map" → classified as map
+  ✓ "fold like" → classified as fold
+  ✓ "fold-like" → classified as fold
+  ✓ "map like" → classified as map
+
+Anything else → shows as "?" in tables
+
+TABLE OUTPUT
+============
+
+Table 1 - End-to-End (automatically classified):
+-------------------------------------------------
+Program | Fold AoS | Fold SoA | Map AoS | Map SoA | Total | Speedup
+DomTree | 1.23e-02 | 1.15e-02 | 3.45e-03| 3.21e-03| ...   | 1.07×
+
+Table 2 - DomTree.hs (automatically classified):
+-------------------------------------------------
+Pass        | Type | AoS      | SoA      | Speedup
+SumArea     | F    | 3.27e-03 | 3.09e-03 | 1.06×
+scaleLayout | M    | 2.11e-03 | 1.98e-03 | 1.07×
+
+FIGURES
+=======
+
+speedup_comparison.pdf:
+  ✓ Automatically shows fold vs map bars per program
+  ✓ No manual work needed!
+
+QUICK START
+===========
+
+1. Make sure your code has print statements like:
+   printsym (quote "Running pass PassName (fold): ")
+   printsym (quote "Running pass PassName (map): ")
+
+2. Run:
+   ./gibbon_benchmark.py --generate-paper
+
+3. Check output:
+   cat performance_table.tex
+   open figures/speedup_comparison.pdf
+
+4. Done! ✓
+
+TROUBLESHOOTING
+===============
+
+Issue: Pass shows as "?" in table
+----------------------------------
+Check: Does your print statement have (fold) or (map)?
+
+Example:
+  ✗ printsym (quote "Running pass SumArea: ")
+  ✓ printsym (quote "Running pass SumArea (fold): ")
+
+Issue: Pass type not detected
+------------------------------
+The script will print a note if it can't parse a file:
+  "Note: Could not parse programs/AoS/DomTree.hs: ..."
+
+Check file is readable and has correct syntax.
+
+Issue: Want to verify what was detected
+----------------------------------------
+Run with verbose output (coming soon) or check the tables -
+if Type column shows F or M, it was detected correctly!
+
+ADVANTAGES
+==========
+
+✓ No manual annotation needed
+✓ Uses your existing code
+✓ No extra files to maintain
+✓ Automatically updates when you change print statements
+✓ Works with existing codebases immediately
+
+EXAMPLE SESSION
+===============
+
+$ ./gibbon_benchmark.py --generate-paper --programs DomTree.hs
+
+======================================================================
+GIBBON COMPILER BENCHMARK SUITE
+======================================================================
+Programs directory: programs
+...
+======================================================================
+
+Benchmarking: DomTree.hs
+======================================================================
+  DomTree (AOS) is up-to-date, skipping compilation
+  Running DomTree.aos.exe... ✓
+  DomTree (SOA) is up-to-date, skipping compilation
+  Running DomTree.soa.exe... ✓
+  
+  Output comparison: ✓ MATCH
+
+======================================================================
+Generating reports...
+======================================================================
+✓ LaTeX tables saved to: performance_table.tex
+✓ Generated table PDF preview: figures/table_preview.pdf
+✓ Generated publication figures
+
+Table 1: Fold passes = 4, Map passes = 1 ✓
+
+$ cat performance_table.tex
+
+\begin{table}
+...
+DomTree & 1.23e-02 & 1.15e-02 & 3.45e-03 & 3.21e-03 & ... & 1.07× \\
+...
+\end{table}
+
+\begin{table}
+...
+SumArea     & F & 3.27e-03 & 3.09e-03 & 1.06× \\
+scaleLayout & M & 2.11e-03 & 1.98e-03 & 1.07× \\
+...
+\end{table}
+
+Perfect! ✓
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SUMMARY
+=======
+
+✓ Automatic detection from print statements
+✓ No manual work required
+✓ Smart name matching
+✓ Works with your existing code
+✓ Fold/Map classification in tables and figures
+
+Just run: ./gibbon_benchmark.py --generate-paper
+
+And get complete fold/map analysis automatically! 🎉
+
+═══════════════════════════════════════════════════════════════════════════════

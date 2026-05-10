@@ -1,0 +1,9 @@
+ ! Responding to env Var: GIBBON_DEBUG=5
+ ! We set DEBUG based on command-line verbose arg: 5
+gibbon: /workdisk/git/gibbon/gibbon-compiler/MonoTree.hs: openFile: does not exist (No such file or directory)
+HasCallStack backtrace:
+  collectBacktraces, called at libraries/ghc-internal/src/GHC/Internal/Exception.hs:92:13 in ghc-internal:GHC.Internal.Exception
+  toExceptionWithBacktrace, called at libraries/ghc-internal/src/GHC/Internal/IO.hs:260:11 in ghc-internal:GHC.Internal.IO
+  throwIO, called at libraries/ghc-internal/src/GHC/Internal/Control/Exception/Base.hs:195:43 in ghc-internal:GHC.Internal.Control.Exception.Base
+
+

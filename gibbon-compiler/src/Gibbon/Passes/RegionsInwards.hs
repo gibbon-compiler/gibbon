@@ -13,7 +13,7 @@ import Gibbon.L2.Syntax
 import Text.PrettyPrint.GenericPretty
 
 data DelayedBind
-  = DelayRegion FreeVarsTy Region RegionSize (Maybe RegionType) -- define data type that can be Region, Loc, LocExp to store the delayed bindings
+  = DelayRegion FreeVarsTy Region RegionSize EndRegionModality (Maybe RegionType) -- define data type that can be Region, Loc, LocExp to store the delayed bindings
   | DelayLoc FreeVarsTy LocExp
   | DelayParRegion FreeVarsTy Region RegionSize (Maybe RegionType)
   deriving (Show, Generic)
@@ -51,10 +51,10 @@ placeRegionInwards env scopeSet ex =
   case ex of
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs -> do
+        LetRegionE r sz endmut ty rhs -> do
           -- take care of regions
           let key' = S.singleton (fromRegVarToFreeVarsTy $ regionToVar r)
-              val' = [DelayRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz ty]
+              val' = [DelayRegion (fromRegVarToFreeVarsTy $ regionToVar r) r sz endmut ty]
               env' = M.insert key' val' env
            in placeRegionInwards env' scopeSet rhs
         StartOfPkdCursor {} -> return ex
@@ -283,7 +283,7 @@ placeRegionInwards env scopeSet ex =
     CharE {} -> return ex
     FloatE {} -> return ex -- Just return Nothing special here
     LitSymE {} -> return ex -- Just return Nothing special here
-    AppE f locVars ls -> do
+    AppE f cty locVars ls -> do
       let allKeys = M.keys env -- List of all keys from env
           keyList = map (\variable -> F.find (S.member (fromLocVarToFreeVarsTy variable)) allKeys) locVars -- For each var in the input set find its corresponding key
           keyList' = S.catMaybes keyList -- Filter all the Nothing values from the list and let only Just values in the list
@@ -293,7 +293,7 @@ placeRegionInwards env scopeSet ex =
           newEnv' = M.fromList tupleList
        in do
             ls' <- mapM (placeRegionInwards newEnv' scopeSet) ls
-            let (_, ex') = dischargeBinds' env (S.fromList (map fromLocVarToFreeVarsTy locVars)) (AppE f locVars ls')
+            let (_, ex') = dischargeBinds' env (S.fromList (map fromLocVarToFreeVarsTy locVars)) (AppE f cty locVars ls')
              in return ex'
     PrimAppE {} -> return ex -- Just return, Nothing special here
     DataConE loc dataCons args -> do
@@ -410,7 +410,7 @@ codeGen set env body =
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
   case delayed of
-    DelayRegion r r' sz ty -> Ext $ LetRegionE r' sz ty body
+    DelayRegion r r' sz endmut ty -> Ext $ LetRegionE r' sz endmut ty body
     DelayParRegion r r' sz ty -> Ext $ LetParRegionE r' sz ty body
     DelayLoc (FL loc) locexp -> Ext $ LetLocE loc locexp body
 
@@ -595,9 +595,9 @@ removeAliasedLocations env definedLocs ex =
   case ex of
     Ext ext ->
       case ext of
-        LetRegionE r sz ty rhs -> do
+        LetRegionE r sz endmut ty rhs -> do
           rhs' <- go rhs
-          return $ Ext $ LetRegionE r sz ty rhs'
+          return $ Ext $ LetRegionE r sz endmut ty rhs'
         StartOfPkdCursor {} -> return ex
         TagCursor {} -> return ex
         LetLocE loc phs rhs -> do
@@ -668,9 +668,8 @@ removeAliasedLocations env definedLocs ex =
             AssignLE loc' -> do
               -- rhs' <- removeAliasedLocations env definedLocs' rhs
               let env' = makeAlias env loc' loc
-              removeAliasedLocations env' definedLocs rhs
+              removeAliasedLocations env' definedLocs' rhs
             GenSoALoc dconl fieldLocs -> do
-              rhs' <- removeAliasedLocations env definedLocs' rhs
               let nloc = case loc of
                     Single _ -> getAliasLoc env loc
                     SoA dcl fieldLocs' ->
@@ -679,9 +678,13 @@ removeAliasedLocations env definedLocs ex =
                        in SoA (unwrapLocVar dcl') fieldLocs''
                   ndconl = getAliasLoc env dconl
                   nfieldLocs = map (\(k, l) -> (k, getAliasLoc env l)) fieldLocs
+                  oldSoALoc = SoA (unwrapLocVar dconl) fieldLocs
+                  newSoALoc = SoA (unwrapLocVar ndconl) nfieldLocs
+                  env' = makeAlias env newSoALoc oldSoALoc
+              rhs' <- removeAliasedLocations env' definedLocs' rhs
               case existsLetForLoc of
                 True -> return rhs'
-                False -> return $ Ext $ LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'
+                False -> dbgTrace (minChatLvl) "New GenSoA: " dbgTrace (minChatLvl) (sdoc (GenSoALoc ndconl nfieldLocs)) dbgTrace (minChatLvl) "End GenSoA!\n" return $ Ext $ LetLocE nloc (GenSoALoc ndconl nfieldLocs) rhs'
         LetParRegionE r sz ty rhs -> do
           rhs' <- go rhs
           return $ Ext $ LetParRegionE r sz ty rhs'
@@ -709,9 +712,9 @@ removeAliasedLocations env definedLocs ex =
     CharE {} -> return ex
     FloatE {} -> return ex
     LitSymE {} -> return ex
-    AppE f locVars ls -> do
+    AppE f cty locVars ls -> do
       let nlocVars = map (getAliasLoc env) locVars
-      AppE f nlocVars <$> mapM go ls
+      AppE f cty nlocVars <$> mapM go ls
     PrimAppE {} -> return ex
     DataConE loc dataCons args -> do
       let nloc = getAliasLoc env loc

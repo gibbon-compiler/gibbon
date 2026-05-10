@@ -14,10 +14,10 @@
 module Gibbon.Language.Syntax
   (
     -- * Datatype definitions
-    DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..)
+    DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..), TailRecType(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef, 
-  getCursorTypeForDataCon
+  getCursorTypeForDataCon, getCursorTypeFromTy
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..)
@@ -28,7 +28,7 @@ module Gibbon.Language.Syntax
 
     -- * Environments
   , TyEnv, Env2(..), emptyEnv2
-  , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv, lookupFEnv,
+  , extendVEnv, extendsVEnv, lookupVEnv, mblookupVEnv, extendFEnv, lookupFEnv,
     lookupFEnvLocVar, extendVEnvLocVar, extendsVEnvLocVar, lookupVEnvLocVar
 
     -- * Expresssions and thier types
@@ -72,6 +72,7 @@ import           System.IO.Unsafe (unsafePerformIO)
 --import qualified Data.Typeable as Typeable
 
 import           Gibbon.Common
+import GHC.Stack (HasCallStack)
 
 --------------------------------------------------------------------------------
 -- Data type definitions
@@ -164,29 +165,73 @@ lkp dds con =
           ++", in datatypes:\n  "++sdoc dds
 
 getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
-getCursorTypeForDataCon ddefs DDef{tyName, dataCons, memLayout} =
+getCursorTypeForDataCon _ddefs DDef{tyName, dataCons, memLayout} =
   -- remove data constructors introduced by RAN
-  let dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
+  let _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
                                        then []
                                        else [e]
                       ) dataCons
-   in case memLayout of 
-        Linear -> CursorTy 
-        FullyFactored -> 
-          let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
-                                                           c' = foldr (\ty c'' -> case ty of 
-                                                                             PackedTy tycon _ ->
-                                                                                if (toVar tycon) == tyName 
-                                                                                then c'' 
-                                                                                else c'' + 1
-                                                                             CursorTy -> c''
-                                                                             CursorArrayTy _ -> c''
-                                                                             _ -> c'' + 1 
-                                                                      ) c fields
-                                                          in c'
-                               ) 0 dataCons'
-            in CursorArrayTy (numFieldBuffers + 1)
-        _ -> error "Memory Layout is not implemented!"
+   in case memLayout of
+       -- VS: For now, in the design we just always ensure 
+       -- that a random access node is a CursorTy. 
+        --_ -> CursorTy
+         Linear -> CursorTy 
+         FullyFactored -> 
+           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon _ddefs dcon 
+                                                            c' = foldr (\ty c'' -> case ty of 
+                                                                              PackedTy tycon _ ->
+                                                                                 if (toVar tycon) == tyName 
+                                                                                 then c'' 
+                                                                                 else 
+                                                                                   let ddef_for_tycon = lookupDDef _ddefs tycon
+                                                                                       ty_of_packed_field = getCursorTypeForDataCon _ddefs ddef_for_tycon
+                                                                                     in case ty_of_packed_field of 
+                                                                                                CursorTy -> c'' + 1
+                                                                                                CursorArrayTy sz -> c'' + sz 
+                                                                                                _ -> error "Did not expect type"
+                                                                              CursorTy -> c''
+                                                                              CursorArrayTy _ -> c''
+                                                                              _ -> c'' + 1 
+                                                                       ) c fields
+                                                           in c'
+                                ) 0 _dataCons'
+             in CursorArrayTy (numFieldBuffers + 1)
+         _ -> error "Memory Layout is not implemented!"
+
+getCursorTypeFromTy :: Out a => TyCon -> DDefs (UrTy a) -> UrTy a
+getCursorTypeFromTy tycon ddefs =
+  let _ddef@DDef{tyName, dataCons, memLayout} = lookupDDef ddefs tycon
+  -- remove data constructors introduced by RAN
+      _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
+                                       then []
+                                       else [e]
+                      ) dataCons
+   in case memLayout of
+       -- VS: For now, in the design we just always ensure 
+       -- that a random access node is a CursorTy. 
+        --_ -> CursorTy
+         Linear -> CursorTy 
+         FullyFactored -> 
+           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
+                                                            c' = foldr (\ty c'' -> case ty of 
+                                                                              PackedTy tycon' _ ->
+                                                                                 if (toVar tycon') == tyName 
+                                                                                 then c'' 
+                                                                                 else 
+                                                                                   let ddef_for_tycon = lookupDDef ddefs tycon'
+                                                                                       ty_of_packed_field = getCursorTypeForDataCon ddefs ddef_for_tycon
+                                                                                     in case ty_of_packed_field of 
+                                                                                                CursorTy -> c'' + 1
+                                                                                                CursorArrayTy sz -> c'' + sz 
+                                                                                                _ -> error "Did not expect type"
+                                                                              CursorTy -> c''
+                                                                              CursorArrayTy _ -> c''
+                                                                              _ -> c'' + 1 
+                                                                       ) c fields
+                                                           in c'
+                                ) 0 _dataCons'
+             in CursorArrayTy (numFieldBuffers + 1)
+         _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
 insertDD d = M.insertWith err' (tyName d) d
@@ -221,6 +266,12 @@ data FunRec = Rec | NotRec | TailRec
 
 data FunInline = Inline | NoInline | Inlineable
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
+data TailRecType =   UnknownTailType
+                   | NotTailRec 
+                   | TailCall 
+                   | TailModuloCons
+                   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data FunMeta = FunMeta
   { funRec    :: FunRec
@@ -356,10 +407,10 @@ extendsVEnv mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 extendsVEnvLocVar :: M.Map FreeVarsTy a -> Env2 FreeVarsTy a -> Env2 FreeVarsTy a 
 extendsVEnvLocVar mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 
-lookupVEnv :: Out a => Var -> Env2 Var a -> a
+lookupVEnv :: (HasCallStack, Out a) => Var -> Env2 Var a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
-lookupVEnvLocVar :: Out a => FreeVarsTy -> Env2 FreeVarsTy a -> a 
+lookupVEnvLocVar :: (HasCallStack, Out a) => FreeVarsTy -> Env2 FreeVarsTy a -> a 
 lookupVEnvLocVar v env2 = (vEnv env2) # v
 
 mblookupVEnv :: Var -> Env2 Var a -> Maybe a
@@ -402,7 +453,7 @@ data PreExp (ext :: Type -> Type -> Type) loc dec =
    | CharE Char            -- ^ A character literal
    | FloatE Double         -- ^ Floating point literal
    | LitSymE Var           -- ^ A quoted symbol literal
-   | AppE Var [loc] [EXP]
+   | AppE Var TailRecType [loc] [EXP]
      -- ^ Apply a top-level / first-order function.  Instantiate
      -- its type schema by providing location-variable arguments,
      -- if applicable.
@@ -631,11 +682,13 @@ data UrTy loc
         | CursorArrayTy Int -- ^ An array of cursors for reading or writing multiple cursors. 
                             -- ^ The cursor may point to an unkwown type or to a fraction of a complete value.
                             -- ^ It is a machine pointer that can point to any byte.
-                            -- ^ The Int is the number of cursors in the array. 
+                            -- ^ The Int is the number of cursors in the array.
+        | MutCursorTy -- ^ A reference to a CursorTy. This can be mutated in place.
+                        
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable, Out)
 
-
+  
 --------------------------------------------------------------------------------
 -- Generic Ops
 --------------------------------------------------------------------------------

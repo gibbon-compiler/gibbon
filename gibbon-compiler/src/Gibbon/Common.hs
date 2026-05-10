@@ -33,14 +33,15 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA, varsInLocVar, varsInRegVar
-       , appendNameToLocVar 
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
+       , varsInLocVar, varsInRegVar, getAllFieldRegsSoA
+       , appendNameToLocVar, locsInLocVar, regsInRegVar
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
 
        , getLocVarFromFreeVarsTy, getRegVarFromFreeVarsTy, getVarFromFreeVarsTy, fromVarToFreeVarsTy, fromLocVarToFreeVarsTy
-       , fromRegVarToFreeVarsTy, getDataConRegFromRegVar, getFieldRegFromRegVar
+       , fromRegVarToFreeVarsTy, getDataConRegFromRegVar, getFieldRegFromRegVar, getVarNameFromFreeVar, getVarNameFromFreeVar'
        --, fromLocVarToRegVar
        )
 where
@@ -539,7 +540,7 @@ truePrinted = "#t"
 falsePrinted :: String
 falsePrinted = "#f"
 
-unwrapLocVar :: LocVar -> Var
+unwrapLocVar :: HasCallStack => LocVar -> Var
 unwrapLocVar locvar = case locvar of 
                             Single loc -> loc
                             SoA _dcon _fieldLocs ->
@@ -550,6 +551,11 @@ locsInLocVar :: LocVar -> [LocVar]
 locsInLocVar loc = case loc of 
                         Single _ -> [loc]
                         SoA dcon fieldLocs -> [(singleLocVar dcon)] ++ L.map (\(_, l) -> l) fieldLocs
+
+regsInRegVar :: RegVar -> [RegVar]
+regsInRegVar loc = case loc of 
+                        SingleR _ -> [loc]
+                        SoARv dcon fieldLocs -> [dcon] ++ L.map (\(_, l) -> l) fieldLocs
 
 varsInLocVar :: LocVar -> [Var]
 varsInLocVar loc = case loc of 
@@ -568,7 +574,7 @@ getDconLoc loc = case loc of
                     SoA dcon _fieldLocs -> Single dcon
                     Single _lc -> loc
                             
-getFieldLoc :: (DataCon, FieldIndex) -> LocVar -> LocVar
+getFieldLoc :: HasCallStack => (DataCon, FieldIndex) -> LocVar -> LocVar
 getFieldLoc (dcon, idx) loc = case loc of 
                                 SoA _ fieldLocs -> case Prelude.lookup (dcon, idx) fieldLocs of 
                                                           Just loc' -> loc'
@@ -579,6 +585,12 @@ getAllFieldLocsSoA :: LocVar -> [((DataCon, Int), LocVar)]
 getAllFieldLocsSoA loc = case loc of 
                     SoA _dcon fieldLocs -> fieldLocs
                     Single _lc -> error "getFieldLocs : Did not expect a non SoA location!"
+
+
+getAllFieldRegsSoA :: RegVar -> [((DataCon, Int), RegVar)]
+getAllFieldRegsSoA loc = case loc of 
+                    SoARv _dcon fieldLocs -> fieldLocs
+                    SingleR _lc -> error "getFieldLocs : Did not expect a non SoA location!"
 
 freshSingleLocVar :: String -> PassM LocVar
 freshSingleLocVar m = do v <- gensym (toVar m)
@@ -633,6 +645,29 @@ getRegVarFromFreeVarsTy _ = error "getRegVarFromFreeVarsTy: unexpected case."
 getVarFromFreeVarsTy :: FreeVarsTy -> Var
 getVarFromFreeVarsTy (V var) = var
 getVarFromFreeVarsTy _ = error "getVarFromFreeVarsTy: unexpected case."
+
+getVarNameFromFreeVar :: HasCallStack => M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
+getVarNameFromFreeVar env fvar = case M.lookup fvar env of 
+                                        Nothing -> case fvar of 
+                                                         R l -> case l of 
+                                                                    SingleR rl -> rl 
+                                                                    _ -> error "Did not find variable name!\n"
+                                                         FL l -> case l of 
+                                                                      Single ll -> ll 
+                                                                      _ -> error "Did not find variable name!\n"
+                                                         _ -> error "Did not find variable name!\n"
+                                        Just v -> v
+
+
+getVarNameFromFreeVar' :: M.Map FreeVarsTy Var -> FreeVarsTy -> Var 
+getVarNameFromFreeVar' env fvar = case M.lookup fvar env of 
+                                        Nothing -> case fvar of 
+                                                         R l -> case l of 
+                                                                    SingleR rl -> rl 
+                                                                    _ -> ""
+                                                         _ -> ""
+                                        Just v -> v
+                                  
 
 fromVarToFreeVarsTy :: Var -> FreeVarsTy
 fromVarToFreeVarsTy v = V v

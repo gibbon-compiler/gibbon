@@ -6,6 +6,7 @@ import qualified Data.Set as S
 import qualified Data.List as L
 import Gibbon.Common
 import Gibbon.NewL2.Syntax as NewL2
+import Gibbon.L2.Syntax (EndRegionModality)
 
 ---------------------------------------------------------------------------
 -- Hoist the bounds check expression to the top of each function
@@ -17,10 +18,10 @@ type BoundEnv = S.Set FreeVarsTy
 data HoistableExpr
   = BoundsCheckExpr Int LocArg LocArg
   | BoundsCheckVectorExpr [(Int, LocArg, LocArg)]
-  | LetLocExpr LocVar (PreLocExp LocArg)
-  | LetRegExpr RegVar (PreRegExp LocArg)
+  | LetLocExpr LocArg (PreLocExp LocArg)
+  | LetRegExpr LocArg (PreRegExp LocArg)
   | LetExpr (Var, [LocArg], Ty2, PreExp E2Ext LocArg Ty2)
-  | LetRegionExpr Region RegionSize (Maybe RegionType)
+  | LetRegionExpr Region RegionSize EndRegionModality (Maybe RegionType)
   deriving (Eq, Ord, Show)
 
 -- | Stores all the expressions that can be hoisted to the top of the function
@@ -45,12 +46,12 @@ fromLocArgToFreeVarsTy' arg =
 collectBoundsCheckExprs :: HoistAbleExprMap -> BoundEnv -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectBoundsCheckExprs env benv ex = do
   case ex of
-    AppE f applocs args -> do
+    AppE f cty applocs args -> do
       res <- mapM (collectBoundsCheckExprs env benv) args
       let args' = map fst res
       let envs = map snd res
       let env' = mergeHoistExprMaps envs
-      return (AppE f applocs args', env')
+      return (AppE f cty applocs args', env')
     LetE bnd@(v, locs, ty, rhs) bod -> do
       case rhs of
         Ext (BoundsCheck sz bound cur) -> do
@@ -93,9 +94,9 @@ collectBoundsCheckExprs env benv ex = do
           return (Ext $ LetRegE reg rhs bod', env')
         RetE {} -> return (ex, env)
         TagCursor {} -> return (ex, env)
-        LetRegionE r sz ty bod -> do
+        LetRegionE r sz endmut ty bod -> do
           (bod', env') <- collectBoundsCheckExprs env benv bod
-          return (Ext $ LetRegionE r sz ty bod', env')
+          return (Ext $ LetRegionE r sz endmut ty bod', env')
         LetParRegionE r sz ty bod -> do
           (bod', env') <- collectBoundsCheckExprs env benv bod
           return (Ext $ LetParRegionE r sz ty bod', env')
@@ -163,12 +164,12 @@ storeHoistableExpr v1 v2 dependentVars hoistableExpr env
 collectVarsForBoundsCheck :: FreeVarsTy -> HoistAbleExprMap -> NewL2.Exp2 -> PassM (NewL2.Exp2, HoistAbleExprMap)
 collectVarsForBoundsCheck vars env ex = do
   case ex of
-    AppE f applocs args -> do
+    AppE f cty applocs args -> do
       res <- mapM (collectVarsForBoundsCheck vars env) args
       let args' = map fst res
       let envs = map snd res
       let env' = mergeHoistExprMaps envs
-      return (AppE f applocs args', env')
+      return (AppE f cty applocs args', env')
     LetE (v, locs, ty, rhs) bod -> do
       let (env', store) = storeHoistableExpr (fromVarToFreeVarsTy v) vars (allFreeVars rhs) (LetExpr (v, locs, ty, rhs)) env
       if store
@@ -186,7 +187,7 @@ collectVarsForBoundsCheck vars env ex = do
       case ext of
         AddFixed {} -> return (ex, env)
         LetLocE loc rhs bod -> do
-          let (env', store) = storeHoistableExpr (fromLocVarToFreeVarsTy loc) vars (freeVarsInLocExp rhs) (LetLocExpr loc rhs) env
+          let (env', store) = storeHoistableExpr (fromLocVarToFreeVarsTy (toLocVar loc)) vars (freeVarsInLocExp rhs) (LetLocExpr loc rhs) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do
@@ -194,7 +195,7 @@ collectVarsForBoundsCheck vars env ex = do
             else do
               return (Ext $ LetLocE loc rhs bod', env'')
         LetRegE reg rhs bod -> do
-          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy reg) vars S.empty (LetRegExpr reg rhs) env
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (fromLocVarToRegVar $ toLocVar reg)) vars S.empty (LetRegExpr reg rhs) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do
@@ -203,14 +204,14 @@ collectVarsForBoundsCheck vars env ex = do
               return (Ext $ LetRegE reg rhs bod', env'')
         RetE {} -> return (ex, env)
         TagCursor {} -> return (ex, env)
-        LetRegionE r sz ty bod -> do
-          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (regionToVar r)) vars S.empty (LetRegionExpr r sz ty) env
+        LetRegionE r sz endmut ty bod -> do
+          let (env', store) = storeHoistableExpr (fromRegVarToFreeVarsTy (regionToVar r)) vars S.empty (LetRegionExpr r sz endmut ty) env
           (bod', env'') <- collectVarsForBoundsCheck vars env' bod
           if store
             then do
               return (bod', env'')
             else do
-              return (Ext $ LetRegionE r sz ty bod', env'')
+              return (Ext $ LetRegionE r sz endmut ty bod', env'')
         LetParRegionE r sz ty bod -> do
           (bod', env') <- collectVarsForBoundsCheck vars env bod
           return (Ext $ LetParRegionE r sz ty bod', env')
@@ -326,7 +327,7 @@ hoistBoundsCheckHelper visited env l2exp = do
                     BoundsCheckVectorExpr bounds -> Just $ LetE ("_", [], MkTy2 IntTy, (Ext $ BoundsCheckVector bounds)) expr'
                     LetLocExpr l rhs -> Just $ Ext $ LetLocE l rhs expr'
                     LetRegExpr r rhs -> Just $ Ext $ LetRegE r rhs expr'
-                    LetRegionExpr r sz ty -> Just $ Ext $ LetRegionE r sz ty expr'
+                    LetRegionExpr r sz endmut ty -> Just $ Ext $ LetRegionE r sz endmut ty expr'
                     LetExpr bnds -> Just $ LetE bnds expr'
           -- release all lets
           -- call function recursively

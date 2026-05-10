@@ -145,8 +145,8 @@ unariserExp isTerminal ddfs stk env2 ex =
         _  -> error $ "Impossible. Non-empty projection stack on LitSymE "++show stk
 
     -- For function output, we need to recover the application nto the arguments
-    AppE v locs args -> do
-      exp0 <- discharge stk <$> (AppE v locs <$> mapM (go False env2) args)
+    AppE v cty locs args -> do
+      exp0 <- discharge stk <$> (AppE v cty locs <$> mapM (go False env2) args)
       if isTerminal
         then do
           tmp <- gensym "tmp_app"
@@ -175,8 +175,8 @@ unariserExp isTerminal ddfs stk env2 ex =
 
     TimeIt e ty b -> do
       tmp <- gensym $ toVar "timed"
-      e'  <- go isTerminal env2 e
-      return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
+      e'  <- go isTerminal env2 e 
+      dbgTrace (minChatLvl) "Print Ty unarizer: " dbgTrace (minChatLvl) (sdoc (ty, flattenTy ty)) dbgTrace (minChatLvl) "End Ty!\n" return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
 
     WithArenaE v e -> WithArenaE v <$> go isTerminal env2 e
 

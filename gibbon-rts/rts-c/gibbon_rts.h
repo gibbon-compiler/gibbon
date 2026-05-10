@@ -9,12 +9,32 @@
 #include <assert.h>
 #include <limits.h>
 #include <time.h>
+#include <string.h>
 
 #ifdef _GIBBON_PARALLEL
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
 #endif
 
+#define GIB_PRAGMA(x) _Pragma(#x)
+
+#if defined(__clang__)
+#define GIB_PRAGMA_MESSAGE(msg)        \
+    GIB_PRAGMA(clang diagnostic push)  \
+    GIB_PRAGMA(clang diagnostic ignored "-W#pragma-messages") \
+    GIB_PRAGMA(message msg)            \
+    GIB_PRAGMA(clang diagnostic pop)
+#else
+#define GIB_PRAGMA_MESSAGE(msg) GIB_PRAGMA(message msg)
+#endif
+
+#if defined(__clang__)
+#define GIB_PRAGMA_UNROLL(n) GIB_PRAGMA(unroll n)
+#elif defined(__GNUC__) && (__GNUC__ >= 8)
+#define GIB_PRAGMA_UNROLL(n) GIB_PRAGMA(GCC unroll n)
+#else
+#define GIB_PRAGMA_UNROLL(n)
+#endif
 /*
  * CPP macros used in the RTS:
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,6 +50,7 @@
  * _GIBBON_PARALLEL          parallel mode
  * _GIBBON_EAGER_PROMOTION   disable eager promotion if set to 0
  * _GIBBON_SIMPLE_WRITE_BARRIER disable eliminate-indirection-chains optimization
+ * _GIBBON_ENABLE_PAPI           enable instrumentation via papi
  *
  */
 
@@ -128,6 +149,8 @@ char *gib_read_bench_prog_param(void);
 char *gib_read_benchfile_param(void);
 char *gib_read_arrayfile_param(void);
 uint64_t gib_read_arrayfile_length_param(void);
+uint64_t get_papi_region_id(void);
+void increment_papi_region_id(void);
 
 // Number of regions allocated.
 int64_t gib_read_region_count(void);
@@ -145,6 +168,7 @@ GibSym gib_read_gensym_counter(void);
 #define GIB_COPIED_TO_TAG 252
 #define GIB_COPIED_TAG 251
 #define GIB_SCALAR_TAG 250
+#define GIB_PTR_ALIGN 8
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -164,6 +188,32 @@ static const GibTaggedPtr GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
 
 #define GIB_GET_TAG(tagged)                               \
     (uint16_t) (((GibTaggedPtr) tagged) >> GIB_POINTER_BITS) \
+
+
+
+INLINE_HEADER void gib_store_taggedptr_unaligned(GibCursor p, GibTaggedPtr x) {
+    memcpy(p, &x, sizeof(GibTaggedPtr));
+}
+
+INLINE_HEADER GibTaggedPtr gib_load_taggedptr_unaligned(GibCursor p) {
+    GibTaggedPtr x;
+    memcpy(&x, p, sizeof(GibTaggedPtr));
+    return x;
+}
+
+INLINE_HEADER uintptr_t gib_load_uintptr_unaligned(GibCursor p) {
+    uintptr_t x;
+    memcpy(&x, p, sizeof(uintptr_t));
+    return x;
+}
+
+INLINE_HEADER size_t gib_align_up_sz(size_t n, size_t a) {
+    return (n + (a - 1)) & ~(a - 1);
+}
+
+#define GIB_LOAD_UINTPTR(p) gib_load_uintptr_unaligned((GibCursor)(p))
+#define GIB_LOAD_TAGGEDPTR(p) gib_load_taggedptr_unaligned((GibCursor)(p))
+#define GIB_STORE_TAGGEDPTR(p, x) gib_store_taggedptr_unaligned((GibCursor)(p), (GibTaggedPtr)(x))
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -358,7 +408,7 @@ extern bool gib_global_thread_requested_gc;
 
 extern uint64_t gib_global_num_threads;
 
-INLINE_HEADER GibThreadId gib_get_thread_id()
+INLINE_HEADER GibThreadId gib_get_thread_id(void)
 {
 #ifdef _GIBBON_PARALLEL
     return __cilkrts_get_worker_number();
@@ -829,7 +879,8 @@ INLINE_HEADER void gib_grow_region_in_nursery_fast(
         GibCursor writeloc = *writeloc_addr;
         *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
         writeloc += 1;
-        *(GibTaggedPtr *) writeloc = tagged;
+        //*(GibTaggedPtr *) writeloc = tagged;
+        gib_store_taggedptr_unaligned(writeloc, tagged);
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         fprintf(stderr, "Growing a region without eager promotion old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d\n",
@@ -858,6 +909,7 @@ INLINE_HEADER void gib_grow_region_in_nursery_fast(
     }
 }
 
+
 INLINE_HEADER void gib_grow_region_on_heap(
     bool old_chunk_in_nursery,
     size_t size,
@@ -865,12 +917,14 @@ INLINE_HEADER void gib_grow_region_on_heap(
     char **writeloc_addr,
     char **footer_addr
 ) {
-    char *heap_start = (char *) gib_alloc(size);
+    //char *heap_start = (char *) gib_alloc(size);
+    size_t size_aligned = gib_align_up_sz(size, GIB_PTR_ALIGN);
+    char *heap_start =  (char *) gib_alloc(size_aligned);
     if (heap_start == NULL) {
         fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", size);
         exit(1);
     }
-    char *heap_end = heap_start + size;
+    char *heap_end = heap_start + size_aligned;
 
 #ifdef _GIBBON_GCSTATS
     GC_STATS->oldgen_chunks++;
@@ -881,7 +935,8 @@ INLINE_HEADER void gib_grow_region_on_heap(
     char *new_footer_start = NULL;
     GibOldgenChunkFooter *new_footer = NULL;
     if (old_chunk_in_nursery) {
-        new_footer_start = gib_init_footer_at(heap_end, size, 0);
+        //new_footer_start = gib_init_footer_at(heap_end, size, 0);
+        new_footer_start = gib_init_footer_at(heap_end, size_aligned, 0);
         new_footer = (GibOldgenChunkFooter *) new_footer_start;
         gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     } else {
@@ -901,7 +956,8 @@ INLINE_HEADER void gib_grow_region_on_heap(
     GibCursor writeloc = *writeloc_addr;
     *(GibPackedTag *) writeloc = GIB_REDIRECTION_TAG;
     writeloc += 1;
-    *(GibTaggedPtr *) writeloc = tagged;
+    gib_store_taggedptr_unaligned(writeloc, tagged);
+    //*(GibTaggedPtr *) writeloc = tagged;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p) in nursery=%d \n",
@@ -1006,7 +1062,7 @@ INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
     while (run_ptr < end_ptr) {
         frame = (GibShadowstackFrame *) run_ptr;
         printf("ptr=%p, endptr=%p, datatype=%d\n",
-               frame->ptr, frame->endptr, frame->datatype);
+               (void *)frame->ptr, (void *)frame->endptr, frame->datatype);
         run_ptr += sizeof(GibShadowstackFrame);
     }
     return;
@@ -1083,9 +1139,9 @@ INLINE_HEADER void gib_indirection_barrier(
 {
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 1
-    #pragma message "Simple write barrier is enabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is enabled.")
 #else
-    #pragma message "Simple write barrier is disabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is disabled.")
     {
         // Optimization: don't create long chains of indirection pointers.
         GibPackedTag pointed_to_tag = *(GibPackedTag *) to;
@@ -1094,7 +1150,8 @@ INLINE_HEADER void gib_indirection_barrier(
         char *pointee, *pointee_end;
         uint16_t pointee_offset;
         while (pointed_to_tag == GIB_INDIRECTION_TAG) {
-            tagged_ptr = *(uintptr_t *) after_pointed_to_tag;
+            //tagged_ptr = *(uintptr_t *) after_pointed_to_tag;
+            tagged_ptr = gib_load_uintptr_unaligned(after_pointed_to_tag);
             pointee = GIB_UNTAG(tagged_ptr);
             pointee_offset = GIB_GET_TAG(tagged_ptr);
             pointee_end = pointee + pointee_offset;
@@ -1113,7 +1170,8 @@ INLINE_HEADER void gib_indirection_barrier(
     GibCursor writeloc = from;
     *(GibPackedTag *) writeloc = GIB_INDIRECTION_TAG;
     writeloc += sizeof(GibPackedTag);
-    *(GibTaggedPtr *) writeloc = tagged;
+    gib_store_taggedptr_unaligned(writeloc, tagged);
+    //*(GibTaggedPtr *) writeloc = tagged;
 
     // If we're using the non-generational GC, all indirections will be
     // old-to-old indirections.
@@ -1219,12 +1277,12 @@ INLINE_HEADER uint8_t gib_log2(size_t x)
 
 // From Chandler Carruth's CppCon 2015 talk.
 INLINE_HEADER void escape(void *p) {
-    asm volatile("" : : "g"(p) : "memory");
+    __asm__ __volatile__("" : : "g"(p) : "memory");
 }
 
 // From Chandler Carruth's CppCon 2015 talk.
-INLINE_HEADER void clobber() {
-    asm volatile("" : : : "memory");
+INLINE_HEADER void clobber(void) {
+    __asm__ __volatile__("" : : : "memory");
 }
 
 

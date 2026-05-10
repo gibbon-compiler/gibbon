@@ -1,0 +1,150 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    VERSION 2.3 - MAJOR TABLE & FIGURE FIXES                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+SUMMARY OF ALL IMPROVEMENTS
+============================
+
+✅ TABLES
+---------
+✓ NEW Table 1: End-to-end times classified by fold vs map  
+✓ NEW Tables 2+: One detailed table per program (all passes)
+✓ Scientific notation for small times (readable!)
+✓ Speedup column in all tables
+✓ Fold/Map type column (F/M/?)
+✓ GC metadata filtered from output comparison
+
+✅ FIGURES  
+----------
+✓ speedup_comparison.pdf: Separated by fold vs map
+✓ Per-program heatmaps (one per program, no 1x noise!)
+✓ pass_breakdown: Horizontal legend + patterns + colors
+✓ Removed messy program_pass_speedup_grid.pdf
+✓ All figures colorblind-accessible
+
+✅ OUTPUT FILTERING
+-------------------
+✓ Filters INFO_TABLE
+✓ Filters GC metadata (footer, region, chunk)
+✓ Filters allocation stats
+✓ No more false mismatches!
+
+WHAT YOU NEED TO DO
+====================
+
+1. Annotate Your Source Files
+   ---------------------------
+   Add these comments to your .hs files:
+   
+   -- PASS_TYPE instCountPass: fold
+   -- PASS_TYPE blockCountPass: map
+   -- PASS_TYPE memoryOpStatsPass: fold
+   
+   See: FOLD_MAP_ANNOTATION_EXAMPLE.txt
+
+2. Run The Benchmark
+   ------------------
+   ./gibbon_benchmark.py --generate-paper
+
+3. You Get
+   -------
+   • performance_table.tex (multiple tables!)
+   • figures/speedup_comparison.pdf (fold/map bars)
+   • figures/heatmaps/Compiler_heatmap.pdf (per-program)
+   • figures/heatmaps/List_heatmap.pdf
+   • figures/pass_breakdown_all.pdf (improved)
+   • ... and more
+
+KEY CHANGES EXPLAINED
+=====================
+
+Table Changes:
+--------------
+BEFORE: One big table with end-to-end times in milliseconds → often showed 0.00
+AFTER:  • Table 1: End-to-end by fold/map in scientific notation
+        • Table 2-N: Per-program details with speedup
+
+        Times now show as: 3.27e-03 instead of 0.00
+
+Figure Changes:
+---------------
+BEFORE: • One big heatmap with all programs × all passes (lots of 1x noise)
+        • Vertical legend (too long, obscured data)
+        • Only colors (hard to distinguish)
+        
+AFTER:  • Per-program heatmaps (Compiler_heatmap.pdf, List_heatmap.pdf, ...)
+        • Horizontal legend (compact)
+        • Patterns + colors (accessible)
+        • Separated fold/map in speedup chart
+
+Removed: program_pass_speedup_grid.pdf (was incomprehensible)
+
+OUTPUT EXAMPLE
+==============
+
+Table 1 in your paper:
+----------------------
+\begin{table}
+Program  | Fold AoS | Fold SoA | Map AoS | Map SoA | Total    | Speedup
+Compiler | 1.23e-02 | 1.15e-02 | 3.45e-03| 3.21e-03| 1.57e-02 | 1.07×
+List     | 2.34e-03 | 2.10e-03 | 1.12e-03| 1.05e-03| 3.46e-03 | 1.10×
+\end{table}
+
+Table 2 - Compiler Details:
+----------------------------
+\begin{table}
+Pass            | Type | AoS      | SoA      | Speedup
+instCountPass   | F    | 3.27e-03 | 3.09e-03 | 1.06×
+blockCountPass  | M    | 2.11e-03 | 1.98e-03 | 1.07×
+Total           |      | 1.57e-02 | 1.47e-02 | 1.07×
+\end{table}
+
+FILES TO REVIEW
+===============
+
+1. VERSION_2.3_GUIDE.txt
+   → Complete guide to all changes
+
+2. FOLD_MAP_ANNOTATION_EXAMPLE.txt
+   → How to annotate your source files
+
+3. gibbon_benchmark.py
+   → Updated script with all improvements
+
+QUICK START
+===========
+
+Step 1: Annotate one program
+   Edit programs/AoS/Compiler.hs:
+   Add: -- PASS_TYPE instCountPass: fold
+
+Step 2: Run benchmark
+   ./gibbon_benchmark.py --programs Compiler.hs --generate-paper
+
+Step 3: Check output
+   cat performance_table.tex
+   open figures/heatmaps/Compiler_heatmap.pdf
+
+Step 4: Annotate remaining programs
+
+Step 5: Full run
+   ./gibbon_benchmark.py --clean --generate-paper --iterations 50
+
+BENEFITS FOR YOUR PAPER
+========================
+
+✓ Tables are readable (scientific notation shows actual values)
+✓ Clear fold vs map analysis
+✓ Per-program deep-dive tables
+✓ Clean heatmaps (no noise from missing passes)
+✓ Accessible figures (patterns + colors)
+✓ Professional presentation
+✓ Ready for top-tier conferences
+
+═══════════════════════════════════════════════════════════════════════════════
+
+All improvements are in gibbon_benchmark.py (version 2.3).
+
+Next: Follow the QUICK START above to test with one program first!
+
+═══════════════════════════════════════════════════════════════════════════════

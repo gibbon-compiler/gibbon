@@ -82,7 +82,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
         -- value as well. Also, since we're storing regions in the value
         -- environment anyways, we probably don't need an additional store.
         --
-        AppE f locs args ->
+        AppE f _cty locs args ->
           case M.lookup f fenv of
             Nothing -> error $ "L2.Interp: unbound function: "++sdoc ex
             Just FunDef{funArgs,funBody,funTy} -> do
@@ -134,7 +134,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                           let trav_fn = mkTravFunName pkd_tycon
                                           -- Bind v to (SOne -1) in sizeEnv temporarily, just long enough
                                           -- to evaluate the call to trav_fn.
-                                          (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn [(Single loc)] [VarE v])
+                                          (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn UnknownTailType [(Single loc)] [VarE v])
                                           let sizeloc = fromJust $ byteSizeOfTy CursorTy
                                               asizeEnv' = M.insert v sizev $
                                                           M.insert loc (SOne sizeloc) $
@@ -262,7 +262,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! (val, sz)
 
-        SpawnE f locs args -> go env sizeEnv (AppE f locs args)
+        SpawnE f locs args -> go env sizeEnv (AppE f UnknownTailType locs args)
         SyncE -> pure $ (VInt (-1), SOne 0)
 
         WithArenaE{} -> error "L2.Interp: WithArenE not handled"
@@ -294,7 +294,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
     LetRegE{} -> error "L2.Interp: LetRegE not handled."
     BoundsCheckVector{} -> error "L2.Interp: BoundsCheckVector not handled."
-    LetRegionE reg _ _ bod -> do
+    LetRegionE reg _ _ _ bod -> do
       let regVar = case (regionToVar reg) of 
                              SingleR v -> v
                              SoARv _ _ -> error "interpExt: did not expect an SoA region!"
@@ -302,7 +302,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
       go env sizeEnv bod
 
     LetParRegionE reg sz ty bod ->
-      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg sz ty bod)
+      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg sz RegionImmutable ty bod)
 
     LetLocE loc locexp bod ->
       case locexp of

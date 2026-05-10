@@ -35,8 +35,9 @@
 #include <cilk/cilk_api.h>
 #endif
 
-
-
+#ifdef _GIBBON_ENABLE_PAPI
+#include <papi.h>
+#endif
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Globals and their accessors
@@ -61,6 +62,8 @@ static int64_t gib_global_region_count = 0;
 // Invariant: should always be equal to max(sym_table_keys).
 static GibSym gib_global_gensym_counter = 0;
 
+//PAPI: specify the region to instrument
+static uint64_t papi_region_id = 0;
 
 
 size_t gib_get_biginf_init_chunk_size(void)
@@ -128,6 +131,30 @@ GibSym gib_read_gensym_counter(void)
     return gib_global_gensym_counter;
 }
 
+#ifndef GIB_PTR_ALIGN
+#define GIB_PTR_ALIGN 8
+#endif
+
+__attribute__((unused))
+static inline size_t gib_align_up_sz_rt(size_t n, size_t a) {
+    return (n + (a - 1)) & ~(a - 1);
+}
+
+__attribute__((unused))
+static inline uintptr_t gib_align_up_ptr_rt(uintptr_t p, uintptr_t a) {
+    return (p + (a - 1)) & ~(a - 1);
+}
+
+uint64_t get_papi_region_id(void)
+{
+    return papi_region_id;
+}
+
+void increment_papi_region_id(void)
+{
+    papi_region_id++;
+}
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
@@ -145,7 +172,7 @@ GibSym gib_read_gensym_counter(void)
 #ifdef _GIBBON_POINTER
 
 #ifdef _GIBBON_BUMPALLOC_HEAP
-#pragma message "Using bump allocator."
+GIB_PRAGMA_MESSAGE("Using bump allocator.")
 
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_ptr_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -512,7 +539,7 @@ GibCursor *gib_array_alloc(GibCursor *arr, size_t size)
         exit(1);
     }
 
-    #pragma GCC unroll 2
+    GIB_PRAGMA_UNROLL(2)
     for (size_t i = 0; i < size; i++){
         arr_on_heap[i] = arr[i];
     }
@@ -724,7 +751,7 @@ double gib_sum_timing_array(GibVector *times)
 
 #ifdef _GIBBON_BUMPALLOC_LISTS
 // #define _GIBBON_DEBUG
-#pragma message "Using bump allocator."
+GIB_PRAGMA_MESSAGE("Using bump allocator.")
 
 static __thread char *gib_global_list_bumpalloc_heap_ptr = (char *) NULL;
 static __thread char *gib_global_list_bumpalloc_heap_ptr_end = (char *) NULL;
@@ -1054,26 +1081,26 @@ void gib_print_gc_config(void) {
     printf("C config\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
 #if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
-    #pragma message "Generational GC is disabled."
+    GIB_PRAGMA_MESSAGE("Generational GC is disabled.")
     printf("Generational GC is disabled.\n");
 #else
-    #pragma message "Generational GC is enabled."
+    GIB_PRAGMA_MESSAGE("Generational GC is enabled.")
     printf("Generational GC is enabled.\n");
 #endif
 
 #if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
-    #pragma message "Eager promotion is disabled."
+    GIB_PRAGMA_MESSAGE("Eager promotion is disabled.")
     printf("Eager promotion is disabled.\n");
 #else
-    #pragma message "Eager promotion is enabled."
+    GIB_PRAGMA_MESSAGE("Eager promotion is enabled.")
     printf("Eager promotion is enabled.\n");
 #endif
 
 #if defined _GIBBON_SIMPLE_WRITE_BARRIER && _GIBBON_SIMPLE_WRITE_BARRIER == 0
-    #pragma message "Simple write barrier is disabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is disabled.")
     printf("Simple write barrier is disabled.\n");
 #else
-    #pragma message "Simple write barrier is enabled."
+    GIB_PRAGMA_MESSAGE("Simple write barrier is enabled.")
     printf("Simple write barrier is enabled.\n");
 #endif
 
@@ -1155,25 +1182,43 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
+// GibChunk gib_alloc_region_on_heap(size_t size)
+// {
+//     size_t size_aligned = gib_align_up_sz(size, GIB_PTR_ALIGN);
+// char *heap_start = gib_alloc(size_aligned);
+// if (heap_start == NULL) {
+//     fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu", size_aligned);
+//     exit(1);
+// }
+// char *heap_end = heap_start + size_aligned;
+// char *footer_start = gib_init_footer_at(heap_end, size_aligned, 1);
+// #ifdef _GIBBON_GCSTATS
+//     GC_STATS->oldgen_regions++;
+//     GC_STATS->mem_allocated_in_oldgen += size;
+// #endif
+//
+// #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+//         fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
+//                 size, heap_start, footer_start);
+// #endif
+//
+//     return (GibChunk) {heap_start, footer_start};
+// }
+
 GibChunk gib_alloc_region_on_heap(size_t size)
 {
-    char *heap_start = gib_alloc(size);
+    size_t size_aligned = gib_align_up_sz(size, GIB_PTR_ALIGN);
+
+    char *heap_start = (char *) gib_alloc(size_aligned);
     if (heap_start == NULL) {
-        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu",size);
+        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu", size_aligned);
         exit(1);
     }
-    char *heap_end = heap_start + size;
-    char *footer_start = gib_init_footer_at(heap_end, size, 1);
 
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->oldgen_regions++;
-    GC_STATS->mem_allocated_in_oldgen += size;
-#endif
+    char *heap_end = heap_start + size_aligned;
 
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
-                size, heap_start, footer_start);
-#endif
+    // IMPORTANT: pass size_aligned consistently.
+    char *footer_start = gib_init_footer_at(heap_end, size_aligned, 1);
 
     return (GibChunk) {heap_start, footer_start};
 }

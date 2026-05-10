@@ -1,0 +1,70 @@
+========================================================================
+GIBBON BENCHMARK REPORT v3.1
+========================================================================
+Generated: 2026-02-13 08:40:06
+
+
+Program: Compiler.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: DBQuery.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: DecisionTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: DomTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: KDTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: LinearListReduction.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: List.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: MonoTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: ObjectGraph.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: OctTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: PiecewiseFunctions.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: TernaryTree.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found
+
+Program: Trie.hs
+----------------------------------------
+  AOS: FAILED – source not found
+  SOA: FAILED – source not found

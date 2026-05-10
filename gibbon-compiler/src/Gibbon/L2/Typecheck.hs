@@ -31,6 +31,7 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.L2.Syntax as L2
+
 -- import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
@@ -148,7 +149,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       LitSymE _v -> return (SymTy, tstatein)
 
-      AppE v ls args ->
+      AppE v _ ls args ->
           -- Checking function application involves a few steps:
           --  (1) We need to make sure the inputs/ouptuts line up with the expected
           --      types for the function.
@@ -683,7 +684,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  RequestEndOf{} -> throwError $ GenericTC  "tcExp of PrimAppE: RequestEndOf not handled yet" exp
 
-      LetE (v, _ls, ty, e1@(AppE _f _ls1 _)) e2 -> do
+      LetE (v, _ls, ty, e1@(AppE _f _ _ls1 _)) e2 -> do
         (ty1,tstate1) <- recur tstatein e1
         ensureEqualTyNoLoc exp ty1 ty
         let zipped = zip _ls _ls1
@@ -772,7 +773,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                return (ty1,tstate1)
 
       SpawnE f locs args ->
-        tcExp ddfs env funs constrs regs tstatein (AppE f locs args)
+        tcExp ddfs env funs constrs regs tstatein (AppE f NotTailRec locs args)
 
       SyncE -> pure (ProdTy [], tstatein)
 
@@ -784,7 +785,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       FoldE _ _ _ -> throwError $ UnsupportedExpTC exp
 
-      Ext (LetRegionE r _ _ e) -> do
+      Ext (LetRegionE r _ _ _ e) -> do
                regs' <- regionInsert exp r regs
                (ty,tstate) <- tcExp ddfs env funs constrs regs' tstatein e
                return (ty,tstate)
@@ -900,11 +901,14 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       Ext (StartOfPkdCursor cur) -> do
         case M.lookup (fromVarToFreeVarsTy cur) (vEnv env) of
-          Just (PackedTy{}) -> pure (CursorTy, tstatein)
+          Just (PackedTy ty _) -> do 
+                                  let ddef = lookupDDef ddfs ty
+                                  let cursorType = getCursorTypeForDataCon ddfs ddef
+                                  pure (cursorType, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
       Ext (TagCursor a _b) -> do
-        case M.lookup (fromVarToFreeVarsTy a) (vEnv env) of
+        case M.lookup (fromLocVarToFreeVarsTy a) (vEnv env) of
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
@@ -1231,6 +1235,8 @@ ensurePackedLoc exp ty l =
 
 -- | Ensure the locations all line up with the constraints in a data constructor application.
 -- Includes an expression for error reporting.
+-- VS : TODO: 
+-- the constraints for case when we have random access pointers is not implemented.
 ensureDataCon :: Exp -> TyCon -> DataCon -> LocVar -> [Ty2] -> ConstraintSet -> TcM ()
 ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                        Single _location -> (go Nothing linit0 tys)
@@ -1256,7 +1262,7 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                        -- This checking should be fine for a Flat list data type
                                        -- data List = Cons Int List | Nil
                                        -- TODO: Extend for a Tree data type
-                                       SoA dcloc fieldLocs -> do 
+                                       SoA dcloc fieldLocs -> do
                                               let unself_idxs = L.concatMap 
                                                                       (\ty -> case ty of 
                                                                                   PackedTy k _ -> if k == dcty 
@@ -1270,6 +1276,8 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                   PackedTy k _ -> if k == dcty 
                                                                                                   then [fromJust (L.elemIndex ty tys)]
                                                                                                   else []
+                                                                                  CursorTy -> [fromJust (L.elemIndex ty tys)]
+                                                                                  CursorArrayTy{} -> [fromJust (L.elemIndex ty tys)]
                                                                                   _ -> []
                                                 
                                                                       ) tys  
@@ -1286,7 +1294,9 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                   case selfTys of 
                                                     [] -> return ()
                                                     x:_ -> case x of 
-                                                             PackedTy _ l -> ensureAfterConstant exp cs (Single dcloc) (getDconLoc l) 
+                                                             PackedTy _ l -> ensureAfterConstant exp cs (Single dcloc) (getDconLoc l)
+                                                             CursorTy -> return () 
+                                                             CursorArrayTy{} -> return ()
                                                              _ -> error "Did not expected unpacked type!"
                                               -- TODO: ensure after constant for all scalar not self recursive fields, with offset 0
                                               -- TODO: ensure after constant for all locs in dest with the next self recursive field. 
@@ -1311,7 +1321,10 @@ ensureDataCon exp dcty dc linit0 tys cs = case linit0 of
                                                                                                         --                                           PackedTy{} -> ensureAfterPacked exp cs l1 l2
                                                                                                         --                                           _ -> ensureAfterConstant exp cs l1 l2) (zip3 aliasLocs nextWriteAtLocs unselfTys)
                                                                                                         return ()
-                                                               _ -> error "ensureDataCon: Did not expected unpacked type!"
+                                                               -- TODO: implement for ran access pointers.
+                                                               CursorTy -> return ()
+                                                               CursorArrayTy{} -> return ()
+                                                               _ -> error "Not implemented!"
                                               -- dbgTraceIt "Print in ensure data con" dbgTraceIt (sdoc (unselfTys, selfTys, unselfWriteAtLocs)) dbgTraceIt "End\n"
                                               return ()
 
@@ -1387,6 +1400,10 @@ switchOutLoc exp ts@(LocationTypeState ls) l =
       Nothing -> throwError $ GenericTC ("Unknown location " ++ (show l)) exp
       Just (Output,a) -> return $ LocationTypeState $ M.update (\_ -> Just (Input,a)) l ls
       Just (Input,_a) -> return ts
+      -- TODO these modalities might require some other logic
+      Just (OutputMutable,a) -> return $ LocationTypeState $ M.update (\_ -> Just (Input,a)) l ls
+      Just (InputMutable,_a) -> return ts
+
 
 _absentAfter :: Exp -> LocationTypeState -> LocVar -> TcM ()
 _absentAfter exp (LocationTypeState ls) l =

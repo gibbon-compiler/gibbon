@@ -21,12 +21,12 @@ module Gibbon.NewL2.Syntax
     -- * Operations on types
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv, extendPatternMatchEnvLocVar
-    , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar, fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar
+    , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars, isVariableReadOrWrittenTo
+    , toLocVar, toEndRegVar, getModality,  fromLRM, fromVarToSingleRegVar, fromLocArgToFreeVarsTy, Old.fromLocVarToRegVar, toRegVar, isRegionLocArg, inLocArgs
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
-    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar, genSymRegVar
+    , toEndFromTaggedV, toTagV, toEndFromTaggedRegVar, genSymRegVar, isLocAlive
 
     , module Gibbon.Language
     )
@@ -48,6 +48,7 @@ import           Gibbon.L1.Syntax hiding (AddFixed, StartOfPkdCursor)
 import qualified Gibbon.L1.Syntax as L1
 
 import qualified Gibbon.L2.Syntax as Old
+import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
@@ -107,11 +108,32 @@ data LocArg = Loc LREM
 instance Out LocArg
 instance NFData LocArg
 
+isRegionLocArg :: LocArg -> Bool 
+isRegionLocArg loc = case loc of 
+                          Loc{} -> False
+                          EndWitness{} -> False
+                          Reg{} -> True
+                          EndOfReg{} -> True
+                          EndOfReg_Tagged{} -> True 
+
+inLocArgs :: L2.ArrowTy2 ty2 -> [LocArg]
+inLocArgs ty = L.map (\lrm -> Loc $ fromLRM lrm) $
+               L.filter (\(L2.LRM _ _ m) -> m == L2.Input || m == L2.InputMutable) (L2.locVars ty)
+
 toRegVar :: LocArg -> RegVar
 toRegVar arg =
   case arg of
     Loc lrm        -> lremReg lrm
     Reg v _        -> v
+    EndOfReg _ _ v -> v
+    EndOfReg_Tagged v -> v
+    EndWitness {} -> error "toRegVar: EndWitness not handled"
+
+toEndRegVar :: LocArg -> RegVar
+toEndRegVar arg =
+  case arg of
+    Loc lrm        -> lremEndReg lrm
+    Reg v _        -> toEndVRegVar v
     EndOfReg _ _ v -> v
     EndOfReg_Tagged v -> v
     EndWitness {} -> error "toRegVar: EndWitness not handled"
@@ -129,6 +151,14 @@ toLocVar arg =
     EndOfReg _ _ v -> Old.fromRegVarToLocVar v
     EndOfReg_Tagged v -> Old.fromRegVarToLocVar v
 
+getModality :: LocArg -> Maybe L2.Modality
+getModality lc =
+  case lc of
+    Loc lrm        -> Just $ lremMode lrm
+    EndWitness lrm _v -> Just $ lremMode lrm
+    Reg _v m        -> Just m
+    EndOfReg _ m _v -> Just m 
+    EndOfReg_Tagged _ -> Nothing
 
 fromLocArgToFreeVarsTy :: LocArg -> FreeVarsTy
 fromLocArgToFreeVarsTy arg =
@@ -191,7 +221,7 @@ instance FreeVars LocExp where
 instance Typeable (Old.E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
-      Old.LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      Old.LetRegionE _r _ _ _ bod    -> gRecoverType ddfs env2 bod
       Old.LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
       Old.StartOfPkdCursor{}       -> MkTy2 $ CursorTy
       Old.TagCursor{}      -> MkTy2 $ CursorTy
@@ -214,7 +244,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
 
   gRecoverTypeLoc ddfs env2 ex =
     case ex of
-      Old.LetRegionE _r _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
+      Old.LetRegionE _r _ _ _ bod    -> gRecoverTypeLoc ddfs env2 bod
       Old.LetParRegionE _r _ _ bod -> gRecoverTypeLoc ddfs env2 bod
       Old.StartOfPkdCursor{}       -> MkTy2 $ CursorTy
       Old.TagCursor{}      -> MkTy2 $ CursorTy
@@ -258,7 +288,7 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
       CharE _      -> MkTy2 $ CharTy
       FloatE{}     -> MkTy2 $ FloatTy
       LitSymE _    -> MkTy2 $ SymTy
-      AppE v locargs _ ->
+      AppE v _ locargs _ ->
                        let fnty  = fEnv env2 # v
                            outty = Old.arrOut fnty
                            mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
@@ -305,7 +335,7 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
       CharE _      -> MkTy2 $ CharTy
       FloatE{}     -> MkTy2 $ FloatTy
       LitSymE _    -> MkTy2 $ SymTy
-      AppE v locargs _ ->
+      AppE v _ locargs _ ->
                        let fnty  = fEnv env2 # (fromVarToFreeVarsTy v)
                            outty = Old.arrOut fnty
                            mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
@@ -443,11 +473,11 @@ revertExp ex =
     CharE n  -> CharE n
     FloatE n  -> FloatE n
     LitSymE v -> LitSymE v
-    AppE v _ args   -> AppE v [] (L.map revertExp args)
+    AppE v cty _ args   -> AppE v cty [] (L.map revertExp args)
     PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
     LetE (v,_, ty, (Ext (Old.IndirectionE _ _ _ _ arg))) bod ->
       let PackedTy tycon _ =  unTy2 ty in
-          LetE (v,[],(stripTyLocs (unTy2 ty)), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
+          LetE (v,[],(stripTyLocs (unTy2 ty)), AppE (mkCopyFunName tycon) NotTailRec [] [revertExp arg]) (revertExp bod)
     LetE (v,_,ty,rhs) bod ->
       LetE (v,[], stripTyLocs (unTy2 ty), revertExp rhs) (revertExp bod)
     IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
@@ -461,10 +491,10 @@ revertExp ex =
     WithArenaE v e -> WithArenaE v (revertExp e)
     Ext ext ->
       case ext of
-        Old.LetRegionE _ _ _ bod -> revertExp bod
+        Old.LetRegionE _ _ _ _ bod -> revertExp bod
         Old.LetParRegionE _ _ _ bod -> revertExp bod
         Old.LetLocE _ _ bod  -> revertExp bod
-        Old.TagCursor a _b -> Ext (L1.StartOfPkdCursor a)
+        Old.TagCursor _a _b -> error "revertExp cannot revert TagCursor" --Ext (L1.StartOfPkdCursor a)
         Old.StartOfPkdCursor v -> Ext (L1.StartOfPkdCursor v)
         Old.RetE _ v -> VarE v
         Old.AddFixed{} -> error "revertExp: TODO AddFixed."
@@ -509,7 +539,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           CharE{}  -> acc
           FloatE{}  -> acc
           LitSymE{} -> acc
-          AppE _ _ args   -> foldl go acc args
+          AppE _ _ _ args   -> foldl go acc args
           PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
             let acc_rhs = go acc rhs
@@ -536,12 +566,12 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FoldE{} -> acc
           Ext ext ->
             case ext of
-              Old.LetRegionE r _ _ rhs ->
+              Old.LetRegionE r _ _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetParRegionE r _ _ rhs ->
                 go (M.insertWith (++) (fromRegVarToFreeVarsTy $ Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               Old.LetLocE loc phs rhs  ->
-                go (M.insertWith (++) (fromLocVarToFreeVarsTy loc) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
+                go (M.insertWith (++) (fromLocVarToFreeVarsTy (toLocVar loc)) (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
               Old.RetE{}         -> acc
               Old.FromEndE{}     -> acc
               Old.BoundsCheck{}  -> acc
@@ -554,7 +584,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.SSPush{} -> acc
               Old.SSPop{} -> acc
               Old.StartOfPkdCursor cur -> M.insertWith (++) (fromVarToFreeVarsTy cur) [(fromVarToFreeVarsTy cur)] acc
-              Old.TagCursor a b -> M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
+              Old.TagCursor _a _b -> acc --M.insertWith (++) (fromVarToFreeVarsTy b) [(fromVarToFreeVarsTy b)] (M.insertWith (++) (fromVarToFreeVarsTy a) [(fromVarToFreeVarsTy a)] acc)
               Old.LetRegE {} -> error "depList: LetRegE not handled"
               Old.BoundsCheckVector {} -> error "depList: BoundsCheckVector not handled"
 
@@ -576,7 +606,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
 allFreeVars :: Exp2 -> S.Set FreeVarsTy
 allFreeVars ex =
   case ex of
-    AppE _ locs args -> S.fromList (map (fromLocArgToFreeVarsTy) locs) `S.union` (S.unions (map allFreeVars args))
+    AppE _ _ locs args -> S.fromList (map (fromLocArgToFreeVarsTy) locs) `S.union` (S.unions (map allFreeVars args))
     PrimAppE _ args -> (S.unions (map allFreeVars args))
     LetE (v,locs,_,rhs) bod -> (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
                                `S.difference` S.singleton (fromVarToFreeVarsTy v)
@@ -593,11 +623,11 @@ allFreeVars ex =
     SpawnE _ locs args -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs) `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        Old.LetRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
+        Old.LetRegionE r _ _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
         Old.LetParRegionE r _ _ bod -> S.delete ((fromRegVarToFreeVarsTy . Old.regionToVar) r) (allFreeVars bod)
-        Old.LetLocE loc locexp bod -> S.difference ((S.singleton . fromLocVarToFreeVarsTy) loc) (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp))
+        Old.LetLocE loc locexp bod -> S.difference (allFreeVars bod `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars locexp)) ((S.singleton . fromLocVarToFreeVarsTy) (toLocVar loc))
         Old.StartOfPkdCursor v -> S.singleton (fromVarToFreeVarsTy v)
-        Old.TagCursor a b-> S.fromList [(fromVarToFreeVarsTy a),(fromVarToFreeVarsTy b)]
+        Old.TagCursor a b-> S.fromList [((fromLocVarToFreeVarsTy . toLocVar)  a),((fromLocVarToFreeVarsTy . toLocVar) b)]
         Old.RetE locs v     -> S.insert (fromVarToFreeVarsTy v) (S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) locs))
         Old.FromEndE loc    -> S.singleton ((fromLocVarToFreeVarsTy . toLocVar) loc)
         Old.BoundsCheck _ reg cur -> S.fromList (map (fromLocVarToFreeVarsTy . toLocVar) [reg, cur])
@@ -605,8 +635,8 @@ allFreeVars ex =
         Old.AddFixed v _    -> S.singleton (fromVarToFreeVarsTy v)
         Old.GetCilkWorkerNum-> S.empty
         Old.LetAvail vs bod -> S.fromList (L.map fromVarToFreeVarsTy vs) `S.union` (S.map fromVarToFreeVarsTy $ gFreeVars bod)
-        Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy loc
-        Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy loc
+        Old.AllocateTagHere loc _ -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
+        Old.AllocateScalarsHere loc -> S.singleton $ fromLocVarToFreeVarsTy (toLocVar loc)
         Old.SSPush _ a b _ -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
         Old.SSPop _ a b -> S.fromList (map fromLocVarToFreeVarsTy [a,b])
         Old.LetRegE {} -> error "allFreeVars: LetRegE not handled"
@@ -615,3 +645,329 @@ allFreeVars ex =
 
 freeLocVars :: Exp2 -> [LocVar]
 freeLocVars ex = L.map getLocVarFromFreeVarsTy (S.toList $ (allFreeVars ex))
+
+
+
+-- Vidush: I need to make a function that checks wheather a variable is dead or not.
+-- In case a addCursor operation is dead code, we should not do a side-effect of bumping 
+-- a mutable cursor for it.
+isLocAlive :: LocVar -> Exp2 -> Bool -> Bool
+isLocAlive loc exp accum = case exp of 
+                                VarE{} -> accum
+                                LetE (_,locs,_,rhs) bod -> let check = isLocAliveHelperList loc locs
+                                                               checkRhs = isLocAlive loc rhs accum
+                                                               isAliveBod = isLocAlive loc bod accum
+                                                              in (check || checkRhs || isAliveBod)
+                                LitE{}    -> accum
+                                CharE{}  -> accum
+                                FloatE{}  -> accum
+                                LitSymE{} -> accum
+                                AppE _ _ locs args -> let checkArgs = map (\e -> isLocAlive loc e accum) args
+                                                          checkArgs' = foldr (\b a -> b || a) False checkArgs
+                                                          checkLocs = isLocAliveHelperList loc locs 
+                                                        in checkArgs' || checkLocs    
+                                PrimAppE _ args -> let checkArgs = map (\e -> isLocAlive loc e accum) args
+                                                       checkArgs' = foldr (\b a -> b || a) False checkArgs
+                                                     in checkArgs'
+                                IfE a b c  -> let checkA = isLocAlive loc a accum
+                                                  checkB = isLocAlive loc b accum 
+                                                  checkC = isLocAlive loc c accum
+                                               in (checkA || checkB || checkC)
+                                MkProdE ls -> let checkLs = map (\e -> isLocAlive loc e accum) ls
+                                                  checkLs' = foldr (\b a -> b || a) False checkLs
+                                                in checkLs' 
+                                ProjE _ e  -> let checkE = isLocAlive loc e accum 
+                                               in checkE
+                                -- assuming scrutinee is in ANF
+                                CaseE _scrt mp ->
+                                  L.foldr (\(_,vlocs,e) acc ->
+                                            let (_vars,locs) = unzip vlocs
+                                                isLocUsedInLst = isLocAliveHelperList loc locs
+                                                checkE = isLocAlive loc e (acc || isLocUsedInLst)
+                                             in checkE
+                                          )
+                                          accum
+                                          mp
+                                DataConE dl _ args -> let locFromLocArg = toLocVar dl
+                                                          checkDconLoc = if loc == locFromLocArg 
+                                                                         then True 
+                                                                         else False
+                                                          argsCheck = map (\a -> isLocAlive loc a accum) args
+                                                          argsCheck' = foldr (\b a -> b || a) False argsCheck 
+                                                        in (checkDconLoc || argsCheck')
+                                TimeIt e _ _ -> let checkE = isLocAlive loc e accum 
+                                                 in checkE
+                                WithArenaE _ e -> let checkE = isLocAlive loc e accum 
+                                                   in checkE
+                                SpawnE _ lst ls  -> let 
+                                                      isLocUsedInLst = isLocAliveHelperList loc lst
+                                                      checkLS = map (\a -> isLocAlive loc a accum) ls 
+                                                      checkLS' = foldr (\b a -> b || a) False checkLS
+                                                     in (checkLS' || isLocUsedInLst)
+                                SyncE          -> accum
+                                MapE{}  -> accum
+                                FoldE{} -> accum
+                                Ext ext -> case ext of
+                                                Old.BoundsCheckVector lst -> foldr (\(_, _r, l) a  -> let ll = toLocVar l 
+                                                                                                   in if ll == loc 
+                                                                                                      then True || a 
+                                                                                                      else a
+                                                                                   ) accum lst
+                                                Old.RetE locs _ -> isLocAliveHelperList loc locs || accum
+                                                Old.LetRegionE _r _ _ _ bod -> isLocAlive loc bod accum
+                                                Old.LetParRegionE _r _ _ bod -> isLocAlive loc bod accum
+                                                Old.LetLocE _lc locexp bod -> let 
+                                                                                checkBod = isLocAlive loc bod accum
+                                                                                checkLocExp = checkLocUsedInLocExp loc locexp
+                                                                               in (checkBod || checkLocExp)
+                                                Old.StartOfPkdCursor _v -> accum
+                                                Old.TagCursor _a _b -> accum 
+                                                Old.FromEndE lc -> let lcl = toLocVar lc
+                                                                       checkLC = if lcl == loc 
+                                                                                 then True 
+                                                                                 else False
+                                                                     in (accum || checkLC)
+                                                Old.BoundsCheck _ _reg cur -> let curLoc = toLocVar cur 
+                                                                                  curCheck = if curLoc == loc 
+                                                                                            then True
+                                                                                            else False
+                                                                               in (accum || curCheck)
+                                                Old.IndirectionE _ _ (a,b) (c,d) e -> let 
+                                                                                        la = toLocVar a 
+                                                                                        lb = toLocVar b 
+                                                                                        lc = toLocVar c 
+                                                                                        ld = toLocVar d 
+                                                                                        checkA = if la == loc then True else False
+                                                                                        checkB = if lb == loc then True else False
+                                                                                        checkC = if lc == loc then True else False
+                                                                                        checkD = if ld == loc then True else False
+                                                                                        checkE = isLocAlive loc e accum 
+                                                                                      in (checkA || checkB || checkC || checkD || checkE)
+                                                Old.AddFixed _v _    -> accum
+                                                Old.GetCilkWorkerNum-> accum
+                                                Old.LetAvail _vs _bod -> accum
+                                                Old.AllocateTagHere lct _ -> let lct'= toLocVar lct 
+                                                                               in if lct' == loc 
+                                                                                  then True 
+                                                                                  else False 
+                                                Old.AllocateScalarsHere lct -> let lct' = toLocVar lct 
+                                                                                in if lct' == loc 
+                                                                                   then True 
+                                                                                   else False
+                                                Old.SSPush _ _a _b _ -> accum 
+                                                Old.SSPop _ _a _b -> accum
+                                                Old.LetRegE _ _ bod -> isLocAlive loc bod accum
+
+                                -- _ -> accum  
+
+checkLocUsedInLocExp :: LocVar -> L2.PreLocExp LocArg -> Bool
+checkLocUsedInLocExp lc exp = case exp of
+                                  Old.StartOfRegionLE _r -> False  
+                                  Old.AfterConstantLE _ loc   -> let loc_l = toLocVar loc 
+                                                                  in if lc == loc_l 
+                                                                     then True
+                                                                     else False
+                                  Old.AfterVariableLE _v loc _ -> let loc_l = toLocVar loc 
+                                                                  in if lc == loc_l
+                                                                     then True
+                                                                     else False
+                                  Old.InRegionLE _r  -> False
+                                  Old.FromEndLE loc -> let loc_l = toLocVar loc 
+                                                        in if lc == loc_l 
+                                                           then True
+                                                           else False
+                                  Old.FreeLE -> False
+                                  Old.GenSoALoc dloc flocs -> let dloc_l = toLocVar dloc
+                                                                  flocs_l = map (\(_k, l) -> toLocVar l) flocs 
+                                                                in if dloc_l == lc || L.elem lc flocs_l
+                                                                   then True 
+                                                                   else False 
+                                  Old.GetDataConLocSoA parent -> let parent_l = toLocVar parent 
+                                                                  in if parent_l == lc 
+                                                                     then True 
+                                                                     else False
+                                  Old.GetFieldLocSoA _ parent -> let parent_l = toLocVar parent
+                                                                   in if parent_l == lc 
+                                                                      then True 
+                                                                      else False
+                                  Old.AssignLE loc -> let loc_l = toLocVar loc 
+                                                       in if loc_l == lc 
+                                                          then True 
+                                                          else False
+
+
+
+isLocAliveHelperList :: LocVar -> [LocArg] -> Bool
+isLocAliveHelperList lc lst = let used = foldr (\li ac -> let li' = toLocVar li 
+                                                           in if li' == lc 
+                                                              then True || ac
+                                                              else ac  
+                                               ) False lst
+                               in used
+
+
+
+isVariableReadOrWrittenTo :: Var -> M.Map FreeVarsTy Var -> Exp2 -> Bool -> Bool
+isVariableReadOrWrittenTo v fenv exp b = case exp of
+                                      VarE v' -> if v' == v 
+                                                 then b || True
+                                                 else b  
+                                      LetE (v',_locs,_,rhs) bod -> let checkRHS = isVariableReadOrWrittenTo v fenv rhs False
+                                                                       checkBodV = isVariableReadOrWrittenTo v fenv bod b
+                                                                       checkVPr = isVariableReadOrWrittenTo v' fenv bod False 
+                                                                       check_side_effect = case rhs of 
+                                                                                                PrimAppE f _ -> case f of  
+                                                                                                                    PrintInt -> True 
+                                                                                                                    PrintBool -> True 
+                                                                                                                    PrintChar -> True 
+                                                                                                                    PrintSym -> True
+                                                                                                                    PrintFloat -> True
+                                                                                                                    _ -> False
+                                                                                                _ -> False
+                                                                    in if ((checkVPr || check_side_effect) && checkRHS)
+                                                                      then True
+                                                                      else if checkBodV
+                                                                      then True
+                                                                      else b
+                                      LitE{} -> b
+                                      CharE{} -> b
+                                      FloatE{} -> b
+                                      LitSymE v' -> if v' == v 
+                                                    then b || True 
+                                                    else b
+                                      AppE _ _ _locs args -> let 
+                                                              map_args = map (\a -> isVariableReadOrWrittenTo v fenv a b) args
+                                                             in foldr (\bb a -> bb || a) False map_args    
+                                      PrimAppE _ args -> let 
+                                                           map_args = map (\a -> case a of 
+                                                                                      VarE av -> if av == v
+                                                                                                 then True
+                                                                                                 else False 
+                                                                                      _ -> isVariableReadOrWrittenTo v fenv a b) args
+                                                          in foldr (\bb a -> bb || a) False map_args
+                                      IfE ai bi ci  -> let ba = isVariableReadOrWrittenTo v fenv ai b
+                                                           bb = isVariableReadOrWrittenTo v fenv bi b
+                                                           cc = isVariableReadOrWrittenTo v fenv ci b
+                                                      in ba || bb || cc
+                                      MkProdE ls -> let 
+                                                      map_ls = map (\l -> isVariableReadOrWrittenTo v fenv l b) ls
+                                                     in foldr (\bb a -> bb || a) False map_ls
+                                      ProjE _ e  -> isVariableReadOrWrittenTo v fenv e b 
+                                      -- assuming scrutinee is in ANF
+                                      CaseE _scrt mp ->
+                                        L.foldr (\(_,_vlocs,e) acc -> let 
+                                                                        isVarAlive = isVariableReadOrWrittenTo v fenv e b
+                                                                      in (isVarAlive || acc)) b mp
+                                      DataConE _dl _ args -> let 
+                                                              dcon_args = map (\arg -> isVariableReadOrWrittenTo v fenv arg b) args
+                                                             in foldr (\bb a -> bb || a) False dcon_args
+                                      TimeIt e _ _ -> isVariableReadOrWrittenTo v fenv e b
+                                      WithArenaE _ e -> isVariableReadOrWrittenTo v fenv e b
+                                      SpawnE _ _locs ls  -> let 
+                                                            map_ls = map (\l -> isVariableReadOrWrittenTo v fenv l b) ls
+                                                           in foldr (\bb a -> bb || a) False map_ls
+                                      SyncE -> b 
+                                      MapE{}  -> b
+                                      FoldE{} -> b
+                                      Ext ext -> case ext of
+                                                      Old.BoundsCheckVector _lst -> b
+                                                      Old.RetE _locs rv -> if rv == v 
+                                                                           then True
+                                                                           else False    
+                                                      Old.LetRegionE _r _ _ _ bod -> isVariableReadOrWrittenTo v fenv bod b
+                                                      Old.LetParRegionE _r _ _ bod -> isVariableReadOrWrittenTo v fenv bod b
+                                                      Old.LetLocE _lc _locexp bod -> let 
+                                                                                      -- checkLocExp = checkVarReadInLocExp v fenv locexp
+                                                                                      checkVarBod = isVariableReadOrWrittenTo v fenv bod b 
+                                                                                      --lcName = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy (toLocVar lc))
+                                                                                      -- _checkLcReadOrWrittenBod = isVariableReadOrWrittenTo lcName fenv bod False
+                                                                                    in checkVarBod || b
+                                                      Old.StartOfPkdCursor spkdc -> if spkdc == v 
+                                                                                    then True
+                                                                                    else False || b
+                                                      Old.TagCursor _a _b -> b 
+                                                      Old.FromEndE _lc -> b
+                                                                      --  let lcl = toLocVar lc
+                                                                      --        -- lclName = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy lcl)
+                                                                      --      in if lclName == v 
+                                                                      --         then True 
+                                                                      --         else False || b
+                                                      Old.BoundsCheck _ _reg _cur -> b
+                                                                                  -- let curLoc = toLocVar cur
+                                                                                  --       curLocName = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy curLoc) 
+                                                                                  --      in if curLocName == v 
+                                                                                  --         then True
+                                                                                  --         else False || b
+                                                      Old.IndirectionE _ _ (_a,_b) (_c,_d) e -> isVariableReadOrWrittenTo v fenv e b
+                                                      Old.GetCilkWorkerNum-> b
+                                                      Old.LetAvail _vs _bod -> b
+                                                      Old.AllocateTagHere _lct _ -> b
+                                                                                    --   let lct'= toLocVar lct
+                                                                                    --    lctName = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy lct')
+                                                                                    -- in if lctName == v 
+                                                                                    --    then True 
+                                                                                    --    else False || b 
+                                                      Old.AllocateScalarsHere _lct -> b
+                                                                                    --  let lct' = toLocVar lct
+                                                                                    --      lctName = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy lct') 
+                                                                                    --   in if lctName == v 
+                                                                                    --     then True 
+                                                                                    --     else False || b
+                                                      Old.SSPush _ _a _b _ -> b 
+                                                      Old.SSPop _ _a _b -> b
+                                                      Old.LetRegE _ _ bod -> isVariableReadOrWrittenTo v fenv bod b
+                                                      _ -> b
+
+
+
+checkVarReadInLocExp :: Var -> M.Map FreeVarsTy Var -> L2.PreLocExp LocArg -> Bool
+checkVarReadInLocExp _v _fenv exp = case exp of
+                                  Old.StartOfRegionLE _r -> False  
+                                  Old.AfterConstantLE _ _loc   -> False
+                                                                --  let loc_l = toLocVar loc
+                                                                --      loc_l_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy loc_l)
+                                                                --   in if v == loc_l_name 
+                                                                --      then True
+                                                                --      else False
+                                  Old.AfterVariableLE _v _loc _ -> False
+                                                                  --  let loc_l = toLocVar loc
+                                                                  --     loc_l_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy loc_l)
+                                                                  -- in if v == loc_l_name
+                                                                  --    then True
+                                                                  --    else False
+                                  Old.InRegionLE _r  -> False
+                                  Old.FromEndLE _loc -> False
+                                                      -- let loc_l = toLocVar loc 
+                                                      --      loc_l_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy loc_l)
+                                                      --   in if v == loc_l_name 
+                                                      --      then True
+                                                      --      else False
+                                  Old.FreeLE -> False
+                                  Old.GenSoALoc _dloc _flocs -> False                                    
+                                          --  let dloc_l = toLocVar dloc
+                                          --                         dloc_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy dloc_l)
+                                          --                         flocs_l = map (\(_k, l) -> let floc = toLocVar l
+                                          --                                                        floc_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy floc)
+                                          --                                                     in floc_name
+                                          --                                       ) flocs 
+                                          --                       in if dloc_name == v || L.elem v flocs_l
+                                          --                          then True 
+                                          --                          else False 
+                                  Old.GetDataConLocSoA _parent -> False
+                                                              -- let parent_l = toLocVar parent
+                                                              --        parent_l_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy parent_l)
+                                                              --     in if parent_l_name == v 
+                                                              --        then True 
+                                                              --        else False
+                                  Old.GetFieldLocSoA _ _parent -> False
+                                                            -- let parent_l = toLocVar parent
+                                                            --          parent_l_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy parent_l)
+                                                            --        in if parent_l_name == v 
+                                                            --           then True 
+                                                            --           else False
+                                  Old.AssignLE _loc -> False
+                                                    --  let loc_l = toLocVar loc
+                                                    --       loc_name = getVarNameFromFreeVar' fenv (fromLocVarToFreeVarsTy loc_l) 
+                                                    --    in if loc_name == v 
+                                                    --       then True 
+                                                    --       else False

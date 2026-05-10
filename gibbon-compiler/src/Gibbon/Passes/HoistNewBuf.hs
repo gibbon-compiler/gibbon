@@ -111,7 +111,7 @@ hoistExp _ ex0 = return $ gocap False ex0
     (FloatE _)    -> ([], e0)
     (LitSymE _)   -> ([], e0)
     (VarE _)      -> ([], e0)
-    (AppE _ _ _)  -> ([], e0)
+    (AppE _ _ _ _)  -> ([], e0)
     (PrimAppE{})  -> ([], e0)
     (MapE _ _)    -> error "hoistExp.go: FINISHME MapE"
     (FoldE _ _ _) -> error "hoistExp.go: FINISHME FoldE"

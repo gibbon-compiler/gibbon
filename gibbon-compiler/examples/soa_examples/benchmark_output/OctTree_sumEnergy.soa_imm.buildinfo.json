@@ -1,0 +1,18 @@
+{
+  "compile_cmd": [
+    "gibbon",
+    "--no-ran",
+    "--packed",
+    "--to-exe",
+    "--cfile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.c",
+    "--exefile",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.exe",
+    "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs"
+  ],
+  "compile_cmd_signature": "gibbon --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs",
+  "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/OctTree_sumEnergy.hs",
+  "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.c",
+  "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/OctTree_sumEnergy.soa_imm.exe",
+  "compiled_at": "2026-03-12T14:48:33"
+}
