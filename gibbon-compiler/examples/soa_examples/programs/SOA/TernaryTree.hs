@@ -8,12 +8,14 @@ data Tree = Leaf Int
 
 {-# ANN type Tree "Factored" #-}
 
+{-# ANN mkTree "OPT:StoreScalarCounts" #-}
 mkTree :: Int -> Tree
 mkTree d =
   if d == 0
   then Leaf d
   else Node 1 (mkTree (d-1)) (mkTree (d-1)) (mkTree (d-1))
 
+{-# ANN add1Tree "OPT:CanVectorize" #-}
 add1Tree :: Tree -> Tree
 add1Tree t =
   case t of

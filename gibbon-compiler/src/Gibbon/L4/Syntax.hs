@@ -348,6 +348,7 @@ data Prim
     | WriteScalar L3.Scalar
     | ScalarCountFooterBegin
     | ScalarCountBump
+    | ScalarCountSet
     | ScalarCountFooterEnd String
     | ScalarCountGet
     | ScalarCountFirstFooter

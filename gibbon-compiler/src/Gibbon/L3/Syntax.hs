@@ -155,8 +155,15 @@ data E3Ext loc dec =
   | StartScalarsAllocation Var -- ^ Marks the beginning of scalar allocation.
   | EndScalarsAllocation Var   -- ^ Marks the end of scalar allocation.
   | ScalarCountBump DataCon [Var]
-    -- ^ Constructor-level scalar-buffer count instrumentation.  The DataCon is
-    -- the semantic event; the Vars are the affected SoA scalar-buffer cursors.
+    -- ^ Constructor-level homogeneous-buffer count instrumentation. The
+    -- DataCon is the semantic event; the Vars are the affected SoA output
+    -- buffers for this constructor, including the dcon buffer and any scalar
+    -- field buffers.
+  | ScalarCountSet Var Var
+    -- ^ Set homogeneous-buffer count metadata for a chunk.  The first Var is
+    -- the output region footer/end cursor, and the second Var is the count to
+    -- store.  Shape-preserving loopified traversals use this once per chunk
+    -- instead of bumping once per element.
   | ReadScalarCount Var
     -- ^ Read the scalar-count value stored in a footer/end cursor.
   | ReadScalarCountFirstFooter Var
@@ -251,6 +258,7 @@ instance FreeVars (E3Ext l d) where
       StartScalarsAllocation v -> S.singleton v
       EndScalarsAllocation v -> S.singleton v
       ScalarCountBump _ footers -> S.fromList footers
+      ScalarCountSet footer count -> S.fromList [footer, count]
       ReadScalarCount v -> S.singleton v
       ReadScalarCountFirstFooter v -> S.singleton v
       ReadScalarCountNextFooter v -> S.singleton v
@@ -281,6 +289,7 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverType _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
     gRecoverType _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverType _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
+    gRecoverType _ _ (ScalarCountSet {}) = ProdTy []
     gRecoverType _ _ (ReadScalarCount {}) = IntTy
     gRecoverType _ _ (ReadScalarCountFirstFooter {}) = CursorTy
     gRecoverType _ _ (ReadScalarCountNextFooter {}) = CursorTy
@@ -297,6 +306,7 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverTypeLoc _ _ (IndexCursorArray {}) = error "gRecoverType: IndexCursorArray not handled"
     gRecoverTypeLoc _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverTypeLoc _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
+    gRecoverTypeLoc _ _ (ScalarCountSet {}) = ProdTy []
     gRecoverTypeLoc _ _ (ReadScalarCount {}) = IntTy
     gRecoverTypeLoc _ _ (ReadScalarCountFirstFooter {}) = CursorTy
     gRecoverTypeLoc _ _ (ReadScalarCountNextFooter {}) = CursorTy
@@ -402,6 +412,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       StartScalarsAllocation v -> StartScalarsAllocation (go v)
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
       ScalarCountBump dcon footers -> ScalarCountBump dcon (L.map go footers)
+      ScalarCountSet footer count -> ScalarCountSet (go footer) (go count)
       ReadScalarCount v -> ReadScalarCount (go v)
       ReadScalarCountFirstFooter v -> ReadScalarCountFirstFooter (go v)
       ReadScalarCountNextFooter v -> ReadScalarCountNextFooter (go v)

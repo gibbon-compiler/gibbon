@@ -630,6 +630,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               StartScalarsAllocation{} -> syms
               EndScalarsAllocation{} -> syms
               ScalarCountBump{} -> syms
+              ScalarCountSet{} -> syms
               ReadScalarCount{} -> syms
               ReadScalarCountFirstFooter{} -> syms
               ReadScalarCountNextFooter{} -> syms
@@ -861,6 +862,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (_, _, _, Ext (ScalarCountBump _ footers)) bod ->
       T.LetPrimCallT [] T.ScalarCountBump (L.map T.VarTriv footers) <$>
+        tail free_reg sym_tbl bod
+
+    LetE (_, _, _, Ext (ScalarCountSet footer count)) bod ->
+      T.LetPrimCallT [] T.ScalarCountSet [T.VarTriv footer, T.VarTriv count] <$>
         tail free_reg sym_tbl bod
 
     LetE (v, _, _, Ext (ReadScalarCount footer)) bod ->

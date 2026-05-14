@@ -21,6 +21,7 @@ mixSeed :: Int -> Int -> Int
 mixSeed s salt = s * 1103 + salt * 97 + 13
 
 -- Build an adaptive piecewise tree with synthetic coefficients and split metadata.
+{-# ANN buildPW "OPT:StoreScalarCounts" #-}
 buildPW :: Int -> Int -> PW
 buildPW d seed =
   if d == 0
@@ -89,6 +90,7 @@ lbDeuxLoadProxy p =
 
 -- Map-like operator: add a constant potential term to all leaves.
 -- Inspiration: high-level MADNESS function addition on adaptive function variables.
+{-# ANN addConstPW "OPT:CanVectorize" #-}
 addConstPW :: PW -> Int -> PW
 addConstPW p c =
   case p of
@@ -97,6 +99,7 @@ addConstPW p c =
 
 -- Map-like operator: local differentiation proxy on basis coefficients.
 -- Inspiration: MADNESS operator differentiation over function trees.
+{-# ANN diffPW "OPT:CanVectorize" #-}
 diffPW :: PW -> PW
 diffPW p =
   case p of

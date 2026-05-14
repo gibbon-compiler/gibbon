@@ -28,6 +28,7 @@ data DTree
 -- Tree generator (benchmark input)
 -- -------------------------------
 
+{-# ANN buildTree "OPT:StoreScalarCounts" #-}
 buildTree :: Int -> DTree
 buildTree d =
   if d <= 0

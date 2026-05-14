@@ -68,6 +68,7 @@ cCount t =
 -- Builds a full synthetic color octree and caches per-cell aggregates.
 -- This creates realistic mixed-field nodes (stats + 8 children), which
 -- stress AoS layouts with wide records and SoA layouts with field-wise scans.
+{-# ANN buildColorOctree "OPT:StoreScalarCounts" #-}
 buildColorOctree :: Int -> Int -> Int -> ColorOctree
 buildColorOctree depth level seed =
   if depth == 0

@@ -763,6 +763,7 @@ void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
 void gib_scalar_count_footer_begin(void);
 void gib_scalar_count_footer_bump(char *footer_ptr);
+void gib_scalar_count_footer_set(char *footer_ptr, uint64_t count);
 void gib_scalar_count_footer_end(const char *build_fun_name);
 void gib_scalar_count_footer_print(char *footer_ptr);
 uint64_t gib_scalar_count_footer_get(char *footer_ptr);

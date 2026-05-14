@@ -21,6 +21,7 @@ data DOM
 
 {-# ANN type DOM "Factored" #-}
 
+{-# ANN buildRenderTree "OPT:StoreScalarCounts" #-}
 buildRenderTree :: Int -> DOM
 buildRenderTree n =
    if n <= 0
@@ -92,6 +93,7 @@ sumTextWidth d =
 -- Vidush This kind of function does not work
 -- with the mutable backend and needs to be fixed
 -- A map like function that's not tail recursive.
+{-# ANN computeWidths "OPT:CanVectorize" #-}
 computeWidths :: DOM -> DOM
 computeWidths d =
   case d of
@@ -112,6 +114,7 @@ getWidth d =
     Text _ _ _ w _ -> w
     Empty -> 0
 
+{-# ANN scaleLayout "OPT:CanVectorize" #-}
 scaleLayout :: DOM -> Int -> DOM
 scaleLayout d k =
   case d of

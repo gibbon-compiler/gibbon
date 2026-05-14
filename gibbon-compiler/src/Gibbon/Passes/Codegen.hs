@@ -1406,6 +1406,19 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                            in C.BlockStm [cstm| gib_scalar_count_footer_bump($exp:footer_arg'); |])
                        rnds
 
+                 ScalarCountSet -> do
+                   when (not (null bnds) || length rnds /= 2) $
+                     error $ "ScalarCountSet expected no bindings and two args: " ++ show (bnds, rnds)
+                   let [footer, count] = rnds
+                       footer_arg =
+                         case footer of
+                           VarTriv v ->
+                             case M.lookup v mutEndEnv of
+                               Just endVar -> [cexp| $id:endVar |]
+                               Nothing -> codegenTriv venv footer
+                           _ -> codegenTriv venv footer
+                   pure [ C.BlockStm [cstm| gib_scalar_count_footer_set($exp:footer_arg, $(codegenTriv venv count)); |] ]
+
                  ScalarCountFooterEnd fun_name -> do
                    when (not (null bnds) || not (null rnds)) $
                      error $ "ScalarCountFooterEnd expected no bindings/args: " ++ show (bnds, rnds)

@@ -2627,6 +2627,25 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
               )
               (additional_bnds, freeVarToVarEnv', 1)
               field_locs
+          let footerVarForLoc floc =
+                case M.lookup floc m2 of
+                  Just (oldv, _, _, _) -> oldv
+                  Nothing ->
+                    case M.lookup (fromLocVarToFreeVarsTy floc) freeVarToVarEnv'' of
+                      Just v -> v
+                      Nothing ->
+                        case floc of
+                          Single l -> l
+                          SoA _ _ ->
+                            error $
+                              "cursorizePackedExp: DataConE("
+                                ++ show dcon
+                                ++ ") : unexpected count footer location "
+                                ++ show floc
+          let dcon_count_footer_vars =
+                if emitScalarCountBumps
+                then [footerVarForLoc (getDconLoc sloc_loc)]
+                else []
           let scalar_count_footer_vars =
                 if emitScalarCountBumps
                 then
@@ -2634,26 +2653,18 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                     ( \(_, mb_floc, (_, MkTy2 ty)) ->
                         case mb_floc of
                           Just floc | isScalarTy ty ->
-                            Just $
-                              case M.lookup floc m2 of
-                                Just (oldv, _, _, _) -> oldv
-                                Nothing ->
-                                  case M.lookup (fromLocVarToFreeVarsTy floc) freeVarToVarEnv'' of
-                                    Just v -> v
-                                    Nothing ->
-                                      case floc of
-                                        Single l -> l
-                                        SoA _ _ -> error $ "cursorizePackedExp: DataConE(" ++ show dcon ++ ") : unexpected scalar-count field location " ++ show floc
+                            Just (footerVarForLoc floc)
                           _ -> Nothing
                     )
                     locs_tys
                 else []
+          let count_footer_vars = dcon_count_footer_vars ++ scalar_count_footer_vars
           scalar_count_bnds <-
-            if null scalar_count_footer_vars
+            if null count_footer_vars
             then return []
             else do
               scalar_count_bump <- gensym "scalar_count_bump"
-              return [(scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon scalar_count_footer_vars)]
+              return [(scalar_count_bump, [], ProdTy [], Ext $ ScalarCountBump dcon count_footer_vars)]
           (dcon_write_cur, dcon_write_prep_bnds, mut_loc_ad_bnds, m1') <-
             if selective_share_enabled
             then

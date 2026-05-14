@@ -69,6 +69,7 @@ momentumOf t =
       0
 
 -- Build a hierarchical octree with pseudo-randomized particles and cached aggregates.
+{-# ANN buildOctree "OPT:StoreScalarCounts" #-}
 buildOctree :: Int -> Int -> Int -> Int -> Octree
 buildOctree d seed center half =
   if d == 0
@@ -250,6 +251,7 @@ fmmPotential t probe order eta =
       0
 
 -- Map 1: damp momentum and scale velocities (models global timestep update).
+{-# ANN scaleEnergy "OPT:CanVectorize" #-}
 scaleEnergy :: Octree -> Int -> Octree
 scaleEnergy t k =
   case t of
@@ -265,6 +267,7 @@ scaleEnergy t k =
       EmptyOct
 
 -- Map 2: clear per-node particle-count cache for a fresh accumulation phase.
+{-# ANN clearFlags "OPT:CanVectorize" #-}
 clearFlags :: Octree -> Octree
 clearFlags t =
   case t of
@@ -276,4 +279,3 @@ clearFlags t =
       Particle m p v
     EmptyOct ->
       EmptyOct
-

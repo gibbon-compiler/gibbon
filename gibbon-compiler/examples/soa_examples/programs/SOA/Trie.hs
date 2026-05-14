@@ -20,6 +20,7 @@ mixSeed :: Int -> Int -> Int
 mixSeed s salt = s * 1103 + salt * 97 + 13
 
 -- Build a synthetic trie with node/leaf statistics used by realistic query passes.
+{-# ANN buildTrie "OPT:StoreScalarCounts" #-}
 buildTrie :: Int -> Int -> Trie
 buildTrie d seed =
   if d == 0
@@ -95,6 +96,7 @@ countLazyNodes t metaCut =
       0
 
 -- Map 1: decay prefix frequencies and leaf scores to emulate time-window refresh.
+{-# ANN decayTrieStats "OPT:CanVectorize" #-}
 decayTrieStats :: Trie -> Int -> Trie
 decayTrieStats t k =
   case t of
@@ -111,6 +113,7 @@ decayTrieStats t k =
       TEmpty
 
 -- Map 2: clear traversal flags and transient leaf metadata for next query batch.
+{-# ANN resetTraversalState "OPT:CanVectorize" #-}
 resetTraversalState :: Trie -> Trie
 resetTraversalState t =
   case t of

@@ -103,6 +103,13 @@ tcExp isPacked ddfs env exp = do
             ensureEqualTyModCursor ddfs exp footer_ty CursorTy
           return $ ProdTy []
 
+        ScalarCountSet footer count -> do
+          footer_ty <- lookupVar env footer exp
+          ensureEqualTyModCursor ddfs exp footer_ty CursorTy
+          count_ty <- lookupVar env count exp
+          ensureEqualTyModCursor ddfs exp count_ty IntTy
+          return $ ProdTy []
+
         ReadScalarCount footer -> do
           footer_ty <- lookupVar env footer exp
           ensureCursorLikeTy ddfs exp footer_ty

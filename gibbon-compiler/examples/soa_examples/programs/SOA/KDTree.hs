@@ -21,6 +21,7 @@ data KDTree
 {-# ANN type KDTree "Factored" #-}
 
 -- Build a synthetic balanced binary KD-tree, cycling split axis by depth.
+{-# ANN buildKD "OPT:StoreScalarCounts" #-}
 buildKD :: Int -> Int -> KDTree
 buildKD d axis =
   if d == 0

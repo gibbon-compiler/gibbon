@@ -1587,6 +1587,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 force: bool, use_mutable_cursors: bool = True,
                 enable_papi: bool = False,
                 enable_papi_native: bool = False,
+                store_scalar_field_counts: bool = False,
+                disable_loopification: bool = False,
                 use_no_ran: bool = True,
                 ) -> Tuple[bool, float, Optional[str]]:
     source = source.resolve()
@@ -1642,6 +1644,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             cmd.append("--enable-papi")
         if use_no_ran:
             cmd.append("--no-ran")
+        if store_scalar_field_counts:
+            cmd.append("--store-scalar-field-counts")
+        if disable_loopification:
+            cmd.append("--disable-loopification")
         cmd.extend([
             "--packed", "--to-exe",
             "--cfile",   str(c_file),
@@ -1670,6 +1676,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         flags_str += ",papi-native"
     if enable_papi:
         flags_str += ",papi"
+    if store_scalar_field_counts:
+        flags_str += ",scalar-counts"
+    if disable_loopification:
+        flags_str += ",no-loopify"
     print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
@@ -1712,8 +1722,11 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
     results: Dict = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         fmap = {
-            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi, enable_papi_native, use_no_ran): (prog, var)
-            for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native, use_no_ran in tasks
+            pool.submit(compile_one, src, var, od, force, use_mut, enable_papi,
+                        enable_papi_native, store_scalar_field_counts,
+                        disable_loopification, use_no_ran): (prog, var)
+            for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native,
+                store_scalar_field_counts, disable_loopification, use_no_ran in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -1780,6 +1793,8 @@ def run_exe(exe: Path, iterations: int,
 
 def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
                          programs_dir: Path, out_dir: Path, iterations: int, force: bool,
+                         store_scalar_field_counts: bool = False,
+                         disable_loopification: bool = False,
                          use_no_ran: bool = True,
                          dump_raw: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
     """
@@ -1841,6 +1856,8 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
         use_mutable_cursors=use_mutable_cursors,
         enable_papi=False,
         enable_papi_native=False,
+        store_scalar_field_counts=store_scalar_field_counts,
+        disable_loopification=disable_loopification,
         use_no_ran=use_no_ran,
     )
     if not ok:
@@ -1878,6 +1895,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       benchmark_baseline_gibbon: bool = False,
                       enable_papi: bool = False,
                       enable_papi_native: bool = False,
+                      store_scalar_field_counts: bool = False,
+                      disable_loopification: bool = False,
                       benchmark_ghc: bool = False,
                       benchmark_mlton: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
@@ -1913,6 +1932,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         use_no_ran_eff = override.get("use_no_ran", use_no_ran)
         variant_compile_opts[var] = {
             "use_mutable_cursors": use_mut_eff,
+            "store_scalar_field_counts": store_scalar_field_counts,
+            "disable_loopification": disable_loopification,
             "use_no_ran": use_no_ran_eff,
         }
         if var == "ghc":
@@ -1932,7 +1953,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             src_dir = "AOS" if var.startswith("aos") else "SOA"
             src = programs_dir / src_dir / prog
         if src.exists():
-            tasks.append((prog, var, src, out_dir, force, use_mut_eff, enable_papi, enable_papi_native, use_no_ran_eff))
+            tasks.append((prog, var, src, out_dir, force, use_mut_eff, enable_papi,
+                          enable_papi_native, store_scalar_field_counts,
+                          disable_loopification, use_no_ran_eff))
         else:
             print(f"  Warning: {src} not found")
 
@@ -1949,6 +1972,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         key = (prog, var)
         compile_opts = variant_compile_opts.get(var, {
             "use_mutable_cursors": use_mut,
+            "store_scalar_field_counts": store_scalar_field_counts,
+            "disable_loopification": disable_loopification,
             "use_no_ran": True,
         })
 
@@ -2037,6 +2062,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         out_dir=out_dir,
                         iterations=iterations,
                         force=force,
+                        store_scalar_field_counts=compile_opts["store_scalar_field_counts"],
+                        disable_loopification=compile_opts["disable_loopification"],
                         use_no_ran=compile_opts["use_no_ran"],
                         dump_raw=dump_raw,
                     )
@@ -4663,6 +4690,23 @@ def main():
                     dest="enable_papi_native", action="store_true",
                     help="Compile with --enable-papi-native, parse PAPI_NATIVE stdout lines, "
                          "and add native PAPI columns to tables.")
+    ap.add_argument("--store-scalar-field-counts", action="store_true",
+                    help="Compile Gibbon variants with --store-scalar-field-counts so "
+                         "SoA runs can exercise scalar-count-footer-based optimizations "
+                         "such as loopified OPT:CanVectorize traversals.")
+    loopification_group = ap.add_mutually_exclusive_group()
+    loopification_group.add_argument("--enable-loopification",
+                                     dest="disable_loopification",
+                                     action="store_false",
+                                     help="Compile Gibbon variants with loopification enabled. "
+                                          "This is the default.")
+    loopification_group.add_argument("--disable-loopification",
+                                     dest="disable_loopification",
+                                     action="store_true",
+                                     help="Compile Gibbon variants with --disable-loopification. "
+                                          "Useful for comparing SOA mutable recursive code against "
+                                          "loopified OPT:CanVectorize traversals without editing sources.")
+    ap.set_defaults(disable_loopification=False)
     args = ap.parse_args()
 
     if args.enable_papi and args.enable_papi_native:
@@ -4684,6 +4728,8 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no'}")
+    print(f"  Scalar counts: {'YES (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'no'}")
+    print(f"  Loopification: {'DISABLED (--disable-loopification)' if args.disable_loopification else 'enabled'}")
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:
@@ -4746,6 +4792,8 @@ def main():
             benchmark_mlton=args.benchmark_mlton,
             enable_papi=args.enable_papi,
             enable_papi_native=args.enable_papi_native,
+            store_scalar_field_counts=args.store_scalar_field_counts,
+            disable_loopification=args.disable_loopification,
         )
         all_results.append((aos, soa))
 

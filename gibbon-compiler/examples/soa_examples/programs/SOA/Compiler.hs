@@ -46,6 +46,7 @@ data IR
 -- buildIR_validPhi :: Int -> IR
 -- buildIR_validPhi n = buildIR_validPhi_go n 0
 
+{-# ANN buildIR_validPhi_go "OPT:StoreScalarCounts" #-}
 buildIR_validPhi_go :: Int -> Int -> IR
 buildIR_validPhi_go n pendingPhi =
   if n <= 0
@@ -153,6 +154,7 @@ throughputModelPass ir =
     End ->
       0
 
+{-# ANN targetRetunePass "OPT:CanVectorize" #-}
 targetRetunePass :: IR -> Int -> IR
 targetRetunePass ir k =
   case ir of
@@ -164,6 +166,7 @@ targetRetunePass ir k =
     End ->
       End
 
+{-# ANN stripSideEffectsPass "OPT:CanVectorize" #-}
 stripSideEffectsPass :: IR -> IR
 stripSideEffectsPass ir =
   case ir of

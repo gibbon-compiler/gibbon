@@ -224,6 +224,7 @@ applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []
 applyPrim ScalarCountFooterBegin [] = pure []
 applyPrim ScalarCountBump _footers = pure []
+applyPrim ScalarCountSet _args = pure []
 applyPrim ScalarCountFooterEnd{} [] = pure []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"

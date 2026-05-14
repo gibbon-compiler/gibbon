@@ -168,6 +168,7 @@ removeReDefsExp env ex =
     Ext (EndScalarsAllocation v) -> do
       pure $ (Ext $ EndScalarsAllocation v)
     Ext ScalarCountBump{} -> pure ex
+    Ext ScalarCountSet{} -> pure ex
     Ext (ReadScalarCount v) ->
       pure $ Ext $ ReadScalarCount v
     Ext (ReadScalarCountFirstFooter v) ->

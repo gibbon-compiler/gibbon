@@ -4,6 +4,7 @@ data List = Cons Int Int Int Int Int Int Int Int Int Int List | Nil
 
 {-# ANN type List "Factored" #-}
 
+{-# ANN mkList "OPT:StoreScalarCounts" #-}
 mkList :: Int -> List
 mkList len = if len < 0
              then Nil
