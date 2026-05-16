@@ -90,6 +90,9 @@ import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.ReorderScalarWrites  ( reorderScalarWrites, writeOrderMarkers )
 import           Gibbon.Passes.LoopifyTraversals (loopifyTraversals)
+import           Gibbon.Passes.LoopifiedTraversalFusion (fuseLoopifiedTraversals)
+import           Gibbon.Passes.ScalarCountPropagation (propagateScalarCounts)
+import           Gibbon.Passes.SelectiveBufferSharing (selectiveBufferSharing)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
@@ -930,6 +933,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l3 <- go "cursorize"        cursorize     l2'
               l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
               l3 <- go "loopifyTraversals" loopifyTraversals l3
+              l3 <- go "propagateScalarCounts" propagateScalarCounts l3
+              l3 <- go "selectiveBufferSharing" selectiveBufferSharing l3
+              l3 <- go "fuseLoopifiedTraversals" fuseLoopifiedTraversals l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               -- l3 <- go "addCasts"         addCasts      l3

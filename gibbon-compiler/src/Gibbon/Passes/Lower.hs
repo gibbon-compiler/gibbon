@@ -541,6 +541,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       PrimAppE FRandP []  -> False
       Ext (ForE _ bound bod) -> ispure bound && ispure bod
       Ext (WhileCursor _ bod) -> ispure bod
+      Ext (ScalarCountCopyAll _ _ _) -> False
       LetE (_,_,_,rhs) bod -> ispure rhs && ispure bod
       IfE _ b c   -> ispure b && ispure c
       CaseE _ brs -> all id $ L.map (\(_,_,rhs) -> ispure rhs) brs
@@ -613,6 +614,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadCursor{}       -> syms
               GrowRegion{}       -> syms
               WriteCursorIndirection{} -> syms
+              WriteCursorSelectiveIndirection{} -> syms
+              UnwrapSelectiveIndirections{} -> syms
               WriteTaggedCursor{}-> syms
               MemCpy{} -> syms
               ReadTaggedCursor{} -> syms
@@ -631,6 +634,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               EndScalarsAllocation{} -> syms
               ScalarCountBump{} -> syms
               ScalarCountSet{} -> syms
+              ScalarCountCopyAll _ _ _ -> syms
               ReadScalarCount{} -> syms
               ReadScalarCountFirstFooter{} -> syms
               ReadScalarCountNextFooter{} -> syms
@@ -868,6 +872,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [] T.ScalarCountSet [T.VarTriv footer, T.VarTriv count] <$>
         tail free_reg sym_tbl bod
 
+    LetE (_, _, _, Ext (ScalarCountCopyAll len dstEnds srcEnds)) bod ->
+      T.LetPrimCallT [] (T.ScalarCountCopyAll len) [T.VarTriv dstEnds, T.VarTriv srcEnds] <$>
+        tail free_reg sym_tbl bod
+
     LetE (v, _, _, Ext (ReadScalarCount footer)) bod ->
       T.LetPrimCallT [(v, T.IntTy)] T.ScalarCountGet [T.VarTriv footer] <$>
         tail free_reg sym_tbl bod
@@ -1069,6 +1077,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v, _, _, (Ext (WriteCursorIndirection cur to toEnd))) bod ->
       T.LetPrimCallT [(v, T.CursorTy)] T.WriteCursorIndirection [T.VarTriv cur, T.VarTriv to, T.VarTriv toEnd] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, _, (Ext (WriteCursorSelectiveIndirection cur to toEnd mask))) bod ->
+      T.LetPrimCallT [(v, T.CursorTy)] T.WriteCursorSelectiveIndirection [T.VarTriv cur, T.VarTriv to, T.VarTriv toEnd, triv sym_tbl "WriteCursorSelectiveIndirection mask" mask] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (_, _, _, (Ext (UnwrapSelectiveIndirections len ends curs))) bod ->
+      T.LetPrimCallT [] (T.UnwrapSelectiveIndirections len) [T.VarTriv ends, T.VarTriv curs] <$>
         tail free_reg sym_tbl bod
 
     LetE (v, _, _,  (Ext (WriteTaggedCursor cur e))) bod ->

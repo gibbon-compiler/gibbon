@@ -25,6 +25,7 @@ import InferRegionScope
 import Unariser
 import AddRAN
 import LoopifyTraversals
+import ScalarCountPropagation
 import SelectiveBufferSharing
 import L1.Typecheck
 import L1.Interp
@@ -40,6 +41,7 @@ main = defaultMain allTests
                    [ tests
                    , addRANTests
                    , loopifyTraversalsTests
+                   , scalarCountPropagationTests
                    , selectiveBufferSharingTests
                    , routeEnds2Tests
                    , inferLocations2Tests

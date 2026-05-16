@@ -162,6 +162,7 @@ GibSym gib_read_gensym_counter(void);
 // Must be same as "Gibbon.Language.Constants".
 #define GIB_REDIRECTION_TAG 255
 #define GIB_INDIRECTION_TAG 254
+#define GIB_SELECTIVE_INDIRECTION_TAG 249
 
 // Tags reserved for the garbage collector.
 #define GIB_CAUTERIZED_TAG 253
@@ -214,6 +215,51 @@ INLINE_HEADER size_t gib_align_up_sz(size_t n, size_t a) {
 #define GIB_LOAD_UINTPTR(p) gib_load_uintptr_unaligned((GibCursor)(p))
 #define GIB_LOAD_TAGGEDPTR(p) gib_load_taggedptr_unaligned((GibCursor)(p))
 #define GIB_STORE_TAGGEDPTR(p, x) gib_store_taggedptr_unaligned((GibCursor)(p), (GibTaggedPtr)(x))
+
+INLINE_HEADER void gib_unwrap_selective_indirections(GibCursor *ends,
+                                                     GibCursor *curs,
+                                                     int len) {
+    if (len <= 0 || curs[0] == NULL ||
+        *(GibPackedTag *) curs[0] != GIB_SELECTIVE_INDIRECTION_TAG) {
+        return;
+    }
+
+    GibCursor dcon_cur = curs[0];
+    GibCursor dcon_src =
+        (GibCursor) gib_load_uintptr_unaligned(dcon_cur + sizeof(GibPackedTag));
+    GibCursor dcon_end =
+        (GibCursor) gib_load_uintptr_unaligned(dcon_cur + sizeof(GibPackedTag) +
+                                               sizeof(uintptr_t));
+    uint64_t mask =
+        *(uint64_t *)(dcon_cur + sizeof(GibPackedTag) + (2 * sizeof(uintptr_t)));
+
+    curs[0] = dcon_src;
+    ends[0] = dcon_end;
+
+    for (int i = 1; i < len && i < 64; i++) {
+        if ((mask & (((uint64_t) 1) << i)) == 0) {
+            continue;
+        }
+
+        GibCursor cur = curs[i];
+        if (cur == NULL ||
+            *(GibPackedTag *) cur != GIB_SELECTIVE_INDIRECTION_TAG) {
+            fprintf(stderr,
+                    "Expected selective indirection wrapper in SoA buffer %d\n",
+                    i);
+            exit(1);
+        }
+
+        GibCursor src =
+            (GibCursor) gib_load_uintptr_unaligned(cur + sizeof(GibPackedTag));
+        GibCursor end =
+            (GibCursor) gib_load_uintptr_unaligned(cur + sizeof(GibPackedTag) +
+                                                   sizeof(uintptr_t));
+
+        curs[i] = src;
+        ends[i] = end;
+    }
+}
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -769,6 +815,8 @@ void gib_scalar_count_footer_print(char *footer_ptr);
 uint64_t gib_scalar_count_footer_get(char *footer_ptr);
 char *gib_scalar_count_first_footer(char *footer_ptr);
 char *gib_scalar_count_footer_next(char *footer_ptr);
+void gib_scalar_count_copy_chain(char *dst_final_footer_ptr, char *src_final_footer_ptr);
+void gib_scalar_count_copy_all(char **dst_final_footers, char **src_final_footers, int len);
 void gib_scalar_count_on_grow(char *old_footer_ptr, char *new_footer_ptr);
 void gib_scalar_count_register_chunk(char *chunk_start, char *footer_ptr);
 INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer);

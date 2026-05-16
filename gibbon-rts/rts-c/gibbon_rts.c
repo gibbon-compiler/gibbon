@@ -1617,6 +1617,66 @@ char *gib_scalar_count_footer_next(char *footer_ptr)
     return (char *) footer->next;
 }
 
+void gib_scalar_count_copy_chain(char *dst_final_footer_ptr, char *src_final_footer_ptr)
+{
+    if (dst_final_footer_ptr == NULL || src_final_footer_ptr == NULL) {
+        return;
+    }
+
+    // Nursery chunks do not carry an oldgen footer chain.  A nursery value can
+    // only be copied directly here; the normal multi-chunk case below is
+    // O(chunks) over the oldgen footer list.
+    if (gib_addr_in_nursery(dst_final_footer_ptr) ||
+        gib_addr_in_nursery(src_final_footer_ptr)) {
+        GibScalarCountFooter *dst =
+            gib_scalar_count_footer_for_addr(dst_final_footer_ptr);
+        GibScalarCountFooter *src =
+            gib_scalar_count_footer_for_addr(src_final_footer_ptr);
+        gib_scalar_count_footer_copy_fixed(dst, src);
+        if (gib_scalar_count_footer_is_touched(src)) {
+            gib_scalar_count_debug_touch(dst_final_footer_ptr);
+        }
+        return;
+    }
+
+    GibOldgenChunkFooter *dst_final =
+        (GibOldgenChunkFooter *) dst_final_footer_ptr;
+    GibOldgenChunkFooter *src_final =
+        (GibOldgenChunkFooter *) src_final_footer_ptr;
+    GibOldgenChunkFooter *dst =
+        (GibOldgenChunkFooter *) dst_final->reg_info->first_chunk_footer;
+    GibOldgenChunkFooter *src =
+        (GibOldgenChunkFooter *) src_final->reg_info->first_chunk_footer;
+
+    while (dst != NULL && src != NULL) {
+        gib_scalar_count_footer_copy_fixed(&dst->scalar_counts,
+                                           &src->scalar_counts);
+        if (gib_scalar_count_footer_is_touched(&src->scalar_counts)) {
+            gib_scalar_count_debug_touch((char *) dst);
+        }
+        dst = dst->next;
+        src = src->next;
+    }
+
+#ifdef _GIBBON_DEBUG
+    if (dst != NULL || src != NULL) {
+        fprintf(stderr,
+                "gib_scalar_count_copy_chain: source/destination chunk count mismatch\n");
+    }
+#endif
+}
+
+void gib_scalar_count_copy_all(char **dst_final_footers, char **src_final_footers, int len)
+{
+    if (dst_final_footers == NULL || src_final_footers == NULL || len <= 0) {
+        return;
+    }
+
+    for (int i = 0; i < len; i++) {
+        gib_scalar_count_copy_chain(dst_final_footers[i], src_final_footers[i]);
+    }
+}
+
 void gib_scalar_count_footer_end(const char *build_fun_name)
 {
     GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;

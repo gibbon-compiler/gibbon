@@ -47,6 +47,9 @@ data GeneralFlag
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
   | Opt_StoreScalarFieldCounts -- ^ Store scalar-field counts for annotated SoA builders.
   | Opt_DisableLoopification -- ^ Disable loopification for OPT:CanVectorize traversals.
+  | Opt_DisableLoopFusion -- ^ Disable scalar-buffer loop fusion inside loopified traversals.
+  | Opt_EnableSelectiveBufferSharing -- ^ Enable post-loopification selective SoA buffer sharing.
+  | Opt_DisableSelectiveBufferSharing -- ^ Disable post-loopification selective SoA buffer sharing.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -133,6 +136,15 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_DisableLoopification (long "disable-loopification" <>
                                                    long "no-loopify-traversals" <>
                                                    help "Disable loopification for OPT:CanVectorize traversals.") <|>
+                   flag' Opt_DisableLoopFusion (long "disable-loop-fusion" <>
+                                                long "no-loop-fusion" <>
+                                                help "Disable scalar-buffer loop fusion inside loopified OPT:CanVectorize traversals.") <|>
+                   flag' Opt_EnableSelectiveBufferSharing (long "enable-selective-buffer-sharing" <>
+                                                           long "selective-buffer-sharing" <>
+                                                           help "Enable post-loopification selective sharing for unchanged SoA buffers in OPT:CanVectorize traversals.") <|>
+                   flag' Opt_DisableSelectiveBufferSharing (long "disable-selective-buffer-sharing" <>
+                                                            long "no-selective-buffer-sharing" <>
+                                                            help "Disable post-loopification selective sharing for unchanged SoA buffers.") <|>
                    flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) <|>
                    flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).")
     dflagsParser :: Parser DebugFlag

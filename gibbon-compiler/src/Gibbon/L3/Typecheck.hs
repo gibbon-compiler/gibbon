@@ -92,6 +92,24 @@ tcExp isPacked ddfs env exp = do
           srcEndTy <- lookupVar env srcEnd exp
           ensureCursorLikeTy ddfs exp srcEndTy
           return CursorTy
+
+        WriteCursorSelectiveIndirection dst src srcEnd mask -> do
+          dstty <- lookupVar env dst exp
+          ensureCursorLikeTy ddfs exp dstty
+          srcty <- lookupVar env src exp
+          ensureCursorLikeTy ddfs exp srcty
+          srcEndTy <- lookupVar env srcEnd exp
+          ensureCursorLikeTy ddfs exp srcEndTy
+          maskTy <- go mask
+          ensureEqualTyModCursor ddfs exp maskTy IntTy
+          return CursorTy
+
+        UnwrapSelectiveIndirections len ends curs -> do
+          endTy <- lookupVar env ends exp
+          curTy <- lookupVar env curs exp
+          ensureEqualTyModCursor ddfs exp endTy (CursorArrayTy len)
+          ensureEqualTyModCursor ddfs exp curTy (CursorArrayTy len)
+          return $ ProdTy []
         
         -- does this require typecheking
         MemCpy{} -> do
@@ -108,6 +126,13 @@ tcExp isPacked ddfs env exp = do
           ensureEqualTyModCursor ddfs exp footer_ty CursorTy
           count_ty <- lookupVar env count exp
           ensureEqualTyModCursor ddfs exp count_ty IntTy
+          return $ ProdTy []
+
+        ScalarCountCopyAll len dstEnds srcEnds -> do
+          dstTy <- lookupVar env dstEnds exp
+          srcTy <- lookupVar env srcEnds exp
+          ensureEqualTyModCursor ddfs exp dstTy (CursorArrayTy len)
+          ensureEqualTyModCursor ddfs exp srcTy (CursorArrayTy len)
           return $ ProdTy []
 
         ReadScalarCount footer -> do

@@ -103,6 +103,11 @@ removeReDefsExp env ex =
       pure (Ext $ TagCursor a b)
     Ext (WriteCursorIndirection a b c) -> do
       pure (Ext $ WriteCursorIndirection a b c)
+    Ext (WriteCursorSelectiveIndirection a b c mask) -> do
+      mask' <- go mask
+      pure (Ext $ WriteCursorSelectiveIndirection a b c mask')
+    Ext (UnwrapSelectiveIndirections n ends curs) ->
+      pure (Ext $ UnwrapSelectiveIndirections n ends curs)
     Ext (WriteTaggedCursor v e) -> do
       e' <- go e
       pure (Ext $ WriteTaggedCursor v e')
@@ -169,6 +174,7 @@ removeReDefsExp env ex =
       pure $ (Ext $ EndScalarsAllocation v)
     Ext ScalarCountBump{} -> pure ex
     Ext ScalarCountSet{} -> pure ex
+    Ext ScalarCountCopyAll{} -> pure ex
     Ext (ReadScalarCount v) ->
       pure $ Ext $ ReadScalarCount v
     Ext (ReadScalarCountFirstFooter v) ->

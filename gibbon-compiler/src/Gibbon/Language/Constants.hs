@@ -28,6 +28,9 @@ isIndirectionTag = L.isPrefixOf indirectionTag
 indirectionAlt :: Num a => a
 indirectionAlt = 254
 
+selectiveIndirectionAlt :: Num a => a
+selectiveIndirectionAlt = 249
+
 toAbsRANDataCon :: DataCon -> DataCon
 toAbsRANDataCon dcon = dcon ++ "^"
 

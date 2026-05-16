@@ -333,6 +333,10 @@ data Prim
 
     | WriteCursorIndirection
 
+    | WriteCursorSelectiveIndirection
+
+    | UnwrapSelectiveIndirections Int
+
     | WriteTaggedCursor
 
     | MemCpy
@@ -349,6 +353,7 @@ data Prim
     | ScalarCountFooterBegin
     | ScalarCountBump
     | ScalarCountSet
+    | ScalarCountCopyAll Int
     | ScalarCountFooterEnd String
     | ScalarCountGet
     | ScalarCountFirstFooter

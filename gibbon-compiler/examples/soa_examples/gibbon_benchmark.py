@@ -1589,6 +1589,9 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 enable_papi_native: bool = False,
                 store_scalar_field_counts: bool = False,
                 disable_loopification: bool = False,
+                disable_loop_fusion: bool = False,
+                enable_selective_buffer_sharing: bool = False,
+                disable_selective_buffer_sharing: bool = False,
                 use_no_ran: bool = True,
                 ) -> Tuple[bool, float, Optional[str]]:
     source = source.resolve()
@@ -1648,6 +1651,12 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             cmd.append("--store-scalar-field-counts")
         if disable_loopification:
             cmd.append("--disable-loopification")
+        if disable_loop_fusion:
+            cmd.append("--disable-loop-fusion")
+        if enable_selective_buffer_sharing:
+            cmd.append("--enable-selective-buffer-sharing")
+        if disable_selective_buffer_sharing:
+            cmd.append("--disable-selective-buffer-sharing")
         cmd.extend([
             "--packed", "--to-exe",
             "--cfile",   str(c_file),
@@ -1680,6 +1689,12 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         flags_str += ",scalar-counts"
     if disable_loopification:
         flags_str += ",no-loopify"
+    if disable_loop_fusion:
+        flags_str += ",no-loop-fusion"
+    if enable_selective_buffer_sharing:
+        flags_str += ",selective-sharing"
+    if disable_selective_buffer_sharing:
+        flags_str += ",no-selective-sharing"
     print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
@@ -1724,9 +1739,12 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
         fmap = {
             pool.submit(compile_one, src, var, od, force, use_mut, enable_papi,
                         enable_papi_native, store_scalar_field_counts,
-                        disable_loopification, use_no_ran): (prog, var)
+                        disable_loopification, disable_loop_fusion,
+                        enable_selective_buffer_sharing, disable_selective_buffer_sharing,
+                        use_no_ran): (prog, var)
             for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native,
-                store_scalar_field_counts, disable_loopification, use_no_ran in tasks
+                store_scalar_field_counts, disable_loopification, disable_loop_fusion,
+                enable_selective_buffer_sharing, disable_selective_buffer_sharing, use_no_ran in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -1795,6 +1813,9 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
                          programs_dir: Path, out_dir: Path, iterations: int, force: bool,
                          store_scalar_field_counts: bool = False,
                          disable_loopification: bool = False,
+                         disable_loop_fusion: bool = False,
+                         enable_selective_buffer_sharing: bool = False,
+                         disable_selective_buffer_sharing: bool = False,
                          use_no_ran: bool = True,
                          dump_raw: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
     """
@@ -1858,6 +1879,9 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
         enable_papi_native=False,
         store_scalar_field_counts=store_scalar_field_counts,
         disable_loopification=disable_loopification,
+        disable_loop_fusion=disable_loop_fusion,
+        enable_selective_buffer_sharing=enable_selective_buffer_sharing,
+        disable_selective_buffer_sharing=disable_selective_buffer_sharing,
         use_no_ran=use_no_ran,
     )
     if not ok:
@@ -1897,6 +1921,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       enable_papi_native: bool = False,
                       store_scalar_field_counts: bool = False,
                       disable_loopification: bool = False,
+                      disable_loop_fusion: bool = False,
+                      enable_selective_buffer_sharing: bool = False,
+                      disable_selective_buffer_sharing: bool = False,
                       benchmark_ghc: bool = False,
                       benchmark_mlton: bool = False,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
@@ -1934,6 +1961,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             "use_mutable_cursors": use_mut_eff,
             "store_scalar_field_counts": store_scalar_field_counts,
             "disable_loopification": disable_loopification,
+            "disable_loop_fusion": disable_loop_fusion,
+            "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
+            "disable_selective_buffer_sharing": disable_selective_buffer_sharing,
             "use_no_ran": use_no_ran_eff,
         }
         if var == "ghc":
@@ -1955,7 +1985,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         if src.exists():
             tasks.append((prog, var, src, out_dir, force, use_mut_eff, enable_papi,
                           enable_papi_native, store_scalar_field_counts,
-                          disable_loopification, use_no_ran_eff))
+                          disable_loopification, disable_loop_fusion,
+                          enable_selective_buffer_sharing, disable_selective_buffer_sharing,
+                          use_no_ran_eff))
         else:
             print(f"  Warning: {src} not found")
 
@@ -1974,6 +2006,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
             "use_mutable_cursors": use_mut,
             "store_scalar_field_counts": store_scalar_field_counts,
             "disable_loopification": disable_loopification,
+            "disable_loop_fusion": disable_loop_fusion,
+            "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
+            "disable_selective_buffer_sharing": disable_selective_buffer_sharing,
             "use_no_ran": True,
         })
 
@@ -2064,6 +2099,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         force=force,
                         store_scalar_field_counts=compile_opts["store_scalar_field_counts"],
                         disable_loopification=compile_opts["disable_loopification"],
+                        disable_loop_fusion=compile_opts["disable_loop_fusion"],
+                        enable_selective_buffer_sharing=compile_opts["enable_selective_buffer_sharing"],
+                        disable_selective_buffer_sharing=compile_opts["disable_selective_buffer_sharing"],
                         use_no_ran=compile_opts["use_no_ran"],
                         dump_raw=dump_raw,
                     )
@@ -4707,6 +4745,29 @@ def main():
                                           "Useful for comparing SOA mutable recursive code against "
                                           "loopified OPT:CanVectorize traversals without editing sources.")
     ap.set_defaults(disable_loopification=False)
+    loop_fusion_group = ap.add_mutually_exclusive_group()
+    loop_fusion_group.add_argument("--enable-loop-fusion",
+                                  dest="disable_loop_fusion",
+                                  action="store_false",
+                                  help="Compile loopified Gibbon variants with scalar-buffer loop fusion enabled. "
+                                       "This is the default.")
+    loop_fusion_group.add_argument("--disable-loop-fusion",
+                                  dest="disable_loop_fusion",
+                                  action="store_true",
+                                  help="Compile Gibbon variants with --disable-loop-fusion. "
+                                       "Loopification remains enabled unless --disable-loopification is also set.")
+    ap.set_defaults(disable_loop_fusion=False)
+    selective_sharing_group = ap.add_mutually_exclusive_group()
+    selective_sharing_group.add_argument("--enable-selective-buffer-sharing",
+                                        dest="enable_selective_buffer_sharing",
+                                        action="store_true",
+                                        help="Compile Gibbon variants with post-loopification selective buffer sharing enabled.")
+    selective_sharing_group.add_argument("--disable-selective-buffer-sharing",
+                                        dest="disable_selective_buffer_sharing",
+                                        action="store_true",
+                                        help="Compile Gibbon variants with post-loopification selective buffer sharing disabled.")
+    ap.set_defaults(enable_selective_buffer_sharing=False,
+                    disable_selective_buffer_sharing=False)
     args = ap.parse_args()
 
     if args.enable_papi and args.enable_papi_native:
@@ -4730,6 +4791,14 @@ def main():
     print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no'}")
     print(f"  Scalar counts: {'YES (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'no'}")
     print(f"  Loopification: {'DISABLED (--disable-loopification)' if args.disable_loopification else 'enabled'}")
+    print(f"  Loop fusion  : {'DISABLED (--disable-loop-fusion)' if args.disable_loop_fusion else 'enabled'}")
+    if args.enable_selective_buffer_sharing:
+        selective_s = "enabled (--enable-selective-buffer-sharing)"
+    elif args.disable_selective_buffer_sharing:
+        selective_s = "DISABLED (--disable-selective-buffer-sharing)"
+    else:
+        selective_s = "default off"
+    print(f"  Selective sh.: {selective_s}")
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:
@@ -4794,6 +4863,9 @@ def main():
             enable_papi_native=args.enable_papi_native,
             store_scalar_field_counts=args.store_scalar_field_counts,
             disable_loopification=args.disable_loopification,
+            disable_loop_fusion=args.disable_loop_fusion,
+            enable_selective_buffer_sharing=args.enable_selective_buffer_sharing,
+            disable_selective_buffer_sharing=args.disable_selective_buffer_sharing,
         )
         all_results.append((aos, soa))
 

@@ -89,6 +89,8 @@ library
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.ReorderScalarWrites
                        Gibbon.Passes.LoopifyTraversals
+                       Gibbon.Passes.LoopifiedTraversalFusion
+                       Gibbon.Passes.ScalarCountPropagation
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
                        Gibbon.Passes.RearrangeFree
@@ -187,6 +189,7 @@ test-suite test-gibbon
                        HoistBoundsCheck
                        AddRAN
                        LoopifyTraversals
+                       ScalarCountPropagation
                        SelectiveBufferSharing
                        L1.Typecheck
                        L1.Interp

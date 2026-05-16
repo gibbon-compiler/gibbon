@@ -104,6 +104,12 @@ data E3Ext loc dec =
                                            -- first cursor pointing to the second,
                                            -- using the third as the pointed-to
                                            -- chunk footer/end cursor.
+  | WriteCursorSelectiveIndirection Var Var Var (PreExp E3Ext loc dec)
+    -- ^ Write a selective sharing wrapper.  The fourth argument is a mask
+    -- describing which SoA buffers are selectively wrapped in this value.
+  | UnwrapSelectiveIndirections Int Var Var
+    -- ^ Given a SoA cursor-array length, end cursor array, and data cursor
+    -- array, unwrap any buffers listed in a dcon selective-indirection mask.
   | WriteTaggedCursor Var (PreExp E3Ext loc dec) -- ^ Write a tagged cursor
   | MemCpy Var Var dec                           -- ^ Do a mem copy from right address into left address of type dec
   | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
@@ -164,6 +170,12 @@ data E3Ext loc dec =
     -- the output region footer/end cursor, and the second Var is the count to
     -- store.  Shape-preserving loopified traversals use this once per chunk
     -- instead of bumping once per element.
+  | ScalarCountCopyAll Int Var Var
+    -- ^ Copy scalar-count footer metadata for a fully factored SoA value.
+    -- The Int is the cursor-array length. The first Var is the output end
+    -- cursor array, and the second Var is the input end cursor array. This
+    -- copies footer chains buffer-by-buffer, so propagation is O(buffers *
+    -- chunks) rather than O(elements).
   | ReadScalarCount Var
     -- ^ Read the scalar-count value stored in a footer/end cursor.
   | ReadScalarCountFirstFooter Var
@@ -222,6 +234,8 @@ instance FreeVars (E3Ext l d) where
       WriteTagPacked v ex -> S.insert v (gFreeVars ex)
       TagCursor a b      -> S.fromList [a,b]
       WriteCursorIndirection a b c -> S.fromList [a,b,c]
+      WriteCursorSelectiveIndirection a b c mask -> S.fromList [a,b,c] `S.union` gFreeVars mask
+      UnwrapSelectiveIndirections _ ends curs -> S.fromList [ends, curs]
       ReadTaggedCursor v -> S.singleton v
       WriteTaggedCursor v ex -> S.insert v (gFreeVars ex)
       MemCpy a b _ -> S.fromList [a, b]
@@ -259,6 +273,7 @@ instance FreeVars (E3Ext l d) where
       EndScalarsAllocation v -> S.singleton v
       ScalarCountBump _ footers -> S.fromList footers
       ScalarCountSet footer count -> S.fromList [footer, count]
+      ScalarCountCopyAll _ dstEnds srcEnds -> S.fromList [dstEnds, srcEnds]
       ReadScalarCount v -> S.singleton v
       ReadScalarCountFirstFooter v -> S.singleton v
       ReadScalarCountNextFooter v -> S.singleton v
@@ -290,12 +305,15 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverType _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverType _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
     gRecoverType _ _ (ScalarCountSet {}) = ProdTy []
+    gRecoverType _ _ (ScalarCountCopyAll {}) = ProdTy []
     gRecoverType _ _ (ReadScalarCount {}) = IntTy
     gRecoverType _ _ (ReadScalarCountFirstFooter {}) = CursorTy
     gRecoverType _ _ (ReadScalarCountNextFooter {}) = CursorTy
     gRecoverType _ _ (ForE {}) = ProdTy []
     gRecoverType _ _ (WhileCursor {}) = ProdTy []
     gRecoverType _ _ (WriteTagPacked {}) = CursorTy
+    gRecoverType _ _ (WriteCursorSelectiveIndirection {}) = CursorTy
+    gRecoverType _ _ (UnwrapSelectiveIndirections {}) = ProdTy []
     gRecoverType _ _ (GrowRegion {}) = ProdTy []
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
@@ -307,12 +325,15 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverTypeLoc _ _ (CastPtr {}) = error "gRecoverType: CastPtr not handled"
     gRecoverTypeLoc _ _ (BoundsCheckVector {}) = error "gRecoverType: BoundsCheckVector not handled"
     gRecoverTypeLoc _ _ (ScalarCountSet {}) = ProdTy []
+    gRecoverTypeLoc _ _ (ScalarCountCopyAll {}) = ProdTy []
     gRecoverTypeLoc _ _ (ReadScalarCount {}) = IntTy
     gRecoverTypeLoc _ _ (ReadScalarCountFirstFooter {}) = CursorTy
     gRecoverTypeLoc _ _ (ReadScalarCountNextFooter {}) = CursorTy
     gRecoverTypeLoc _ _ (ForE {}) = ProdTy []
     gRecoverTypeLoc _ _ (WhileCursor {}) = ProdTy []
     gRecoverTypeLoc _ _ (WriteTagPacked {}) = CursorTy
+    gRecoverTypeLoc _ _ (WriteCursorSelectiveIndirection {}) = CursorTy
+    gRecoverTypeLoc _ _ (UnwrapSelectiveIndirections {}) = ProdTy []
     gRecoverTypeLoc _ _ (GrowRegion {}) = ProdTy []
     gRecoverTypeLoc _ _ _ = error "L3.gRecoverTypeLoc"
 
@@ -333,6 +354,8 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
     case ext of
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
       WriteTagPacked v bod -> WriteTagPacked v (gSubst old new bod)
+      WriteCursorSelectiveIndirection a b c mask ->
+        WriteCursorSelectiveIndirection a b c (gSubst old new mask)
       GrowRegion v w       -> GrowRegion v w
       WriteCursorMutable v bod    -> WriteCursorMutable v (gSubst old new bod)
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
@@ -352,6 +375,8 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
     case ext of
       WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
       WriteTagPacked v bod   -> WriteTagPacked v (gSubstE old new bod)
+      WriteCursorSelectiveIndirection a b c mask ->
+        WriteCursorSelectiveIndirection a b c (gSubstE old new mask)
       GrowRegion v w         -> GrowRegion v w
       WriteCursorMutable v bod -> WriteCursorMutable v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
@@ -372,6 +397,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       WriteScalar s v bod-> WriteScalar s (go v) (go bod)
       TagCursor a b      -> TagCursor (go a) (go b)
       WriteCursorIndirection a b c -> WriteCursorIndirection (go a) (go b) (go c)
+      WriteCursorSelectiveIndirection a b c mask -> WriteCursorSelectiveIndirection (go a) (go b) (go c) (go mask)
+      UnwrapSelectiveIndirections n ends curs -> UnwrapSelectiveIndirections n (go ends) (go curs)
       ReadTaggedCursor v -> ReadTaggedCursor (go v)
       WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
       MemCpy a b ty -> MemCpy (go a) (go b) ty 
@@ -413,6 +440,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
       ScalarCountBump dcon footers -> ScalarCountBump dcon (L.map go footers)
       ScalarCountSet footer count -> ScalarCountSet (go footer) (go count)
+      ScalarCountCopyAll len dstEnds srcEnds -> ScalarCountCopyAll len (go dstEnds) (go srcEnds)
       ReadScalarCount v -> ReadScalarCount (go v)
       ReadScalarCountFirstFooter v -> ReadScalarCountFirstFooter (go v)
       ReadScalarCountNextFooter v -> ReadScalarCountNextFooter (go v)

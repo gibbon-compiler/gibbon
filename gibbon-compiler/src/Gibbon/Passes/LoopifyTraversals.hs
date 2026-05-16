@@ -11,7 +11,10 @@
 -- * The pass is active only when `--store-scalar-field-counts` is enabled and
 --   `--disable-loopification` / `--no-loopify-traversals` is not enabled.
 --   Loop bounds come from scalar-count footer metadata, so loopification is
---   not meaningful without that runtime metadata.
+--   not meaningful without that runtime metadata.  This pass deliberately
+--   emits the unfused per-buffer loop form.  The compiler pipeline runs
+--   selective buffer sharing next, and then a separate post-selective loop
+--   fusion nano-pass fuses the remaining non-shared loops.
 --
 -- * The function must be annotated with `OPT:CanVectorize`, and the packed
 --   datatype mentioned by its case expression must use a fully-factored SoA
@@ -54,11 +57,14 @@
 --
 -- Chunk/footer invariants:
 --
--- * Every homogeneous buffer is walked independently with an outer
---   chunk loop and an inner counted `ForE`.  The first chunk's count is read
---   from the end-of-region footer; later chunk counts are read from the footer
---   reached at the preceding redirection boundary.  This matches the cyclic
---   next-chunk-count encoding in the RTS.
+-- * This pass emits one outer chunk loop and one inner counted `ForE` per
+--   homogeneous buffer.  The first chunk's count is read from the
+--   end-of-region footer; later chunk counts are read from the footer reached
+--   at the preceding redirection boundary.  This matches the cyclic
+--   next-chunk-count encoding in the RTS.  The later
+--   `LoopifiedTraversalFusion` pass may fuse remaining scalar-buffer loops for
+--   fields of the same constructor after selective sharing has removed copied
+--   buffers.
 --
 -- * The dcon stream is copied by reading tags from the input tag buffer and
 --   writing the same tags to the output.  The pass does not synthesize
@@ -98,6 +104,7 @@ module Gibbon.Passes.LoopifyTraversals
   ) where
 
 import Control.Monad (foldM)
+import Data.Char (isAlphaNum)
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -186,6 +193,10 @@ loopBufferName LoopNameSeed{loopNameSeedPrefix} ix s =
     `varAppend` "_"
     `varAppend` toVar s
 
+sanitizeLoopName :: String -> String
+sanitizeLoopName =
+  map (\c -> if isAlphaNum c then c else '_')
+
 loopifyTraversals :: Prog3 -> PassM Prog3
 loopifyTraversals prog@Prog{ddefs, fundefs} = do
   dflags <- getDynFlags
@@ -194,19 +205,19 @@ loopifyTraversals prog@Prog{ddefs, fundefs} = do
         not (gopt Opt_DisableLoopification dflags)
   fds' <-
     if enabled
-    then mapM (rewriteFun ddefs) (M.elems fundefs)
+    then mapM (rewriteFun False ddefs) (M.elems fundefs)
     else pure (M.elems fundefs)
   pure $ prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
 
-rewriteFun :: DDefs Ty3 -> FunDef3 -> PassM FunDef3
-rewriteFun ddefs fn =
+rewriteFun :: Bool -> DDefs Ty3 -> FunDef3 -> PassM FunDef3
+rewriteFun fuseScalarLoops ddefs fn =
   case loopifyCandidateInfo ddefs fn of
     Nothing -> pure fn
     Just cand ->
       case extractTraversalPlan ddefs cand fn of
         Nothing -> pure fn
         Just plan -> do
-          mbody <- loopifyFastPath plan fn
+          mbody <- loopifyFastPath fuseScalarLoops plan fn
           case mbody of
             Nothing -> pure fn
             Just body' -> pure $ fn { funBody = body' }
@@ -359,6 +370,9 @@ collectExtVars ext =
     WriteTagPacked cur rhs -> S.insert cur (collectVars rhs)
     TagCursor cur tag -> S.fromList [cur, tag]
     WriteCursorIndirection cur target end -> S.fromList [cur, target, end]
+    WriteCursorSelectiveIndirection cur target end mask ->
+      S.fromList [cur, target, end] `S.union` collectVars mask
+    UnwrapSelectiveIndirections _ ends curs -> S.fromList [ends, curs]
     WriteTaggedCursor cur rhs -> S.insert cur (collectVars rhs)
     MemCpy src dst _ -> S.fromList [src, dst]
     ReadTaggedCursor cur -> S.singleton cur
@@ -408,6 +422,7 @@ collectExtVars ext =
     EndScalarsAllocation cur -> S.singleton cur
     ScalarCountBump _ curs -> S.fromList curs
     ScalarCountSet footer count -> S.fromList [footer, count]
+    ScalarCountCopyAll _ dstEnds srcEnds -> S.fromList [dstEnds, srcEnds]
     ReadScalarCount cur -> S.singleton cur
     ReadScalarCountFirstFooter cur -> S.singleton cur
     ReadScalarCountNextFooter cur -> S.singleton cur
@@ -729,15 +744,15 @@ mergeBranchPlanMaps =
          (M.toList mp))
     M.empty
 
-loopifyFastPath :: TraversalPlan -> FunDef3 -> PassM (Maybe Exp3)
-loopifyFastPath TraversalPlan{tpABI = LoopifyABI{abiArrLen, abiInEnds, abiOutEnds, abiOutCurs, abiInCurs}, tpScalarPlans} FunDef{funTy = (_, out)}
+loopifyFastPath :: Bool -> TraversalPlan -> FunDef3 -> PassM (Maybe Exp3)
+loopifyFastPath fuseScalarLoops TraversalPlan{tpABI = LoopifyABI{abiArrLen, abiInEnds, abiOutEnds, abiOutCurs, abiInCurs}, tpScalarPlans} FunDef{funTy = (_, out)}
   | otherwise =
       if abiArrLen == 1 + length tpScalarPlans
          && out == loopifiedOutTy abiArrLen
-      then Just <$> mkFastPathBody abiArrLen abiInEnds abiOutEnds abiOutCurs abiInCurs tpScalarPlans
+      then Just <$> mkFastPathBody fuseScalarLoops abiArrLen abiInEnds abiOutEnds abiOutCurs abiInCurs tpScalarPlans
       else if abiArrLen == 1 + length tpScalarPlans
               && out == ProdTy []
-      then Just <$> mkMutableFastPathBody abiArrLen abiInEnds abiOutEnds abiOutCurs abiInCurs tpScalarPlans
+      then Just <$> mkMutableFastPathBody fuseScalarLoops abiArrLen abiInEnds abiOutEnds abiOutCurs abiInCurs tpScalarPlans
       else pure Nothing
 
 loopifiedOutTy :: Int -> Ty3
@@ -912,38 +927,68 @@ extHasParentChildUse childVars ext =
     _ ->
       False
 
-mkFastPathBody :: Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkFastPathBody arrLen inEnds outEnds outCurs inCurs plans =
-  mkGenericFastPathBody False arrLen inEnds outEnds outCurs inCurs plans
+mkFastPathBody :: Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
+mkFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans =
+  mkGenericFastPathBody False fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
 
-mkMutableFastPathBody :: Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkMutableFastPathBody arrLen inEnds outEnds outCurs inCurs plans =
-  mkGenericFastPathBody True arrLen inEnds outEnds outCurs inCurs plans
+mkMutableFastPathBody :: Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
+mkMutableFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans =
+  mkGenericFastPathBody True fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
 
-mkGenericFastPathBody :: Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
+mkGenericFastPathBody :: Bool -> Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
+mkGenericFastPathBody isMutable fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans = do
   nameSeed <- freshLoopNameSeed isMutable
   let body = mkLets (prelude nameSeed) (fastBody nameSeed)
   pure body
   where
     -- The generated structure is:
     --
-    --   for each SoA buffer:
-    --     while current_count_footer != NULL:
-    --       count = scalar_count(current_count_footer)
+    --   for the dcon stream, and each constructor's scalar-buffer group:
+    --     while representative_count_footer != NULL:
+    --       count = scalar_count(representative_count_footer)
+    --       set each output buffer's footer count to count
     --       for i in [0,count):
-    --         copy/update one element in this homogeneous buffer
+    --         copy/update one element in every buffer in the group
     --       if not last chunk:
-    --         read the input redirection, grow the output region, and advance
-    --         footer cursors to the next chunk's count
+    --         read each input redirection, grow each output region, and advance
+    --         each footer cursor to the next chunk's count
     --
-    -- This is intentionally buffer-oriented rather than recursive.  It relies
-    -- on the RTS invariant that footer counts describe the next chunk in O(1):
-    -- the final/end footer stores the first chunk count, and each redirection
-    -- boundary footer stores the following chunk count.
+    -- This is intentionally buffer-oriented rather than recursive.  We fuse
+    -- scalar buffers by constructor, not by field, because fields belonging to
+    -- the same constructor have the same per-chunk element count.  Fully
+    -- factored SoA layout keeps redirection boundaries aligned across buffers:
+    -- when any buffer grows, all peer buffers get corresponding redirections.
+    -- The dcon stream remains separate because its footer count is the total
+    -- number of constructor tags in the chunk, not the count for a single
+    -- constructor.  The generated loops rely on the RTS invariant that footer
+    -- counts describe the next chunk in O(1): the final/end footer stores the
+    -- first chunk count, and each redirection boundary footer stores the
+    -- following chunk count.
     sortedPlans = L.sortOn sbpBufIx plans
     planMap = M.fromList [ (sbpBufIx p, p) | p <- sortedPlans ]
     bufferIndices = [0 .. arrLen - 1]
+    scalarGroups
+      | fuseScalarLoops =
+          L.sortOn (minimum . map sbpBufIx) $
+            map (L.sortOn sbpBufIx) $
+              M.elems $
+                M.fromListWith (++)
+                  [ (sbpDCon plan, [plan])
+                  | plan <- sortedPlans
+                  ]
+      | otherwise =
+          map (:[]) sortedPlans
+    loopGroups = Left 0 : map Right scalarGroups
+
+    groupBufferIndices group =
+      case group of
+        Left ix -> [ix]
+        Right groupPlans -> map sbpBufIx groupPlans
+
+    groupRepIx group =
+      case groupBufferIndices group of
+        ix:_ -> ix
+        [] -> error "loopify: empty loop group"
 
     nullFooter seed = loopName seed "null_footer"
     overwriteReg seed = loopName seed "overwrite_reg"
@@ -961,6 +1006,8 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
     outLocVar seed ix = loopBufferName seed ix "out_loc"
     outEndLocVar seed ix = loopBufferName seed ix "out_end_loc"
     loopResVar seed ix = loopBufferName seed ix "loop"
+    scalarLoopResVar seed ix dcon =
+      loopBufferName seed ix ("dcon_" ++ sanitizeLoopName dcon ++ "_loop")
     finalInVar seed ix = loopBufferName seed ix "in_final"
     finalOutVar seed ix = loopBufferName seed ix "out_final"
     finalOutEndVar seed ix = loopBufferName seed ix "out_end_final"
@@ -1015,10 +1062,10 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
 
     fastBody pfx =
       if isMutable
-        then mkLets (map (mkBufferLoop pfx) bufferIndices) (MkProdE [])
+        then mkLets (map (mkLoopGroup pfx) loopGroups) (MkProdE [])
         else
           mkLets
-            ( map (mkBufferLoop pfx) bufferIndices
+            ( map (mkLoopGroup pfx) loopGroups
                 ++ concatMap (mkBufferFinalLets pfx) bufferIndices
                 ++ [ (overwriteReg pfx, [], CursorArrayTy arrLen, Ext $ MakeCursorArray arrLen (map (finalOutEndVar pfx) bufferIndices))
                    , (inFinalArr pfx, [], CursorArrayTy arrLen, Ext $ MakeCursorArray arrLen (map (finalInVar pfx) bufferIndices))
@@ -1028,8 +1075,14 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
             )
             (MkProdE [VarE inEnds, VarE (overwriteReg pfx), VarE (inFinalArr pfx), VarE (packedPair pfx)])
 
-    mkBufferLoop pfx ix =
-      (loopResVar pfx ix, [], ProdTy [], Ext $ WhileCursor (countFooterLocVar pfx ix) (mkBufferChunkBody pfx ix))
+    mkLoopGroup pfx group =
+      let repIx = groupRepIx group
+          resVar =
+            case group of
+              Left{} -> loopResVar pfx repIx
+              Right (plan:_) -> scalarLoopResVar pfx repIx (sbpDCon plan)
+              Right [] -> loopResVar pfx repIx
+       in (resVar, [], ProdTy [], Ext $ WhileCursor (countFooterLocVar pfx repIx) (mkGroupChunkBody pfx group))
 
     mkBufferFinalLets pfx ix =
       [ (finalInVar pfx ix, [], CursorTy, Ext $ DerefMutCursor (inLocVar pfx ix))
@@ -1037,37 +1090,47 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
       , (finalOutEndVar pfx ix, [], CursorTy, Ext $ DerefMutCursor (outEndLocVar pfx ix))
       ]
 
-    mkBufferChunkBody pfx ix =
-      let currentCountFooter = loopBufferName pfx ix "current_count_footer"
-          chunkCount = loopBufferName pfx ix "chunk_count"
-          currentNextFooter = loopBufferName pfx ix "current_next_footer"
-          isNullNextFooter = loopBufferName pfx ix "is_null_next_footer"
-          isEndNextFooter = loopBufferName pfx ix "is_end_next_footer"
-          isLastChunk = loopBufferName pfx ix "is_last_chunk"
-          currentOutEnd = loopBufferName pfx ix "current_out_end"
-          setChunkCount = loopBufferName pfx ix "set_chunk_count"
-          innerLoopRes = loopBufferName pfx ix "inner_loop_res"
-          chunkBranch = loopBufferName pfx ix "chunk_branch"
+    mkGroupChunkBody pfx group =
+      let repIx = groupRepIx group
+          currentCountFooter = loopBufferName pfx repIx "current_count_footer"
+          chunkCount = loopBufferName pfx repIx "chunk_count"
+          currentNextFooter = loopBufferName pfx repIx "current_next_footer"
+          isNullNextFooter = loopBufferName pfx repIx "is_null_next_footer"
+          isEndNextFooter = loopBufferName pfx repIx "is_end_next_footer"
+          isLastChunk = loopBufferName pfx repIx "is_last_chunk"
+          innerLoopRes = loopBufferName pfx repIx "inner_loop_res"
+          chunkBranch = loopBufferName pfx repIx "chunk_branch"
        in mkLets
-            ( [ (currentCountFooter, [], CursorTy, Ext $ DerefMutCursor (countFooterLocVar pfx ix))
+            ( [ (currentCountFooter, [], CursorTy, Ext $ DerefMutCursor (countFooterLocVar pfx repIx))
               , (chunkCount, [], IntTy, Ext $ ReadScalarCount currentCountFooter)
-              , (currentNextFooter, [], CursorTy, Ext $ DerefMutCursor (nextFooterLocVar pfx ix))
+              , (currentNextFooter, [], CursorTy, Ext $ DerefMutCursor (nextFooterLocVar pfx repIx))
               , (isNullNextFooter, [], BoolTy, PrimAppE EqIntP [VarE currentNextFooter, VarE (nullFooter pfx)])
-              , (isEndNextFooter, [], BoolTy, PrimAppE EqIntP [VarE currentNextFooter, VarE (inputEndVar pfx ix)])
+              , (isEndNextFooter, [], BoolTy, PrimAppE EqIntP [VarE currentNextFooter, VarE (inputEndVar pfx repIx)])
               , (isLastChunk, [], BoolTy, PrimAppE OrP [VarE isNullNextFooter, VarE isEndNextFooter])
-              , (currentOutEnd, [], CursorTy, Ext $ DerefMutCursor (outEndLocVar pfx ix))
-              , (setChunkCount, [], ProdTy [], Ext $ ScalarCountSet currentOutEnd chunkCount)
               ]
-              ++ [ (innerLoopRes, [], ProdTy [], Ext $ ForE (loopBufferName pfx ix "i") (VarE chunkCount) (mkInnerLoopBody pfx ix))
-                 , (chunkBranch, [], ProdTy [], IfE (VarE isLastChunk) (mkLastChunkBody pfx ix) (mkContinueChunkBody pfx ix currentNextFooter))
+              ++ concatMap (mkSetChunkCountLets pfx chunkCount) (groupBufferIndices group)
+              ++ [ (innerLoopRes, [], ProdTy [], Ext $ ForE (loopBufferName pfx repIx "i") (VarE chunkCount) (mkGroupInnerLoopBody pfx group))
+                 , (chunkBranch, [], ProdTy [], IfE (VarE isLastChunk) (mkGroupLastChunkBody pfx group) (mkGroupContinueChunkBody pfx group currentNextFooter))
               ]
             )
             (MkProdE [])
 
-    mkInnerLoopBody pfx ix =
-      case M.lookup ix planMap of
-        Nothing -> mkDConInnerLoop pfx ix
-        Just plan -> mkScalarInnerLoop pfx ix plan
+    mkSetChunkCountLets pfx chunkCount ix =
+      let currentOutEnd = loopBufferName pfx ix "current_out_end"
+          setChunkCount = loopBufferName pfx ix "set_chunk_count"
+       in [ (currentOutEnd, [], CursorTy, Ext $ DerefMutCursor (outEndLocVar pfx ix))
+          , (setChunkCount, [], ProdTy [], Ext $ ScalarCountSet currentOutEnd chunkCount)
+          ]
+
+    mkGroupInnerLoopBody pfx group =
+      case group of
+        Left ix -> mkDConInnerLoop pfx ix
+        Right groupPlans ->
+          mkLets
+            [ (loopBufferName pfx (sbpBufIx plan) "inner_body", [], ProdTy [], mkScalarInnerLoop pfx (sbpBufIx plan) plan)
+            | plan <- groupPlans
+            ]
+            (MkProdE [])
 
     -- The tag stream is copied from input to output.  We deliberately avoid
     -- hardcoding constructor tags here: tree-like and multi-constructor ADTs
@@ -1233,13 +1296,32 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
           | (_, info) <- planDependencies plan
           ]
 
-    mkLastChunkBody pfx ix =
-      let updateCountFooter = loopBufferName pfx ix "update_count_footer"
+    mkGroupLastChunkBody pfx group =
+      let updateCountFooter ix = loopBufferName pfx ix "update_count_footer"
        in mkLets
-            [ (updateCountFooter, [], ProdTy [], Ext $ WriteCursorMutable (countFooterLocVar pfx ix) (VarE (nullFooter pfx))) ]
+            [ (updateCountFooter ix, [], ProdTy [], Ext $ WriteCursorMutable (countFooterLocVar pfx ix) (VarE (nullFooter pfx)))
+            | ix <- groupBufferIndices group
+            ]
             (MkProdE [])
 
-    mkContinueChunkBody pfx ix currentNextFooter =
+    mkGroupContinueChunkBody pfx group repCurrentNextFooter =
+      let repIx = groupRepIx group
+       in mkLets
+            (concatMap (mkContinueOneBuffer pfx repIx repCurrentNextFooter) (groupBufferIndices group))
+            (MkProdE [])
+
+    mkContinueOneBuffer pfx repIx repCurrentNextFooter ix =
+      let currentNextFooter =
+            if ix == repIx
+            then repCurrentNextFooter
+            else loopBufferName pfx ix "current_next_footer"
+          readCurrentNextFooter =
+            if ix == repIx
+            then []
+            else [(currentNextFooter, [], CursorTy, Ext $ DerefMutCursor (nextFooterLocVar pfx ix))]
+       in readCurrentNextFooter ++ mkContinueOneBufferLets pfx ix currentNextFooter
+
+    mkContinueOneBufferLets pfx ix currentNextFooter =
       let boundaryCur = loopBufferName pfx ix "boundary_cur"
           boundaryPair = loopBufferName pfx ix "boundary_pair"
           boundaryAfter = loopBufferName pfx ix "boundary_after"
@@ -1250,23 +1332,20 @@ mkGenericFastPathBody isMutable arrLen inEnds outEnds outCurs inCurs plans = do
           nextNextFooter = loopBufferName pfx ix "next_next_footer"
           updateCountFooter = loopBufferName pfx ix "update_count_footer"
           updateNextFooter = loopBufferName pfx ix "update_next_footer"
-       in mkLets
-            ( [ (boundaryCur, [], CursorTy, Ext $ DerefMutCursor (inLocVar pfx ix))
-              , (boundaryPair, [], ProdTy [IntTy, CursorTy], Ext $ ReadTag boundaryCur)
-              , (boundaryAfter, [], CursorTy, ProjE 1 (VarE boundaryPair))
-              , (redirPair, [], ProdTy [CursorTy, CursorTy, IntTy], Ext $ ReadTaggedCursor boundaryAfter)
-              , (nextStart, [], CursorTy, ProjE 0 (VarE redirPair))
-              , (growOut, [], ProdTy [], Ext $ GrowRegion (outLocVar pfx ix) (outEndLocVar pfx ix))
-              , (setIn, [], ProdTy [], Ext $ WriteCursorMutable (inLocVar pfx ix) (VarE nextStart))
-              ]
-              ++ mkDependencyContinueLets pfx ix
-              ++
-              [ (nextNextFooter, [], CursorTy, Ext $ ReadScalarCountNextFooter currentNextFooter)
-              , (updateCountFooter, [], ProdTy [], Ext $ WriteCursorMutable (countFooterLocVar pfx ix) (VarE currentNextFooter))
-              , (updateNextFooter, [], ProdTy [], Ext $ WriteCursorMutable (nextFooterLocVar pfx ix) (VarE nextNextFooter))
-              ]
-            )
-            (MkProdE [])
+       in [ (boundaryCur, [], CursorTy, Ext $ DerefMutCursor (inLocVar pfx ix))
+          , (boundaryPair, [], ProdTy [IntTy, CursorTy], Ext $ ReadTag boundaryCur)
+          , (boundaryAfter, [], CursorTy, ProjE 1 (VarE boundaryPair))
+          , (redirPair, [], ProdTy [CursorTy, CursorTy, IntTy], Ext $ ReadTaggedCursor boundaryAfter)
+          , (nextStart, [], CursorTy, ProjE 0 (VarE redirPair))
+          , (growOut, [], ProdTy [], Ext $ GrowRegion (outLocVar pfx ix) (outEndLocVar pfx ix))
+          , (setIn, [], ProdTy [], Ext $ WriteCursorMutable (inLocVar pfx ix) (VarE nextStart))
+          ]
+          ++ mkDependencyContinueLets pfx ix
+          ++
+          [ (nextNextFooter, [], CursorTy, Ext $ ReadScalarCountNextFooter currentNextFooter)
+          , (updateCountFooter, [], ProdTy [], Ext $ WriteCursorMutable (countFooterLocVar pfx ix) (VarE currentNextFooter))
+          , (updateNextFooter, [], ProdTy [], Ext $ WriteCursorMutable (nextFooterLocVar pfx ix) (VarE nextNextFooter))
+          ]
 
     -- Dependency cursors must follow the same chunk transitions as their
     -- consumer loop.  At a redirection boundary, read the dependent buffer's
@@ -1396,6 +1475,8 @@ collectMentionedDataCons ex =
         WriteTagPacked _ rhs -> collectMentionedDataCons rhs
         TagCursor{} -> []
         WriteCursorIndirection{} -> []
+        WriteCursorSelectiveIndirection _ _ _ mask -> collectMentionedDataCons mask
+        UnwrapSelectiveIndirections{} -> []
         WriteTaggedCursor _ rhs -> collectMentionedDataCons rhs
         MemCpy{} -> []
         ReadTaggedCursor{} -> []
@@ -1439,6 +1520,7 @@ collectMentionedDataCons ex =
         EndScalarsAllocation{} -> []
         ScalarCountBump dcon _ -> [dcon]
         ScalarCountSet{} -> []
+        ScalarCountCopyAll{} -> []
         ReadScalarCount{} -> []
         ReadScalarCountFirstFooter{} -> []
         ReadScalarCountNextFooter{} -> []

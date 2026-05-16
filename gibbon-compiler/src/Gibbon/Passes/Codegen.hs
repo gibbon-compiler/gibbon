@@ -651,6 +651,8 @@ codegenTriv _ (TagTriv i) = if i == GL.indirectionAlt
                             then [cexp| GIB_INDIRECTION_TAG |]
                             else if i == GL.redirectionAlt
                             then [cexp| GIB_REDIRECTION_TAG |]
+                            else if i == GL.selectiveIndirectionAlt
+                            then [cexp| GIB_SELECTIVE_INDIRECTION_TAG |]
                             else [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
   let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
@@ -1419,6 +1421,12 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                            _ -> codegenTriv venv footer
                    pure [ C.BlockStm [cstm| gib_scalar_count_footer_set($exp:footer_arg, $(codegenTriv venv count)); |] ]
 
+                 ScalarCountCopyAll len -> do
+                   when (not (null bnds) || length rnds /= 2) $
+                     error $ "ScalarCountCopyAll expected no bindings and two args: " ++ show (bnds, rnds)
+                   let [(VarTriv dstEnds), (VarTriv srcEnds)] = rnds
+                   pure [ C.BlockStm [cstm| gib_scalar_count_copy_all($id:dstEnds, $id:srcEnds, $int:len); |] ]
+
                  ScalarCountFooterEnd fun_name -> do
                    when (not (null bnds) || not (null rnds)) $
                      error $ "ScalarCountFooterEnd expected no bindings/args: " ++ show (bnds, rnds)
@@ -1479,6 +1487,36 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                        , C.BlockStm [cstm| gib_store_taggedptr_unaligned($exp:cur' + sizeof(GibPackedTag), $id:tagged); |]
                                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($exp:cur') + 9; |]
                                        ]
+
+                 WriteCursorSelectiveIndirection ->
+                               let [(outV,CursorTy)] = bnds
+                                   [(VarTriv cur), (VarTriv to), (VarTriv toEnd), mask] = rnds
+                                   cursorLikeExp v =
+                                     case M.lookup v venv of
+                                       Just MutCursorTy ->
+                                         [cexp| *$id:v |]
+                                       _ ->
+                                         [cexp| $id:v |]
+                                   cur' = cursorLikeExp cur
+                                   to' = cursorLikeExp to
+                                   toEnd' = cursorLikeExp toEnd
+                                   mask' = codegenTriv venv mask
+                                   tagged_ptr_t = [cty| typename uintptr_t |]
+                                   mask_t = [cty| typename uint64_t |]
+                               in do writeloc <- gensym "writeloc"
+                                     pure
+                                       [ assn [cty| char * |] writeloc [cexp| (char *) $exp:cur' |]
+                                       , C.BlockStm [cstm| *$id:writeloc = GIB_SELECTIVE_INDIRECTION_TAG; |]
+                                       , C.BlockStm [cstm| *($ty:tagged_ptr_t *)($exp:cur' + sizeof(GibPackedTag)) = ($ty:tagged_ptr_t) $exp:to'; |]
+                                       , C.BlockStm [cstm| *($ty:tagged_ptr_t *)($exp:cur' + sizeof(GibPackedTag) + sizeof(uintptr_t)) = ($ty:tagged_ptr_t) $exp:toEnd'; |]
+                                       , C.BlockStm [cstm| *($ty:mask_t *)($exp:cur' + sizeof(GibPackedTag) + (2 * sizeof(uintptr_t))) = ($ty:mask_t) $exp:mask'; |]
+                                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($exp:cur') + 25; |]
+                                       ]
+
+                 UnwrapSelectiveIndirections len ->
+                               let [(VarTriv ends), (VarTriv curs)] = rnds
+                               in pure
+                                  [ C.BlockStm [cstm| gib_unwrap_selective_indirections($id:ends, $id:curs, $int:len); |] ]
 
                  ReadTaggedCursor -> do
                                tagged <- gensym "tagged_tmpcur"
