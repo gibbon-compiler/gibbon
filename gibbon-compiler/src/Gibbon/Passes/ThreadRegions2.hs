@@ -235,7 +235,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                     --
                                     --                            ) $ zip fieldLocs' fieldRegs'
                                     -- VS: 1 byte for constructor, 1 byte for redirection, 8 bytes for pointer + 2 to be safe
-                                    spaceDcon = boundsCheckDconSoa ddefs (locs_tycons M.! loc)
+                                    spaceDcon = boundsCheckDconSoa dflags ddefs (locs_tycons M.! loc)
                                     boundsCheckDcon = [(spaceDcon, dcRegArg, dcLocArg)]
                                     boundsCheckFields =
                                       concatMap
@@ -244,7 +244,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                              in case (unTy2 ty) of
                                                   PackedTy {} -> []
                                                   _ ->
-                                                    let size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
+                                                    let size_of_ty = fromJust $ sizeOfTyD dflags (unTy2 ty)
                                                      -- VS: 1 byte for redirection, 8 for redirection pointer + size of type
                                                      in [((size_of_ty + 9), (NewL2.EndOfReg freg mode (toEndVRegVar freg)), (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))]
                                         )
@@ -309,7 +309,7 @@ threadRegionsFn ddefs fundefs f@FunDef {funName, funArgs, funTy, funMeta, funBod
                                 let rv = regionToVar reg
                                     end_rv = toEndVRegVar rv
                                     -- rv = end_reg
-                                    bc = boundsCheck ddefs (locs_tycons M.! loc)
+                                    bc = boundsCheck dflags ddefs (locs_tycons M.! loc)
                                     locarg = NewL2.Loc (LREM loc rv end_rv mode)
                                     regarg = NewL2.EndOfReg rv mode end_rv
                                  in -- dbgTrace (minChatLvl) ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
@@ -1219,8 +1219,8 @@ findRetLocs e0 = go e0 []
 -- constructors of this type. The assumption is that whatever writes
 -- that packed value will do a bounds check again. Note that only AppE's
 -- do boundschecking, DataConE's dont. We should fix this.
-boundsCheck :: NewL2.DDefs2 -> TyCon -> Int
-boundsCheck ddefs tycon =
+boundsCheck :: DynFlags -> NewL2.DDefs2 -> TyCon -> Int
+boundsCheck dflags ddefs tycon =
   let dcons = getConOrdering ddefs tycon
       spaceReqd tys =
         foldl
@@ -1230,7 +1230,7 @@ boundsCheck ddefs tycon =
                 else
                   if hasPacked (unTy2 ty)
                     then (bytes, True)
-                    else (bytes + (fromJust $ sizeOfTy (unTy2 ty)), False)
+                    else (bytes + (fromJust $ sizeOfTyD dflags (unTy2 ty)), False)
           )
           (0, False)
           tys
@@ -1242,14 +1242,14 @@ boundsCheck ddefs tycon =
       dbgTrace (minChatLvl) "Print boundsCheck: " dbgTrace (minChatLvl) (sdoc (dcons, vals, tyss)) dbgTrace (minChatLvl) "End boundsCheck.\n" num_bytes + 9
 
 
-boundsCheckDconSoa :: NewL2.DDefs2 -> TyCon -> Int
-boundsCheckDconSoa ddefs tycon = 
+boundsCheckDconSoa :: DynFlags -> NewL2.DDefs2 -> TyCon -> Int
+boundsCheckDconSoa dflags ddefs tycon = 
   let dcons = getConOrdering ddefs tycon 
       spaceReqd tys = 
         foldl (\bytes ty -> 
                      case (unTy2 ty) of 
-                         CursorTy -> (bytes + (fromJust $ sizeOfTy (unTy2 ty))) 
-                         CursorArrayTy _sz -> (bytes + (fromJust $ sizeOfTy (unTy2 ty)))
+                         CursorTy -> (bytes + (fromJust $ sizeOfTyD dflags (unTy2 ty))) 
+                         CursorArrayTy _sz -> (bytes + (fromJust $ sizeOfTyD dflags (unTy2 ty)))
                          PackedTy ty _ -> if ty == tycon 
                                         then (bytes + 1)
                                         else (bytes)

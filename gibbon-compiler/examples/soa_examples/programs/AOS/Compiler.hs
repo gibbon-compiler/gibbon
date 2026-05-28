@@ -149,6 +149,7 @@ throughputModelPass ir =
     End ->
       0
 
+{-# ANN targetRetunePass "OPT:CanVectorize" #-}
 targetRetunePass :: IR -> Int -> IR
 targetRetunePass ir k =
   case ir of
@@ -160,6 +161,7 @@ targetRetunePass ir k =
     End ->
       End
 
+{-# ANN stripSideEffectsPass "OPT:CanVectorize" #-}
 stripSideEffectsPass :: IR -> IR
 stripSideEffectsPass ir =
   case ir of

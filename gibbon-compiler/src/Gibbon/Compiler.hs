@@ -90,7 +90,9 @@ import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.ReorderScalarWrites  ( reorderScalarWrites, writeOrderMarkers )
 import           Gibbon.Passes.LoopifyTraversals (loopifyTraversals)
+import           Gibbon.Passes.LoopifyFlatTraversals (loopifyFlatTraversals)
 import           Gibbon.Passes.LoopifiedTraversalFusion (fuseLoopifiedTraversals)
+import           Gibbon.Passes.VectorizeTraversals (vectorizeTraversals)
 import           Gibbon.Passes.ScalarCountPropagation (propagateScalarCounts)
 import           Gibbon.Passes.SelectiveBufferSharing (selectiveBufferSharing)
 import           Gibbon.Passes.Unariser       (unariser)
@@ -723,7 +725,6 @@ addRedirectionCon p@Prog{ddefs} = do
 passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l0 = do
       let isPacked   = gopt Opt_Packed dynflags
-          isSoA      = gopt Opt_Packed_SoA dynflags
           noRAN      = gopt Opt_No_RAN dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
@@ -881,13 +882,13 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
               --l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- VS: TODO: This pass needs to be debugged.
-              -- VS: This currently generates incorrect code for SoA case. 
-              -- Hence, i've added a conditional here.
-              -- Parallel mode with SoA memory backend has no support yet to begin with 
-              -- so this is fine for now. 
+              -- VS: This currently generates incorrect code for fully factored layouts.
+              -- Layout is selected by source annotations, so skip parAlloc by
+              -- inspecting datatype memory layouts rather than a command-line flag. 
               -- l2 <- goE2 "parAlloc"   parAlloc  l2
-              l2 <- if isSoA
-                    then pure l2 
+              let hasFactoredLayout = any ((== FullyFactored) . memLayout) (ddefs l2)
+              l2 <- if hasFactoredLayout
+                    then pure l2
                     else goE2 "parAlloc"   parAlloc  l2
               lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
               l2 <- go "L2.typecheck" L2.tcProg l2
@@ -932,10 +933,12 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2'
               l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
+              l3 <- go "loopifyFlatTraversals" loopifyFlatTraversals l3
               l3 <- go "loopifyTraversals" loopifyTraversals l3
               l3 <- go "propagateScalarCounts" propagateScalarCounts l3
               l3 <- go "selectiveBufferSharing" selectiveBufferSharing l3
               l3 <- go "fuseLoopifiedTraversals" fuseLoopifiedTraversals l3
+              l3 <- go "vectorizeTraversals" vectorizeTraversals l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               -- l3 <- go "addCasts"         addCasts      l3

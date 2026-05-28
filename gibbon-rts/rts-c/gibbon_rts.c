@@ -498,7 +498,7 @@ int gib_print_symbol(GibSym idx)
         GibSymtable *s;
         HASH_FIND(hh, global_sym_table, &idx, sizeof(GibSym), s);
         if (s == NULL) {
-            return printf("%" PRId64, idx);
+            return printf("%" PRIu64, idx);
         } else {
             return printf("%s", s->value);
         }
@@ -588,13 +588,13 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
     GibInt lower = vec->lower + i;
     GibInt upper = vec->lower + i + n;
     if ((lower > vec->upper)) {
-        fprintf(stderr, "gib_vector_slice: lower out of bounds, %" PRId64
-                " > %" PRId64, lower, vec->upper);
+        fprintf(stderr, "gib_vector_slice: lower out of bounds, %" GIBBON_PRIdInt
+                " > %" GIBBON_PRIdInt, lower, vec->upper);
         exit(1);
     }
     if ((upper > vec->upper)) {
-        fprintf(stderr, "gib_vector_slice: upper out of bounds, %" PRId64
-                " > %" PRId64, upper, vec->upper);
+        fprintf(stderr, "gib_vector_slice: upper out of bounds, %" GIBBON_PRIdInt
+                " > %" GIBBON_PRIdInt, upper, vec->upper);
         exit(1);
     }
     GibVector *vec2 = (GibVector *) gib_alloc(sizeof(GibVector));
@@ -698,8 +698,8 @@ void gib_vector_free(GibVector *vec)
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->upper != vec2->lower) {
-        fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" PRId64
-                ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
+        fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" GIBBON_PRIdInt
+                ",%" GIBBON_PRIdInt "), (%" GIBBON_PRIdInt ",%" GIBBON_PRIdInt ")",
                vec1->lower, vec1->upper, vec2->lower, vec2->upper);
         exit(1);
     }
@@ -902,7 +902,7 @@ void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixel
     fp = fopen(filename, "w+");
     fprintf(fp, "P3\n");
     // fprintf(fp, "%lld %lld\n255\n", width, height);
-    fprintf(fp, "%" PRId64 " %" PRId64 "\n255\n", width, height);
+    fprintf(fp, "%" GIBBON_PRIdInt " %" GIBBON_PRIdInt "\n255\n", width, height);
     GibInt len = gib_vector_length(pixels);
     gib_write_ppm_loop(fp, 0, len, pixels);
     fclose(fp);
@@ -924,7 +924,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
         GibInt z = tup.field2;
         // write to file.
         // fprintf(fp, "%lld %lld %lld\n", x, y, z);
-        fprintf(fp, "%" PRId64 " %" PRId64 " %" PRId64 "\n", x, y, z);
+        fprintf(fp, "%" GIBBON_PRIdInt " %" GIBBON_PRIdInt " %" GIBBON_PRIdInt "\n", x, y, z);
         gib_write_ppm_loop(fp, (idx+1), end, pixels);
     }
 }

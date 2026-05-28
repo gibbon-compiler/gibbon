@@ -39,17 +39,18 @@ data GeneralFlag
   | Opt_GenGc              -- ^ Use the new generational GC.
   | Opt_NoEagerPromote     -- ^ Disable eager promotion.
   | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
-  | Opt_Packed_SoA         -- ^ Use packed representation but use a structure of arrays representation for the datatype
   | Opt_No_RAN             -- ^ Don't use shortcut pointers instead use extra traversals to reach get endwitness
   | Opt_UseMutableCursors  -- ^ Use Mutable Cursors instead of Immutable Cursors, this allows inplace updates to the Packed Cursor values.
   | Opt_PapiInstrumentation -- ^ Enable PAPI instrumentation while compiling the gibbon binary.
   | Opt_PapiNativeInstrumentation -- ^ Enable native PAPI event instrumentation while compiling the gibbon binary.
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
   | Opt_StoreScalarFieldCounts -- ^ Store scalar-field counts for annotated SoA builders.
-  | Opt_DisableLoopification -- ^ Disable loopification for OPT:CanVectorize traversals.
-  | Opt_DisableLoopFusion -- ^ Disable scalar-buffer loop fusion inside loopified traversals.
+  | Opt_EnableLoopification -- ^ Enable loopification for OPT:CanVectorize traversals.
+  | Opt_AutoLoopification -- ^ Infer CanVectorize candidates for map-like traversals when loopification is enabled.
+  | Opt_EnableLoopFusion -- ^ Enable scalar-buffer loop fusion inside loopified SoA traversals.
   | Opt_EnableSelectiveBufferSharing -- ^ Enable post-loopification selective SoA buffer sharing.
-  | Opt_DisableSelectiveBufferSharing -- ^ Disable post-loopification selective SoA buffer sharing.
+  | Opt_EnableVectorization -- ^ Enable SIMD vectorization for supported loopified SoA scalar-buffer loops.
+  | Opt_Int32 -- ^ Represent Gibbon Int values as 32-bit integers in the C backend.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -126,25 +127,30 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_GenGc (long "gen-gc" <> help "Use the new generational GC.") <|>
                    flag' Opt_NoEagerPromote (long "no-eager-promote" <> help "Disable eager promotion.") <|>
                    flag' Opt_SimpleWriteBarrier (long "simple-write-barrier" <> help "Disables eliminate-indirection-chains optimization.") <|>
-                   flag' Opt_Packed_SoA (long "SoA" <>
-                                         help "Use a structure of arrays representation for all datatypes.") <|>
                    flag' Opt_No_RAN (long "no-ran" <>
                                          help "Don't use RAN pointers, instead, use extra traversals.") <|>
                    flag' Opt_UseMutableCursors (long "use-mutable-cursors" <> help "Use Mutable Cursors Instead of Immutable Cursors.") <|>
                    flag' Opt_TailCallOptimize (long "tail-call-optimize" <> help "Run the oprimization pass to optimize functions that are tail recursive.") <|>
-                   flag' Opt_StoreScalarFieldCounts (long "store-scalar-field-counts" <> help "Store scalar-field counts for functions annotated with OPT:StoreScalarCounts.") <|>
-                   flag' Opt_DisableLoopification (long "disable-loopification" <>
-                                                   long "no-loopify-traversals" <>
-                                                   help "Disable loopification for OPT:CanVectorize traversals.") <|>
-                   flag' Opt_DisableLoopFusion (long "disable-loop-fusion" <>
-                                                long "no-loop-fusion" <>
-                                                help "Disable scalar-buffer loop fusion inside loopified OPT:CanVectorize traversals.") <|>
+                   flag' Opt_StoreScalarFieldCounts (long "store-scalar-field-counts" <>
+                                                  help "Store scalar-count footer metadata for SoA functions annotated with OPT:StoreScalarCounts.") <|>
+                   flag' Opt_EnableLoopification (long "enable-loopification" <>
+                                                    long "loopify-traversals" <>
+                                                    help "Enable OPT:CanVectorize loopification. AoS maps use a flat cursor loop; SoA maps use counted per-buffer loops when scalar counts are available.") <|>
+                   flag' Opt_AutoLoopification (long "auto-loopification" <>
+                                                  long "infer-can-vectorize" <>
+                                                  help "Infer map-like traversal candidates for loopification instead of requiring OPT:CanVectorize annotations. Still rejects parent-child dependencies and unsupported traversal shapes.") <|>
+                   flag' Opt_EnableLoopFusion (long "enable-loop-fusion" <>
+                                                 long "loop-fusion" <>
+                                                 help "Enable post-loopification loop fusion for fully factored SoA scalar-buffer loops.") <|>
                    flag' Opt_EnableSelectiveBufferSharing (long "enable-selective-buffer-sharing" <>
                                                            long "selective-buffer-sharing" <>
-                                                           help "Enable post-loopification selective sharing for unchanged SoA buffers in OPT:CanVectorize traversals.") <|>
-                   flag' Opt_DisableSelectiveBufferSharing (long "disable-selective-buffer-sharing" <>
-                                                            long "no-selective-buffer-sharing" <>
-                                                            help "Disable post-loopification selective sharing for unchanged SoA buffers.") <|>
+                                                           help "Enable post-loopification selective sharing for unchanged fully factored SoA buffers.") <|>
+                   flag' Opt_EnableVectorization (long "enable-vectorization" <>
+                                                   long "vectorize-traversals" <>
+                                                   help "Enable SSE2 vectorization for supported OPT:CanVectorize loopified fully factored SoA scalar-buffer loops.") <|>
+                   flag' Opt_Int32 (long "int32" <>
+                                    long "gibbon-int32" <>
+                                    help "Represent Gibbon Int values as 32-bit integers in generated C and packed layouts.") <|>
                    flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) <|>
                    flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).")
     dflagsParser :: Parser DebugFlag

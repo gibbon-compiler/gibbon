@@ -296,6 +296,7 @@ instance (Pretty l) => Pretty (UrTy l) where
               case sty of
                 PPHaskell  -> text tc
                 PPInternal -> parens $ text "Packed" <+> text tc <+> pprintWithStyle sty loc
+          SimdTy el_ty1 lanes -> text "Simd" <> int lanes <+> pprintWithStyle sty el_ty1
           VectorTy el_ty1 -> text "Vector" <+> pprintWithStyle sty el_ty1
           ListTy el_ty1 -> text "List" <+> pprintWithStyle sty el_ty1
           PtrTy     -> text "Ptr"

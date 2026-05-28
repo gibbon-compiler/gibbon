@@ -2,8 +2,11 @@
   "compile_cmd": [
     "gibbon",
     "--use-mutable-cursors",
-    "--enable-papi-native",
     "--no-ran",
+    "--store-scalar-field-counts",
+    "--enable-loopification",
+    "--enable-loop-fusion",
+    "--enable-selective-buffer-sharing",
     "--packed",
     "--to-exe",
     "--cfile",
@@ -12,9 +15,9 @@
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.exe",
     "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/List.hs"
   ],
-  "compile_cmd_signature": "gibbon --use-mutable-cursors --enable-papi-native --no-ran --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/List.hs",
+  "compile_cmd_signature": "gibbon --use-mutable-cursors --no-ran --store-scalar-field-counts --enable-loopification --enable-loop-fusion --enable-selective-buffer-sharing --packed --to-exe --cfile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.c --exefile /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.exe /workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/List.hs",
   "source": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/programs/SOA/List.hs",
   "c_file": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.c",
   "exe": "/workdisk/git/gibbon/gibbon-compiler/examples/soa_examples/benchmark_output/List.soa.exe",
-  "compiled_at": "2026-03-17T16:23:38"
+  "compiled_at": "2026-05-16T23:20:53"
 }

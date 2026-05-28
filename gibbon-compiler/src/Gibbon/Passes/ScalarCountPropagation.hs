@@ -104,6 +104,7 @@ rewriteExp producerShapes = go
       case ext of
         L3.ForE idx bound bod -> L3.ForE idx <$> go bound <*> go bod
         L3.WhileCursor cur bod -> L3.WhileCursor cur <$> go bod
+        L3.WhileCursorEnd cur end bod -> L3.WhileCursorEnd cur end <$> go bod
         L3.WriteScalar s cur rhs -> L3.WriteScalar s cur <$> go rhs
         L3.WriteTagPacked cur rhs -> L3.WriteTagPacked cur <$> go rhs
         L3.WriteTaggedCursor cur rhs -> L3.WriteTaggedCursor cur <$> go rhs
@@ -210,6 +211,7 @@ extWritesScalarCounts ext =
     L3.ScalarCountCopyAll _ _ _ -> True
     L3.ForE _ bound bod -> bodyWritesScalarCounts bound || bodyWritesScalarCounts bod
     L3.WhileCursor _ bod -> bodyWritesScalarCounts bod
+    L3.WhileCursorEnd _ _ bod -> bodyWritesScalarCounts bod
     L3.WriteScalar _ _ rhs -> bodyWritesScalarCounts rhs
     L3.WriteTagPacked _ rhs -> bodyWritesScalarCounts rhs
     L3.WriteTaggedCursor _ rhs -> bodyWritesScalarCounts rhs

@@ -187,6 +187,30 @@ data E3Ext loc dec =
   | WhileCursor Var (PreExp E3Ext loc dec)
     -- ^ A statement-like loop that repeats while the mutable cursor ref is
     -- non-null. The body should evaluate to unit.
+  | WhileCursorEnd Var Var (PreExp E3Ext loc dec)
+    -- ^ A statement-like loop that repeats while the first mutable cursor ref
+    -- has not reached the second mutable cursor ref.  This is used by flat
+    -- AoS loopified traversals, where the input value end is the loop bound.
+  | VecBroadcast Scalar Int (PreExp E3Ext loc dec)
+    -- ^ Broadcast a scalar expression into a fixed-width SIMD register.
+  | VecLoad Scalar Int Var
+    -- ^ Load a SIMD register from the cursor stored in a mutable cursor ref.
+  | VecAdd Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise SIMD addition.
+  | VecSub Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise SIMD subtraction.
+  | VecMul Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise SIMD multiplication, for scalar kinds with backend support.
+  | VecDiv Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise SIMD division, for scalar kinds with backend support.
+  | VecMod Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise SIMD modulus, for scalar kinds with backend support.
+  | VecEq Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise equality producing an all-bits mask in the same register type.
+  | VecSelect Scalar Int (PreExp E3Ext loc dec) (PreExp E3Ext loc dec) (PreExp E3Ext loc dec)
+    -- ^ Lane-wise select: mask, then-value, else-value.
+  | VecStore Scalar Int Var (PreExp E3Ext loc dec)
+    -- ^ Store a SIMD register to the cursor stored in a mutable cursor ref.
   | SSPush SSModality Var Var TyCon
   | SSPop SSModality Var Var
   | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
@@ -281,6 +305,18 @@ instance FreeVars (E3Ext l d) where
         gFreeVars bound `S.union` S.delete idx (gFreeVars bod)
       WhileCursor ref bod ->
         S.insert ref (gFreeVars bod)
+      WhileCursorEnd cur end bod ->
+        S.insert cur (S.insert end (gFreeVars bod))
+      VecBroadcast _ _ val -> gFreeVars val
+      VecLoad _ _ ref -> S.singleton ref
+      VecAdd _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecSub _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecMul _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecDiv _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecMod _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecEq _ _ a b -> gFreeVars a `S.union` gFreeVars b
+      VecSelect _ _ m a b -> S.unions [gFreeVars m, gFreeVars a, gFreeVars b]
+      VecStore _ _ ref val -> S.insert ref (gFreeVars val)
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
       Assert a -> gFreeVars a
@@ -311,6 +347,17 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverType _ _ (ReadScalarCountNextFooter {}) = CursorTy
     gRecoverType _ _ (ForE {}) = ProdTy []
     gRecoverType _ _ (WhileCursor {}) = ProdTy []
+    gRecoverType _ _ (WhileCursorEnd {}) = ProdTy []
+    gRecoverType _ _ (VecBroadcast s lanes _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecLoad s lanes _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecAdd s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecSub s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecMul s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecDiv s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecMod s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecEq s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecSelect s lanes _ _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverType _ _ (VecStore {}) = ProdTy []
     gRecoverType _ _ (WriteTagPacked {}) = CursorTy
     gRecoverType _ _ (WriteCursorSelectiveIndirection {}) = CursorTy
     gRecoverType _ _ (UnwrapSelectiveIndirections {}) = ProdTy []
@@ -331,6 +378,17 @@ instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext 
     gRecoverTypeLoc _ _ (ReadScalarCountNextFooter {}) = CursorTy
     gRecoverTypeLoc _ _ (ForE {}) = ProdTy []
     gRecoverTypeLoc _ _ (WhileCursor {}) = ProdTy []
+    gRecoverTypeLoc _ _ (WhileCursorEnd {}) = ProdTy []
+    gRecoverTypeLoc _ _ (VecBroadcast s lanes _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecLoad s lanes _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecAdd s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecSub s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecMul s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecDiv s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecMod s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecEq s lanes _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecSelect s lanes _ _ _) = SimdTy (scalarToTy s) lanes
+    gRecoverTypeLoc _ _ (VecStore {}) = ProdTy []
     gRecoverTypeLoc _ _ (WriteTagPacked {}) = CursorTy
     gRecoverTypeLoc _ _ (WriteCursorSelectiveIndirection {}) = CursorTy
     gRecoverTypeLoc _ _ (UnwrapSelectiveIndirections {}) = ProdTy []
@@ -365,6 +423,16 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
         | idx == old -> ForE idx (gSubst old new bound) bod
         | otherwise  -> ForE idx (gSubst old new bound) (gSubst old new bod)
       WhileCursor ref bod  -> WhileCursor ref (gSubst old new bod)
+      WhileCursorEnd cur end bod -> WhileCursorEnd cur end (gSubst old new bod)
+      VecBroadcast s lanes val -> VecBroadcast s lanes (gSubst old new val)
+      VecAdd s lanes a b -> VecAdd s lanes (gSubst old new a) (gSubst old new b)
+      VecSub s lanes a b -> VecSub s lanes (gSubst old new a) (gSubst old new b)
+      VecMul s lanes a b -> VecMul s lanes (gSubst old new a) (gSubst old new b)
+      VecDiv s lanes a b -> VecDiv s lanes (gSubst old new a) (gSubst old new b)
+      VecMod s lanes a b -> VecMod s lanes (gSubst old new a) (gSubst old new b)
+      VecEq s lanes a b -> VecEq s lanes (gSubst old new a) (gSubst old new b)
+      VecSelect s lanes m a b -> VecSelect s lanes (gSubst old new m) (gSubst old new a) (gSubst old new b)
+      VecStore s lanes ref val -> VecStore s lanes ref (gSubst old new val)
       MakeCursorArray{}    -> ext
       IndexCursorArray{}   -> ext
       CastPtr{}            -> ext
@@ -384,6 +452,16 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       LetAvail ls b     -> LetAvail ls (gSubstE old new b)
       ForE idx bound bod -> ForE idx (gSubstE old new bound) (gSubstE old new bod)
       WhileCursor ref bod -> WhileCursor ref (gSubstE old new bod)
+      WhileCursorEnd cur end bod -> WhileCursorEnd cur end (gSubstE old new bod)
+      VecBroadcast s lanes val -> VecBroadcast s lanes (gSubstE old new val)
+      VecAdd s lanes a b -> VecAdd s lanes (gSubstE old new a) (gSubstE old new b)
+      VecSub s lanes a b -> VecSub s lanes (gSubstE old new a) (gSubstE old new b)
+      VecMul s lanes a b -> VecMul s lanes (gSubstE old new a) (gSubstE old new b)
+      VecDiv s lanes a b -> VecDiv s lanes (gSubstE old new a) (gSubstE old new b)
+      VecMod s lanes a b -> VecMod s lanes (gSubstE old new a) (gSubstE old new b)
+      VecEq s lanes a b -> VecEq s lanes (gSubstE old new a) (gSubstE old new b)
+      VecSelect s lanes m a b -> VecSelect s lanes (gSubstE old new m) (gSubstE old new a) (gSubstE old new b)
+      VecStore s lanes ref val -> VecStore s lanes ref (gSubstE old new val)
       MakeCursorArray{}    -> ext
       IndexCursorArray{}   -> ext
       CastPtr{}            -> ext
@@ -448,6 +526,17 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
         let env' = M.delete idx env
         in ForE idx (go bound) (gRename env' bod)
       WhileCursor ref bod -> WhileCursor (go ref) (go bod)
+      WhileCursorEnd cur end bod -> WhileCursorEnd (go cur) (go end) (go bod)
+      VecBroadcast s lanes val -> VecBroadcast s lanes (go val)
+      VecLoad s lanes ref -> VecLoad s lanes (go ref)
+      VecAdd s lanes a b -> VecAdd s lanes (go a) (go b)
+      VecSub s lanes a b -> VecSub s lanes (go a) (go b)
+      VecMul s lanes a b -> VecMul s lanes (go a) (go b)
+      VecDiv s lanes a b -> VecDiv s lanes (go a) (go b)
+      VecMod s lanes a b -> VecMod s lanes (go a) (go b)
+      VecEq s lanes a b -> VecEq s lanes (go a) (go b)
+      VecSelect s lanes m a b -> VecSelect s lanes (go m) (go a) (go b)
+      VecStore s lanes ref val -> VecStore s lanes (go ref) (go val)
       SSPush a b c d -> SSPush a (go b) (go c) d
       SSPop a b c -> SSPop a (go b) (go c)
       Assert e -> Assert (go e)
@@ -929,6 +1018,7 @@ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality t
                           else if M.member l oldLocsToMutEnv
                           then ProdTy []
                           else dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy [getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l, getCursorizeTyFromLocVar'' modality isTailAndOverrideModality l]
+    SimdTy el_ty' lanes -> SimdTy (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty') lanes
     VectorTy el_ty' -> VectorTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     ListTy el_ty'   -> ListTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     PtrTy    -> PtrTy
@@ -997,6 +1087,26 @@ updateAvailVars froms tos ex =
               froms' = map fst pairs
               tos' = map snd pairs
           in Ext $ ForE idx (go bound) (updateAvailVars froms' tos' bod)
+        WhileCursorEnd cur end bod ->
+          Ext $ WhileCursorEnd cur end (updateAvailVars froms tos bod)
+        VecBroadcast scalar lanes val ->
+          Ext $ VecBroadcast scalar lanes (go val)
+        VecAdd scalar lanes a b ->
+          Ext $ VecAdd scalar lanes (go a) (go b)
+        VecSub scalar lanes a b ->
+          Ext $ VecSub scalar lanes (go a) (go b)
+        VecMul scalar lanes a b ->
+          Ext $ VecMul scalar lanes (go a) (go b)
+        VecDiv scalar lanes a b ->
+          Ext $ VecDiv scalar lanes (go a) (go b)
+        VecMod scalar lanes a b ->
+          Ext $ VecMod scalar lanes (go a) (go b)
+        VecEq scalar lanes a b ->
+          Ext $ VecEq scalar lanes (go a) (go b)
+        VecSelect scalar lanes m a b ->
+          Ext $ VecSelect scalar lanes (go m) (go a) (go b)
+        VecStore scalar lanes ref val ->
+          Ext $ VecStore scalar lanes ref (go val)
         _ -> ex
   where
     go = updateAvailVars froms tos

@@ -176,6 +176,11 @@ data Tail
                    , loopBody :: Tail
                    , bod :: Tail
                    }
+    | WhileCursorEndT { ref :: Var
+                      , endRef :: Var
+                      , loopBody :: Tail
+                      , bod :: Tail
+                      }
 
     | IfT { tst  :: Triv,
             con  :: Tail,
@@ -219,6 +224,9 @@ data Ty
     | ChunkTy  -- ^ Start and end pointers
     | CursorArrayTy Int
     | MutCursorTy
+    | SimdTy Ty Int
+      -- ^ Fixed-width SIMD register.  The element type and lane count are
+      -- explicit so lowering can pick an SSE2/AVX/AVX512 backend later.
 
 
 -- TODO: Make Ptrs more type safe like this:
@@ -358,6 +366,26 @@ data Prim
     | ScalarCountGet
     | ScalarCountFirstFooter
     | ScalarCountNextFooter
+    | VecBroadcast L3.Scalar Int
+      -- ^ Broadcast one scalar value into a vector register.
+    | VecLoad L3.Scalar Int
+      -- ^ Load a vector register from a mutable cursor reference.
+    | VecAdd L3.Scalar Int
+      -- ^ Add two vector registers lane-wise.
+    | VecSub L3.Scalar Int
+      -- ^ Subtract two vector registers lane-wise.
+    | VecMul L3.Scalar Int
+      -- ^ Multiply two vector registers lane-wise, where supported.
+    | VecDiv L3.Scalar Int
+      -- ^ Divide two vector registers lane-wise, where supported.
+    | VecMod L3.Scalar Int
+      -- ^ Modulo two vector registers lane-wise, where supported.
+    | VecEq L3.Scalar Int
+      -- ^ Equality mask over two vector registers lane-wise, where supported.
+    | VecSelect L3.Scalar Int
+      -- ^ Lane-wise select: mask, then-value, else-value.
+    | VecStore L3.Scalar Int
+      -- ^ Store a vector register to a mutable cursor reference.
 
     | ReadList
     | WriteList
@@ -465,6 +493,7 @@ withTail (tl0,retty) fn =
     (LetAvailT { vars, bod })                  -> LetAvailT vars                <$> go bod
     (ForLoopT { idx, bound, loopBody, bod })   -> ForLoopT idx bound loopBody   <$> go bod
     (WhileCursorT { ref, loopBody, bod })      -> WhileCursorT ref loopBody     <$> go bod
+    (WhileCursorEndT { ref, endRef, loopBody, bod }) -> WhileCursorEndT ref endRef loopBody <$> go bod
 
     -- We could DUPLICATE code in both branches or just let-bind the result instead:
     (IfT { tst, con, els }) -> IfT tst <$> go con <*> go els
@@ -496,6 +525,7 @@ fromL3Ty ty =
     L.CursorTy   -> CursorTy
     L.CursorArrayTy size -> CursorArrayTy size
     L.MutCursorTy -> MutCursorTy
+    L.SimdTy el_ty lanes -> SimdTy (fromL3Ty el_ty) lanes
     -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
     L.VectorTy el_ty  -> VectorTy (fromL3Ty el_ty)
     _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
@@ -542,6 +572,10 @@ inlineTrivL4 (Prog info_tbl sym_tbl fundefs mb_main) =
           let env' = M.delete idx env
           in ForLoopT idx (inline env bound) (inline_tail env' loopBody) (go bod)
         WhileCursorT{loopBody,bod} ->
+          tl { loopBody = go loopBody
+             , bod = go bod
+             }
+        WhileCursorEndT{loopBody,bod} ->
           tl { loopBody = go loopBody
              , bod = go bod
              }

@@ -8,19 +8,25 @@
 --
 -- Candidate invariants:
 --
--- * The pass is active only when `--store-scalar-field-counts` is enabled and
---   `--disable-loopification` / `--no-loopify-traversals` is not enabled.
---   Loop bounds come from scalar-count footer metadata, so loopification is
+-- * The pass is active only when `--enable-loopification` and `--store-scalar-field-counts` are enabled.
+--   For SoA, loop bounds come from scalar-count footer metadata, so loopification is
 --   not meaningful without that runtime metadata.  This pass deliberately
 --   emits the unfused per-buffer loop form.  The compiler pipeline runs
 --   selective buffer sharing next, and then a separate post-selective loop
 --   fusion nano-pass fuses the remaining non-shared loops.
 --
--- * The function must be annotated with `OPT:CanVectorize`, and the packed
+-- * The function must be annotated with `OPT:CanVectorize`, or the compiler
+--   must be run with `--auto-loopification`.  In automatic mode, the same
+--   structural extractor and parent-child dependency check decide whether the
+--   function is actually rewritten.  The packed
 --   datatype mentioned by its case expression must use a fully-factored SoA
 --   layout.  Buffer 0 is the dcon/tag stream; scalar buffers are assigned by
 --   walking constructor fields in `DDef` order and skipping packed recursive
 --   fields.
+--   Automatic mode deliberately ignores compiler-generated packed helpers such
+--   as `_copy_*`, `_print_*`, `_traverse_*`, and `_unpack_*`: those functions
+--   are infrastructure, not user map traversals, and rewriting them can perturb
+--   consumers that rely on their precise packed-walk behavior.
 --
 -- * The annotation is treated as the user's semantic promise that recursive
 --   calls are independent.  The pass still has a syntactic safety check:
@@ -100,7 +106,9 @@ module Gibbon.Passes.LoopifyTraversals
   , TraversalPlan(..)
   , ScalarBufferPlan(..)
   , loopifyCandidateInfo
+  , loopifyCandidateInfoWith
   , collectMentionedDataCons
+  , hasParentChildDependency
   ) where
 
 import Control.Monad (foldM)
@@ -202,16 +210,17 @@ loopifyTraversals prog@Prog{ddefs, fundefs} = do
   dflags <- getDynFlags
   let enabled =
         gopt Opt_StoreScalarFieldCounts dflags &&
-        not (gopt Opt_DisableLoopification dflags)
+        gopt Opt_EnableLoopification dflags
+      auto = gopt Opt_AutoLoopification dflags
   fds' <-
     if enabled
-    then mapM (rewriteFun False ddefs) (M.elems fundefs)
+    then mapM (rewriteFun False auto ddefs) (M.elems fundefs)
     else pure (M.elems fundefs)
   pure $ prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
 
-rewriteFun :: Bool -> DDefs Ty3 -> FunDef3 -> PassM FunDef3
-rewriteFun fuseScalarLoops ddefs fn =
-  case loopifyCandidateInfo ddefs fn of
+rewriteFun :: Bool -> Bool -> DDefs Ty3 -> FunDef3 -> PassM FunDef3
+rewriteFun fuseScalarLoops auto ddefs fn =
+  case loopifyCandidateInfoWith auto ddefs fn of
     Nothing -> pure fn
     Just cand ->
       case extractTraversalPlan ddefs cand fn of
@@ -220,11 +229,14 @@ rewriteFun fuseScalarLoops ddefs fn =
           mbody <- loopifyFastPath fuseScalarLoops plan fn
           case mbody of
             Nothing -> pure fn
-            Just body' -> pure $ fn { funBody = body' }
+            Just body' -> pure $ stampCanVectorize (fn { funBody = body' })
 
 loopifyCandidateInfo :: DDefs Ty3 -> FunDef3 -> Maybe LoopifyCandidate
-loopifyCandidateInfo ddefs FunDef{funName, funMeta, funBody}
-  | CanVectorize `notElem` funOpt funMeta = Nothing
+loopifyCandidateInfo = loopifyCandidateInfoWith False
+
+loopifyCandidateInfoWith :: Bool -> DDefs Ty3 -> FunDef3 -> Maybe LoopifyCandidate
+loopifyCandidateInfoWith allowInferred ddefs FunDef{funName, funMeta, funBody}
+  | not explicitlyAnnotated && not canInfer = Nothing
   | otherwise =
       let dcons = L.nub (collectMentionedDataCons funBody)
           tycons = L.nub (map (getTyOfDataCon ddefs) dcons)
@@ -237,6 +249,23 @@ loopifyCandidateInfo ddefs FunDef{funName, funMeta, funBody}
                     , lcDataCons = dcons
                     }
             _ -> Nothing
+  where
+    explicitlyAnnotated = CanVectorize `elem` funOpt funMeta
+    canInfer = allowInferred && not (isGeneratedPackedHelper funName)
+
+isGeneratedPackedHelper :: Var -> Bool
+isGeneratedPackedHelper v =
+  or [ isCopyFunName v
+     , isCopySansPtrsFunName v
+     , isPrinterName v
+     , isTravFunName v
+     , isUnpackerName v
+     , isRelOffsetsFunName v
+     ]
+
+stampCanVectorize :: FunDef3 -> FunDef3
+stampCanVectorize fn@FunDef{funMeta} =
+  fn { funMeta = funMeta { funOpt = CanVectorize : filter (/= CanVectorize) (funOpt funMeta) } }
 
 extractTraversalPlan :: DDefs Ty3 -> LoopifyCandidate -> FunDef3 -> Maybe TraversalPlan
 extractTraversalPlan ddefs LoopifyCandidate{lcFunName, lcTyCon} FunDef{funArgs, funBody, funTy = (ins, _)} = do
@@ -428,6 +457,17 @@ collectExtVars ext =
     ReadScalarCountNextFooter cur -> S.singleton cur
     ForE v bound bod -> S.insert v (collectVars bound `S.union` collectVars bod)
     WhileCursor cur bod -> S.insert cur (collectVars bod)
+    WhileCursorEnd cur end bod -> S.insert cur (S.insert end (collectVars bod))
+    VecBroadcast _ _ val -> collectVars val
+    VecLoad _ _ ref -> S.singleton ref
+    VecAdd _ _ a b -> collectVars a `S.union` collectVars b
+    VecSub _ _ a b -> collectVars a `S.union` collectVars b
+    VecMul _ _ a b -> collectVars a `S.union` collectVars b
+    VecDiv _ _ a b -> collectVars a `S.union` collectVars b
+    VecMod _ _ a b -> collectVars a `S.union` collectVars b
+    VecEq _ _ a b -> collectVars a `S.union` collectVars b
+    VecSelect _ _ m a b -> S.unions [collectVars m, collectVars a, collectVars b]
+    VecStore _ _ ref val -> S.insert ref (collectVars val)
     SSPush _ a b _ -> S.fromList [a, b]
     SSPop _ a b -> S.fromList [a, b]
     Assert rhs -> collectVars rhs
@@ -803,6 +843,8 @@ collectAllLets ex =
       collectAllLets bound ++ collectAllLets body
     Ext (WhileCursor _ bod) ->
       collectAllLets bod
+    Ext (WhileCursorEnd _ _ bod) ->
+      collectAllLets bod
     Ext (WriteScalar _ _ rhs) ->
       collectAllLets rhs
     Ext (WriteTaggedCursor _ rhs) ->
@@ -864,15 +906,18 @@ exprHasParentChildUse childVars ex =
     CharE{} -> False
     FloatE{} -> False
     LitSymE{} -> False
-    AppE _ _ _ _ -> False
-    PrimAppE _ _ -> False
+    AppE _ _ _ args ->
+      any (exprMentionsAny childVars) args
+    PrimAppE _ args ->
+      any (exprMentionsAny childVars) args
     LetE (_, _, _, rhs) bod ->
       exprHasParentChildUse childVars rhs || exprHasParentChildUse childVars bod
     IfE cond thn els ->
       exprMentionsAny childVars cond
         || exprHasParentChildUse childVars thn
         || exprHasParentChildUse childVars els
-    MkProdE _ -> False
+    MkProdE args ->
+      any (exprMentionsAny childVars) args
     ProjE _ rhs ->
       exprHasParentChildUse childVars rhs
     CaseE scrt brs ->
@@ -884,7 +929,8 @@ exprHasParentChildUse childVars ex =
       exprHasParentChildUse childVars rhs
     WithArenaE _ rhs ->
       exprHasParentChildUse childVars rhs
-    SpawnE _ _ _ -> False
+    SpawnE _ _ args ->
+      any (exprMentionsAny childVars) args
     SyncE -> False
     MapE (_, _, e1) e2 ->
       exprHasParentChildUse childVars e1 || exprHasParentChildUse childVars e2
@@ -922,21 +968,25 @@ extHasParentChildUse childVars ext =
       exprMentionsAny childVars bound || exprHasParentChildUse childVars bod
     WhileCursor _ bod ->
       exprHasParentChildUse childVars bod
-    RetE _ ->
-      False
+    WhileCursorEnd _ _ bod ->
+      exprHasParentChildUse childVars bod
+    RetE args ->
+      any (exprMentionsAny childVars) args
     _ ->
       False
 
 mkFastPathBody :: Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans =
-  mkGenericFastPathBody False fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
+mkFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans = do
+  dflags <- getDynFlags
+  mkGenericFastPathBody dflags False fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
 
 mkMutableFastPathBody :: Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkMutableFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans =
-  mkGenericFastPathBody True fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
+mkMutableFastPathBody fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans = do
+  dflags <- getDynFlags
+  mkGenericFastPathBody dflags True fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans
 
-mkGenericFastPathBody :: Bool -> Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
-mkGenericFastPathBody isMutable fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans = do
+mkGenericFastPathBody :: DynFlags -> Bool -> Bool -> Int -> Var -> Var -> Var -> Var -> [ScalarBufferPlan] -> PassM Exp3
+mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds outCurs inCurs plans = do
   nameSeed <- freshLoopNameSeed isMutable
   let body = mkLets (prelude nameSeed) (fastBody nameSeed)
   pure body
@@ -1174,7 +1224,7 @@ mkGenericFastPathBody isMutable fuseScalarLoops arrLen inEnds outEnds outCurs in
           conditionalWrite = loopBufferName pfx ix "conditional_write"
           bumpIn = loopBufferName pfx ix "bump_in"
           bumpOut = loopBufferName pfx ix "bump_out"
-          scalarBytes = fromMaybe (error $ "loopify: expected scalar size for " ++ sdoc sbpTy) (sizeOfTy sbpTy)
+          scalarBytes = fromMaybe (error $ "loopify: expected scalar size for " ++ sdoc sbpTy) (sizeOfTyD dflags sbpTy)
           rawFieldExpr = instantiateScalarOp pfx ix readVal sbpOp
           (fieldExprLets, fieldExpr) = anfScalarExpr pfx ix rawFieldExpr
           commonLets =
@@ -1223,7 +1273,7 @@ mkGenericFastPathBody isMutable fuseScalarLoops arrLen inEnds outEnds outCurs in
       | depIx == ix = []
       | otherwise =
           let depTy = scalarToTy (siiScalar info)
-              depBytes = fromMaybe (error $ "loopify: expected scalar size for " ++ sdoc depTy) (sizeOfTy depTy)
+              depBytes = fromMaybe (error $ "loopify: expected scalar size for " ++ sdoc depTy) (sizeOfTyD dflags depTy)
            in [ (depReadCurVar pfx ix depIx, [], CursorTy, Ext $ DerefMutCursor (depLocVar pfx ix depIx))
               , (depReadPairVar pfx ix depIx, [], ProdTy [depTy, CursorTy], Ext $ ReadScalar (siiScalar info) (depReadCurVar pfx ix depIx))
               , (depReadValVar pfx ix depIx, [], depTy, ProjE 0 (VarE (depReadPairVar pfx ix depIx)))
@@ -1527,6 +1577,17 @@ collectMentionedDataCons ex =
         ForE _ bound bod ->
           collectMentionedDataCons bound ++ collectMentionedDataCons bod
         WhileCursor _ bod -> collectMentionedDataCons bod
+        WhileCursorEnd _ _ bod -> collectMentionedDataCons bod
+        VecBroadcast _ _ val -> collectMentionedDataCons val
+        VecLoad{} -> []
+        VecAdd _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecSub _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecMul _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecDiv _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecMod _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecEq _ _ a b -> collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecSelect _ _ m a b -> collectMentionedDataCons m ++ collectMentionedDataCons a ++ collectMentionedDataCons b
+        VecStore _ _ _ val -> collectMentionedDataCons val
         SSPush{} -> []
         SSPop{} -> []
         Assert rhs -> collectMentionedDataCons rhs

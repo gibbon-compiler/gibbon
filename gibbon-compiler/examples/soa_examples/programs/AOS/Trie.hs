@@ -95,6 +95,7 @@ countLazyNodes t metaCut =
       0
 
 -- Map 1: decay prefix frequencies and leaf scores to emulate time-window refresh.
+{-# ANN decayTrieStats "OPT:CanVectorize" #-}
 decayTrieStats :: Trie -> Int -> Trie
 decayTrieStats t k =
   case t of
@@ -111,6 +112,7 @@ decayTrieStats t k =
       TEmpty
 
 -- Map 2: clear traversal flags and transient leaf metadata for next query batch.
+{-# ANN resetTraversalState "OPT:CanVectorize" #-}
 resetTraversalState :: Trie -> Trie
 resetTraversalState t =
   case t of

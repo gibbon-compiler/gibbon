@@ -50,8 +50,7 @@ selectiveBufferSharing :: L3.Prog3 -> PassM L3.Prog3
 selectiveBufferSharing prog@Prog{fundefs, mainExp} = do
   dflags <- getDynFlags
   let enabled =
-        gopt Opt_EnableSelectiveBufferSharing dflags &&
-        not (gopt Opt_DisableSelectiveBufferSharing dflags)
+        gopt Opt_EnableSelectiveBufferSharing dflags
   if not enabled
     then pure prog
     else do
@@ -384,6 +383,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
       case ext of
         L3.ForE idx bound bod -> L3.ForE idx <$> go env bound <*> go env bod
         L3.WhileCursor cur bod -> L3.WhileCursor cur <$> go env bod
+        L3.WhileCursorEnd cur end bod -> L3.WhileCursorEnd cur end <$> go env bod
         L3.WriteScalar s cur rhs -> L3.WriteScalar s cur <$> go env rhs
         L3.WriteTagPacked cur rhs -> L3.WriteTagPacked cur <$> go env rhs
         L3.WriteTaggedCursor cur rhs -> L3.WriteTaggedCursor cur <$> go env rhs
@@ -460,6 +460,7 @@ producerOutputPairsExt producers ext =
   case ext of
     L3.ForE _ bound bod -> producerOutputPairs producers bound ++ producerOutputPairs producers bod
     L3.WhileCursor _ bod -> producerOutputPairs producers bod
+    L3.WhileCursorEnd _ _ bod -> producerOutputPairs producers bod
     L3.WriteScalar _ _ rhs -> producerOutputPairs producers rhs
     L3.WriteTagPacked _ rhs -> producerOutputPairs producers rhs
     L3.WriteTaggedCursor _ rhs -> producerOutputPairs producers rhs
@@ -664,6 +665,7 @@ findForBody ex =
     L3.LetE (_, _, _, rhs) bod -> findForBody rhs <|> findForBody bod
     L3.IfE a b c -> findForBody a <|> findForBody b <|> findForBody c
     L3.Ext (L3.WhileCursor _ bod) -> findForBody bod
+    L3.Ext (L3.WhileCursorEnd _ _ bod) -> findForBody bod
     _ -> Nothing
 
 scalarInnerBodyIxs :: L3.Exp3 -> S.Set Int
@@ -753,6 +755,7 @@ containsExt p ex =
           case ext of
             L3.ForE _ bound bod -> containsExt p bound || containsExt p bod
             L3.WhileCursor _ bod -> containsExt p bod
+            L3.WhileCursorEnd _ _ bod -> containsExt p bod
             L3.WriteScalar _ _ rhs -> containsExt p rhs
             L3.WriteTagPacked _ rhs -> containsExt p rhs
             L3.WriteTaggedCursor _ rhs -> containsExt p rhs

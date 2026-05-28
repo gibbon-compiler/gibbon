@@ -14,7 +14,7 @@ module Gibbon.Language
 
       -- * Helpers operating on types
     , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, isScalarTy
-    , hasPacked, sizeOfTy, primArgsTy, primRetTy, tyToDataCon
+    , hasPacked, sizeOfTy, sizeOfTyD, primArgsTy, primRetTy, tyToDataCon
     , stripTyLocs, isValidListElemTy, getPackedTys
 
       -- * Misc
@@ -32,6 +32,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Language.Constants
 import           Gibbon.Language.Syntax
 import           Gibbon.Common
+import           Gibbon.DynFlags (DynFlags, GeneralFlag(..), gopt)
 import GHC.Stack
 
 --------------------------------------------------------------------------------
@@ -509,6 +510,7 @@ isValidListElemTy ty
   | isScalarTy ty = True
   | otherwise = case ty of
                   VectorTy elty -> isValidListElemTy elty
+                  SimdTy{}      -> False
                   ListTy elty   -> isValidListElemTy elty
                   ProdTy tys    -> all isScalarTy tys
                   _ -> False
@@ -527,6 +529,7 @@ hasPacked t =
     SymDictTy _ _  -> False -- hasPacked ty
     PDictTy k v    -> hasPacked k || hasPacked v
     VectorTy ty    -> hasPacked ty
+    SimdTy ty _    -> hasPacked ty
     ListTy ty      -> hasPacked ty
     PtrTy          -> False
     CursorTy       -> False
@@ -552,6 +555,7 @@ getPackedTys t =
     SymDictTy _ _  -> [] -- getPackedTys ty
     PDictTy k v    -> getPackedTys k ++ getPackedTys v
     VectorTy ty    -> getPackedTys ty
+    SimdTy ty _    -> getPackedTys ty
     ListTy ty      -> getPackedTys ty
     PtrTy          -> []
     CursorTy       -> []
@@ -564,18 +568,28 @@ getPackedTys t =
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
-sizeOfTy t =
+sizeOfTy = sizeOfTyWithIntBytes 8
+
+-- | Like 'sizeOfTy', but respects backend representation flags that affect
+-- serialized scalar layout.  Today only --int32 changes IntTy from 8 bytes to
+-- 4 bytes; all pointer-sized values remain 64-bit.
+sizeOfTyD :: DynFlags -> UrTy a -> Maybe Int
+sizeOfTyD dflags = sizeOfTyWithIntBytes (if gopt Opt_Int32 dflags then 4 else 8)
+
+sizeOfTyWithIntBytes :: Int -> UrTy a -> Maybe Int
+sizeOfTyWithIntBytes intBytes t =
   case t of
     PackedTy{}    -> Nothing
-    ProdTy ls     -> sum <$> mapM sizeOfTy ls
+    ProdTy ls     -> sum <$> mapM (sizeOfTyWithIntBytes intBytes) ls
     SymDictTy _ _ -> Just 8 -- Always a pointer.
     PDictTy _ _   -> Just 8 -- Always a pointer.
-    IntTy         -> Just 8
+    IntTy         -> Just intBytes
     CharTy        -> Just 1
     FloatTy       -> Just 4
     SymTy         -> Just 8
     BoolTy        -> Just 1
     VectorTy{}    -> Just 8 -- Always a pointer.
+    SimdTy ty lanes -> (* lanes) <$> sizeOfTyWithIntBytes intBytes ty
     ListTy{}      -> Just 8 -- Always a pointer.
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
@@ -791,6 +805,7 @@ stripTyLocs ty =
     PDictTy k v -> PDictTy (stripTyLocs k) (stripTyLocs v)
     PackedTy tycon _ -> PackedTy tycon ()
     VectorTy ty' -> VectorTy $ stripTyLocs ty'
+    SimdTy ty' lanes -> SimdTy (stripTyLocs ty') lanes
     ListTy ty' -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy

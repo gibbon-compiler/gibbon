@@ -88,6 +88,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         PDictTy k v -> PDictTy (goTy k) (goTy v)
         PackedTy _ _ -> CursorTy
         ArenaTy -> ArenaTy
+        SimdTy t lanes -> SimdTy (goTy t) lanes
         VectorTy t -> VectorTy (goTy t)
         ListTy t -> ListTy (goTy t)
         PtrTy -> PtrTy

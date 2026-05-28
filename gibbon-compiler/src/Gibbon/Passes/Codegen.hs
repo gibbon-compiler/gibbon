@@ -134,6 +134,7 @@ harvestStructTys (Prog _ _ funs mtal) =
        (LetAvailT _ bod)           -> go bod
        (ForLoopT _ _ loopBody bod) -> go loopBody ++ go bod
        (WhileCursorT _ loopBody bod) -> go loopBody ++ go bod
+       (WhileCursorEndT _ _ loopBody bod) -> go loopBody ++ go bod
 
        (IfT _ a b) -> go a ++ go b
        ErrT{} -> []
@@ -180,6 +181,8 @@ tailFreeVars tl =
                     `S.union` tailFreeVars bod)
     WhileCursorT {ref, loopBody, bod} ->
       S.singleton ref `S.union` tailFreeVars loopBody `S.union` tailFreeVars bod
+    WhileCursorEndT {ref, endRef, loopBody, bod} ->
+      S.fromList [ref, endRef] `S.union` tailFreeVars loopBody `S.union` tailFreeVars bod
     IfT {tst, con, els} ->
       trivFreeVars tst `S.union` tailFreeVars con `S.union` tailFreeVars els
     ErrT _ ->
@@ -281,6 +284,7 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
         LetAvailT{bod}  -> go acc bod
         ForLoopT{loopBody,bod} -> go (go acc loopBody) bod
         WhileCursorT{loopBody,bod} -> go (go acc loopBody) bod
+        WhileCursorEndT{loopBody,bod} -> go (go acc loopBody) bod
         IfT{con,els}    -> go (go acc con) els
         ErrT{} -> acc
         LetTimedT{timed,bod} -> go (go acc timed) bod
@@ -408,8 +412,9 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         in [cedecl| typedef enum { $enums:decls } GibDatatype; |]
 
       hashIncludes =
-        "/* Gibbon program. */\n\n\
-        \#include \"gibbon_rts.h\"\n\n\
+        "/* Gibbon program. */\n\n" ++
+        (if gopt Opt_Int32 (dynflags cfg) then "#define GIBBON_INT32 1\n" else "") ++
+        "#include \"gibbon_rts.h\"\n\n\
         \#include <assert.h>\n\
         \#include <stdio.h>\n\
         \#include <stdlib.h>\n\
@@ -427,7 +432,206 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <fcntl.h>\n\
         \#include <stdarg.h>\n\
         \#include <errno.h>\n\
+        \#include <xmmintrin.h>\n\
+        \#include <emmintrin.h>\n\
         \#include <uthash.h>\n\n\
+        \static inline __m128i gib_vec_broadcast_int64x2(GibInt x) {\n\
+        \  return _mm_set1_epi64x((long long) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_load_int64x2(GibCursor *ref) {\n\
+        \  return _mm_loadu_si128((const __m128i *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_add_int64x2(__m128i a, __m128i b) {\n\
+        \  return _mm_add_epi64(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_sub_int64x2(__m128i a, __m128i b) {\n\
+        \  return _mm_sub_epi64(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_mul_int64x2(__m128i a, __m128i b) {\n\
+        \  GibInt av[2], bv[2];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi64x(av[1] * bv[1], av[0] * bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_div_int64x2(__m128i a, __m128i b) {\n\
+        \  GibInt av[2], bv[2];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi64x(av[1] / bv[1], av[0] / bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_mod_int64x2(__m128i a, __m128i b) {\n\
+        \  GibInt av[2], bv[2];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi64x(av[1] % bv[1], av[0] % bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_eq_int64x2(__m128i a, __m128i b) {\n\
+        \  GibInt av[2], bv[2];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi64x(av[1] == bv[1] ? -1LL : 0LL, av[0] == bv[0] ? -1LL : 0LL);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_select_int64x2(__m128i mask, __m128i thenv, __m128i elsev) {\n\
+        \  return _mm_or_si128(_mm_and_si128(mask, thenv), _mm_andnot_si128(mask, elsev));\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_int64x2(GibCursor *ref, __m128i v) {\n\
+        \  _mm_storeu_si128((__m128i *) (*ref), v);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_broadcast_int32x4(GibInt x) {\n\
+        \  return _mm_set1_epi32((int) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_load_int32x4(GibCursor *ref) {\n\
+        \  return _mm_loadu_si128((const __m128i *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_add_int32x4(__m128i a, __m128i b) {\n\
+        \  return _mm_add_epi32(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_sub_int32x4(__m128i a, __m128i b) {\n\
+        \  return _mm_sub_epi32(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_mul_int32x4(__m128i a, __m128i b) {\n\
+        \  int32_t av[4], bv[4];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi32(av[3] * bv[3], av[2] * bv[2], av[1] * bv[1], av[0] * bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_div_int32x4(__m128i a, __m128i b) {\n\
+        \  int32_t av[4], bv[4];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi32(av[3] / bv[3], av[2] / bv[2], av[1] / bv[1], av[0] / bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_mod_int32x4(__m128i a, __m128i b) {\n\
+        \  int32_t av[4], bv[4];\n\
+        \  _mm_storeu_si128((__m128i *) av, a);\n\
+        \  _mm_storeu_si128((__m128i *) bv, b);\n\
+        \  return _mm_set_epi32(av[3] % bv[3], av[2] % bv[2], av[1] % bv[1], av[0] % bv[0]);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_eq_int32x4(__m128i a, __m128i b) {\n\
+        \  return _mm_cmpeq_epi32(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_select_int32x4(__m128i mask, __m128i thenv, __m128i elsev) {\n\
+        \  return _mm_or_si128(_mm_and_si128(mask, thenv), _mm_andnot_si128(mask, elsev));\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_int32x4(GibCursor *ref, __m128i v) {\n\
+        \  _mm_storeu_si128((__m128i *) (*ref), v);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_broadcast_sym64x2(GibSym x) {\n\
+        \  return _mm_set1_epi64x((long long) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_load_sym64x2(GibCursor *ref) {\n\
+        \  return _mm_loadu_si128((const __m128i *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_add_sym64x2(__m128i a, __m128i b) {\n\
+        \  return _mm_add_epi64(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_sub_sym64x2(__m128i a, __m128i b) {\n\
+        \  return _mm_sub_epi64(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_sym64x2(GibCursor *ref, __m128i v) {\n\
+        \  _mm_storeu_si128((__m128i *) (*ref), v);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_broadcast_char8x16(GibChar x) {\n\
+        \  return _mm_set1_epi8((char) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_load_char8x16(GibCursor *ref) {\n\
+        \  return _mm_loadu_si128((const __m128i *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_add_char8x16(__m128i a, __m128i b) {\n\
+        \  return _mm_add_epi8(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_sub_char8x16(__m128i a, __m128i b) {\n\
+        \  return _mm_sub_epi8(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_char8x16(GibCursor *ref, __m128i v) {\n\
+        \  _mm_storeu_si128((__m128i *) (*ref), v);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_broadcast_bool8x16(GibBool x) {\n\
+        \  return _mm_set1_epi8((char) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_load_bool8x16(GibCursor *ref) {\n\
+        \  return _mm_loadu_si128((const __m128i *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_add_bool8x16(__m128i a, __m128i b) {\n\
+        \  return _mm_add_epi8(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128i gib_vec_sub_bool8x16(__m128i a, __m128i b) {\n\
+        \  return _mm_sub_epi8(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_bool8x16(GibCursor *ref, __m128i v) {\n\
+        \  _mm_storeu_si128((__m128i *) (*ref), v);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_broadcast_float32x4(GibFloat x) {\n\
+        \  return _mm_set1_ps((float) x);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_load_float32x4(GibCursor *ref) {\n\
+        \  return _mm_loadu_ps((const float *) (*ref));\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_add_float32x4(__m128 a, __m128 b) {\n\
+        \  return _mm_add_ps(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_sub_float32x4(__m128 a, __m128 b) {\n\
+        \  return _mm_sub_ps(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_mul_float32x4(__m128 a, __m128 b) {\n\
+        \  return _mm_mul_ps(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_div_float32x4(__m128 a, __m128 b) {\n\
+        \  return _mm_div_ps(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_eq_float32x4(__m128 a, __m128 b) {\n\
+        \  return _mm_cmpeq_ps(a, b);\n\
+        \}\n\
+        \\n\
+        \static inline __m128 gib_vec_select_float32x4(__m128 mask, __m128 thenv, __m128 elsev) {\n\
+        \  return _mm_or_ps(_mm_and_ps(mask, thenv), _mm_andnot_ps(mask, elsev));\n\
+        \}\n\
+        \\n\
+        \static inline void gib_vec_store_float32x4(GibCursor *ref, __m128 v) {\n\
+        \  _mm_storeu_ps((float *) (*ref), v);\n\
+        \}\n\
+        \\n\
         \#ifdef _WIN64\n\
         \#include <windows.h>\n\
         \#endif\n\n\
@@ -620,6 +824,7 @@ rewriteReturns tl bnds =
    (LetAvailT vs body)       -> LetAvailT vs (go body)
    (ForLoopT idx bound loopBody body) -> ForLoopT idx bound loopBody (go body)
    (WhileCursorT ref loopBody body) -> WhileCursorT ref loopBody (go body)
+   (WhileCursorEndT ref endRef loopBody body) -> WhileCursorEndT ref endRef loopBody (go body)
    (IfT a b c) -> IfT a (go b) (go c)
    (ErrT s) -> (ErrT s)
    (Switch lbl tr alts def) -> Switch lbl tr (mapAlts go alts) (fmap go def)
@@ -824,6 +1029,13 @@ codegenTail venv mutEndEnv fenv sort_fns (WhileCursorT ref loopBody body) ty syn
        body' <- codegenTail venv mutEndEnv fenv sort_fns body ty sync_deps
        pure $
          [ C.BlockStm [cstm| while (*$id:ref != NULL) { $items:loop' } |] ]
+         ++ body'
+
+codegenTail venv mutEndEnv fenv sort_fns (WhileCursorEndT ref endRef loopBody body) ty sync_deps =
+    do loop' <- codegenTail venv mutEndEnv fenv sort_fns loopBody (ProdTy []) sync_deps
+       body' <- codegenTail venv mutEndEnv fenv sort_fns body ty sync_deps
+       pure $
+         [ C.BlockStm [cstm| while (*$id:ref != *$id:endRef) { $items:loop' } |] ]
          ++ body'
 
 codegenTail venv mutEndEnv fenv sort_fns (LetUnpackT bs scrt body) ty sync_deps =
@@ -1447,6 +1659,36 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                        [footer] = rnds
                    pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = gib_scalar_count_footer_next($(codegenTriv venv footer)); |] ]
 
+                 VecBroadcast s lanes ->
+                   codegenVecBroadcast venv bnds s lanes rnds
+
+                 VecLoad s lanes ->
+                   codegenVecLoad venv bnds s lanes rnds
+
+                 VecAdd s lanes ->
+                   codegenVecAdd venv bnds s lanes rnds
+
+                 VecSub s lanes ->
+                   codegenVecSub venv bnds s lanes rnds
+
+                 VecMul s lanes ->
+                   codegenVecMul venv bnds s lanes rnds
+
+                 VecDiv s lanes ->
+                   codegenVecDiv venv bnds s lanes rnds
+
+                 VecMod s lanes ->
+                   codegenVecMod venv bnds s lanes rnds
+
+                 VecEq s lanes ->
+                   codegenVecEq venv bnds s lanes rnds
+
+                 VecSelect s lanes ->
+                   codegenVecSelect venv bnds s lanes rnds
+
+                 VecStore s lanes ->
+                   codegenVecStore venv bnds s lanes rnds
+
                  ReadScalar s -> let [(valV,valTy),(curV,CursorTy)] = bnds
                                      [(VarTriv cur)] = rnds in pure
                                      [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
@@ -1683,10 +1925,11 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                       [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = gib_get_size_param(); |] ]
 
                  PrintInt ->
-                     let [arg] = rnds in
-                     case bnds of
-                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%ld", $(codegenTriv venv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| printf("%ld", $(codegenTriv venv arg)); |] ]
+                     let [arg] = rnds
+                         printFmt = if gopt Opt_Int32 dflags then "%d" else "%ld"
+                     in case bnds of
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf($string:printFmt, $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf($string:printFmt, $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintChar ->
@@ -1799,7 +2042,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                  ReadArrayFile mfile ty
                    | [] <- rnds, [(outV,_outT)] <- bnds -> do
                            let parse_in_c t = case t of
-                                                IntTy   -> "%ld"
+                                                IntTy   -> if gopt Opt_Int32 dflags then "%d" else "%ld"
                                                 FloatTy -> "%f"
                                                 CharTy  -> "%c"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
@@ -2259,6 +2502,115 @@ genSwitch venv mutEndEnv fenv sort_fns lbl tr alts lastE ty sync_deps =
 
 -- | The identifier after typename refers to typedefs defined in rts.c
 --
+
+codegenVecBroadcast :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecBroadcast venv bnds scalar lanes rnds = do
+  when (length bnds /= 1 || length rnds /= 1) $
+    error $ "VecBroadcast expected one binding and one arg: " ++ show (bnds, rnds)
+  let [(outV, outTy)] = bnds
+      [val] = rnds
+      fn = vecHelperName "broadcast" scalar lanes
+  pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = $id:fn($(codegenTriv venv val)); |] ]
+
+codegenVecLoad :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecLoad _venv bnds scalar lanes rnds = do
+  when (length bnds /= 1 || length rnds /= 1) $
+    error $ "VecLoad expected one binding and one arg: " ++ show (bnds, rnds)
+  let [(outV, outTy)] = bnds
+      [refTriv] = rnds
+      fn = vecHelperName "load" scalar lanes
+  ref <- case refTriv of
+           VarTriv v -> pure v
+           _ -> error $ "VecLoad expected cursor ref variable: " ++ show refTriv
+  pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = $id:fn($id:ref); |] ]
+
+codegenVecAdd :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecAdd = codegenVecBin "add" "VecAdd"
+
+codegenVecSub :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecSub = codegenVecBin "sub" "VecSub"
+
+codegenVecMul :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecMul = codegenVecBin "mul" "VecMul"
+
+codegenVecDiv :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecDiv = codegenVecBin "div" "VecDiv"
+
+codegenVecMod :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecMod = codegenVecBin "mod" "VecMod"
+
+codegenVecEq :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecEq = codegenVecBin "eq" "VecEq"
+
+codegenVecBin :: String -> String -> M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecBin op label venv bnds scalar lanes rnds = do
+  when (length bnds /= 1 || length rnds /= 2) $
+    error $ label ++ " expected one binding and two args: " ++ show (bnds, rnds)
+  let [(outV, outTy)] = bnds
+      [lhs, rhs] = rnds
+      fn = vecHelperName op scalar lanes
+  pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = $id:fn($(codegenTriv venv lhs), $(codegenTriv venv rhs)); |] ]
+
+codegenVecSelect :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecSelect venv bnds scalar lanes rnds = do
+  when (length bnds /= 1 || length rnds /= 3) $
+    error $ "VecSelect expected one binding and three args: " ++ show (bnds, rnds)
+  let [(outV, outTy)] = bnds
+      [mask, thenv, elsev] = rnds
+      fn = vecHelperName "select" scalar lanes
+  pure [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = $id:fn($(codegenTriv venv mask), $(codegenTriv venv thenv), $(codegenTriv venv elsev)); |] ]
+
+codegenVecStore :: M.Map Var Ty -> [(Var, Ty)] -> Scalar -> Int -> [Triv] -> PassM [C.BlockItem]
+codegenVecStore venv bnds scalar lanes rnds = do
+  when (not (null bnds) || length rnds /= 2) $
+    error $ "VecStore expected no bindings and two args: " ++ show (bnds, rnds)
+  let [refTriv, val] = rnds
+      fn = vecHelperName "store" scalar lanes
+  ref <- case refTriv of
+           VarTriv v -> pure v
+           _ -> error $ "VecStore expected cursor ref variable: " ++ show refTriv
+  pure [ C.BlockStm [cstm| $id:fn($id:ref, $(codegenTriv venv val)); |] ]
+
+vecHelperName :: String -> Scalar -> Int -> Var
+vecHelperName op scalar lanes
+  | vecOpSupported op scalar lanes = toVar $ "gib_vec_" ++ op ++ "_" ++ scalarSuffix scalar lanes
+  | otherwise = error $ "Unsupported SIMD operation/scalar/lane combination: " ++ show (op, scalar, lanes)
+
+vecOpSupported :: String -> Scalar -> Int -> Bool
+vecOpSupported op scalar lanes =
+  case op of
+    "broadcast" -> scalarSuffixSupported scalar lanes
+    "load" -> scalarSuffixSupported scalar lanes
+    "store" -> scalarSuffixSupported scalar lanes
+    "add" -> scalarSuffixSupported scalar lanes
+    "sub" -> scalarSuffixSupported scalar lanes
+    "mul" -> (scalar == FloatS && lanes == 4) || (scalar == IntS && lanes `elem` [2,4])
+    "div" -> (scalar == FloatS && lanes == 4) || (scalar == IntS && lanes `elem` [2,4])
+    "mod" -> scalar == IntS && lanes `elem` [2,4]
+    "eq" -> (scalar == FloatS && lanes == 4) || (scalar == IntS && lanes `elem` [2,4])
+    "select" -> (scalar == FloatS && lanes == 4) || (scalar == IntS && lanes `elem` [2,4])
+    _ -> False
+
+scalarSuffixSupported :: Scalar -> Int -> Bool
+scalarSuffixSupported scalar lanes =
+  case (scalar, lanes) of
+    (IntS, 2) -> True
+    (IntS, 4) -> True
+    (SymS, 2) -> True
+    (CharS, 16) -> True
+    (BoolS, 16) -> True
+    (FloatS, 4) -> True
+    _ -> False
+
+scalarSuffix :: Scalar -> Int -> String
+scalarSuffix IntS 2 = "int64x2"
+scalarSuffix IntS 4 = "int32x4"
+scalarSuffix SymS 2 = "sym64x2"
+scalarSuffix CharS 16 = "char8x16"
+scalarSuffix BoolS 16 = "bool8x16"
+scalarSuffix FloatS 4 = "float32x4"
+scalarSuffix scalar lanes = error $ "Unsupported SIMD scalar/lane combination: " ++ show (scalar, lanes)
+
 codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename GibInt|]
 codegenTy CharTy = [cty|typename GibChar|]
@@ -2271,6 +2623,13 @@ codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if
 codegenTy CursorTy = [cty|typename GibCursor|]
 codegenTy (CursorArrayTy size) = [cty| typename GibCursor[$int:size] |]
 codegenTy MutCursorTy = [cty|typename GibCursor*|]
+codegenTy (SimdTy IntTy 2) = [cty|typename __m128i|]
+codegenTy (SimdTy IntTy 4) = [cty|typename __m128i|]
+codegenTy (SimdTy SymTy 2) = [cty|typename __m128i|]
+codegenTy (SimdTy CharTy 16) = [cty|typename __m128i|]
+codegenTy (SimdTy BoolTy 16) = [cty|typename __m128i|]
+codegenTy (SimdTy FloatTy 4) = [cty|typename __m128|]
+codegenTy (SimdTy ty lanes) = error $ "Unsupported SIMD register type in codegen: " ++ show (ty, lanes)
 codegenTy RegionTy = [cty|typename GibChunk|]
 codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
@@ -2297,6 +2656,7 @@ makeName' BoolTy      = "GibBool"
 makeName' CursorTy    = "GibCursor"
 makeName' (CursorArrayTy sz) = "GibCursorPtr" ++ show sz
 makeName' (MutCursorTy) = "GibMutCursor"
+makeName' (SimdTy ty lanes) = "GibSimd" ++ show lanes ++ makeName' ty
 makeName' TagTyPacked = "GibPackedTag"
 makeName' TagTyBoxed  = "GibBoxedTag"
 makeName' PtrTy       = "GibPtr"

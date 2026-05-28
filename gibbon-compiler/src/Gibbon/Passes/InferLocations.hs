@@ -100,6 +100,7 @@ import Text.PrettyPrint.GenericPretty
 import GHC.Stack (HasCallStack)
 
 import Gibbon.Common
+import Gibbon.DynFlags (DynFlags)
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.AddRAN (numRANsDataCon)
 import qualified Gibbon.L1.Syntax as L1
@@ -378,6 +379,37 @@ data DCArg = ArgFixed Int
   deriving (Show, Generic)
 
 instance Out DCArg
+
+inferDataConArg :: DDefs1 -> FullEnv -> (Exp1, LocVar) -> TiM Result
+inferDataConArg ddefs env pair =
+  case pair of
+    (e, lv) -> inferExp ddefs env e (SingleDest lv)
+
+argSizeForDataCon :: DynFlags -> FullEnv -> Exp2 -> TiM DCArg
+argSizeForDataCon dflags env arg =
+  case arg of
+    VarE v ->
+      case lookupVEnv v env of
+        CursorTy -> return $ ArgFixed 8
+        CursorArrayTy sz -> return $ ArgFixed (8 * sz)
+        IntTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags IntTy)
+        FloatTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags FloatTy)
+        SymTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags SymTy)
+        BoolTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags BoolTy)
+        CharTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags CharTy)
+        VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTyD dflags (VectorTy elt))
+        ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTyD dflags (ListTy elt))
+        PackedTy{} -> return $ ArgVar v
+        _ -> return $ ArgVar v
+    LitE{} -> return $ ArgFixed (fromJust $ sizeOfTyD dflags IntTy)
+    FloatE{} -> return $ ArgFixed (fromJust $ sizeOfTyD dflags FloatTy)
+    LitSymE{} -> return $ ArgFixed (fromJust $ sizeOfTyD dflags SymTy)
+    PrimAppE MkTrue [] -> return $ ArgFixed (fromJust $ sizeOfTyD dflags BoolTy)
+    PrimAppE MkFalse [] -> return $ ArgFixed (fromJust $ sizeOfTyD dflags BoolTy)
+    AppE f _cty lvs [VarE v] -> do
+      v' <- lift $ lift $ freshLocVar "cpy"
+      return $ ArgCopy v (unwrapLocVar v') f lvs
+    _ -> err $ "Expected argument to be trivial, got " ++ show arg
 
 inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
@@ -1048,39 +1080,14 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                       locs <- sequence $ replicate (length ls) fresh
                       mapM_ fixLoc locs -- Don't allow argument locations to freely unify
                       -- dbgTrace minChatLvl "Print in SingleDest inferExp " dbgTrace minChatLvl (sdoc (locs)) dbgTrace minChatLvl "End SingleDest inferExp.\n"
-                      ls' <- mapM (\(e,lv) -> 
-                    
-                        -- dbgTrace minChatLvl "Print in lambda DataConE inferExp: "
-                        -- dbgTrace minChatLvl (sdoc (e, lv))
-                        -- dbgTrace minChatLvl "End in lambda inferExp.\n"
-                    
-                        (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
+                      ls' <- mapM (inferDataConArg ddefs env) (zip ls locs)
                       -- let ls'' = L.map unNestLet ls'
                       --     bnds = catMaybes $ L.map pullBnds ls'
                       --     env' = addCopyVarToEnv ls' env
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
-                      argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
-                        case arg of
-                          (VarE v) -> case lookupVEnv v env of
-                                               CursorTy -> return $ ArgFixed 8
-                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                               CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                               VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                               ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                               _ -> return $ ArgVar v
-                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                          (AppE f _cty lvs [(VarE v)]) -> do 
-                                                  v' <- lift $ lift $ freshLocVar "cpy"
-                                                  return $ ArgCopy v (unwrapLocVar v') f lvs
-                          _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                      dflags <- getDynFlags
+                      argLs <- mapM (argSizeForDataCon dflags env) (map fst3 ls')
                       newLocs <- mapM finalLocVar locs
                       let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
                           afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
@@ -1157,13 +1164,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                    ) ls
                       mapM_ fixLoc locs -- Don't allow argument locations to freely unify
                       -- dbgTrace minChatLvl "Print in SingleDest inferExp " dbgTrace minChatLvl (sdoc (locs)) dbgTrace minChatLvl "End SingleDest inferExp.\n"
-                      ls' <- mapM (\(e,lv) -> 
-                    
-                        -- dbgTrace minChatLvl "Print in lambda DataConE inferExp: "
-                        -- dbgTrace minChatLvl (sdoc (e, lv))
-                        -- dbgTrace minChatLvl "End in lambda inferExp.\n"
-                    
-                        (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
+                      ls' <- mapM (inferDataConArg ddefs env) (zip ls locs)
                       -- let ls'' = L.map unNestLet ls'
                       --     bnds = catMaybes $ L.map pullBnds ls'
                       --     env' = addCopyVarToEnv ls' env
@@ -1186,27 +1187,27 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                  CursorArrayTy sz -> return $ ArgFixed (8 * sz)
                                                --CursorTy -> return $ ArgFixed 8
                                                  IntTy -> return $ ArgFixed 0
-                                               --IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                               --IntTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags IntTy)
                                                  FloatTy -> return $ ArgFixed 0
-                                               --FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
+                                               --FloatTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags FloatTy)
                                                  SymTy -> return $ ArgFixed 0
-                                               --SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                               --SymTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags SymTy)
                                                  BoolTy -> return $ ArgFixed 0
-                                               --BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                                               --BoolTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags BoolTy)
                                                  CharTy -> return $ ArgFixed 0
-                                               --CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                               --VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                               --ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
+                                               --CharTy -> return $ ArgFixed (fromJust $ sizeOfTyD dflags CharTy)
+                                               --VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTyD dflags (VectorTy elt))
+                                               --ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTyD dflags (ListTy elt))
                                                  PackedTy tycon loc -> if tycon == tyConOfDataCon
                                                                        then return $ ArgVar v
                                                                        else return $ ArgFixed 0
                                                  _ -> return $ ArgVar v --error $  "inferExp: DataConE SoA: offset for type not implemented! var: " ++ (show v)
                           -- TODO: fix these to get the correct offset for an SoA loc.
-                          (LitE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy IntTy)
-                          (FloatE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy FloatTy)
-                          (LitSymE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTy SymTy)
-                          (PrimAppE MkTrue []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
-                          (PrimAppE MkFalse []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTy BoolTy)
+                          (LitE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTyD dflags IntTy)
+                          (FloatE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTyD dflags FloatTy)
+                          (LitSymE _) -> return $ ArgFixed 0 --(fromJust $ sizeOfTyD dflags SymTy)
+                          (PrimAppE MkTrue []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTyD dflags BoolTy)
+                          (PrimAppE MkFalse []) -> return $ ArgFixed 0 -- (fromJust $ sizeOfTyD dflags BoolTy)
                           (AppE f _cty lvs [(VarE v)]) -> do 
                                                   v' <- lift $ lift $ freshLocVar "cpy"
                                                   return $ ArgCopy v (unwrapLocVar v') f lvs
@@ -1297,33 +1298,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                             Just location -> Just location
                                                                                                                             Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k' ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
                                                                                                       ) idxsFields'
-                                                                        argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
-                                                                                  case arg of
-                                                                                      (VarE v) -> case lookupVEnv v env of
-                                                                                                        CursorTy -> return $ ArgFixed 8
-                                                                                                        CursorArrayTy sz -> return $ ArgFixed (8 * sz)
-                                                                                                        IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                                                                                        FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                                                                                        SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                                                                                        BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                                        CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                                                                                        VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                                                                                        ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                                                                                        PackedTy ttyy loccc -> return $ ArgVar v 
-                                                                                                        --if ttyy == tyConOfDataCon
-                                                                                                        --                       then return $ ArgVar v
-                                                                                                        --                       else return $ ArgFixed 0
-                                                                                                        _ -> return $ ArgVar v --error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
-                                                                                      -- TODO: fix these to get the correct offset for an SoA loc.
-                                                                                      (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                                                                      (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                                                                      (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                                                                      (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                      (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                      (AppE f _cty lvs [(VarE v)]) -> do 
-                                                                                                v' <- lift $ lift $ freshLocVar "cpy"
-                                                                                                return $ ArgCopy v (unwrapLocVar v') f lvs
-                                                                                      _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                                                                        dflags <- getDynFlags
+                                                                        argLsAfterSoALoc <- mapM (argSizeForDataCon dflags env) (map fst3 argsLsFields)
                                                                         let fieldConstraints' = (mapMaybe afterVar $ zip3 
                                                                                                   argLsAfterSoALoc
                                                                                                   ((fieldLocVarsAfter))
@@ -1384,33 +1360,8 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                                             Just location -> Just location
                                                                                                                             Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ k ++ "," ++ show idxsFields' ++ ", fieldLocs: " ++ show (hloc, locs, (getFieldLocs hloc), DataConE () k ls)
                                                                                                           ) idxsFields'
-                                                                            argLsAfterSoALoc <- forM [a | (a,_,_) <- argsLsFields] $ \arg ->
-                                                                                      case arg of
-                                                                                          (VarE v) -> case lookupVEnv v env of
-                                                                                                          CursorTy -> return $ ArgFixed 8
-                                                                                                          CursorArrayTy sz -> return $ ArgFixed (8 * sz)
-                                                                                                          IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                                                                                          FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                                                                                          SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                                                                                          BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                                          CharTy -> return $ ArgFixed (fromJust $ sizeOfTy CharTy)
-                                                                                                          VectorTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (VectorTy elt))
-                                                                                                          ListTy elt -> return $ ArgFixed (fromJust $ sizeOfTy (ListTy elt))
-                                                                                                          PackedTy ttyy loccc -> return $ ArgVar v 
-                                                                                                          --if ttyy == tyConOfDataCon
-                                                                                                          --                       then return $ ArgVar v
-                                                                                                          --                       else return $ ArgFixed 0
-                                                                                                          _ -> return $ ArgVar v --error $ "inferExp: DataConE SoA: offset for type not implemented! var: " ++ show v
-                                                                                          -- TODO: fix these to get the correct offset for an SoA loc.
-                                                                                          (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
-                                                                                          (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
-                                                                                          (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
-                                                                                          (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                          (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
-                                                                                          (AppE f _cty lvs [(VarE v)]) -> do 
-                                                                                                    v' <- lift $ lift $ freshLocVar "cpy"
-                                                                                                    return $ ArgCopy v (unwrapLocVar v') f lvs
-                                                                                          _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                                                                            dflags <- getDynFlags
+                                                                            argLsAfterSoALoc <- mapM (argSizeForDataCon dflags env) (map fst3 argsLsFields)
                                                                             let fieldConstraints' = (mapMaybe afterVar $ zip3 
                                                                                                       argLsAfterSoALoc
                                                                                                       ((fieldLocVarsAfter))

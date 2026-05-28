@@ -188,6 +188,45 @@ removeReDefsExp env ex =
     Ext (WhileCursor ref bod) -> do
       bod' <- go bod
       pure $ Ext $ WhileCursor ref bod'
+    Ext (WhileCursorEnd cur end bod) -> do
+      bod' <- go bod
+      pure $ Ext $ WhileCursorEnd cur end bod'
+    Ext (VecBroadcast scalar lanes val) -> do
+      val' <- go val
+      pure $ Ext $ VecBroadcast scalar lanes val'
+    Ext (VecLoad{}) -> pure ex
+    Ext (VecAdd scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecAdd scalar lanes a' b'
+    Ext (VecSub scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecSub scalar lanes a' b'
+    Ext (VecMul scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecMul scalar lanes a' b'
+    Ext (VecDiv scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecDiv scalar lanes a' b'
+    Ext (VecMod scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecMod scalar lanes a' b'
+    Ext (VecEq scalar lanes a b) -> do
+      a' <- go a
+      b' <- go b
+      pure $ Ext $ VecEq scalar lanes a' b'
+    Ext (VecSelect scalar lanes mask thenv elsev) -> do
+      mask' <- go mask
+      thenv' <- go thenv
+      elsev' <- go elsev
+      pure $ Ext $ VecSelect scalar lanes mask' thenv' elsev'
+    Ext (VecStore scalar lanes ref val) -> do
+      val' <- go val
+      pure $ Ext $ VecStore scalar lanes ref val'
     Ext (SSPush _ _ _ _) -> pure ex
     Ext (SSPop _ _ _) -> pure ex
     Ext (Assert e) -> do

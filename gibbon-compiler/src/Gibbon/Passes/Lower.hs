@@ -368,14 +368,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
   -- sym_tbl :: M.Map Int64 String
   let sym_tbl = M.fromList $ map swap (M.toList inv_sym_tbl)
 
-  let info_tbl = build_info_table
+  dflags <- getDynFlags
+  let info_tbl = build_info_table dflags
 
   mn <- case mainExp of
           Nothing    -> return Nothing
           Just (x,mty) -> (Just . T.PrintExp) <$>
                             (addPrintToTail mty =<< tail True inv_sym_tbl x)
   funs       <- mapM (fund inv_sym_tbl) (M.elems fundefs)
-  dflags     <- getDynFlags
   unpackers  <- if gopt Opt_Pointer dflags
                 then mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
                 else pure []
@@ -430,6 +430,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
           T.ForLoopT idx bound loopBody (go bod)
         T.WhileCursorT ref loopBody bod ->
           T.WhileCursorT ref loopBody (go bod)
+        T.WhileCursorEndT ref endRef loopBody bod ->
+          T.WhileCursorEndT ref endRef loopBody (go bod)
         T.IfT tst con els ->
           T.IfT tst (go con) (go els)
         T.ErrT{} -> tl
@@ -462,7 +464,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
         T.LetTrivT bnd bod ->
           T.LetTrivT bnd (unitTail bod)
         T.LetIfT binds (tst, con, els) bod ->
-          T.LetIfT binds (tst, unitTail con, unitTail els) (unitTail bod)
+          -- If the conditional binds values, the branch tails are expressions
+          -- that produce those values (for example, a scalar `let x = if ...`).
+          -- A statement-like loop may discard its final result, but it must not
+          -- erase the value returns that feed such local bindings.
+          let con' = if null binds then unitTail con else con
+              els' = if null binds then unitTail els else els
+           in T.LetIfT binds (tst, con', els') (unitTail bod)
         T.LetUnpackT binds ptr bod ->
           T.LetUnpackT binds ptr (unitTail bod)
         T.LetAllocT lhs vals bod ->
@@ -473,6 +481,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
           T.ForLoopT idx bound (unitTail loopBody) (unitTail bod)
         T.WhileCursorT ref loopBody bod ->
           T.WhileCursorT ref (unitTail loopBody) (unitTail bod)
+        T.WhileCursorEndT ref endRef loopBody bod ->
+          T.WhileCursorEndT ref endRef (unitTail loopBody) (unitTail bod)
         T.IfT tst con els ->
           T.IfT tst (unitTail con) (unitTail els)
         T.ErrT{} -> tl
@@ -490,8 +500,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       goAlts (T.TagAlts xs) = T.TagAlts $ L.map (\(tag, bod) -> (tag, unitTail bod)) xs
       goAlts (T.IntAlts xs) = T.IntAlts $ L.map (\(tag, bod) -> (tag, unitTail bod)) xs
 
-  build_info_table :: T.InfoTable
-  build_info_table =
+  build_info_table :: DynFlags -> T.InfoTable
+  build_info_table dflags =
       M.foldr
           (\DDef{tyName,dataCons} acc ->
                M.insert
@@ -520,7 +530,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                           case ty of
                                             PackedTy{} -> (acc1,acc2)
                                             CursorTy -> (acc1, acc2+1)
-                                            _ -> (acc1+fromJust (sizeOfTy ty), acc2))
+                                            _ -> (acc1+fromJust (sizeOfTyD dflags ty), acc2))
                                      (0,0) field_tys
                 dcon_tag = getTagOfDataCon ddefs dcon
             in (T.DataConInfo dcon_tag scalar_bytes num_shortcut num_scalars num_packed field_tys)
@@ -541,6 +551,17 @@ lower Prog{fundefs,ddefs,mainExp} = do
       PrimAppE FRandP []  -> False
       Ext (ForE _ bound bod) -> ispure bound && ispure bod
       Ext (WhileCursor _ bod) -> ispure bod
+      Ext (WhileCursorEnd _ _ bod) -> ispure bod
+      Ext (VecBroadcast _ _ val) -> ispure val
+      Ext (VecLoad {}) -> False
+      Ext (VecAdd _ _ a b) -> ispure a && ispure b
+      Ext (VecSub _ _ a b) -> ispure a && ispure b
+      Ext (VecMul _ _ a b) -> ispure a && ispure b
+      Ext (VecDiv _ _ a b) -> ispure a && ispure b
+      Ext (VecMod _ _ a b) -> ispure a && ispure b
+      Ext (VecEq _ _ a b) -> ispure a && ispure b
+      Ext (VecSelect _ _ m a b) -> ispure m && ispure a && ispure b
+      Ext (VecStore {}) -> False
       Ext (ScalarCountCopyAll _ _ _) -> False
       LetE (_,_,_,rhs) bod -> ispure rhs && ispure bod
       IfE _ b c   -> ispure b && ispure c
@@ -640,6 +661,17 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadScalarCountNextFooter{} -> syms
               ForE _ bound bod -> go bound <> go bod
               WhileCursor _ bod -> go bod
+              WhileCursorEnd _ _ bod -> go bod
+              VecBroadcast _ _ val -> go val
+              VecLoad{} -> syms
+              VecAdd _ _ a b -> go a <> go b
+              VecSub _ _ a b -> go a <> go b
+              VecMul _ _ a b -> go a <> go b
+              VecDiv _ _ a b -> go a <> go b
+              VecMod _ _ a b -> go a <> go b
+              VecEq _ _ a b -> go a <> go b
+              VecSelect _ _ m a b -> go m <> go a <> go b
+              VecStore _ _ _ val -> go val
               SSPush{} -> syms
               SSPop{} -> syms
               Assert ex -> go ex
@@ -888,6 +920,56 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v, T.CursorTy)] T.ScalarCountNextFooter [T.VarTriv footer] <$>
         tail free_reg sym_tbl bod
 
+    LetE (v, _, ty, Ext (VecBroadcast scalar lanes val)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecBroadcast scalar lanes)
+        [triv sym_tbl "vector broadcast value" val] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecLoad scalar lanes ref)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecLoad scalar lanes)
+        [T.VarTriv ref] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecAdd scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecAdd scalar lanes)
+        [triv sym_tbl "vector add lhs" a, triv sym_tbl "vector add rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecSub scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecSub scalar lanes)
+        [triv sym_tbl "vector sub lhs" a, triv sym_tbl "vector sub rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecMul scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecMul scalar lanes)
+        [triv sym_tbl "vector mul lhs" a, triv sym_tbl "vector mul rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecDiv scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecDiv scalar lanes)
+        [triv sym_tbl "vector div lhs" a, triv sym_tbl "vector div rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecMod scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecMod scalar lanes)
+        [triv sym_tbl "vector mod lhs" a, triv sym_tbl "vector mod rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecEq scalar lanes a b)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecEq scalar lanes)
+        [triv sym_tbl "vector eq lhs" a, triv sym_tbl "vector eq rhs" b] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (v, _, ty, Ext (VecSelect scalar lanes mask thenv elsev)) bod ->
+      T.LetPrimCallT [(v, T.fromL3Ty ty)] (T.VecSelect scalar lanes)
+        [triv sym_tbl "vector select mask" mask, triv sym_tbl "vector select then" thenv, triv sym_tbl "vector select else" elsev] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (_, _, _, Ext (VecStore scalar lanes ref val)) bod ->
+      T.LetPrimCallT [] (T.VecStore scalar lanes)
+        [T.VarTriv ref, triv sym_tbl "vector store value" val] <$>
+        tail free_reg sym_tbl bod
+
     LetE (_v, _, _, Ext (ForE idx bound rhs)) bod -> do
       rhs' <- tail free_reg sym_tbl rhs
       bod' <- tail free_reg sym_tbl bod
@@ -897,6 +979,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
       rhs' <- tail free_reg sym_tbl rhs
       bod' <- tail free_reg sym_tbl bod
       return $ T.WhileCursorT ref (unitTail rhs') bod'
+
+    LetE (_v, _, _, Ext (WhileCursorEnd ref endRef rhs)) bod -> do
+      rhs' <- tail free_reg sym_tbl rhs
+      bod' <- tail free_reg sym_tbl bod
+      return $ T.WhileCursorEndT ref endRef (unitTail rhs') bod'
 
 
     -- In Target, AddP is overloaded still:
@@ -1329,6 +1416,7 @@ typ t =
     FloatTy-> T.FloatTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
+    SimdTy el_ty lanes -> T.SimdTy (typ el_ty) lanes
     VectorTy el_ty -> T.VectorTy (typ el_ty)
     ListTy el_ty -> T.ListTy (typ el_ty)
     PDictTy k v -> T.PDictTy (typ k) (typ v)

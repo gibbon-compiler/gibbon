@@ -14,6 +14,7 @@ mkTree d acc =
   then Leaf (acc)
   else Node (mkTree (d-1) (d+acc)) (mkTree (d-1) (d+acc))
 
+{-# ANN add1Tree "OPT:CanVectorize" #-}
 add1Tree :: Tree -> Tree
 add1Tree t =
   case t of

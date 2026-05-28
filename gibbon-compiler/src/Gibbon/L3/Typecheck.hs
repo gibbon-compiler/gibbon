@@ -164,6 +164,90 @@ tcExp isPacked ddfs env exp = do
           _ <- ensureEqualTy body (ProdTy []) body_ty
           return (ProdTy [])
 
+        WhileCursorEnd cur end body -> do
+          curty <- lookupVar env cur exp
+          endty <- lookupVar env end exp
+          ensureEqualTyModCursor ddfs exp curty MutCursorTy
+          ensureEqualTyModCursor ddfs exp endty MutCursorTy
+          body_ty <- go body
+          _ <- ensureEqualTy body (ProdTy []) body_ty
+          return (ProdTy [])
+
+        VecBroadcast scalar lanes val -> do
+          valTy <- go val
+          ensureEqualTyModCursor ddfs val valTy (scalarToTy scalar)
+          return $ SimdTy (scalarToTy scalar) lanes
+
+        VecLoad scalar lanes ref -> do
+          refTy <- lookupVar env ref exp
+          ensureEqualTyModCursor ddfs exp refTy MutCursorTy
+          return $ SimdTy (scalarToTy scalar) lanes
+
+        VecAdd scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecSub scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecMul scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecDiv scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecMod scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecEq scalar lanes a b -> do
+          aty <- go a
+          bty <- go b
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs a aty vty
+          ensureEqualTyModCursor ddfs b bty vty
+          return vty
+
+        VecSelect scalar lanes mask thenv elsev -> do
+          maskTy <- go mask
+          thenTy <- go thenv
+          elseTy <- go elsev
+          let vty = SimdTy (scalarToTy scalar) lanes
+          ensureEqualTyModCursor ddfs mask maskTy vty
+          ensureEqualTyModCursor ddfs thenv thenTy vty
+          ensureEqualTyModCursor ddfs elsev elseTy vty
+          return vty
+
+        VecStore scalar lanes ref val -> do
+          refTy <- lookupVar env ref exp
+          valTy <- go val
+          ensureEqualTyModCursor ddfs exp refTy MutCursorTy
+          ensureEqualTyModCursor ddfs val valTy (SimdTy (scalarToTy scalar) lanes)
+          return (ProdTy [])
+
         ReadCursor v -> do
           vty <- lookupVar env v exp
           ensureEqualTyModCursor ddfs exp vty CursorTy

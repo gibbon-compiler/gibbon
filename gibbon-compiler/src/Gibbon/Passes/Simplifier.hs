@@ -307,6 +307,8 @@ lateInlineTriv (L4.Prog info_tbl sym_tbl fundefs mainExp) = do
                        in L4.ForLoopT idx (gotriv env bound) (go env' loopBody) (go env bod)
                    L4.WhileCursorT ref loopBody bod ->
                        L4.WhileCursorT ref (go env loopBody) (go env bod)
+                   L4.WhileCursorEndT ref endRef loopBody bod ->
+                       L4.WhileCursorEndT ref endRef (go env loopBody) (go env bod)
                    L4.TailCall var trvs ->
                        L4.TailCall var (map (gotriv env) trvs)
                    L4.Goto lbl -> L4.Goto lbl

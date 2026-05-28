@@ -1097,6 +1097,7 @@ mapPacked fn t =
     CursorArrayTy size -> CursorArrayTy size
     MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
+    SimdTy elty lanes -> SimdTy (mapPacked fn elty) lanes
     VectorTy elty -> VectorTy elty
     ListTy elty   -> ListTy elty
     SymSetTy -> SymSetTy
@@ -1120,6 +1121,7 @@ constPacked c t =
     CursorArrayTy size -> CursorArrayTy size
     MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
+    SimdTy el_ty lanes -> SimdTy (constPacked c el_ty) lanes
     VectorTy el_ty -> VectorTy (constPacked c el_ty)
     ListTy el_ty -> ListTy (constPacked c el_ty)
     SymSetTy -> SymSetTy

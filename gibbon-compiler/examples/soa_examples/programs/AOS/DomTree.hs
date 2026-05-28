@@ -110,6 +110,7 @@ getWidth d =
     Text _ _ _ w _ -> w
     Empty -> 0
 
+{-# ANN scaleLayout "OPT:CanVectorize" #-}
 scaleLayout :: DOM -> Int -> DOM
 scaleLayout d k =
   case d of

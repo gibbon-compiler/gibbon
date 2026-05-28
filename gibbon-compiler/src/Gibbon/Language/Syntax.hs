@@ -661,6 +661,8 @@ data UrTy loc
   | PackedTy TyCon loc -- ^ No type arguments to TyCons for now.  (No polymorphism.)
   | VectorTy (UrTy loc) -- ^ Vectors are decorated with the types of their elements;
                              -- which can only include scalars or flat products of scalars.
+  | SimdTy (UrTy loc) Int -- ^ A fixed-width SIMD register, with element type and lane count.
+                          -- This is an internal compiler type, not a heap vector.
   | PDictTy (UrTy loc) (UrTy loc) -- ^ Thread safe dictionaries decorated with
                                     -- key and value type.
   | ListTy (UrTy loc) -- ^ Linked lists are decorated with the types of their elements;

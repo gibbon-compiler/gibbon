@@ -250,6 +250,7 @@ fmmPotential t probe order eta =
       0
 
 -- Map 1: damp momentum and scale velocities (models global timestep update).
+{-# ANN scaleEnergy "OPT:CanVectorize" #-}
 scaleEnergy :: Octree -> Int -> Octree
 scaleEnergy t k =
   case t of
@@ -265,6 +266,7 @@ scaleEnergy t k =
       EmptyOct
 
 -- Map 2: clear per-node particle-count cache for a fresh accumulation phase.
+{-# ANN clearFlags "OPT:CanVectorize" #-}
 clearFlags :: Octree -> Octree
 clearFlags t =
   case t of

@@ -89,7 +89,9 @@ library
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.ReorderScalarWrites
                        Gibbon.Passes.LoopifyTraversals
+                       Gibbon.Passes.LoopifyFlatTraversals
                        Gibbon.Passes.LoopifiedTraversalFusion
+                       Gibbon.Passes.VectorizeTraversals
                        Gibbon.Passes.ScalarCountPropagation
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower

@@ -74,148 +74,150 @@ calculateBoundsExp
   -> RegionTypeMapping -- ^ region => type
   -> Old.Exp2 -- ^ expression
   -> PassM (Old.Exp2, RegionSizeMapping, RegionTypeMapping)
-calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv ex = case ex of
-  Ext (BoundsCheck{}) -> return (ex, regSzEnv, regTyEnv)
-  Ext (IndirectionE _tycon _dcon (fromLoc, _fromvar) (toLoc, _tovar) _exp) -> do
-    let fromReg = locRegEnv # fromLoc
-    let fromOff = locOffEnv # fromLoc
-    let toOff   = locOffEnv # toLoc
-    let regTy = M.findWithDefault IndirectionFree fromReg regTyEnv <> if toOff >= fromOff then RightwardLocalIndirections else LocalIndirections
-    let regSz   = fromOff <> BoundedSize 9
-    return (ex, M.insert fromReg regSz regSzEnv, M.insert fromReg regTy regTyEnv)
-  VarE _ -> return (ex, regSzEnv, regTyEnv)
-  _ ->
-    let ty   = gRecoverType ddefs env2 ex
-        go   = calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv
-        err  = error "Should have been covered by sizeOfTy"
-        pass = return (ex, regSzEnv, regTyEnv)
-    in  case sizeOfTy ty of
-          Just _ -> return (ex, regSzEnv, regTyEnv)
-          _      -> case ex of
-            LitE    _           -> err
-            CharE   _           -> err
-            FloatE  _           -> err
-            LitSymE _           -> err
-            ProjE{}             -> pass
-            TimeIt{}            -> pass
-            WithArenaE{}        -> pass
-            SpawnE{}            -> pass
-            SyncE{}             -> pass
-            MapE{}              -> pass
-            FoldE{}             -> pass
-            AppE _v _ _locs _args -> do
-              -- TODO traversals
-              return (ex, regSzEnv, regTyEnv)
-            PrimAppE{}             -> return (ex, regSzEnv, regTyEnv)
-            DataConE loc dcon args -> do
-              (_, res, rts) <- unzip3 <$> mapM go args
-              return (DataConE loc dcon args, mconcat res, mconcat rts)
-            IfE cond bod1 bod2 -> do
-              (bod1', regSzEnv1, regTyEnv1) <- go bod1
-              (bod2', regSzEnv2, regTyEnv2) <- go bod2
-              return (IfE cond bod1' bod2', M.unionWith max regSzEnv1 regSzEnv2, regTyEnv1 <> regTyEnv2)
-            MkProdE ls -> do
-              (ls', regSzEnvs, regTyEnvs) <- unzip3 <$> mapM go ls
-              return (MkProdE ls', M.unionsWith max regSzEnvs, M.unions regTyEnvs)
-            LetE (v, locs, ty0, bind) bod -> do
-              (bind', regSzEnv', regTyEnv') <- go bind
-              let venv' = M.insert v ty0 (vEnv env2)
-              let vle = case ty0 of
-                    PackedTy _tag loc -> M.insert v loc varLocEnv
-                    _                 -> varLocEnv
-              (bod', regSzEnv'', regTyEnv'') <- calculateBoundsExp ddefs (env2 { vEnv = venv' }) varSzEnv vle locRegEnv locOffEnv regSzEnv regTyEnv bod
-              let regSzEnv3 = M.unionWith max regSzEnv' regSzEnv''
-              let regSzEnv4 = case ty0 of
-                    -- TODO sizeofTy ty0 is incalculable? -> assume as 0 to give preference to analysis in other locations
-                    PackedTy _tag loc ->
-                      -- Make the chunk at least 32 bytes.
-                      let sz = case (locOffEnv # loc <> (maybe (BoundedSize 0) BoundedSize . sizeOfTy) ty0) of
-                                 BoundedSize i -> BoundedSize (max i 32)
-                                 Undefined -> Undefined
-                      in M.insertWith max (locRegEnv # loc) sz regSzEnv3
-                    _ -> regSzEnv3
-              return (LetE (v, locs, ty0, bind') bod', regSzEnv4, M.union regTyEnv' regTyEnv'')
-            CaseE ex2 cases -> do
-              (cases', res, rts) <-
-                unzip3
-                  <$> mapM
-                        (\(dcon :: DataCon, vlocs :: [(Var, LocVar)], bod :: Old.Exp2) -> do
-                          -- TODO use for traversal somewhere down the line?
-                          -- let offsets =
-                          --       M.fromList
-                          --         . tail -- remove tag
-                          --         . scanl1 (\(_, s1) (v2, s2) -> (v2, s1 <> s2)) -- accumulate offsets
-                          --         . ((undefined, BoundedSize 1) :)  -- add size for tag
-                          --         . zip (map snd vlocs) -- take locations
-                          --         . map (maybe Undefined BoundedSize . sizeOfTy) -- map to our region size type
-                          --         $ lookupDataCon ddefs dcon -- find ddef)
-                          let venv' = M.union (M.fromList $ zip (map fst vlocs) (lookupDataCon ddefs dcon)) (vEnv env2)
-                              varLocEnv' = M.fromList vlocs `M.union` varLocEnv
-                              (_vars,locs) = unzip vlocs
-                              locOffEnv' = (M.fromList (zip locs (repeat Undefined))) `M.union` locOffEnv
-                          (bod', re, rt) <- calculateBoundsExp ddefs (env2 { vEnv = venv'}) varSzEnv varLocEnv' locRegEnv locOffEnv' regSzEnv regTyEnv bod
-                          return ((dcon, vlocs, bod'), re, rt)
-                        )
-                        cases
-              return (CaseE ex2 cases', M.unionsWith max res, M.unions rts)
-            Ext ext -> case ext of
-              LetRegionE reg _ endmut _ bod -> do
-                (bod', re, rt) <- go bod
-                let regVar = regionToVar reg
-                let regSz  = re # regVar
-                let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
-                return (Ext $ LetRegionE reg regSz endmut regTy bod', re, rt)
-              LetParRegionE reg _ _ bod -> do
-                (bod', re, rt) <- go bod
-                let regVar = regionToVar reg
-                let regSz  = re # regVar
-                let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
-                return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
-              SelectiveBufferShareE src tgts bod -> do
-                (bod', re, rt) <- go bod
-                return (Ext $ SelectiveBufferShareE src tgts bod', re, rt)
-              LetLocE loc locExp ex1 -> do
-                -- * NOTE: jumps are only necessary for route ends, skipping them.
-                if "jump_" `L.isPrefixOf` fromVar (unwrapLocVar loc)
-                  then do
-                    (ex1', re', rt') <- go ex1
-                    return (Ext $ LetLocE loc locExp ex1', re', rt')
-                  else do
-                    let (re, off) = case locExp of
-                          (StartOfRegionLE r          ) -> (regionToVar r, BoundedSize 0)
-                          -- [2024.12.04] VS: currently discarding offsets for SoA representation
-                          (AfterConstantLE n l  ) -> (locRegEnv # l, locOffEnv # l <> BoundedSize n)
-                          -- [2022.12.26] CSK: the lookup in varSzEnv always fails since the
-                          -- pass never inserts anything into it. Disabling it for now.
-                          -- [2024.12.04] VS: currently discarding offsets for SoA representation
-                          (AfterVariableLE v l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v)) -- <> varSzEnv # v
-                          (InRegionLE r         ) -> (regionToVar r, Undefined)
-                          (FromEndLE  l         ) -> (locRegEnv # l, Undefined)
-                          FreeLE                  -> undefined
-                          GenSoALoc {}            -> error "calculateBoundsExp: GenSoALoc not handled"
-                          GetDataConLocSoA {}     -> error "calculateBoundsExp: GetDataConLocSoA not handled"
-                          GetFieldLocSoA {}       -> error "calculateBoundsExp: GetFieldLocSoA not handled"
-                          AssignLE {}             -> error "calculateBoundsExp: AssignLE not handled"
-                    let lre = M.insert loc re locRegEnv
-                    let loe = M.insert loc off locOffEnv
-                    (ex1', re', rt') <- calculateBoundsExp ddefs env2 varSzEnv varLocEnv lre loe regSzEnv regTyEnv ex1
-                    return (Ext $ LetLocE loc locExp ex1', re', rt')
-              RetE _locs v -> do
-                (_, re, rt) <- go (VarE v)
-                return (ex, re, rt)
-              FromEndE{}         -> pass
-              AddFixed{}         -> pass
-              GetCilkWorkerNum{} -> pass
-              LetAvail vs e      -> do
-                (e', re', rt') <- go e
-                return (Ext $ LetAvail vs e', re', rt')
-              StartOfPkdCursor{}    -> error $ "todo: " ++ sdoc ex
-              TagCursor{}           -> error $ "todo: " ++ sdoc ex
-              AllocateTagHere{}     -> error $ "todo: " ++ sdoc ex
-              AllocateScalarsHere{} -> error $ "todo: " ++ sdoc ex
-              SSPush{}              -> error $ "todo: " ++ sdoc ex
-              SSPop{}               -> error $ "todo: " ++ sdoc ex
-              LetRegE {}            -> error "calculateBoundsExp: LetRegE not handled"
-              BoundsCheckVector {}  -> error "calculateBoundsExp: BoundsCheckVector not handled"
+calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv ex = do
+  dflags <- getDynFlags
+  case ex of
+    Ext (BoundsCheck{}) -> return (ex, regSzEnv, regTyEnv)
+    Ext (IndirectionE _tycon _dcon (fromLoc, _fromvar) (toLoc, _tovar) _exp) -> do
+      let fromReg = locRegEnv # fromLoc
+      let fromOff = locOffEnv # fromLoc
+      let toOff   = locOffEnv # toLoc
+      let regTy = M.findWithDefault IndirectionFree fromReg regTyEnv <> if toOff >= fromOff then RightwardLocalIndirections else LocalIndirections
+      let regSz   = fromOff <> BoundedSize 9
+      return (ex, M.insert fromReg regSz regSzEnv, M.insert fromReg regTy regTyEnv)
+    VarE _ -> return (ex, regSzEnv, regTyEnv)
+    _ ->
+      let ty   = gRecoverType ddefs env2 ex
+          go   = calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv
+          err  = error "Should have been covered by sizeOfTy"
+          pass = return (ex, regSzEnv, regTyEnv)
+      in  case sizeOfTyD dflags ty of
+            Just _ -> return (ex, regSzEnv, regTyEnv)
+            _      -> case ex of
+              LitE    _           -> err
+              CharE   _           -> err
+              FloatE  _           -> err
+              LitSymE _           -> err
+              ProjE{}             -> pass
+              TimeIt{}            -> pass
+              WithArenaE{}        -> pass
+              SpawnE{}            -> pass
+              SyncE{}             -> pass
+              MapE{}              -> pass
+              FoldE{}             -> pass
+              AppE _v _ _locs _args -> do
+                -- TODO traversals
+                return (ex, regSzEnv, regTyEnv)
+              PrimAppE{}             -> return (ex, regSzEnv, regTyEnv)
+              DataConE loc dcon args -> do
+                (_, res, rts) <- unzip3 <$> mapM go args
+                return (DataConE loc dcon args, mconcat res, mconcat rts)
+              IfE cond bod1 bod2 -> do
+                (bod1', regSzEnv1, regTyEnv1) <- go bod1
+                (bod2', regSzEnv2, regTyEnv2) <- go bod2
+                return (IfE cond bod1' bod2', M.unionWith max regSzEnv1 regSzEnv2, regTyEnv1 <> regTyEnv2)
+              MkProdE ls -> do
+                (ls', regSzEnvs, regTyEnvs) <- unzip3 <$> mapM go ls
+                return (MkProdE ls', M.unionsWith max regSzEnvs, M.unions regTyEnvs)
+              LetE (v, locs, ty0, bind) bod -> do
+                (bind', regSzEnv', regTyEnv') <- go bind
+                let venv' = M.insert v ty0 (vEnv env2)
+                let vle = case ty0 of
+                      PackedTy _tag loc -> M.insert v loc varLocEnv
+                      _                 -> varLocEnv
+                (bod', regSzEnv'', regTyEnv'') <- calculateBoundsExp ddefs (env2 { vEnv = venv' }) varSzEnv vle locRegEnv locOffEnv regSzEnv regTyEnv bod
+                let regSzEnv3 = M.unionWith max regSzEnv' regSzEnv''
+                let regSzEnv4 = case ty0 of
+                      -- TODO sizeofTy ty0 is incalculable? -> assume as 0 to give preference to analysis in other locations
+                      PackedTy _tag loc ->
+                        -- Make the chunk at least 32 bytes.
+                        let sz = case (locOffEnv # loc <> (maybe (BoundedSize 0) BoundedSize . sizeOfTyD dflags) ty0) of
+                                   BoundedSize i -> BoundedSize (max i 32)
+                                   Undefined -> Undefined
+                        in M.insertWith max (locRegEnv # loc) sz regSzEnv3
+                      _ -> regSzEnv3
+                return (LetE (v, locs, ty0, bind') bod', regSzEnv4, M.union regTyEnv' regTyEnv'')
+              CaseE ex2 cases -> do
+                (cases', res, rts) <-
+                  unzip3
+                    <$> mapM
+                          (\(dcon :: DataCon, vlocs :: [(Var, LocVar)], bod :: Old.Exp2) -> do
+                            -- TODO use for traversal somewhere down the line?
+                            -- let offsets =
+                            --       M.fromList
+                            --         . tail -- remove tag
+                            --         . scanl1 (\(_, s1) (v2, s2) -> (v2, s1 <> s2)) -- accumulate offsets
+                            --         . ((undefined, BoundedSize 1) :)  -- add size for tag
+                            --         . zip (map snd vlocs) -- take locations
+                            --         . map (maybe Undefined BoundedSize . sizeOfTy) -- map to our region size type
+                            --         $ lookupDataCon ddefs dcon -- find ddef)
+                            let venv' = M.union (M.fromList $ zip (map fst vlocs) (lookupDataCon ddefs dcon)) (vEnv env2)
+                                varLocEnv' = M.fromList vlocs `M.union` varLocEnv
+                                (_vars,locs) = unzip vlocs
+                                locOffEnv' = (M.fromList (zip locs (repeat Undefined))) `M.union` locOffEnv
+                            (bod', re, rt) <- calculateBoundsExp ddefs (env2 { vEnv = venv'}) varSzEnv varLocEnv' locRegEnv locOffEnv' regSzEnv regTyEnv bod
+                            return ((dcon, vlocs, bod'), re, rt)
+                          )
+                          cases
+                return (CaseE ex2 cases', M.unionsWith max res, M.unions rts)
+              Ext ext -> case ext of
+                LetRegionE reg _ endmut _ bod -> do
+                  (bod', re, rt) <- go bod
+                  let regVar = regionToVar reg
+                  let regSz  = re # regVar
+                  let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
+                  when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
+                  return (Ext $ LetRegionE reg regSz endmut regTy bod', re, rt)
+                LetParRegionE reg _ _ bod -> do
+                  (bod', re, rt) <- go bod
+                  let regVar = regionToVar reg
+                  let regSz  = re # regVar
+                  let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
+                  when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
+                  return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
+                SelectiveBufferShareE src tgts bod -> do
+                  (bod', re, rt) <- go bod
+                  return (Ext $ SelectiveBufferShareE src tgts bod', re, rt)
+                LetLocE loc locExp ex1 -> do
+                  -- * NOTE: jumps are only necessary for route ends, skipping them.
+                  if "jump_" `L.isPrefixOf` fromVar (unwrapLocVar loc)
+                    then do
+                      (ex1', re', rt') <- go ex1
+                      return (Ext $ LetLocE loc locExp ex1', re', rt')
+                    else do
+                      let (re, off) = case locExp of
+                            (StartOfRegionLE r          ) -> (regionToVar r, BoundedSize 0)
+                            -- [2024.12.04] VS: currently discarding offsets for SoA representation
+                            (AfterConstantLE n l  ) -> (locRegEnv # l, locOffEnv # l <> BoundedSize n)
+                            -- [2022.12.26] CSK: the lookup in varSzEnv always fails since the
+                            -- pass never inserts anything into it. Disabling it for now.
+                            -- [2024.12.04] VS: currently discarding offsets for SoA representation
+                            (AfterVariableLE v l _) -> (locRegEnv # l, locOffEnv # (varLocEnv # v)) -- <> varSzEnv # v
+                            (InRegionLE r         ) -> (regionToVar r, Undefined)
+                            (FromEndLE  l         ) -> (locRegEnv # l, Undefined)
+                            FreeLE                  -> undefined
+                            GenSoALoc {}            -> error "calculateBoundsExp: GenSoALoc not handled"
+                            GetDataConLocSoA {}     -> error "calculateBoundsExp: GetDataConLocSoA not handled"
+                            GetFieldLocSoA {}       -> error "calculateBoundsExp: GetFieldLocSoA not handled"
+                            AssignLE {}             -> error "calculateBoundsExp: AssignLE not handled"
+                      let lre = M.insert loc re locRegEnv
+                      let loe = M.insert loc off locOffEnv
+                      (ex1', re', rt') <- calculateBoundsExp ddefs env2 varSzEnv varLocEnv lre loe regSzEnv regTyEnv ex1
+                      return (Ext $ LetLocE loc locExp ex1', re', rt')
+                RetE _locs v -> do
+                  (_, re, rt) <- go (VarE v)
+                  return (ex, re, rt)
+                FromEndE{}         -> pass
+                AddFixed{}         -> pass
+                GetCilkWorkerNum{} -> pass
+                LetAvail vs e      -> do
+                  (e', re', rt') <- go e
+                  return (Ext $ LetAvail vs e', re', rt')
+                StartOfPkdCursor{}    -> error $ "todo: " ++ sdoc ex
+                TagCursor{}           -> error $ "todo: " ++ sdoc ex
+                AllocateTagHere{}     -> error $ "todo: " ++ sdoc ex
+                AllocateScalarsHere{} -> error $ "todo: " ++ sdoc ex
+                SSPush{}              -> error $ "todo: " ++ sdoc ex
+                SSPop{}               -> error $ "todo: " ++ sdoc ex
+                LetRegE {}            -> error "calculateBoundsExp: LetRegE not handled"
+                BoundsCheckVector {}  -> error "calculateBoundsExp: BoundsCheckVector not handled"

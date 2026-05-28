@@ -38,7 +38,7 @@ data ChunkLoop = ChunkLoop
 fuseLoopifiedTraversals :: L3.Prog3 -> PassM L3.Prog3
 fuseLoopifiedTraversals prog@Prog{fundefs} = do
   dflags <- getDynFlags
-  let enabled = not (gopt Opt_DisableLoopFusion dflags)
+  let enabled = gopt Opt_EnableLoopFusion dflags
   fds' <-
     if enabled
     then mapM fuseFun (M.elems fundefs)

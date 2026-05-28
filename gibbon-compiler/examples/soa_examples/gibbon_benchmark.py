@@ -72,7 +72,7 @@ Usage:
   ./gibbon_benchmark.py --dump-raw                   save raw exe output
 """
 
-import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime
+import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime, math
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -748,6 +748,45 @@ def parse_passes(raw: str) -> Dict:
     return passes
 
 
+
+_T_CRIT_975 = {
+    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+    6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+    11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+    16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+    26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+}
+
+
+def _t_crit_975(n: int) -> Optional[float]:
+    """Two-sided 95% Student-t critical value for n samples."""
+    if n < 2:
+        return None
+    df = n - 1
+    if df in _T_CRIT_975:
+        return _T_CRIT_975[df]
+    # Normal approximation is fine once df is moderately large.
+    return 1.96
+
+
+def _ci95_from_stderr(mean: float, stderr: float, n: int) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    tcrit = _t_crit_975(n)
+    if tcrit is None:
+        return None, None, None, None
+    half = tcrit * stderr
+    pct = (100.0 * half / mean) if mean != 0 else None
+    return half, mean - half, mean + half, pct
+
+
+def fmt_ci95(ci: Optional[float]) -> str:
+    if ci is None:
+        return "--"
+    if ci < 1e-3:
+        return f"{ci:.6f}s"
+    return f"{ci:.5f}s"
+
+
 def _stats(times: List[float], pass_type: str = "unknown",
            uses: Optional[int] = None) -> Dict:
     """
@@ -763,6 +802,7 @@ def _stats(times: List[float], pass_type: str = "unknown",
     mx     = max(times)
     sd     = statistics.stdev(times) if n > 1 else 0.0
     stderr = sd / (n ** 0.5) if n > 1 else 0.0
+    ci95, ci95_low, ci95_high, ci95_pct = _ci95_from_stderr(mean, stderr, n)
     return {
         "iter_times":  times,
         "median_time": med,
@@ -770,7 +810,11 @@ def _stats(times: List[float], pass_type: str = "unknown",
         "min_time":    mn,
         "max_time":    mx,
         "stdev":       sd,
-        "stderr":      stderr,   # ± shown in tables
+        "stderr":      stderr,
+        "ci95_abs":    ci95,
+        "ci95_low":    ci95_low,
+        "ci95_high":   ci95_high,
+        "ci95_pct":    ci95_pct,
         "n":           n,
         "pass_type":   pass_type,
         "uses":        uses,
@@ -797,6 +841,7 @@ def _counter_stats(values: List[float]) -> Dict:
     mx = max(values)
     sd = statistics.stdev(values) if n > 1 else 0.0
     stderr = sd / (n ** 0.5) if n > 1 else 0.0
+    ci95, ci95_low, ci95_high, ci95_pct = _ci95_from_stderr(mean, stderr, n)
     return {
         "median": med,
         "mean": mean,
@@ -804,6 +849,10 @@ def _counter_stats(values: List[float]) -> Dict:
         "max": mx,
         "stdev": sd,
         "stderr": stderr,
+        "ci95_abs": ci95,
+        "ci95_low": ci95_low,
+        "ci95_high": ci95_high,
+        "ci95_pct": ci95_pct,
         "n": n,
     }
 
@@ -1581,6 +1630,34 @@ def needs_recompilation(source: Path, exe: Path, c_file: Optional[Path]
     return False, f"exe up-to-date (compiled {exe_dt})"
 
 # ---------------------------------------------------------------------------
+# Variant-specific optimization policy
+# ---------------------------------------------------------------------------
+def is_soa_gibbon_variant(variant: str) -> bool:
+    return variant.startswith("soa")
+
+def effective_optimization_flags(variant: str,
+                                 store_scalar_field_counts: bool,
+                                 enable_loopification: bool,
+                                 enable_loop_fusion: bool,
+                                 enable_selective_buffer_sharing: bool,
+                                 enable_vectorization: bool) -> Dict[str, bool]:
+    """Return the flags that should actually be passed for this variant.
+
+    AoS flat layouts can use only flat map loopification.  Scalar-count
+    footers, selective buffer sharing, and loop fusion are fully factored SoA
+    mechanisms, so the harness deliberately does not pass those flags to AoS
+    variants even when the user enabled them globally.
+    """
+    is_soa = is_soa_gibbon_variant(variant)
+    return {
+        "store_scalar_field_counts": store_scalar_field_counts and is_soa,
+        "enable_loopification": enable_loopification,
+        "enable_loop_fusion": enable_loop_fusion and is_soa,
+        "enable_selective_buffer_sharing": enable_selective_buffer_sharing and is_soa,
+        "enable_vectorization": enable_vectorization and is_soa,
+    }
+
+# ---------------------------------------------------------------------------
 # Compile one variant  (called from thread pool)
 # ---------------------------------------------------------------------------
 def compile_one(source: Path, variant: str, out_dir: Path,
@@ -1588,10 +1665,11 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 enable_papi: bool = False,
                 enable_papi_native: bool = False,
                 store_scalar_field_counts: bool = False,
-                disable_loopification: bool = False,
-                disable_loop_fusion: bool = False,
+                enable_loopification: bool = False,
+                enable_loop_fusion: bool = False,
                 enable_selective_buffer_sharing: bool = False,
-                disable_selective_buffer_sharing: bool = False,
+                enable_vectorization: bool = False,
+                use_int32: bool = False,
                 use_no_ran: bool = True,
                 ) -> Tuple[bool, float, Optional[str]]:
     source = source.resolve()
@@ -1647,16 +1725,26 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             cmd.append("--enable-papi")
         if use_no_ran:
             cmd.append("--no-ran")
-        if store_scalar_field_counts:
+        if use_int32:
+            cmd.append("--int32")
+        effective_opts = effective_optimization_flags(
+            variant,
+            store_scalar_field_counts,
+            enable_loopification,
+            enable_loop_fusion,
+            enable_selective_buffer_sharing,
+            enable_vectorization,
+        )
+        if effective_opts["store_scalar_field_counts"]:
             cmd.append("--store-scalar-field-counts")
-        if disable_loopification:
-            cmd.append("--disable-loopification")
-        if disable_loop_fusion:
-            cmd.append("--disable-loop-fusion")
-        if enable_selective_buffer_sharing:
+        if effective_opts["enable_loopification"]:
+            cmd.extend(["--enable-loopification", "--auto-loopification"])
+        if effective_opts["enable_loop_fusion"]:
+            cmd.append("--enable-loop-fusion")
+        if effective_opts["enable_selective_buffer_sharing"]:
             cmd.append("--enable-selective-buffer-sharing")
-        if disable_selective_buffer_sharing:
-            cmd.append("--disable-selective-buffer-sharing")
+        if effective_opts["enable_vectorization"]:
+            cmd.append("--enable-vectorization")
         cmd.extend([
             "--packed", "--to-exe",
             "--cfile",   str(c_file),
@@ -1685,16 +1773,26 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         flags_str += ",papi-native"
     if enable_papi:
         flags_str += ",papi"
-    if store_scalar_field_counts:
+    effective_label_opts = effective_optimization_flags(
+        variant,
+        store_scalar_field_counts,
+        enable_loopification,
+        enable_loop_fusion,
+        enable_selective_buffer_sharing,
+        enable_vectorization,
+    )
+    if effective_label_opts["enable_loopification"]:
+        flags_str += ",loopify"
+    if effective_label_opts["store_scalar_field_counts"]:
         flags_str += ",scalar-counts"
-    if disable_loopification:
-        flags_str += ",no-loopify"
-    if disable_loop_fusion:
-        flags_str += ",no-loop-fusion"
-    if enable_selective_buffer_sharing:
+    if effective_label_opts["enable_selective_buffer_sharing"]:
         flags_str += ",selective-sharing"
-    if disable_selective_buffer_sharing:
-        flags_str += ",no-selective-sharing"
+    if effective_label_opts["enable_loop_fusion"]:
+        flags_str += ",loop-fusion"
+    if effective_label_opts["enable_vectorization"]:
+        flags_str += ",vectorization"
+    if use_int32:
+        flags_str += ",int32"
     print(f"  [{variant.upper()} {flags_str}] {stem}: compiling  ({reason})")
     print(f"           src: {source}  →  {exe}")
     t0 = time.time()
@@ -1739,12 +1837,12 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
         fmap = {
             pool.submit(compile_one, src, var, od, force, use_mut, enable_papi,
                         enable_papi_native, store_scalar_field_counts,
-                        disable_loopification, disable_loop_fusion,
-                        enable_selective_buffer_sharing, disable_selective_buffer_sharing,
-                        use_no_ran): (prog, var)
+                        enable_loopification, enable_loop_fusion,
+                        enable_selective_buffer_sharing, enable_vectorization,
+                        use_int32, use_no_ran): (prog, var)
             for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native,
-                store_scalar_field_counts, disable_loopification, disable_loop_fusion,
-                enable_selective_buffer_sharing, disable_selective_buffer_sharing, use_no_ran in tasks
+                store_scalar_field_counts, enable_loopification, enable_loop_fusion,
+                enable_selective_buffer_sharing, enable_vectorization, use_int32, use_no_ran in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -1812,10 +1910,11 @@ def run_exe(exe: Path, iterations: int,
 def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
                          programs_dir: Path, out_dir: Path, iterations: int, force: bool,
                          store_scalar_field_counts: bool = False,
-                         disable_loopification: bool = False,
-                         disable_loop_fusion: bool = False,
+                         enable_loopification: bool = False,
+                         enable_loop_fusion: bool = False,
                          enable_selective_buffer_sharing: bool = False,
-                         disable_selective_buffer_sharing: bool = False,
+                         enable_vectorization: bool = False,
+                         use_int32: bool = False,
                          use_no_ran: bool = True,
                          dump_raw: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
     """
@@ -1878,10 +1977,11 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
         enable_papi=False,
         enable_papi_native=False,
         store_scalar_field_counts=store_scalar_field_counts,
-        disable_loopification=disable_loopification,
-        disable_loop_fusion=disable_loop_fusion,
+        enable_loopification=enable_loopification,
+        enable_loop_fusion=enable_loop_fusion,
         enable_selective_buffer_sharing=enable_selective_buffer_sharing,
-        disable_selective_buffer_sharing=disable_selective_buffer_sharing,
+        enable_vectorization=enable_vectorization,
+        use_int32=use_int32,
         use_no_ran=use_no_ran,
     )
     if not ok:
@@ -1920,12 +2020,16 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       enable_papi: bool = False,
                       enable_papi_native: bool = False,
                       store_scalar_field_counts: bool = False,
-                      disable_loopification: bool = False,
-                      disable_loop_fusion: bool = False,
+                      enable_loopification: bool = False,
+                      enable_loop_fusion: bool = False,
                       enable_selective_buffer_sharing: bool = False,
-                      disable_selective_buffer_sharing: bool = False,
+                      enable_vectorization: bool = False,
+                      use_int32: bool = False,
                       benchmark_ghc: bool = False,
                       benchmark_mlton: bool = False,
+                      warmup_runs: int = 1,
+                      warmup_iterations: int = 1,
+                      cooldown_seconds: float = 3.0,
                       ) -> Tuple[Optional[BenchmarkResult], Optional[BenchmarkResult]]:
     """
     Benchmark one program. Returns (aos_result, soa_result) for backwards compatibility.
@@ -1960,10 +2064,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         variant_compile_opts[var] = {
             "use_mutable_cursors": use_mut_eff,
             "store_scalar_field_counts": store_scalar_field_counts,
-            "disable_loopification": disable_loopification,
-            "disable_loop_fusion": disable_loop_fusion,
+            "enable_loopification": enable_loopification,
+            "enable_loop_fusion": enable_loop_fusion,
             "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
-            "disable_selective_buffer_sharing": disable_selective_buffer_sharing,
+            "enable_vectorization": enable_vectorization,
+            "use_int32": use_int32,
             "use_no_ran": use_no_ran_eff,
         }
         if var == "ghc":
@@ -1985,9 +2090,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         if src.exists():
             tasks.append((prog, var, src, out_dir, force, use_mut_eff, enable_papi,
                           enable_papi_native, store_scalar_field_counts,
-                          disable_loopification, disable_loop_fusion,
-                          enable_selective_buffer_sharing, disable_selective_buffer_sharing,
-                          use_no_ran_eff))
+                          enable_loopification, enable_loop_fusion,
+                          enable_selective_buffer_sharing, enable_vectorization,
+                          use_int32, use_no_ran_eff))
         else:
             print(f"  Warning: {src} not found")
 
@@ -2005,10 +2110,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         compile_opts = variant_compile_opts.get(var, {
             "use_mutable_cursors": use_mut,
             "store_scalar_field_counts": store_scalar_field_counts,
-            "disable_loopification": disable_loopification,
-            "disable_loop_fusion": disable_loop_fusion,
+            "enable_loopification": enable_loopification,
+            "enable_loop_fusion": enable_loop_fusion,
             "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
-            "disable_selective_buffer_sharing": disable_selective_buffer_sharing,
+            "enable_vectorization": enable_vectorization,
+            "use_int32": use_int32,
             "use_no_ran": True,
         })
 
@@ -2031,10 +2137,30 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         exe  = out_dir / f"{stem}.{var}.exe"
 
         print(f"  [{var.upper()}] running ...")
-        papi_before = _snapshot_papi_json_files(Path.cwd()) if enable_papi else {}
-        run_started_at = time.time()
         papi_env = ({"PAPI_EVENTS": ",".join(_PAPI_SELECTED_EVENTS)}
                     if (enable_papi and _PAPI_SELECTED_EVENTS) else None)
+
+        warmup_failed = False
+        warmup_runs_eff = max(0, warmup_runs)
+        warmup_iters_eff = max(1, warmup_iterations)
+        for w in range(warmup_runs_eff):
+            print(f"           warmup {w + 1}/{warmup_runs_eff}  (--iterate {warmup_iters_eff})")
+            ok_w, _rt_w, _stdout_w, stderr_w, rc_w = run_exe(
+                exe, warmup_iters_eff, dump_dir=None, env_override=papi_env
+            )
+            if not ok_w:
+                res.compile_success = True
+                res.run_success = False
+                res.error_message = stderr_w or f"warmup failed (exit {rc_w})"
+                print(f"           FAILED during warmup (exit {rc_w})")
+                warmup_failed = True
+                break
+        if warmup_failed:
+            results[var] = res
+            continue
+
+        papi_before = _snapshot_papi_json_files(Path.cwd()) if enable_papi else {}
+        run_started_at = time.time()
         ok2, rt, stdout, stderr, returncode = run_exe(
             exe, iterations, dump_dir=dump_dir, env_override=papi_env
         )
@@ -2098,10 +2224,11 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         iterations=iterations,
                         force=force,
                         store_scalar_field_counts=compile_opts["store_scalar_field_counts"],
-                        disable_loopification=compile_opts["disable_loopification"],
-                        disable_loop_fusion=compile_opts["disable_loop_fusion"],
+                        enable_loopification=compile_opts["enable_loopification"],
+                        enable_loop_fusion=compile_opts["enable_loop_fusion"],
                         enable_selective_buffer_sharing=compile_opts["enable_selective_buffer_sharing"],
-                        disable_selective_buffer_sharing=compile_opts["disable_selective_buffer_sharing"],
+                        enable_vectorization=compile_opts["enable_vectorization"],
+                        use_int32=compile_opts["use_int32"],
                         use_no_ran=compile_opts["use_no_ran"],
                         dump_raw=dump_raw,
                     )
@@ -2111,8 +2238,9 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         res.passes = merged_passes
                         print(
                             "           [B] build: "
-                            f"median={build_stats['median_time']:.4f}s "
-                            f"±{build_stats['stderr']:.5f}s  "
+                            f"median={build_stats['median_time']:.4f}s  "
+                            f"mean={build_stats['mean_time']:.4f}s  "
+                            f"95%CI=±{fmt_ci95(build_stats.get('ci95_abs'))}  "
                             f"min={build_stats['min_time']:.4f}s  "
                             f"max={build_stats['max_time']:.4f}s  "
                             f"n={build_stats['n']}"
@@ -2133,21 +2261,24 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                 for pname, pd in res.passes.items():
                     its = pd.get("iter_times", [])
                     med = pd["median_time"]
-                    se  = pd.get("stderr", 0.0)
+                    mean = pd.get("mean_time", med)
+                    ci95 = pd.get("ci95_abs")
                     mn  = pd["min_time"]
                     mx  = pd["max_time"]
                     n   = pd.get("n", len(its))
                     t   = pd["pass_type"][0].upper() if pd["pass_type"] != "unknown" else "?"
                     print(f"           [{t}] {pname}: "
-                          f"median={_fmt_time(med)} ±{se:.5f}s  "
+                          f"median={_fmt_time(med)}  "
+                          f"mean={_fmt_time(mean)}  "
+                          f"95%CI=±{fmt_ci95(ci95)}  "
                           f"min={_fmt_time(mn)}  max={_fmt_time(mx)}  n={n}")
 
         results[var] = res
 
         # Cooldown between variant executions to reduce thermal/cache carryover.
-        if idx < len(variants) - 1:
-            print("           waiting 3s before next variant run ...")
-            time.sleep(3)
+        if idx < len(variants) - 1 and cooldown_seconds > 0:
+            print(f"           waiting {cooldown_seconds:g}s before next variant run ...")
+            time.sleep(cooldown_seconds)
 
     # For backwards compatibility, return (aos, soa) with mutable cursors
     # Also store all results globally if benchmarking immutable variants
@@ -4222,11 +4353,15 @@ def write_text_report(all_results: List[Tuple], out_file: Path,
                 dr    = pd.get("dead_ratio")
                 n_it  = pd.get("n", len(pd.get("iter_times", [])))
                 med   = pd["median_time"]
-                se    = pd.get("stderr", 0.0)
+                mean  = pd.get("mean_time", med)
+                ci95  = pd.get("ci95_abs")
                 ann   = ""
                 if uses is not None and adt:
                     ann += f"  uses={uses}/{adt}  dead={dr*100:.0f}%"
-                lines.append(f"    [{t}] {pname}: {med:.4f} ±{se:.5f}s  (n={n_it}){ann}")
+                lines.append(
+                    f"    [{t}] {pname}: median={med:.4f}s  "
+                    f"mean={mean:.4f}s  95%CI=±{fmt_ci95(ci95)}  (n={n_it}){ann}"
+                )
         if aos.run_success and soa.run_success:
             at = sum(p["median_time"] for p in aos.passes.values())
             st = sum(p["median_time"] for p in soa.passes.values())
@@ -4681,8 +4816,9 @@ def main():
           Diagnosing timing discrepancies vs manual runs:
             1. Run with --dump-raw to save every exe's full stdout to
                benchmark_output/raw_output/*.stdout.txt  then inspect ITER TIMES lines.
-            2. Run with --iterations 1 to match a cold single-run manual test.
-               (More iterations can inflate median due to GC/cache warm-up effects.)
+            2. For publication-style runs, keep --iterations high enough for
+               uncertainty estimates and leave the default warmup enabled.
+               For cold single-run debugging, use --iterations 1 --warmup-runs 0.
             3. Run with --clean to force recompilation and rule out stale exes.
                Every run prints the exact exe path and its mtime for verification.
         """),
@@ -4690,9 +4826,16 @@ def main():
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
     ap.add_argument("--iterations",     type=int,  default=20,
-                    help="Number of timed iterations passed as --iterate N to each exe. "
-                         "Use --iterations 1 to match a cold single-run manual test. "
-                         "(default: 20)")
+                    help="Number of timed iterations passed as --iterate N to each measured exe run. "
+                         "Use enough samples for confidence intervals; use --iterations 1 "
+                         "--warmup-runs 0 to match a cold manual run. (default: 20)")
+    ap.add_argument("--warmup-runs", type=int, default=1,
+                    help="Untimed executable launches before each measured variant run. "
+                         "Warmups are discarded and reduce first-run/cache effects. Default: 1.")
+    ap.add_argument("--warmup-iterations", type=int, default=1,
+                    help="--iterate value used for each warmup launch. Default: 1.")
+    ap.add_argument("--cooldown-seconds", type=float, default=3.0,
+                    help="Sleep between variant executions to reduce carryover. Default: 3.0; use 0 to disable.")
     ap.add_argument("--programs",       nargs="+")
     ap.add_argument("--clean",          action="store_true",
                     help="Force recompile every program regardless of mtime")
@@ -4729,45 +4872,23 @@ def main():
                     help="Compile with --enable-papi-native, parse PAPI_NATIVE stdout lines, "
                          "and add native PAPI columns to tables.")
     ap.add_argument("--store-scalar-field-counts", action="store_true",
-                    help="Compile Gibbon variants with --store-scalar-field-counts so "
-                         "SoA runs can exercise scalar-count-footer-based optimizations "
-                         "such as loopified OPT:CanVectorize traversals.")
-    loopification_group = ap.add_mutually_exclusive_group()
-    loopification_group.add_argument("--enable-loopification",
-                                     dest="disable_loopification",
-                                     action="store_false",
-                                     help="Compile Gibbon variants with loopification enabled. "
-                                          "This is the default.")
-    loopification_group.add_argument("--disable-loopification",
-                                     dest="disable_loopification",
-                                     action="store_true",
-                                     help="Compile Gibbon variants with --disable-loopification. "
-                                          "Useful for comparing SOA mutable recursive code against "
-                                          "loopified OPT:CanVectorize traversals without editing sources.")
-    ap.set_defaults(disable_loopification=False)
-    loop_fusion_group = ap.add_mutually_exclusive_group()
-    loop_fusion_group.add_argument("--enable-loop-fusion",
-                                  dest="disable_loop_fusion",
-                                  action="store_false",
-                                  help="Compile loopified Gibbon variants with scalar-buffer loop fusion enabled. "
-                                       "This is the default.")
-    loop_fusion_group.add_argument("--disable-loop-fusion",
-                                  dest="disable_loop_fusion",
-                                  action="store_true",
-                                  help="Compile Gibbon variants with --disable-loop-fusion. "
-                                       "Loopification remains enabled unless --disable-loopification is also set.")
-    ap.set_defaults(disable_loop_fusion=False)
-    selective_sharing_group = ap.add_mutually_exclusive_group()
-    selective_sharing_group.add_argument("--enable-selective-buffer-sharing",
-                                        dest="enable_selective_buffer_sharing",
-                                        action="store_true",
-                                        help="Compile Gibbon variants with post-loopification selective buffer sharing enabled.")
-    selective_sharing_group.add_argument("--disable-selective-buffer-sharing",
-                                        dest="disable_selective_buffer_sharing",
-                                        action="store_true",
-                                        help="Compile Gibbon variants with post-loopification selective buffer sharing disabled.")
-    ap.set_defaults(enable_selective_buffer_sharing=False,
-                    disable_selective_buffer_sharing=False)
+                    help="Enable scalar-count footer metadata for SoA builders annotated with OPT:StoreScalarCounts. "
+                         "This flag is not passed to AoS variants.")
+    ap.add_argument("--enable-loopification", action="store_true",
+                    help="Enable map-traversal loopification. The benchmark harness also passes "
+                         "--auto-loopification, so supported maps no longer require manual "
+                         "OPT:CanVectorize annotations.")
+    ap.add_argument("--enable-loop-fusion", action="store_true",
+                    help="Enable post-loopification loop fusion for fully factored SoA scalar-buffer loops. "
+                         "This flag is not passed to AoS variants.")
+    ap.add_argument("--enable-selective-buffer-sharing", action="store_true",
+                    help="Enable post-loopification selective sharing for unchanged fully factored SoA buffers. "
+                         "This flag is not passed to AoS variants.")
+    ap.add_argument("--enable-vectorization", action="store_true",
+                    help="Enable SIMD vectorization for supported loopified fully factored SoA scalar-buffer loops. "
+                         "This flag is not passed to AoS variants.")
+    ap.add_argument("--int32", "--gibbon-int32", dest="use_int32", action="store_true",
+                    help="Compile Gibbon variants with 32-bit GibInt payloads. This is passed to both AoS and SoA Gibbon variants.")
     args = ap.parse_args()
 
     if args.enable_papi and args.enable_papi_native:
@@ -4782,23 +4903,20 @@ def main():
     print("=" * 72)
     print(f"  Programs dir : {args.programs_dir}")
     print(f"  Output dir   : {args.output_dir}")
-    print(f"  Iterations   : {args.iterations}  "
-          f"(passed as --iterate N; use --iterations 1 to match cold manual runs)")
+    print(f"  Iterations   : {args.iterations} timed samples per pass (--iterate N)")
+    print(f"  Warmup       : {args.warmup_runs} run(s) × --iterate {args.warmup_iterations}")
+    print(f"  Cooldown     : {args.cooldown_seconds:g}s between variants")
     print(f"  Programs     : {len(programs_to_run)}")
     print(f"  Force recomp : {'YES  (--clean)' if args.clean else 'no  (smart mtime check)'}")
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no'}")
-    print(f"  Scalar counts: {'YES (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'no'}")
-    print(f"  Loopification: {'DISABLED (--disable-loopification)' if args.disable_loopification else 'enabled'}")
-    print(f"  Loop fusion  : {'DISABLED (--disable-loop-fusion)' if args.disable_loop_fusion else 'enabled'}")
-    if args.enable_selective_buffer_sharing:
-        selective_s = "enabled (--enable-selective-buffer-sharing)"
-    elif args.disable_selective_buffer_sharing:
-        selective_s = "DISABLED (--disable-selective-buffer-sharing)"
-    else:
-        selective_s = "default off"
-    print(f"  Selective sh.: {selective_s}")
+    print(f"  Scalar counts: {'enabled for SoA (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'off'}")
+    print(f"  Loopification: {'enabled (--enable-loopification + --auto-loopification)' if args.enable_loopification else 'off'}")
+    print(f"  Loop fusion  : {'enabled for SoA (--enable-loop-fusion)' if args.enable_loop_fusion else 'off'}")
+    print(f"  Selective sh.: {'enabled for SoA (--enable-selective-buffer-sharing)' if args.enable_selective_buffer_sharing else 'off'}")
+    print(f"  Vectorization: {'enabled for SoA (--enable-vectorization)' if args.enable_vectorization else 'off'}")
+    print(f"  Int width    : {'32-bit (--int32)' if args.use_int32 else '64-bit default'}")
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:
@@ -4862,10 +4980,14 @@ def main():
             enable_papi=args.enable_papi,
             enable_papi_native=args.enable_papi_native,
             store_scalar_field_counts=args.store_scalar_field_counts,
-            disable_loopification=args.disable_loopification,
-            disable_loop_fusion=args.disable_loop_fusion,
+            enable_loopification=args.enable_loopification,
+            enable_loop_fusion=args.enable_loop_fusion,
             enable_selective_buffer_sharing=args.enable_selective_buffer_sharing,
-            disable_selective_buffer_sharing=args.disable_selective_buffer_sharing,
+            enable_vectorization=args.enable_vectorization,
+            use_int32=args.use_int32,
+            warmup_runs=args.warmup_runs,
+            warmup_iterations=args.warmup_iterations,
+            cooldown_seconds=args.cooldown_seconds,
         )
         all_results.append((aos, soa))
 

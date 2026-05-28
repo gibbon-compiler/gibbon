@@ -89,6 +89,7 @@ lbDeuxLoadProxy p =
 
 -- Map-like operator: add a constant potential term to all leaves.
 -- Inspiration: high-level MADNESS function addition on adaptive function variables.
+{-# ANN addConstPW "OPT:CanVectorize" #-}
 addConstPW :: PW -> Int -> PW
 addConstPW p c =
   case p of
@@ -97,6 +98,7 @@ addConstPW p c =
 
 -- Map-like operator: local differentiation proxy on basis coefficients.
 -- Inspiration: MADNESS operator differentiation over function trees.
+{-# ANN diffPW "OPT:CanVectorize" #-}
 diffPW :: PW -> PW
 diffPW p =
   case p of

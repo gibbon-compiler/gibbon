@@ -85,6 +85,10 @@ rearrangeFreeExp is_main frees tail =
       loopBody' <- go loopBody
       bod' <- go bod
       return $ WhileCursorT ref loopBody' bod'
+    WhileCursorEndT ref endRef loopBody bod -> do
+      loopBody' <- go loopBody
+      bod' <- go bod
+      return $ WhileCursorEndT ref endRef loopBody' bod'
     IfT tst con els ->
       IfT tst <$> go con <*> go els
     ErrT{} -> return tail

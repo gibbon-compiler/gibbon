@@ -115,6 +115,7 @@ clearMarks h =
 
 -- Sweep phase:
 -- reclaim unmarked objects by zeroing size, and clear mark bits for next cycle.
+{-# ANN sweepUnmarked "OPT:CanVectorize" #-}
 sweepUnmarked :: Heap -> Heap
 sweepUnmarked h =
   case h of
@@ -140,6 +141,7 @@ inflateSizes h k =
 
 -- Mutator-style update:
 -- periodically "touch" hot objects, setting mark and increasing size.
+{-# ANN touchHotObjects "OPT:CanVectorize" #-}
 touchHotObjects :: Heap -> Int -> Int -> Heap
 touchHotObjects h stride delta =
   case h of

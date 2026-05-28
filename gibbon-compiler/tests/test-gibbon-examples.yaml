@@ -9,6 +9,18 @@
 ## summaryFile:  String  -- ^ File in which to store the test summary. (default: gibbon-test-summary.txt)
 ## tempdir:      String  -- ^ Temporary directory to store the build artifacts (default: examples/build_tmp)
 ## run-modes:   [String] -- ^ If non-empty, run tests only in the specified modes. (default: [])
+##
+## The default examples suite is currently scoped to the optimization modes
+## under active development. This intentionally avoids unrelated GC/pointer
+## configurations while we validate:
+##   * 64-bit baseline packed execution,
+##   * 32-bit packed execution,
+##   * loopification,
+##   * selective buffer sharing,
+##   * SSE vectorization, and
+##   * 32-bit SSE vectorization.
+
+run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
 
 ## Specifiying an individual test:
 ##
@@ -71,15 +83,15 @@ tests:
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
   - name: test12b_traverse.gib
-    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test12c_traverse.gib
-    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test13b_build.gib
   - name: test13_build.gib
   - name: Test185.hs
     answer-file: examples/Test185.ans
     # Scalar fields after packed not allowed
-    failing: [gibbon1,gibbon2,gibbon3, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: SS.hs
     dir: examples/gc
     answer-file: examples/gc/SS.ans
@@ -258,11 +270,11 @@ tests:
   - name: Poly1.hs
     dir: examples/poly
     answer-file: examples/poly/Poly1.ans
-    failing: [gibbon1, gibbon2, gibbon3, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
   # - name: measure_mode.hs
   #   answer-file: examples/measure_mode.ans
-  #   failing: [gibbon1, gibbon2]
+  #   failing: [gibbon1, gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
 
   - name: MonoTree.hs
     answer-file: examples/MonoTree.ans
@@ -288,7 +300,7 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/CurriedFns.ans
     skip: true
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
 
   - name: T127.hs
     dir: examples/poly
@@ -308,19 +320,19 @@ tests:
 
   - name: unariser_bug1.hs
     answer-file: examples/unariser_bug1.ans
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     skip: true
 
   - name: ParseLinearTypes.hs
     test-flags: ["--ghc-tc"]
     dir: examples/lineartypes/
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
   - name: EqBench.hs
     answer-file: examples/EqBench.ans
 
   - name: test_parse.hs
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
   - name: toplevel_value.hs
     answer-file: examples/toplevel_value.ans
@@ -357,7 +369,7 @@ tests:
     dir: examples
     answer-file: examples/test_printpacked.ans
     # gibbon3 and gibbon2: Inferlocations bug.
-    failing: [interp1,gibbon1,pointer, nocopies]
+    failing: [interp1, gibbon1, pointer, nocopies, int32, loopify, selective, vectorize, int32-vectorize]
 
    ## FAILING: Multiple packed outputs.
   - name: TupleTest.hs
@@ -371,7 +383,7 @@ tests:
 
     ## FAILING: Scalar field after a packed field.
   - name: test12_skip.gib
-    failing: [gibbon1]
+    failing: [gibbon1, int32, loopify, selective, vectorize, int32-vectorize]
     skip: true
   - name: test12b_traverse.gib
     skip: true
@@ -401,7 +413,7 @@ tests:
     skip: true
   - name: test29d_list.gib
     skip: true
-    failing: [gibbon1]
+    failing: [gibbon1, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test_unpacking.gib
     skip: true
 
@@ -409,46 +421,46 @@ tests:
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: Fail2.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: Fail3.hs
     dir: examples/should_fail
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     test-flags: ["--fusion"]
 
   - name: render_tree.hs
     dir: examples/fusion-benchmarks
     skip: true
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree.ans
 
   - name: render_tree_two_passes.hs
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree_two_passes.ans
 
   - name: render_tree_four_passes.hs
     skip: true
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree_four_passes.ans
 
   - name: render_tree_five_passes.hs
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3, pointer]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, int32, loopify, selective, vectorize, int32-vectorize]
     ## [2020.05.27]: It never finishes on Travis...
     skip: true
     test-flags: ["--fusion"]
@@ -456,7 +468,7 @@ tests:
 
   - name: LC.hs
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2, gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     test-flags: ["--fusion"]
     skip: true
     # gibbon2: segfaults in free_region
@@ -494,43 +506,43 @@ tests:
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/ast/C1.ans
     skip: true
 
   ## Tests that only work with some backend:
   - name: test18f_flip.gib
-    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: pp_projs.gib
     skip: true
   - name: test12_skip.gib
-    failing: [gibbon1]
+    failing: [gibbon1, int32, loopify, selective, vectorize, int32-vectorize]
     skip: true
 
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
+    failing: [interp1, pointer, gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test08b_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
+    failing: [interp1, pointer, gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test08c_dict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
+    failing: [interp1, pointer, gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
   - name: test08d_sharedict.gib
-    failing: [interp1,pointer,gibbon1,gibbon2,gibbon3, nocopies, noran]
+    failing: [interp1, pointer, gibbon1, gibbon2, gibbon3, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
   # - name: test08f_dict.gib
   # - name: test08f2_dict.gib
-  #   failing: [pointer,gibbon1,gibbon2]
+  #   failing: [pointer, gibbon1, gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
-    failing: [gibbon1,gibbon2,gibbon3]
+    failing: [gibbon1, gibbon2, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     skip: true
     # printing symbols is broken atm
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib
-    failing: [gibbon1,gibbon2,gibbon3,pointer,interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
 
   # sym-append not implemented in the RTS
   - name: test15b_symappend.gib
@@ -555,15 +567,15 @@ tests:
     failing: [interp1]
 
   - name: test_153.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1, nocopies, noran]
+    failing: [gibbon3, gibbon2, gibbon1, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/test_153.ans
 
   - name: test_164.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1, nocopies, noran]
+    failing: [gibbon3, gibbon2, gibbon1, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/test_164.ans
 
   - name: test_166.hs
-    failing: [gibbon3,gibbon2,gibbon1,interp1, nocopies, noran]
+    failing: [gibbon3, gibbon2, gibbon1, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/test_166.ans
 
   - name: test_167.hs
@@ -580,38 +592,1513 @@ tests:
   - name: test_power.hs
     answer-file: examples/test_power.ans
     # gib_alloc_region_on_heap: gib_alloc failed
-    failing: [gibbon1]
+    failing: [gibbon1, int32, loopify, selective, vectorize, int32-vectorize]
     # Vidush: unskip this, thing hangs because of all the debug print statements
     skip: true
 
   - name: test_191.hs
     answer-file: examples/test_191.ans
     # Gibbon2 and Gibbon3 modes don't pass the L2 typechecker.
-    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2, nocopies, noran]
+    failing: [pointer, gibbon1, interp1, gibbon3, gibbon2, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
     run-modes: ["gibbon2"]
 
   #simple SoA benchmarks
   - name: list.hs
     dir: examples/soa_examples
-    failing: [gibbon3]
+    failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_list.ans
 
   - name: tree.hs
     dir: examples/soa_examples
-    failing: ["interp1", gibbon3]
+    failing: [interp1, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_tree.ans
 
   - name: packedList.hs
     dir: examples/soa_examples
-    failing: [gibbon3]
+    failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_packed_list.ans
 
   - name: packedTree.hs
     dir: examples/soa_examples
-    failing: [gibbon3]
+    failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_packed_tree.ans
     
   - name: test_303.hs
-    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran]
+    failing: [gibbon1, gibbon2, gibbon3, pointer, interp1, nocopies, noran, int32, loopify, selective, vectorize, int32-vectorize]
+
+
+  ## Optimization regression tests added for loopification/vectorization work.
+  ## These compare optimized output against a vanilla packed baseline, with
+  ## timing lines ignored by TestRunner.
+
+  # Small vectorization-focused examples.  These are intentionally tiny so
+  # they are valid in both 64-bit and 32-bit integer modes.
+  - name: VectorListMap.hs
+    dir: examples/vectorization/SOA
+    answer-file: examples/vectorization/VectorListMap.ans
+    compare-with-baseline: true
+    baseline-dir: examples/vectorization/AOS
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: VectorTreeMap.hs
+    dir: examples/vectorization/SOA
+    answer-file: examples/vectorization/VectorTreeMap.ans
+    compare-with-baseline: true
+    baseline-dir: examples/vectorization/AOS
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  # Existing fully factored SoA benchmark programs, compared against their
+  # matching flat AoS sources when one exists.
+  - name: ColorOctree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/ColorOctree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: Compiler.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/Compiler.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: DBQuery.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/DBQuery.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: DecisionTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/DecisionTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: DomTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/DomTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: KDTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/KDTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: LinearListReduction.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/LinearListReduction.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: List.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/List.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: MonoTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/MonoTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: ObjectGraph.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/ObjectGraph.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTreeBase.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTreeBase.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_barnesHutPotential.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_barnesHutPotential.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_clearFlags.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_clearFlags.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_countActive.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_countActive.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_countParticles.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_countParticles.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_fmmPotential.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_fmmPotential.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_scaleEnergy.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_scaleEnergy.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_sumEnergy.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_sumEnergy.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: OctTree_sumMass.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/OctTree_sumMass.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: PiecewiseFunctions.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/PiecewiseFunctions.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: TernaryTree.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/TernaryTree.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: Trie.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/Trie.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: reduceNestedList.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/reduceNestedList.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    baseline-dir: examples/soa_examples/programs/AOS
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  # SoA-only smoke tests.  These compare each optimization mode against
+  # the same source compiled with vanilla packed Gibbon.
+  - name: ScalarCountMultiIntSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/ScalarCountMultiIntSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: ScalarCountSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/ScalarCountSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: ScalarCountSmokeSingle.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/ScalarCountSmokeSingle.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: SelectiveBufferSharingFloatSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/SelectiveBufferSharingFloatSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: SelectiveBufferSharingSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/SelectiveBufferSharingSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: VectorCrossFieldSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/VectorCrossFieldSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+  - name: VectorExprSmoke.hs
+    dir: examples/soa_examples/programs/SOA
+    answer-file: examples/soa_examples/reduced_answers/VectorExprSmoke.ans
+    source-replacements:
+      - {from: "100000000", to: "64"}
+      - {from: "10000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "mkTree 23", to: "mkTree 6"}
+      - {from: "mkTree 15", to: "mkTree 6"}
+      - {from: "mkMultiList 1000000", to: "mkMultiList 64"}
+      - {from: "mkVList 1000", to: "mkVList 64"}
+      - {from: "mkListA 3000", to: "mkListA 8"}
+      - {from: "(sizeParam + 5000000)", to: "(sizeParam + 64)"}
+      - {from: "(sizeParam + 75)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 35)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 23)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 22)", to: "(sizeParam + 6)"}
+      - {from: "(sizeParam + 8)", to: "(sizeParam + 4)"}
+      - {from: "(sizeParam + 7)", to: "(sizeParam + 4)"}
+      - {from: "buildOctree 8", to: "buildOctree 4"}
+      - {from: "buildOctree (8)", to: "buildOctree (4)"}
+      - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
+      - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, loopify, selective, vectorize]
+
+
+  # Existing layout-benchmark bug reproducers.  They are listed here so the
+  # suite accounts for every layout_benchmarks example, but they are skipped in
+  # this phase because the current objective explicitly excludes unrelated GC
+  # and historical copy/CalculateBounds bugs.
+  - name: replicate_calculateBounds_bug.hs
+    compile-only: true
+    dir: examples/layout_benchmarks
+    skip: true
+  - name: replicate_copyPacked_bug.hs
+    compile-only: true
+    dir: examples/layout_benchmarks
+    skip: true
+  - name: replicate_failing_gc.hs
+    compile-only: true
+    dir: examples/layout_benchmarks
+    skip: true
+  - name: replicate_traverse_copyPacked_bug.hs
+    compile-only: true
+    dir: examples/layout_benchmarks
+    skip: true
+
+  # Layout benchmark examples.  Files named *_bug or *_failing_* are
+  # existing bug reproducers, not optimization regressions, so they are not
+  # part of this phase of the matrix.
+  - name: Adts.hs
+    # Phase 3: mutable-cursor packed-field/end-cursor issue.
+    failing: [loopify, selective, vectorize, int32-vectorize]
+    dir: examples/layout_benchmarks
+    answer-file: examples/layout_benchmarks/reduced_answers/Adts.ans
+    source-replacements:
+      - {from: "3000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "80000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "3000", to: "8"}
+      - {from: "2000", to: "8"}
+      - {from: "1000", to: "8"}
+      - {from: "100", to: "8"}
+      - {from: "50", to: "8"}
+      - {from: "10", to: "4"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: Contents.hs
+    # Phase 3: mutable-cursor packed-field/end-cursor issue.
+    failing: [loopify, selective, vectorize, int32-vectorize]
+    dir: examples/layout_benchmarks
+    answer-file: examples/layout_benchmarks/reduced_answers/Contents.ans
+    source-replacements:
+      - {from: "3000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "80000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "3000", to: "8"}
+      - {from: "2000", to: "8"}
+      - {from: "1000", to: "8"}
+      - {from: "100", to: "8"}
+      - {from: "50", to: "8"}
+      - {from: "10", to: "4"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: eval_bench.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout1ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout1DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout1InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout1ListLen.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout1TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout2ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout2DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout2InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout2ListLen.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout2TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout3ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout3DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout3InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout3TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout4ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout4DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout4InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout4TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout5ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout5DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout5InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout5TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout6ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout6DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout6InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout6TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout7ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout7DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout7InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout7TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout8ContentSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout8DeleteTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout8InsertTag.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: layout8TagSearch.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks/blog_management/marmoset
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: calcAdtLengthAc.hs
+    # Phase 3: mutable-cursor packed-field/end-cursor issue.
+    failing: [loopify, selective, vectorize, int32-vectorize]
+    dir: examples/layout_benchmarks
+    answer-file: examples/layout_benchmarks/reduced_answers/calcAdtLengthAc.ans
+    source-replacements:
+      - {from: "3000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "80000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "3000", to: "8"}
+      - {from: "2000", to: "8"}
+      - {from: "1000", to: "8"}
+      - {from: "100", to: "8"}
+      - {from: "50", to: "8"}
+      - {from: "10", to: "4"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: calcAdtLengthCa.hs
+    # Phase 3: mutable-cursor packed-field/end-cursor issue.
+    failing: [loopify, selective, vectorize, int32-vectorize]
+    dir: examples/layout_benchmarks
+    answer-file: examples/layout_benchmarks/reduced_answers/calcAdtLengthCa.ans
+    source-replacements:
+      - {from: "3000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "80000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "3000", to: "8"}
+      - {from: "2000", to: "8"}
+      - {from: "1000", to: "8"}
+      - {from: "100", to: "8"}
+      - {from: "50", to: "8"}
+      - {from: "10", to: "4"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtContentAC.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtContentCA.hs
+    # Phase 3: mutable-cursor packed-field/end-cursor issue.
+    failing: [loopify, selective, vectorize, int32-vectorize]
+    dir: examples/layout_benchmarks
+    answer-file: examples/layout_benchmarks/reduced_answers/processAdtContentCA.ans
+    source-replacements:
+      - {from: "3000000", to: "64"}
+      - {from: "1000000", to: "64"}
+      - {from: "100000", to: "64"}
+      - {from: "80000", to: "64"}
+      - {from: "10000", to: "64"}
+      - {from: "3000", to: "8"}
+      - {from: "2000", to: "8"}
+      - {from: "1000", to: "8"}
+      - {from: "100", to: "8"}
+      - {from: "50", to: "8"}
+      - {from: "10", to: "4"}
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsAct.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsAct2.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsAtc.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsAtc2.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsCat.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsCat2.hs
+    compile-only: true
+    # Baseline packed runtime currently segfaults even after unit-sized
+    # source reduction; leave this for the packed-field/layout bug phase.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsCta.hs
+    compile-only: true
+    # Baseline packed runtime currently segfaults even after unit-sized
+    # source reduction; leave this for the packed-field/layout bug phase.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsCta2.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsTac.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsTac2.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsTca.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
+  - name: processAdtTagsTca2.hs
+    compile-only: true
+    # Baseline packed compile currently fails; leave for Phase 3
+    # packed-field/layout import fixes, not Phase 1 optimization validation.
+    skip: true
+    dir: examples/layout_benchmarks
+    compare-with-baseline: true
+    run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+
 
 

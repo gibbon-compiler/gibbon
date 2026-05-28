@@ -131,6 +131,7 @@ filterSelectivitySkew q =
     QEmpty -> 0
 
 -- Map 1: scale planner costs for cost-model retuning.
+{-# ANN scaleCosts "OPT:CanVectorize" #-}
 scaleCosts :: Query -> Int -> Query
 scaleCosts q k =
   case q of
@@ -144,6 +145,7 @@ scaleCosts q k =
       QEmpty
 
 -- Map 2: clear transient filter flags after rewrite.
+{-# ANN clearQueryFlags "OPT:CanVectorize" #-}
 clearQueryFlags :: Query -> Query
 clearQueryFlags q =
   case q of

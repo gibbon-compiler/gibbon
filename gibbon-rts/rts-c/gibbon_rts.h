@@ -83,7 +83,15 @@
 
 typedef uint8_t GibPackedTag;
 typedef uint8_t GibBoxedTag;
+#ifdef GIBBON_INT32
+typedef int32_t GibInt;
+#define GIBBON_PRIdInt PRId32
+#define GIBBON_SCNdInt SCNd32
+#else
 typedef int64_t GibInt;
+#define GIBBON_PRIdInt PRId64
+#define GIBBON_SCNdInt SCNd64
+#endif
 typedef char GibChar;
 typedef float GibFloat;
 typedef uint64_t GibSym;

@@ -11,6 +11,7 @@ import Data.Foldable ( foldrM )
 
 import Gibbon.Common
 import Gibbon.DynFlags
+import Gibbon.Language (sizeOfTyD)
 -- import Gibbon.NewL2.Syntax as L2
 import Gibbon.NewL2.Syntax as NewL2
 import Gibbon.L2.Syntax as Old
@@ -160,7 +161,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                                                                                                                in case (unTy2 ty) of 
                                                                                                                                                     PackedTy{} -> []
                                                                                                                                                     _ -> let 
-                                                                                                                                                            size_of_ty = fromJust $ sizeOfTy (unTy2 ty)
+                                                                                                                                                            size_of_ty = fromJust $ sizeOfTyD dflags (unTy2 ty)
                                                                                                                                                            in [("_",[],MkTy2 IntTy, Ext $ BoundsCheck (size_of_ty) (NewL2.EndOfReg freg mode (toEndVRegVar freg)) (NewL2.Loc (LREM floc freg (toEndVRegVar freg) mode)))] 
                                                                                                           
                                                                                                           ) $ zip fieldLocs' fieldRegs'
@@ -176,7 +177,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funMeta,funBody} = 
                                                      then let rv = regionToVar reg
                                                               end_rv = toEndVRegVar rv
                                                               -- rv = end_reg
-                                                              bc = boundsCheck ddefs (locs_tycons M.! loc)
+                                                              bc = boundsCheck dflags ddefs (locs_tycons M.! loc)
                                                               locarg = NewL2.Loc (LREM loc rv end_rv mode)
                                                               regarg = NewL2.EndOfReg rv mode end_rv
                                                             in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
@@ -795,15 +796,15 @@ findRetLocs e0 = go e0 []
 -- constructors of this type. The assumption is that whatever writes
 -- that packed value will do a bounds check again. Note that only AppE's
 -- do boundschecking, DataConE's dont. We should fix this.
-boundsCheck :: NewL2.DDefs2 -> TyCon -> Int
-boundsCheck ddefs tycon =
+boundsCheck :: DynFlags -> NewL2.DDefs2 -> TyCon -> Int
+boundsCheck dflags ddefs tycon =
   let dcons = getConOrdering ddefs tycon
       spaceReqd tys = foldl (\(bytes, seen_packed) ty ->
                                if seen_packed
                                then ( bytes, seen_packed )
                                else if hasPacked (unTy2 ty)
                                then ( bytes, True )
-                               else ( bytes + (fromJust $ sizeOfTy (unTy2 ty)), False ))
+                               else ( bytes + (fromJust $ sizeOfTyD dflags (unTy2 ty)), False ))
                         (0, False)
                         tys
       tyss = map (lookupDataCon ddefs) dcons

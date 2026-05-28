@@ -2,7 +2,829 @@
 
 ## Current Snapshot
 
-This section is the current source of truth. Notes below `Archived Previous Notes` are historical and may describe older per-tag-slot or per-field designs.
+## Latest Handoff: Phase 1 Test Infrastructure Expansion In Progress (2026-05-27)
+
+The current work is Phase 1 of the broader validation plan: expand the example
+test matrix for the packed-layout optimization work without chasing unrelated
+GC/pointer/interpreter failures.
+
+### Scope For This Phase
+
+Only these configurations are in scope:
+
+- vanilla packed 64-bit baseline (`gibbon2`);
+- packed 32-bit integer mode (`int32`);
+- mutable-cursor loopification (`loopify`);
+- loopification plus selective buffer sharing (`selective`);
+- loopification plus selective sharing plus vectorization (`vectorize`);
+- the same vectorized configuration with 32-bit integers
+  (`int32-vectorize`).
+
+GC-specific failures and other unrelated backend bugs are intentionally out of
+scope for this phase.
+
+### Test Runner Changes
+
+`gibbon-compiler/tests/TestRunner.hs` now has named modes for the optimization
+matrix:
+
+- `GibbonInt32`
+- `GibbonLoopify`
+- `GibbonSelective`
+- `GibbonVectorize`
+- `GibbonInt32Vectorize`
+
+The mode flags are:
+
+```text
+int32:
+  --run --packed --int32
+
+loopify:
+  --run --packed --use-mutable-cursors
+  --store-scalar-field-counts --enable-loopification
+
+selective:
+  loopify flags + --enable-selective-buffer-sharing
+
+vectorize:
+  selective flags + --enable-vectorization
+
+int32-vectorize:
+  vectorize flags + --int32
+```
+
+The runner also gained baseline-comparison support for layout/optimization
+equivalence tests:
+
+- `compare-with-baseline: true`
+- optional `baseline-mode`
+- optional `baseline-dir`
+- optional `baseline-name`
+
+When enabled, the runner compiles/runs a baseline program and compares each
+requested mode against that output after stripping timing lines (`BATCHTIME`,
+`SELFTIMED`) and normalizing whitespace. This is used to treat vanilla packed
+AoS as the ground truth for SoA optimization tests.
+
+I also fixed the runner's mode-precedence logic: per-test `run-modes` now
+correctly override global YAML/CLI modes; otherwise global modes apply; otherwise
+the runner falls back to `allModes`.
+
+### YAML Test Matrix Changes
+
+`gibbon-compiler/tests/test-gibbon-examples.yaml` now sets the global default
+mode matrix to:
+
+```yaml
+run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+```
+
+Expected-failure lists that already included packed Gibbon modes were extended
+with the new packed optimization modes so known non-optimization failures do not
+become noise in this phase.
+
+New entries were appended for:
+
+- small vectorization-specific examples in `examples/vectorization/{AOS,SOA}`;
+- paired SoA benchmark programs in
+  `examples/soa_examples/programs/SOA`, compared against matching AOS sources;
+- SoA-only smoke tests in `examples/soa_examples/programs/SOA`, compared against
+  the same source compiled with vanilla packed Gibbon;
+- layout benchmark examples under `examples/layout_benchmarks`.
+
+The benchmark-sized SoA programs are currently restricted to 64-bit optimization
+modes (`gibbon2`, `loopify`, `selective`, `vectorize`) because several compute
+large sums that intentionally do not have the same result under 32-bit integer
+overflow. The small vectorization tests cover both 64-bit and 32-bit
+vectorization.
+
+Known layout-benchmark bug reproducers named `*_bug` or `*_failing_*` are not in
+the optimization matrix for this phase.
+
+### New Vectorization Smoke Tests
+
+Added small AoS/SoA pairs:
+
+- `gibbon-compiler/examples/vectorization/AOS/VectorListMap.hs`
+- `gibbon-compiler/examples/vectorization/SOA/VectorListMap.hs`
+- `gibbon-compiler/examples/vectorization/AOS/VectorTreeMap.hs`
+- `gibbon-compiler/examples/vectorization/SOA/VectorTreeMap.hs`
+
+These are intentionally small so both 64-bit and 32-bit modes should produce the
+same output.
+
+Manual smoke validation performed:
+
+```text
+VectorListMap AoS baseline:       2272
+VectorListMap SoA vectorized:     2272
+VectorListMap SoA int32-vector:   2272
+VectorTreeMap AoS baseline:       1216
+VectorTreeMap SoA vectorized:     1216
+VectorTreeMap SoA int32-vector:   1216
+```
+
+Build validation performed:
+
+```text
+cabal build test-gibbon-examples
+cabal run test-gibbon-examples -- --help
+```
+
+Both succeeded after the test-runner edits.
+
+### Update: Reduced Unit-Style Testing And Answer Files
+
+The first pass used `compile-only: true` for benchmark-sized SoA/layout entries,
+but that is not enough for runtime correctness. The runner now supports
+`source-replacements`: exact source rewrites applied to a temporary copy under
+`examples/build_tmp/reduced_sources/...`. This keeps benchmark sources untouched
+while allowing the examples suite to execute reduced unit-sized variants.
+
+For SoA benchmark-program tests in `examples/soa_examples/programs/SOA`, the
+YAML now removes `compile-only`, references stored reduced answers under
+`gibbon-compiler/examples/soa_examples/reduced_answers`, and adds reductions such
+as:
+
+- `100000000`, `10000000`, `1000000`, `100000`, `10000` -> `64`
+- `mkTree 23`, `mkTree 15` -> depth `6`
+- `mkMultiList 1000000`, `mkVList 1000`, `mkListA 3000` -> small sizes
+- large `sizeParam + ...` builders -> small depths/counts
+- large DomTree/OctTree direct builder depths -> smaller depths
+
+Baseline and optimized modes both receive the same source reductions, so
+`compare-with-baseline` remains a semantic output check against vanilla packed
+AoS. Timing jitter is ignored by normalizing `BATCHTIME`, `SELFTIMED`, and
+`ITER TIMES` lines.
+
+Layout-benchmark entries that currently fail even in vanilla packed mode remain
+skipped or expected-failing for the relevant mutable-cursor modes; those are
+Phase 3 packed-field/mutable-cursor issues, not Phase 1 runtime optimization
+checks.
+
+The reduced runtime tests now have stored golden answers:
+
+- `gibbon-compiler/examples/vectorization/VectorListMap.ans` -> `2272`
+- `gibbon-compiler/examples/vectorization/VectorTreeMap.ans` -> `1216`
+- `gibbon-compiler/examples/soa_examples/reduced_answers/*.ans` for the 31
+  reduced SoA benchmark/smoke programs.
+
+`TestRunner.hs` baseline-comparison mode now checks an optional `answer-file`
+against the baseline output before comparing optimized mode outputs against the
+baseline. The answer check is timing-normalized, so reduced benchmark answers do
+not need to store unstable `BATCHTIME`, `SELFTIMED`, or `ITER TIMES` lines. This
+gives the reduced tests both an AoS ground truth and a checked golden output.
+
+`TestRunner.hs` also gained `compile-only` support. For compile-only tests it
+uses `modeCFlags`, derived from the normal executable flags but replacing
+`--to-exe` with `--toC`. This remains useful for examples whose vanilla baseline
+does not yet compile/run.
+
+Representative reduced-runtime validation performed manually for `List.hs`:
+
+```text
+AOS reduced List final value:            '#(2144 2144 64)
+SoA vectorized reduced List final value: '#(2144 2144 64)
+```
+
+The only differences were timing lines, now covered by `isTimingLine`.
+
+A scoped validation run was performed before the final answer-file change:
+
+```text
+GIBBONDIR=/workdisk/git/gibbon \
+  cabal run test-gibbon-examples -- \
+  --skip-failing --run-modes int32 \
+  --test-summary-file /tmp/gibbon-phase1-int32-summary.txt -v 1
+```
+
+It completed in 105s after compile-only reduction. Result at that point:
+
+```text
+150 expected passes
+1 unexpected pass: test_printpacked.hs in GibbonInt32
+31 expected failures
+6 unexpected failures:
+  AnonLambdas.hs, NeedsClosure.hs, Reverse.hs, SS.hs, T64_1.gib,
+  test18b_tupconstraint.gib in GibbonInt32
+105 skipped
+```
+
+Those remaining int32 failures are outside the SoA/vectorization-specific test
+entries and should be triaged only if the next phase chooses to broaden the
+32-bit backend correctness effort.
+
+### Remaining Phase 1 Work
+
+- Run the expanded example matrix and triage only failures in the scoped
+  optimization areas: SoA layout, mutable cursors, loopification, selective
+  sharing, vectorization, 32-bit mode, and 32-bit vectorization.
+- Improve the layout-testing story further. The current suite uses existing
+  AOS/SOA source pairs where available and baseline comparison. The longer-term
+  request is a smarter pre-processing path that can inject or rewrite layout
+  annotations programmatically so factored/flat variants do not need duplicated
+  source files.
+- If full-suite runtime is too high because some benchmark sources use large
+  hard-coded inputs, add a principled test-only source preprocessor or separate
+  reduced-size examples rather than weakening output comparison.
+
+## Latest Handoff: SIMD Vectorization Audit Complete For Annotated SoA Maps (2026-05-23)
+
+This section supersedes the older SIMD prototype notes below. The vectorization
+pass is now implemented and has been audited against the default
+`gibbon_benchmark.py` programs that contain `OPT:CanVectorize` annotations.
+
+### What Changed In This Round
+
+`gibbon-compiler/src/Gibbon/Passes/VectorizeTraversals.hs` was generalized from
+simple add/sub loops to a register-DAG vectorizer that now handles:
+
+- multiple input scalar buffers in one expression DAG;
+- multiple top-level scalar writes in one loop body;
+- loop-fusion unit wrappers around several scalar-buffer loop bodies;
+- invariant scalar expressions, including non-trivial expressions such as
+  `k + 1`, by binding the scalar temporary before `VecBroadcast`;
+- 64-bit `IntS` arithmetic: add, subtract, multiply, divide, and modulo;
+- `FloatS` arithmetic: add, subtract, multiply, and divide;
+- statement-level conditional scalar writes of the form:
+
+```text
+if cond then WriteScalar out a else WriteScalar out b
+```
+
+  when both branches write the same scalar cursor. The recognizer canonicalizes
+  this only for analysis/vector code generation as a value-level select; the
+  original scalar loop body remains the tail loop.
+
+New explicit vector-register L3/L4 primitives were added:
+
+- existing: `VecBroadcast`, `VecLoad`, `VecAdd`, `VecSub`, `VecMul`, `VecDiv`,
+  `VecStore`;
+- new: `VecMod`, `VecEq`, `VecSelect`.
+
+The C backend lowers these through static inline helper functions in
+`Codegen.hs`:
+
+- `IntS`/64-bit uses 2-lane `__m128i` groups. A logical stride of 4 is still
+  represented as two 2-lane groups.
+- `FloatS` uses 4-lane `__m128` groups.
+- `VecMul`, `VecDiv`, `VecMod`, and 64-bit equality are helper-lowered for
+  64-bit integers because SSE2 does not provide native packed 64-bit integer
+  multiply/divide/modulo/equality. This is correct for the prototype and keeps
+  the IR general, but it should not be read as a peak-performance SIMD lowering.
+- `VecSelect` uses mask-and/or selection for supported vector shapes.
+
+The pass remains conservative: if a loop has scalar writes that cannot all be
+represented by supported vector DAGs, that loop stays scalar.
+
+### Validation Performed
+
+Compiler build:
+
+```text
+cabal build exe:gibbon
+```
+
+Focused smoke tests:
+
+- `SOA/VectorExprSmoke.hs` produced `'#(1009000 1018000)`.
+- `SOA/VectorCrossFieldSmoke.hs` produced `'#(1018000 17000)`.
+- Generated C for the smokes contains `gib_vec_load_*`, arithmetic helpers, and
+  `gib_vec_store_*` inside the transformed loops.
+
+No-loop-fusion audit over default annotated SoA benchmark programs:
+
+- `Compiler.stripSideEffectsPass` vectorized
+- `Compiler.targetRetunePass` vectorized
+- `DBQuery.clearQueryFlags` vectorized
+- `DBQuery.scaleCosts` vectorized
+- `DomTree.scaleLayout` vectorized
+- `List.add1` vectorized
+- `MonoTree.add1Tree` vectorized
+- `ObjectGraph.sweepUnmarked` vectorized
+- `ObjectGraph.touchHotObjects` vectorized
+- `OctTree_scaleEnergy.scaleEnergy` vectorized
+- `OctTree_clearFlags.clearFlags` vectorized
+- `PiecewiseFunctions.addConstPW` vectorized
+- `PiecewiseFunctions.diffPW` vectorized
+- `TernaryTree.add1Tree` vectorized
+- `Trie.decayTrieStats` vectorized
+- `Trie.resetTraversalState` vectorized
+
+Loop-fusion-enabled audit produced the same vectorization coverage. In the
+OctTree split-driver programs, imported sibling maps that are not called by that
+specific driver may be absent from the generated C; those are reported as
+`missing` by the audit script but are not failures for that benchmark.
+
+Benchmark-harness smoke run:
+
+```text
+python3 gibbon_benchmark.py \
+  --programs Compiler.hs DBQuery.hs DomTree.hs List.hs MonoTree.hs \
+             ObjectGraph.hs OctTree_scaleEnergy.hs OctTree_clearFlags.hs \
+             PiecewiseFunctions.hs TernaryTree.hs Trie.hs \
+  --iterations 1 --warmup-runs 0 --cooldown-seconds 0 --clean \
+  --store-scalar-field-counts \
+  --enable-loopification \
+  --enable-selective-buffer-sharing \
+  --enable-loop-fusion \
+  --enable-vectorization
+```
+
+Run from `gibbon-compiler/examples/soa_examples`. Result:
+
+```text
+DONE - 11/11 succeeded | 11/11 output matches
+```
+
+This checked AoS vs optimized SoA output equality through the benchmark script.
+
+### Current Vectorization Limitations / Next Steps
+
+- Integer `VecMul`/`VecDiv`/`VecMod` and integer equality are helper-lowered in
+  SSE2 for correctness/general IR coverage. For performance, add AVX2/AVX512 or
+  a better lowering strategy where hardware supports the operation.
+- Conditional vectorization currently handles equality-based masks and same-cursor
+  scalar writes. It does not yet handle arbitrary nested statement control flow,
+  less-than/greater-than masks, boolean conjunction/disjunction masks, or
+  branch bodies with side effects beyond the matched scalar write.
+- Mixed-width condition/output cases are not fully generalized. Current audited
+  benchmark conditionals are `IntS`-based.
+- Reductions, gathers/scatters, math-library calls, casts, and true parent-child
+  dependent traversals remain intentionally out of scope.
+- Future TODO: keep `GibInt` 64-bit for now, but later test a 32-bit integer
+  configuration where SIMD lanes and expected speedups are more favorable.
+- Future TODO: add selectable vector backends. The IR is now explicit enough to
+  lower the same vector DAGs to SSE2, AVX2, or AVX512 later.
+
+## Latest Handoff: Loopification, Selective Sharing, Benchmarking, And SIMD Next Step (2026-05-18)
+
+This older handoff remains useful for pipeline context, but the 2026-05-23
+SIMD vectorization handoff above is now the latest state. Older "next step"
+notes in this section may have since been completed or superseded.
+
+### Live Compiler Pipeline State
+
+The active packed pipeline around cursorized L3 is currently:
+
+```text
+cursorize
+-> reorderScalarWrites
+-> loopifyFlatTraversals        -- AoS / flat heterogeneous layout
+-> loopifyTraversals            -- fully factored SoA layout
+-> propagateScalarCounts        -- preserve footer metadata across producers
+-> selectiveBufferSharing       -- SoA loopified maps only, opt-in
+-> fuseLoopifiedTraversals      -- SoA scalar-loop fusion, opt-in
+-> vectorizeTraversals          -- SoA SIMD vectorization, opt-in
+-> L3.flatten
+-> L3.typecheck
+-> hoistNewBuf
+-> L3.typecheck
+-> unariser / lower / codegen ...
+```
+
+Relevant implementation files:
+
+- `gibbon-compiler/src/Gibbon/Passes/LoopifyFlatTraversals.hs`
+  - flat AoS map loopification;
+  - walks one heterogeneous packed buffer from input start to packed-value end;
+  - does not use scalar-count footers, selective sharing, loop fusion, or SIMD.
+
+- `gibbon-compiler/src/Gibbon/Passes/LoopifyTraversals.hs`
+  - fully factored SoA loopification for `OPT:CanVectorize` map traversals;
+  - emits chunk loops and inner counted field loops;
+  - consumes cyclic footer metadata for per-chunk loop bounds;
+  - copies the dcon stream from input rather than synthesizing constructor tags;
+  - supports loop-invariant scalar arguments, same-shape conditional writes,
+    cross-buffer scalar dependencies, multi-chunk walking, and output footer
+    count maintenance.
+
+- `gibbon-compiler/src/Gibbon/Passes/ScalarCountPropagation.hs`
+  - copies footer-count metadata from source SoA buffers to destination SoA
+    buffers after materialized shape-preserving producer calls;
+  - fixes pipelines where a non-loopified producer, such as `computeWidths`,
+    feeds a later loopified consumer, such as `scaleLayout`.
+
+- `gibbon-compiler/src/Gibbon/Passes/SelectiveBufferSharing.hs`
+  - post-loopification SoA-only pass;
+  - shares copied/dead buffers with a single selective-indirection wrapper;
+  - normalizes selective wrappers at consumer call sites rather than at
+    recursive function entries;
+  - hoists normalization outside `TimeIt` where applicable so measured traversal
+    time does not include wrapper cleanup.
+
+- `gibbon-compiler/src/Gibbon/Passes/LoopifiedTraversalFusion.hs`
+  - SoA-only post-sharing pass;
+  - fuses remaining loopified scalar-buffer loops by constructor group;
+  - relies on the fully factored SoA invariant that redirection boundaries are
+    aligned across peer buffers for the same logical value.
+
+- `gibbon-compiler/src/Gibbon/Passes/VectorizeTraversals.hs`
+  - opt-in SIMD nano-pass behind `--enable-vectorization`;
+  - runs after selective sharing and after optional loop fusion;
+  - conservatively recognizes loopified scalar-buffer vector DAGs in
+    `OPT:CanVectorize` functions, including supported arithmetic, invariant
+    broadcasts, multi-input expressions, and equality/select conditionals;
+  - rewrites only exact supported loops into explicit vector-register L3 ops
+    (`VecBroadcast`, `VecLoad`, `VecAdd`, `VecSub`, `VecMul`, `VecDiv`,
+     `VecMod`, `VecEq`, `VecSelect`, `VecStore`) plus a scalar tail loop;
+  - leaves unsupported loops unchanged.
+
+### Current Flag Semantics
+
+The confusing old `--SoA` / `Opt_Packed_SoA` flag has been removed. Layout is
+chosen by source annotations on datatype definitions:
+
+- `ANN type T "Linear"` means flat AoS / linear layout.
+- `ANN type T "FullyFactored"` means fully factored SoA layout.
+
+Optimization flags are one-way opt-in flags:
+
+- `--enable-loopification`
+  - enables map loopification;
+  - AoS gets flat heterogeneous while-loop traversal;
+  - SoA gets per-buffer chunk/for traversal when count metadata is available.
+
+- `--store-scalar-field-counts`
+  - required for SoA loopification because SoA loop bounds come from footer
+    metadata;
+  - not needed for AoS loopification and the benchmark harness does not pass it
+    to AoS variants.
+
+- `--enable-selective-buffer-sharing`
+  - SoA-only;
+  - applies after loopification;
+  - shares dcon/copied scalar buffers through selective-indirection wrappers.
+
+- `--enable-loop-fusion`
+  - SoA-only;
+  - applies after selective sharing;
+  - fuses remaining scalar loops by constructor group.
+
+- `--enable-vectorization` / `--vectorize-traversals`
+  - SoA SIMD target;
+  - applies after selective sharing and after loop fusion when fusion is enabled;
+  - currently vectorizes clearly supported loopified scalar-buffer arithmetic DAGs;
+  - unsupported loops are intentionally left as scalar loopified code.
+
+Current conceptual split:
+
+```text
+AoS / flat linear:
+  maps can be loopified by walking one heterogeneous buffer;
+  no scalar-count footers needed;
+  no selective buffer sharing;
+  no loop fusion;
+  SIMD is not the main target because data is heterogeneous.
+
+Fully factored SoA:
+  maps can be loopified over homogeneous buffers;
+  scalar-count footer metadata supplies O(1) per-chunk loop bounds;
+  selective buffer sharing can remove copied/dead buffers;
+  loop fusion can reduce loop overhead for remaining mutated buffers;
+  SIMD vectorization can operate over homogeneous scalar buffers after sharing;
+  this is the SIMD-friendly representation.
+```
+
+### Current Representation / Metadata Invariants
+
+The scalar-count/footer work is now used as runtime loop-bound metadata for SoA
+buffers. The important invariant for future vectorization is:
+
+- the end-of-region/footer for a buffer stores the count for that buffer's first
+  chunk;
+- each redirection/chunk-boundary footer stores the count for the next chunk;
+- therefore a traversal can get the first chunk count in O(1) from the input end
+  footer and later chunk counts in O(1) from the preceding boundary footer;
+- loopified shape-preserving maps copy/set output footer counts once per chunk,
+  not once per element.
+
+For SoA loopification, the generated code shape is intentionally:
+
+```text
+while chunks remain:
+  read chunk count from footer metadata
+  for i in 0 .. count-1:
+    run scalar operation(s) over homogeneous field buffers
+  advance input/output cursors and footer cursors
+```
+
+Selective sharing happens before loop fusion so copied/dead buffers can be
+removed entirely before remaining loops are grouped.
+
+### Historical SIMD Vectorization Prototype State (2026-05-19; Superseded)
+
+This section records the earlier prototype. The current vectorization state is the 2026-05-23 handoff above.
+
+The first compiler-driven SIMD path now uses explicit vector-register IR instead
+of a high-level semantic map primitive.  This supersedes the earlier
+`SimdMapAddConst` prototype.
+
+Implemented compiler pieces:
+
+- Shared language type support:
+  - `UrTy` now has `SimdTy element_ty lanes`;
+  - L3/L4 conversion, pretty-printing, cursorization type plumbing, and C
+    codegen know about this internal register type.
+
+- L3 IR now has explicit vector primitives:
+  - `VecBroadcast Scalar lanes value`;
+  - `VecLoad Scalar lanes cursor_ref`;
+  - `VecAdd Scalar lanes lhs rhs`;
+  - `VecSub Scalar lanes lhs rhs`;
+  - `VecMul Scalar lanes lhs rhs`;
+  - `VecStore Scalar lanes cursor_ref value`.
+
+- L4 IR has matching backend primitives.
+
+- The C backend lowers the current supported register shapes to SSE/SSE2 helper
+  calls emitted as static inline C helpers:
+  - `IntS` / `SymS`, 2 lanes, `__m128i`;
+  - `FloatS`, 4 lanes, `__m128`;
+  - `CharS` / `BoolS`, 16 lanes, `__m128i` byte operations;
+  - helper names have the form `gib_vec_{broadcast,load,add,sub,mul,store}_...`.
+  - `VecMul` is currently emitted only for `FloatS` because SSE2 has no general
+    64-bit integer multiply.
+
+- `VectorizeTraversals.hs` now rewrites supported scalar loop bodies by first
+  extracting parallel expression DAGs:
+
+  ```text
+  leaves:
+    scalar reads from one or more input buffer cursor refs
+    loop-invariant scalar expressions, broadcast to vector registers
+
+  internal nodes:
+    supported arithmetic ops, currently Add/Sub for Int/Sym/Char/Bool/Float
+    and Mul for Float
+  ```
+
+  The pass is deliberately whole-loop conservative: if a `ForE` contains multiple
+  top-level scalar writes, every write must be represented by a supported DAG or
+  the loop is left unchanged. This avoids vectorizing one field while silently
+  dropping another field into only the scalar tail. The matcher also flattens
+  unit-valued wrappers introduced by loop fusion for recognition, while keeping
+  the original scalar body as the tail loop.
+
+  The generated loop shape is:
+
+  ```text
+  vec_count  = scalar_count / stride
+  tail_count = scalar_count % stride
+  broadcast loop-invariant leaves once before the vector loop
+
+  for _ in 0 .. vec_count-1:
+    VecLoad each needed input cursor ref
+    bump each input cursor ref by vector bytes
+    evaluate each vector DAG into vector registers
+    VecStore each output cursor ref result
+    bump each output cursor ref by vector bytes
+    ...repeat once more for 64-bit Int/Sym to cover stride 4...
+
+  for _ in 0 .. tail_count-1:
+    original scalar loop body
+  ```
+
+  This preserves the existing 64-bit `GibInt` ABI.  For 64-bit `IntS` / `SymS`,
+  stride 4 is represented as two 2-lane SSE2 groups.  For `FloatS`, stride 4 is
+  represented as one 4-lane SSE group.  Byte-sized `CharS` / `BoolS` vector
+  primitives are available as 16-lane SSE2 register operations.
+
+- The retired high-level `SimdMapAddConst` IR/backend primitive has been removed
+  from the compiler source; the remaining SIMD surface is register-oriented.
+
+Validated target:
+
+- `SOA/List.hs` with `add1` under:
+  `--packed --to-exe --use-mutable-cursors --store-scalar-field-counts --enable-loopification --enable-selective-buffer-sharing --enable-vectorization --no-ran`.
+- Generated C contains vector-register helper calls such as
+  `gib_vec_broadcast_int64x2`, `gib_vec_load_int64x2`,
+  `gib_vec_add_int64x2`, and `gib_vec_store_int64x2`.
+- A temporary small copy with `mkList 1000` produced the expected result
+  `'#(501500 501500 1000)`.
+
+- `SOA/VectorExprSmoke.hs` validates a more general vector DAG:
+  - field 0 computes `(i + k) + (i + 3)`, using the input vector twice;
+  - field 1 computes `(j - k) + (j + 2)`, using both vector subtraction and
+    vector addition;
+  - generated C contains `gib_vec_sub_int64x2` and multiple vector-register DAG
+    temporaries;
+  - the executable produced `'#(1009000 1018000)`.
+
+- `SOA/VectorCrossFieldSmoke.hs` validates multi-input DAGs:
+  - field 0 computes `i + (j + k)` from two input scalar buffers plus a
+    loop-invariant argument;
+  - field 1 computes `(j - i) + k`;
+  - with loop fusion disabled and enabled, generated C contains vector loads from
+    multiple cursor refs, `gib_vec_add_int64x2`, `gib_vec_sub_int64x2`, and
+    vector stores for both output fields;
+  - the executable produced `'#(1018000 17000)`.
+
+Current limitations / next steps:
+
+- The recognizer handles pure arithmetic DAGs over scalar buffer reads and
+  loop-invariant scalar expressions.
+- It does not yet vectorize conditionals inside the scalar expression,
+  comparisons, casts, math-library calls, reductions, gathers/scatters, or mixed
+  scalar widths in one loop.
+- It currently hoists broadcasts for loop-invariant leaves, but does not CSE
+  duplicate invariant expressions across different output DAGs.
+- Next steps: validate tree maps, add richer expression forms, and then run the
+  broader benchmark suite with vectorization enabled.
+- Future TODO: evaluate a 32-bit `GibInt` configuration.  The current prototype
+  deliberately keeps `GibInt` 64-bit.
+- Future TODO: add selectable SIMD backends, likely SSE2 first-class today,
+  AVX2 stride-8 for 32-bit / stride-4 for 64-bit, and eventually AVX512.
+
+
+### Current Benchmarking And Reporting State
+
+Benchmark scripts have been updated to reduce noise and make uncertainty easier
+to read:
+
+- `gibbon-compiler/examples/soa_examples/gibbon_benchmark.py`
+  - default timed iterations are now `20`;
+  - supports untimed warmups via `--warmup-runs` and `--warmup-iterations`;
+  - supports configurable cooldowns via `--cooldown-seconds`;
+  - reports median, mean, and a two-sided 95% confidence interval for the mean;
+  - console and text report output now include `median`, `mean`, `95%CI`,
+    `min`, `max`, and sample count where useful;
+  - benchmark command construction respects the AoS/SoA split: scalar counts,
+    selective sharing, loop fusion, and vectorization are passed only to SoA
+    variants.
+
+- `benchmark_layout_versions.py`
+  - top-level driver for side-by-side version comparison;
+  - runs these variants:
+    - AoS non-mutable recursive,
+    - AoS mutable recursive,
+    - AoS mutable loopified,
+    - SoA non-mutable recursive,
+    - SoA mutable recursive,
+    - SoA mutable loopified,
+    - SoA mutable loopified + selective sharing;
+  - forwards warmup/cooldown/iteration options to `gibbon_benchmark.py`;
+  - writes both `layout_version_comparison.txt` and
+    `layout_version_comparison.md`;
+  - runtime tables now expand each program/pass into clean sub-rows:
+    `median`, `mean`, and `error`, where `error` is the 95% CI;
+  - `n=...` was intentionally removed from cells to keep tables readable;
+  - in the Markdown report only, map pass entries are visually marked:
+    - `SoA mut loopified`: dotted blue border;
+    - `SoA mut loop+share`: solid purple border;
+  - total rows and fold rows are not bordered, so the visual emphasis is only
+    on map optimizations.
+
+The current `layout_version_comparison.md` was regenerated from the existing
+JSON in `layout_version_benchmark_output/`; it was not a fresh full benchmark
+rerun. For a fresh publication-style comparison run:
+
+```bash
+python3 benchmark_layout_versions.py \
+  --clean \
+  --iterations 30 \
+  --warmup-runs 1 \
+  --warmup-iterations 1 \
+  --cooldown-seconds 3 \
+  --verbose
+```
+
+For quick smoke/debug runs, lower the iterations and disable warmup, e.g.:
+
+```bash
+python3 benchmark_layout_versions.py \
+  --programs List.hs MonoTree.hs \
+  --iterations 2 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --verbose
+```
+
+### Latest Validation Known In This Handoff
+
+Recently checked during the benchmark/reporting updates:
+
+```text
+python3 -m py_compile benchmark_layout_versions.py
+python3 -m py_compile gibbon-compiler/examples/soa_examples/gibbon_benchmark.py
+```
+
+A small `gibbon_benchmark.py` smoke on `LinearListReduction.hs` also succeeded
+with CI output in the console and report. The larger layout comparison report
+was regenerated from existing JSON, not rerun from scratch.
+
+Older compiler validation notes below include successful focused checks for:
+
+- `cabal build exe:gibbon -j1`;
+- `cabal run test-gibbon` / targeted pass tests;
+- DomTree scalar-count propagation;
+- PiecewiseFunctions loopification;
+- DBQuery selective sharing and unwrap placement;
+- full or partial benchmark sweeps at earlier checkpoints.
+
+Before making performance claims from the current code, rerun
+`benchmark_layout_versions.py --clean` so the JSON, Markdown, and text reports
+all come from one fresh automated run.
+
+### Current Known Limitations
+
+- Older note: `VectorizeTraversals.hs` used to be unimplemented; it is now implemented as described in the 2026-05-23 handoff above.
+- SoA loopification is still conservative; unsupported non-map traversals remain recursive.
+- Selective sharing is opt-in and still experimental, though the current design
+  is call-site normalized rather than recursive-entry normalized.
+- Loop fusion is opt-in and should remain separable for correctness/performance
+  comparisons.
+- Existing CI/error calculations are based on the executable's timed samples;
+  if we later want stronger statistics, add process-level repetitions in
+  addition to in-process `--iterate` samples.
+- The generated scalar loops are correctness-oriented. Some remaining overheads
+  are expected until SIMD/vectorization and further code cleanup land.
+
+### Older Superseded Plan: SIMD For Fully Factored Loopified Maps
+
+The next substantial compiler step should be SIMD vectorization for fully
+factored SoA maps after loopification, selective sharing, and optionally loop
+fusion. The reason to run it late is that selective sharing removes dead/copy
+buffers and fusion exposes the final hot loops over the remaining mutated
+homogeneous buffers.
+
+Recommended implementation direction:
+
+1. Keep SIMD separate from loopification and selective sharing.
+   Implement it in `Gibbon.Passes.VectorizeTraversals`, not inside
+   `LoopifyTraversals`.
+
+2. Start with the final loopified SoA shape:
+
+```text
+WhileCursor/chunk loop
+  ScalarCountSet / footer maintenance
+  ForE loop over chunk count
+    scalar loads from one or more homogeneous input buffers
+    pure scalar primitive operation
+    scalar store to homogeneous output buffer
+```
+
+3. First SIMD target should be simple, local scalar maps:
+
+```text
+out[i] = in[i] + constant
+out[i] = in[i] * invariant
+out[i] = f(in1[i], in2[i], scalar_invariant)
+```
+
+Where all vectorized buffers are:
+
+- fully factored SoA scalar buffers;
+- same constructor group / same chunk count;
+- contiguous within the chunk;
+- not selectively shared;
+- already in a loopified map pass.
+
+4. Add explicit IR/codegen support rather than relying entirely on C compiler
+   auto-vectorization. A conservative first target is SSE2 for `GibInt` because
+   earlier manual experiments showed AVX2 was not automatically better for the
+   end-to-end benchmark mix. AVX2 can be a later backend flag.
+
+5. Required lowering/codegen pieces will likely include:
+
+- vector load from scalar buffer cursor;
+- vector splat/broadcast for loop-invariant constants;
+- vector arithmetic primitive(s), initially add/mul/sub for integer scalars;
+- vector store to output buffer cursor;
+- scalar remainder loop for `count % vector_width`;
+- feature gating for SSE2/AVX2 C intrinsics.
+
+6. Validation plan for SIMD:
+
+- unit tests over generated IR shape: vector pass fires only on valid loopified
+  SoA map loops;
+- generated C inspection for representative maps;
+- correctness comparisons with SIMD off/on for:
+  - `List.add1`,
+  - `MonoTree.add1Tree`,
+  - `TernaryTree.add 1 tree`,
+  - `DBQuery.scaleCosts` / `clearQueryFlags`,
+  - `OctTree_scaleEnergy`,
+  - `PiecewiseFunctions.addConstPW` and `diffPW`;
+- benchmark comparisons using `benchmark_layout_versions.py --clean` and the
+  manual experiments under `experiments/scalar_count_smoke/` as intuition, not
+  as compiler truth.
+
+7. Keep the performance questions separate:
+
+- loopification speedup vs recursive backend;
+- selective sharing speedup from removing copy/dead buffers;
+- loop fusion speedup from reducing per-buffer loop overhead;
+- SIMD speedup within the hot inner loop;
+- end-to-end program speedup after all overheads.
+
+This separation matters because earlier manual C experiments showed that a
+vectorized inner loop can improve locally while end-to-end speedup is smaller
+when chunk walking, copying, allocation, or benchmark overhead dominates.
+
+The latest handoff above is the current source of truth. The sections below preserve implementation history and may describe older or superseded per-tag-slot, per-field, and pass-order designs.
 
 ## Scalar Count Propagation Update (2026-05-16)
 
@@ -155,7 +977,7 @@ DomTree direct validation:
 
 ```text
 GIBBONDIR=/workdisk/git/gibbon cabal run gibbon -- \
-  --packed --to-exe --use-mutable-cursors --SoA \
+  --packed --to-exe --use-mutable-cursors \
   --store-scalar-field-counts \
   --cfile /tmp/DomTree_scalar_count_prop.c \
   --exefile /tmp/DomTree_scalar_count_prop.exe \
@@ -192,7 +1014,6 @@ python3 gibbon_benchmark.py \
   --clean \
   --store-scalar-field-counts \
   --enable-loopification \
-  --disable-selective-buffer-sharing \
   --output-dir /tmp/gibbon_benchmark_scalar_count_prop
 ```
 
@@ -238,11 +1059,8 @@ fully-factored SoA map traversals:
 - pass: `Gibbon.Passes.LoopifyTraversals`
 - placement: after `reorderScalarWrites` in the L3 pipeline
 - trigger: functions marked `OPT:CanVectorize`
-- required flag: `--store-scalar-field-counts`
-- disable flag: `--disable-loopification` (alias:
-  `--no-loopify-traversals`)
-- loop-fusion disable flag: `--disable-loop-fusion` (alias:
-  `--no-loop-fusion`)
+- required flags: `--enable-loopification`; for fully factored SoA, also `--store-scalar-field-counts`
+- optional follow-on flag: `--enable-loop-fusion` / `--loop-fusion`
 - layout restriction: fully factored SoA only
 - IR shape: outer chunk `WhileCursor`, inner counted `ForE`
 - bounds source: cyclic scalar-count footer metadata
@@ -353,9 +1171,9 @@ comments in `gibbon-compiler/src/Gibbon/Passes/LoopifyTraversals.hs`.
     count is the total number of tags in the chunk, not the count of any one
     constructor.
 
-11. Loop fusion can be disabled independently from loopification with
-    `--disable-loop-fusion` / `--no-loop-fusion`. This keeps the loopified
-    chunk/for structure but restores the older one-loop-per-scalar-buffer
+11. Loop fusion is an independent opt-in pass enabled with
+    `--enable-loop-fusion` / `--loop-fusion`. Leaving it off keeps the
+    loopified chunk/for structure but preserves the one-loop-per-scalar-buffer
     baseline for correctness and performance comparisons.
 
 12. Selective-buffer-sharing unwraps are now call-site normalization, not
@@ -375,18 +1193,16 @@ comments in `gibbon-compiler/src/Gibbon/Passes/LoopifyTraversals.hs`.
 Most recent focused validation:
 
 - `cabal build exe:gibbon -j1`: passed
-- `cabal run exe:gibbon -- --help`: shows
-  `--disable-loopification` / `--no-loopify-traversals`
+- `cabal run exe:gibbon -- --help`: shows the one-way opt-in flags
+  `--enable-loopification`, `--enable-loop-fusion`, and
+  `--enable-selective-buffer-sharing`; it does not show old disable flags.
 - `python3 gibbon-compiler/examples/soa_examples/gibbon_benchmark.py --help`:
-  shows `--enable-loopification` / `--disable-loopification`
-- benchmark-script switch smoke on `List.hs`, one iteration:
-  - enabled:
-    `--store-scalar-field-counts`
-  - disabled:
-    `--store-scalar-field-counts --disable-loopification`
-  - both runs compiled, executed, and AoS/SOA outputs matched
-  - generated SOA C with loopification enabled contains `loop_mut` chunk
-    loops in `add1`; disabled output falls back to recursive `add1` calls
+  shows the same enable-only optimization interface.
+- benchmark-script smoke on `List.hs`, one iteration with
+  `--enable-loopification --store-scalar-field-counts --enable-selective-buffer-sharing --enable-loop-fusion`:
+  AoS compiled as `AOS mut-cursors,loopify`; SoA compiled as
+  `SOA mut-cursors,loopify,scalar-counts,selective-sharing,loop-fusion`;
+  outputs matched.
 - focused runtime regression check after `ScalarCountSet`:
   - `MonoTree.hs`, 5 iterations: loopified SOA `add1Tree` median improved
     from about `0.0578s` to `0.0211s`; recursive SOA baseline was about
@@ -402,8 +1218,6 @@ Most recent focused validation:
   - `DBQuery.hs` generated one dcon loop plus three constructor scalar-group
     loops for each loopified map, rather than one loop per scalar buffer
   - `DBQuery.hs` loopified and non-loopified final outputs matched
-  - `DBQuery.hs` with `--disable-loop-fusion` generated 26 loopified `for`s,
-    compared with 8 fused `for`s, and the final output matched the fused run
   - `OctTree_scaleEnergy.hs` generated one dcon loop plus two constructor
     scalar-group loops for `scaleEnergy`
   - `OctTree_scaleEnergy.hs` loopified and non-loopified final outputs
@@ -464,9 +1278,7 @@ The loopification effort is not complete. The major missing pieces are:
 3. Post-loopification selective dead-buffer sharing.
    This has been reintroduced as a separate opt-in `L3 -> L3` pass after
    loopification: `Gibbon.Passes.SelectiveBufferSharing`. It is enabled with
-   `--enable-selective-buffer-sharing` / `--selective-buffer-sharing` and can
-   be explicitly disabled with `--disable-selective-buffer-sharing` /
-   `--no-selective-buffer-sharing`.
+   `--enable-selective-buffer-sharing` / `--selective-buffer-sharing`.
 
    Current behavior:
    - for loopified `OPT:CanVectorize` functions, the dcon/tag stream and pure
@@ -1237,9 +2049,6 @@ opt-in:
 
 - enable: `--enable-selective-buffer-sharing` or
   `--selective-buffer-sharing`
-- disable: `--disable-selective-buffer-sharing` or
-  `--no-selective-buffer-sharing`
-
 The old `selectiveBufferSharingL2` entry point is no longer part of the
 pipeline. The remaining L2 `SelectiveBufferShareE` syntax is legacy plumbing
 from the abandoned prototype and is not constructed by the current pass.
@@ -1264,8 +2073,8 @@ selective sharing remove every pure-copy buffer loop without falling back to
 copying a buffer merely because it was selected as the representative fused
 chunk walker. The new `Gibbon.Passes.LoopifiedTraversalFusion` pass runs after
 selective sharing and fuses only the remaining adjacent loopified scalar loops
-with the same generated constructor label. The `--disable-loop-fusion` /
-`--no-loop-fusion` flag now disables this post-selective fusion stage.
+with the same generated constructor label. Leaving `--enable-loop-fusion` off
+keeps the unfused per-buffer loopified baseline.
 
 ## Pass 2: Loopify Traversals
 
@@ -1762,3 +2571,654 @@ What is not working yet:
 - There is not yet a permanent regression test for the cyclic invariant.
 - There are not yet helper APIs for vectorized traversal code to consume the footer list cleanly.
 - The manual vectorization examples have not yet been completed for the new constructor-count design.
+
+## 2026-05-16: Flat AoS Loopification Checkpoint
+
+### What changed
+
+- Added a separate flat-layout loopification pass in `gibbon-compiler/src/Gibbon/Passes/LoopifyFlatTraversals.hs`.
+  - This pass is intentionally independent from the existing fully factored SoA loopifier in `LoopifyTraversals.hs`.
+  - It fires only for functions annotated with `OPT:CanVectorize` whose mentioned datatype is not `FullyFactored`.
+  - It reuses the existing parent-child dependency check from `LoopifyTraversals.hs`; if self-call-derived values affect parent writes, tags, conditions, or later traversal decisions, the function remains recursive.
+  - It currently targets the mutable-cursor AoS cursorized shape.
+
+- Added a new statement-like loop primitive:
+  - L3: `WhileCursorEnd cur end body`
+  - L4: `WhileCursorEndT ref endRef loopBody bod`
+  - Codegen emits:
+    `while (*cur != *end) { ... }`
+  - This is distinct from existing `WhileCursor`, which means `while (*ref != NULL)` and is still used by SoA footer-chain loops.
+
+- Wired the new pass into the compiler pipeline after `reorderScalarWrites` and before the existing SoA `loopifyTraversals` pass:
+  1. `reorderScalarWrites`
+  2. `loopifyFlatTraversals`
+  3. `loopifyTraversals`
+  4. `propagateScalarCounts`
+  5. `selectiveBufferSharing`
+  6. `fuseLoopifiedTraversals`
+
+### AoS loopification invariant
+
+For flat AoS, all constructor tags and fields are in one heterogeneous buffer. The pass therefore cannot use fixed-stride field loops, scalar-count footers, selective buffer sharing, or SIMD-friendly homogeneous buffers. Instead, it removes recursion by walking the packed value from its start cursor to its packed value end cursor.
+
+The cursor-end fix in `Cursorize.hs` is essential here: for mutable calls, the input end argument now corresponds to the packed value end, not merely the current region/chunk end. The flat loop can therefore stop at `*input_cursor == *input_end`.
+
+Each iteration executes the original one-node switch body with recursive self-calls erased to unit. Normal constructor cases consume one node and leave child nodes to be processed by later loop iterations. Redirection and indirection cases update the input cursor to the pointed-to target and then continue the loop.
+
+### Normalization detail
+
+`LoopifyFlatTraversals.hs` has a small pass-local normalizer, `exposeRhsLets`, because cursorized/reordered L3 can leave cursor temporaries inside a let RHS while later writes refer to those temporaries. Lowering flattens those RHS lets into C statements, but an L3 loop body is typechecked before lowering, so the pass makes the same sequencing explicit before inserting `WhileCursorEnd`.
+
+### Validation performed
+
+- Compiler build:
+  - `cabal build exe:gibbon -j1`
+
+- Temporary AoS list smoke:
+  - Source: `/tmp/AOSListLoopifySmoke.hs`
+  - Compiled with `--packed --to-exe --use-mutable-cursors`
+  - Generated C contains `while (*lst_... != *end_r_...)` in `add1`.
+  - Small output: `'#(44 44 8)`.
+  - Large multi-chunk variant with `mkList 100000` output: `'#(5000150000 5000150000 100000)`.
+
+- Temporary AoS ternary tree smoke:
+  - Source: `/tmp/AOSTreeLoopifySmoke.hs`
+  - `add1Tree` generated a flat cursor-end loop.
+  - Loopified and recursive outputs both matched: `19682`.
+
+- Full benchmark suite from `gibbon-compiler/examples/soa_examples`:
+  - Command:
+    `python3 gibbon_benchmark.py --clean --iterations 1 --store-scalar-field-counts --dump-raw --json /tmp/gibbon_benchmark_aos_loopification.json --report /tmp/gibbon_benchmark_aos_loopification.md`
+  - Result: `22/22 succeeded | 22/22 output matches`.
+
+### Remaining work
+
+- Generalize flat AoS role inference beyond the current mutable-cursor shape if we want immutable-cursor AoS loopification too.
+- Add dedicated regression tests for the flat AoS pass instead of relying only on temporary `/tmp` smoke files and the benchmark suite.
+- Inspect generated AoS loopified C for complex maps and compare performance against recursive AoS; correctness is now stable, but the loop body still executes a switch per node and will not get the SoA/vectorization benefits.
+- Keep selective buffer sharing and SIMD/vector IR SoA-only. They do not naturally apply to the flat heterogeneous AoS buffer.
+
+## 2026-05-16: AoS Source Annotations And Benchmark Verification
+
+### Confirmation
+
+The AoS benchmark sources were missing `OPT:CanVectorize` annotations for the map traversals, so earlier full-suite runs were not fully exercising the new flat AoS loopification path. I mirrored the SoA map annotations into the corresponding AoS programs and intentionally left fold/non-map traversals unannotated.
+
+Annotated AoS map functions:
+
+- `AOS/List.hs`: `add1`
+- `AOS/MonoTree.hs`: `add1Tree`
+- `AOS/TernaryTree.hs`: `add1Tree`
+- `AOS/Compiler.hs`: `targetRetunePass`, `stripSideEffectsPass`
+- `AOS/DBQuery.hs`: `scaleCosts`, `clearQueryFlags`
+- `AOS/DomTree.hs`: `scaleLayout`
+- `AOS/ObjectGraph.hs`: `sweepUnmarked`, `touchHotObjects`
+- `AOS/OctTree.hs`: `scaleEnergy`, `clearFlags`
+- `AOS/OctTreeBase.hs`: `scaleEnergy`, `clearFlags`
+- `AOS/PiecewiseFunctions.hs`: `addConstPW`, `diffPW`
+- `AOS/Trie.hs`: `decayTrieStats`, `resetTraversalState`
+
+No `OPT:CanVectorize` annotation was added to `AOS/ColorOctree.hs` because its benchmarked passes are folds, not maps.
+
+### Lowering fix exposed by AoS annotations
+
+After the annotations were added, the full benchmark suite exposed an AoS lowering failure in `ObjectGraph`: `unitTail` rejected value returns from scalar conditional bindings inside a statement loop, for example a loop body containing `let size_prime = if ... then ... else ...`.
+
+The fix is in `gibbon-compiler/src/Gibbon/Passes/Lower.hs`: when `unitTail` sees `LetIfT` with non-empty bindings, it now preserves the branch value returns and only forces the continuation to unit. For statement-only conditionals with no bindings, it still requires unit branches. This keeps loop bodies statement-like without erasing values needed by local scalar bindings.
+
+### Verification
+
+- Rebuilt the compiler with `cabal build exe:gibbon -j1`.
+- Targeted rerun:
+  `python3 gibbon_benchmark.py --clean --iterations 1 --programs ObjectGraph.hs --store-scalar-field-counts --dump-raw --json /tmp/gibbon_benchmark_objectgraph_fix.json --report /tmp/gibbon_benchmark_objectgraph_fix.md`
+  Result: `1/1 succeeded | 1/1 output matches`.
+- Full rerun:
+  `python3 gibbon_benchmark.py --clean --iterations 1 --store-scalar-field-counts --dump-raw --json /tmp/gibbon_benchmark_aos_annotations_after_fix.json --report /tmp/gibbon_benchmark_aos_annotations_after_fix.md`
+  Result: `22/22 succeeded | 22/22 output matches`.
+
+Generated AoS C now visibly contains flat cursor-end loops for representative annotated maps, for example:
+
+- `benchmark_output/List.aos.c`: `while (*lst_... != *end_r_...)`
+- `benchmark_output/MonoTree.aos.c`: `while (*t_... != *end_r_...)`
+- `benchmark_output/ObjectGraph.aos.c`: two loopified map traversals
+- `benchmark_output/OctTree_scaleEnergy.aos.c`: loopified `scaleEnergy`
+- `benchmark_output/PiecewiseFunctions.aos.c`: loopified `addConstPW` and `diffPW`
+- `benchmark_output/Trie.aos.c`: loopified `decayTrieStats` and `resetTraversalState`
+
+## 2026-05-16: Removed Dead `--SoA` Flag
+
+### Confirmation
+
+The old compiler flag `--SoA` / `Opt_Packed_SoA` was a dead or misleading layout switch. Packed layout is selected by source annotations on datatype definitions, not by this command-line flag:
+
+- `ANN type T "Factored"` sets the datatype memory layout to `FullyFactored`.
+- `ANN type T "Linear"` keeps the datatype in the flat linear/AoS layout.
+- Unannotated datatypes default to `Linear`.
+
+The audit found that `--SoA` no longer controlled source layout. Its only remaining semantic use was an old compiler-pipeline guard that skipped `parAlloc`. That guard now checks the actual datatype definitions instead: if any `DDef` has `memLayout == FullyFactored`, the pipeline skips `parAlloc`; otherwise it runs as before.
+
+### Flag cleanup
+
+Removed from the compiler:
+
+- `Opt_Packed_SoA`
+- the `--SoA` command-line parser entry
+- stale benchmark/script references to `--SoA`
+
+The optimization flags are now one-way opt-in flags, all defaulting off:
+
+- `--enable-loopification` / `--loopify-traversals`
+- `--enable-loop-fusion` / `--loop-fusion`
+- `--enable-selective-buffer-sharing` / `--selective-buffer-sharing`
+- `--store-scalar-field-counts`
+
+There are no paired disable flags in the compiler or benchmark driver.
+
+### Layout/Optimization split
+
+AoS/linear layout:
+
+- can use flat map loopification when a traversal is annotated `OPT:CanVectorize`;
+- does not need scalar-count footers;
+- does not use selective buffer sharing;
+- does not use loop fusion;
+- is not the SIMD-friendly path because fields live in one heterogeneous buffer.
+
+Fully factored SoA layout:
+
+- can use scalar-counted per-buffer loopification;
+- needs `--store-scalar-field-counts` for footer loop bounds;
+- can use selective buffer sharing after loopification;
+- can use loop fusion after selective sharing;
+- is the vectorization-friendly representation because scalar buffers are homogeneous.
+
+The benchmark driver enforces this split at command construction time: scalar counts, selective sharing, and loop fusion are passed only to SoA variants, while loopification can be passed to both AoS and SoA variants. Benchmark labels now print the effective optimization set for each compiled variant, e.g. `AOS mut-cursors,loopify` versus `SOA mut-cursors,loopify,scalar-counts,selective-sharing,loop-fusion`.
+
+### Validation
+
+- `rg` sweep over `gibbon-compiler/src` and `gibbon-compiler/examples` found no remaining `Opt_Packed_SoA`, `--SoA`, or `Packed_SoA` references.
+- `cabal build exe:gibbon -j1` succeeded.
+- `cabal run exe:gibbon -- --help` shows no `--SoA` option and only the enable-style optimization flags.
+- `python3 gibbon-compiler/examples/soa_examples/gibbon_benchmark.py --help` shows no `--SoA` or disable-style optimization flags.
+- Paper-mode smoke:
+  `python3 gibbon_benchmark.py --clean --iterations 1 --programs List.hs --enable-loopification --store-scalar-field-counts --enable-selective-buffer-sharing --enable-loop-fusion --generate-paper --report /tmp/gibbon_list_opt_report.txt --json /tmp/gibbon_list_opt_results.json --latex-table /tmp/gibbon_list_opt_table.tex --figures-dir /tmp/gibbon_list_opt_figures`
+  Result: `1/1 succeeded | 1/1 output matches`; LaTeX table generation succeeded. Figures were skipped only because matplotlib/numpy are not installed in this environment.
+
+
+## 2026-05-25: Prototype `--int32` Backend Mode and SSE2 Int32 Vectorization
+
+### Goal
+
+Add an opt-in compiler mode that represents Gibbon `Int` values as 32-bit payloads in generated C and packed layouts, while preserving the existing 64-bit `Int` mode as the default. This is intended to let fully factored loopified maps use four 32-bit lanes with SSE2 instead of two 64-bit lanes.
+
+### Compiler flag
+
+Added a one-way opt-in flag:
+
+- `--int32`
+- alias: `--gibbon-int32`
+
+The flag is represented as `Opt_Int32` in `gibbon-compiler/src/Gibbon/DynFlags.hs`.
+
+### Runtime / generated C representation
+
+Implemented in `gibbon-rts/rts-c/gibbon_rts.h`:
+
+- default: `typedef int64_t GibInt;`
+- with generated `#define GIBBON_INT32 1`: `typedef int32_t GibInt;`
+
+`Codegen.hs` now emits `#define GIBBON_INT32 1` before including `gibbon_rts.h` when the flag is enabled. RTS print helpers use `GIBBON_PRIdInt` for `GibInt` values; `GibSym` remains 64-bit and still prints with `PRIu64`.
+
+### Width-aware packed layout
+
+Added `sizeOfTyD :: DynFlags -> UrTy a -> Maybe Int` in `gibbon-compiler/src/Gibbon/Language.hs`. The legacy `sizeOfTy` remains 64-bit for compatibility. `sizeOfTyD` changes only `IntTy` from 8 bytes to 4 bytes under `Opt_Int32`; pointer-sized things, symbols, cursors, redirection payloads, and region metadata stay 8 bytes.
+
+The int-width-aware helper is now used in layout-sensitive paths:
+
+- `InferLocations.hs`: constructor scalar field offsets.
+- `Cursorize.hs`: explicit scalar cursor bumps and `RequestSizeOf`.
+- `LoopifyTraversals.hs`: loopified scalar-buffer cursor steps.
+- `Lower.hs`: info table scalar byte sizes.
+- `CalculateBounds.hs`, `RouteEnds.hs`, `ThreadRegions.hs`, `ThreadRegions2.hs`: bounds/jump calculations that depend on scalar byte width.
+
+### SSE2 vector backend
+
+`Codegen.hs` now has SSE2 helper families for both integer widths:
+
+- default `Int`: `int64x2`, two lanes in `__m128i`.
+- `--int32`: `int32x4`, four lanes in `__m128i`.
+
+Efficient SSE2 lowering exists for `broadcast`, `load`, `store`, `add`, `sub`, and equality. Multiplication/division/modulo are present as scalar fallback helpers because SSE2 does not provide general packed 32-bit integer division/modulo, and packed low 32-bit multiply is not available until later SIMD extensions.
+
+`VectorizeTraversals.hs` now selects `Int` vector lanes from the dynamic integer width:
+
+- 64-bit `Int`: 2 lanes per vector group.
+- 32-bit `Int`: 4 lanes per vector group.
+
+The high-level vectorizer still only rewrites clearly supported loop bodies and leaves unsupported loops unchanged.
+
+### Validation
+
+Compiler build:
+
+- `cabal build exe:gibbon` succeeds.
+
+Flag visibility:
+
+- `cabal run gibbon-compiler:exe:gibbon -- --help` shows `--gibbon-int32,--int32`.
+
+SoA/vectorized smoke:
+
+- Compiled `programs/SOA/List.hs` with `--packed --to-exe --use-mutable-cursors --store-scalar-field-counts --enable-loopification --enable-vectorization --int32`.
+- Generated C contains `#define GIBBON_INT32 1`.
+- Generated C uses 4-byte `Int` field offsets and `gib_vec_*_int32x4` in the hot loop.
+- Running the executable succeeds. The printed sums overflow relative to the 64-bit baseline, which is expected because this mode intentionally changes `Int` semantics to 32-bit.
+
+Default 64-bit regression smoke:
+
+- Compiled the same `SOA/List.hs` command without `--int32`.
+- Generated C uses 8-byte `Int` field offsets and `gib_vec_*_int64x2`.
+- Running the executable succeeds and preserves the old 64-bit sum output.
+
+AoS/flat smoke:
+
+- Compiled `programs/AOS/List.hs` with `--packed --to-exe --use-mutable-cursors --int32`.
+- Generated C uses `sizeof(GibInt)` or 4-byte cursor bumps for integer payloads, while pointer/redirection movement remains 8 bytes.
+- Running the executable succeeds, again with expected 32-bit overflow in sum results.
+
+### Remaining work
+
+- Audit `gibbon-rts/rts-ng/src/ffi.rs` if the Rust RTS path is needed; it still assumes `GibInt = i64`.
+- Run a broader benchmark sweep under `--int32`. Many fold outputs will legitimately differ from 64-bit due to overflow, so correctness checks need an int32-aware baseline.
+- Consider adding explicit `Int32Ty` / `Int64Ty` later if mixed-width programs become useful. The current design is deliberately simpler: one source-level `IntTy`, with backend width selected by flag.
+- Future SIMD backend work: AVX2/AVX512 lane families can reuse the same vector IR and lane-selection layer.
+
+
+## 2026-05-26: `--int32` Benchmark Coverage And Layout-Comparison Variant
+
+The benchmark scripts now expose the 32-bit backend mode directly.
+
+### `gibbon_benchmark.py`
+
+- Added `--int32` / `--gibbon-int32`.
+- The flag is threaded through every Gibbon compile task and appends `--int32`
+  to the compiler command for both AoS and SoA Gibbon variants.
+- Compile labels include `int32`, so logs make the active integer width visible.
+- The run header prints `Int width: 32-bit (--int32)` or `64-bit default`.
+- Correctness checks compare AoS-int32 output against SoA-int32 output. They do
+  not compare against 64-bit output, because 32-bit `GibInt` intentionally
+  changes overflow behavior.
+
+Validation:
+
+```text
+cd gibbon-compiler/examples/soa_examples
+python3 gibbon_benchmark.py \
+  --clean \
+  --iterations 1 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --int32 \
+  --output-dir /tmp/gibbon_benchmark_int32_all \
+  --json /tmp/gibbon_benchmark_int32_all.json \
+  --report /tmp/gibbon_benchmark_int32_all.txt
+```
+
+Result:
+
+```text
+DONE - 22/22 succeeded | 22/22 output matches
+```
+
+This verifies the default benchmark corpus under 32-bit `GibInt` for the
+standard mutable AoS/SoA Gibbon variants.
+
+
+A second full-suite run validated the optimized int32 path used by the parent
+layout comparison variant:
+
+```text
+cd gibbon-compiler/examples/soa_examples
+python3 gibbon_benchmark.py \
+  --clean \
+  --iterations 1 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --store-scalar-field-counts \
+  --enable-loopification \
+  --enable-selective-buffer-sharing \
+  --enable-vectorization \
+  --int32 \
+  --output-dir /tmp/gibbon_benchmark_int32_opt_all \
+  --json /tmp/gibbon_benchmark_int32_opt_all.json \
+  --report /tmp/gibbon_benchmark_int32_opt_all.txt
+```
+
+Result:
+
+```text
+DONE - 22/22 succeeded | 22/22 output matches
+```
+
+This checks the `loopification + scalar counts + selective sharing +
+vectorization + int32` path across the default benchmark corpus.
+
+### `benchmark_layout_versions.py`
+
+The parent layout-comparison script now uses one integer-width mode for the
+entire comparison matrix:
+
+- default: normal 64-bit `GibInt` backend;
+- `--32-bit` / `--int32`: run the same recursive, loopified, selective-sharing,
+  and vectorized comparison matrix with 32-bit `GibInt`.
+
+The script no longer adds separate int32-only columns to the normal 64-bit
+report. Instead, generate a 32-bit report explicitly, for example:
+
+```text
+python3 benchmark_layout_versions.py \
+  --32-bit \
+  --clean \
+  --iterations 1 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --programs List.hs \
+  --output-dir /tmp/layout_versions_width_smoke \
+  --results-file /tmp/layout_versions_width32.md
+```
+
+The default 64-bit mode uses the same version columns and omits `--int32`:
+
+```text
+python3 benchmark_layout_versions.py \
+  --clean \
+  --iterations 1 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --programs List.hs \
+  --output-dir /tmp/layout_versions_width_smoke \
+  --results-file /tmp/layout_versions_width64.md
+```
+
+Implementation notes:
+
+- child `gibbon_benchmark.py` commands receive `--int32` only when the parent
+  receives `--32-bit` / `--int32`;
+- outputs are namespaced under `int32/` or `int64/` inside the chosen output
+  directory to avoid stale executable reuse across integer-width modes;
+- generated Markdown reports include an `Int width: ...` line near the top;
+- the table columns are the same in both modes: AoS recursive, AoS loopified,
+  SoA recursive, SoA loopified, SoA loop+share, and SoA loop+share+vec.
+
+Validation smoke:
+
+- 64-bit default `List.hs` parent run wrote `/tmp/layout_versions_width64.md`
+  and reported `Int width: 64-bit GibInt`.
+- 32-bit `List.hs` parent run wrote `/tmp/layout_versions_width32.md`, passed
+  `--int32` to every child benchmark configuration, and reported
+  `Int width: 32-bit GibInt`.
+- In both smokes, the known immutable-cursor `List.hs` failures remain isolated
+  to historical non-mutable variants; successful mutable variants still match.
+
+
+## Latest Update: Layout Benchmark Runtime Answers Added (2026-05-28)
+
+The `examples/layout_benchmarks` directory is now represented in the examples
+suite, and the subset that currently runs under the vanilla packed baseline now
+has reduced runtime tests with golden answer files.
+
+### Runnable Layout Benchmarks
+
+Five root layout benchmark programs currently execute successfully under
+vanilla packed Gibbon after source reduction:
+
+- `Adts.hs`
+- `Contents.hs`
+- `calcAdtLengthAc.hs`
+- `calcAdtLengthCa.hs`
+- `processAdtContentCA.hs`
+
+For these, `gibbon-compiler/tests/test-gibbon-examples.yaml` now removes the old
+`compile-only` marker and adds:
+
+- `answer-file: examples/layout_benchmarks/reduced_answers/<name>.ans`
+- `source-replacements` to shrink benchmark-sized inputs to unit-test sizes
+- `compare-with-baseline: true`
+
+The generated answer files live in:
+
+```text
+gibbon-compiler/examples/layout_benchmarks/reduced_answers/
+```
+
+The source reductions used for these layout tests include large list/tree/string
+sizes such as `3000000`, `1000000`, `100000`, `80000`, `10000`, `3000`, `2000`,
+`1000`, `100`, `50`, and `10`, reducing them to small values while leaving the
+original benchmark sources untouched. The test runner applies these rewrites to
+a temporary copy before compiling/running the test.
+
+### Validation Performed
+
+Focused runtime validation was run for the five runnable layout benchmarks in
+both 64-bit and 32-bit packed modes. Each reduced program matched its stored
+answer file:
+
+```text
+PASS Adts.hs gibbon2
+PASS Adts.hs int32
+PASS Contents.hs gibbon2
+PASS Contents.hs int32
+PASS calcAdtLengthAc.hs gibbon2
+PASS calcAdtLengthAc.hs int32
+PASS calcAdtLengthCa.hs gibbon2
+PASS calcAdtLengthCa.hs int32
+PASS processAdtContentCA.hs gibbon2
+PASS processAdtContentCA.hs int32
+```
+
+A broader `gibbon2` examples-suite slice was also run with `--skip-failing` and
+`GIBBONDIR=/workdisk/git/gibbon`. It completed answer generation and executed
+the suite; none of the new layout answer-file tests appeared in the unexpected
+failures. The remaining unexpected failures in that broad slice were unrelated
+pre-existing examples/SoA benchmark cases such as `AnonLambdas.hs`, `SS.hs`,
+`T64_1.gib`, several OctTree benchmark entries, and a few import examples.
+Those are not part of the current layout-benchmark answer-file change.
+
+### Non-Runnable Layout Cases
+
+The rest of `examples/layout_benchmarks` remains listed in the YAML, but is
+skipped or expected-failing for this phase when vanilla packed mode already
+fails before the optimization flags matter. Reasons observed during reduced
+classification include:
+
+- missing/import-side failures in `blog_management/marmoset` examples
+  (`Gibbon.Maybe`);
+- unsupported memory-layout frontend paths (`Memory Layout not yet supported!`);
+- existing cursor/typechecking failures such as `CursorTy <> MutCursorTy` or
+  `StartOfPkdCursor` over non-packed values;
+- baseline packed runtime segfaults in `processAdtTagsCat2.hs` and
+  `processAdtTagsCta.hs`, even with tiny source reductions.
+
+Those are Phase 3 packed-field/layout/mutable-cursor issues or historical bug
+reproducers, so they were not fixed here. The important invariant for Phase 1 is
+that layout benchmarks which can currently run under the vanilla packed baseline
+now run on small inputs and check stored answers.
+
+
+## Latest Update: Phase 2 Auto Loopification Completed (2026-05-28)
+
+Phase 2 added an opt-in automatic loopification discovery mode. The goal was to stop relying exclusively on manual `OPT:CanVectorize` annotations while still preserving the safety boundary: only map-like traversals with no parent-child dependencies should be rewritten.
+
+### Compiler Flag
+
+A new general flag was added in `gibbon-compiler/src/Gibbon/DynFlags.hs`:
+
+```text
+--auto-loopification
+--infer-can-vectorize
+```
+
+This flag is intentionally separate from `--enable-loopification`. Loopification still only runs when `--enable-loopification` is set. Automatic discovery is enabled only when the new flag is also set.
+
+The benchmark/test harnesses now pass this flag automatically for loopification-oriented modes:
+
+- `gibbon-compiler/examples/soa_examples/gibbon_benchmark.py`
+- `benchmark_layout_versions.py`
+- `gibbon-compiler/tests/TestRunner.hs`
+
+The benchmark banner now reports loopification as:
+
+```text
+Loopification: enabled (--enable-loopification + --auto-loopification)
+```
+
+### SoA Loopification Changes
+
+Implemented in `gibbon-compiler/src/Gibbon/Passes/LoopifyTraversals.hs`.
+
+Key changes:
+
+- exported `loopifyCandidateInfoWith`;
+- preserved the old manual behavior through `loopifyCandidateInfo = loopifyCandidateInfoWith False`;
+- added auto mode through `loopifyCandidateInfoWith True`;
+- when a function is successfully inferred and rewritten, the pass stamps `CanVectorize` onto the function metadata so later passes such as selective sharing, loop fusion, and vectorization can reuse the same signal;
+- automatic mode skips generated packed helper functions:
+  - `_copy_*`
+  - `_copy_without_ptrs_*`
+  - `_print_*`
+  - `_traverse_*`
+  - `_unpack_*`
+  - `_add_size_and_rel_offsets_*`
+
+The generated-helper exclusion fixed a real corpus bug: `DecisionTree.hs` contains only folds, but auto mode was previously rewriting generated `_copy_DTree`, which changed successful output comparison. After the exclusion, `DecisionTree.hs` has no accidental loopification markers and its AoS/SoA outputs match again.
+
+### AoS Flat Loopification Changes
+
+Implemented in `gibbon-compiler/src/Gibbon/Passes/LoopifyFlatTraversals.hs`.
+
+The flat AoS pass now follows the same auto-discovery policy:
+
+- manual `OPT:CanVectorize` still works;
+- `--auto-loopification` may infer unannotated source-level candidates;
+- generated packed helpers are ignored in auto mode;
+- parent-child dependency checks still reject fold-like traversals.
+
+AoS loopification remains structural and does not use scalar-count footers, selective sharing, loop fusion, or SIMD.
+
+### Parent-Child Dependency Fix
+
+The syntactic dependency check in `LoopifyTraversals.hs` was tightened. Before this fix, a fold-like function could slip through if a recursive child result was only used inside a primitive expression. For example:
+
+```haskell
+child_sum = sumList ...
+total = child_sum + 1
+```
+
+The checker now treats child-derived variables as parent-child dependencies when they appear in:
+
+- function-call arguments;
+- primitive-call arguments;
+- product construction;
+- spawn arguments;
+- return values;
+- conditionals and case scrutinees;
+- scalar/tag/cursor writes;
+- loop bounds.
+
+A dedicated unit test now covers primitive RHS use of a child result.
+
+### Unit Tests
+
+Updated `gibbon-compiler/tests/LoopifyTraversals.hs`.
+
+New coverage includes:
+
+- auto mode detects an unannotated source candidate;
+- auto mode rewrites an unannotated cursorized fast path;
+- auto mode stamps `CanVectorize` after a successful rewrite;
+- auto mode skips generated helpers such as `_copy_List`;
+- primitive use of a child-derived value is rejected as a parent-child dependency.
+
+The test-suite Cabal stanza was also cleaned up in `gibbon-compiler/gibbon.cabal` by removing stale missing test modules that blocked `test-gibbon` from building.
+
+Validation:
+
+```text
+cd gibbon-compiler
+cabal run test-gibbon
+```
+
+Result:
+
+```text
+All 66 tests passed
+```
+
+### End-to-End Validation
+
+A temporary unannotated copy of `examples/vectorization/SOA/VectorListMap.hs` was compiled with:
+
+```text
+--run --packed --use-mutable-cursors \
+--store-scalar-field-counts \
+--enable-loopification --auto-loopification
+```
+
+Result:
+
+- output was correct: `2272`;
+- generated C for `add3` contained counted loopification markers:
+  - `loop_mut...`
+  - `while`
+  - counted `for`
+  - `gib_scalar_count_footer_get`.
+
+The same temporary source compiled without `--auto-loopification` stayed recursive, confirming the new behavior is opt-in.
+
+The default SoA benchmark corpus was then run with auto loopification enabled:
+
+```text
+cd gibbon-compiler/examples/soa_examples
+python3 gibbon_benchmark.py \
+  --iterations 1 \
+  --warmup-runs 0 \
+  --cooldown-seconds 0 \
+  --clean \
+  --store-scalar-field-counts \
+  --enable-loopification \
+  --output-dir /tmp/gibbon_phase2_loopify_full_after_fix \
+  --json /tmp/gibbon_phase2_loopify_full_after_fix.json \
+  --report /tmp/gibbon_phase2_loopify_full_after_fix.txt
+```
+
+Result:
+
+```text
+DONE - 21/22 succeeded | 21/21 output matches
+```
+
+The one compile failure is `DomTree.hs` in the AoS mutable-cursor variant:
+
+```text
+gibbon: lower/triv, expected trivial in one of app rands, got LetE (... DerefMutCursor ...)
+```
+
+This is the known mutable-cursor packed-field/lower-trivialization class of issue and belongs to Phase 3. The successful variants all matched their AoS/SoA output checks after the Phase 2 fixes.
+
+Spot checks of generated C confirmed:
+
+- map examples such as `List.add1`, `MonoTree.add1Tree`, `OctTree_scaleEnergy.scaleEnergy`, `PiecewiseFunctions.addConstPW`/`diffPW`, and Trie map passes contain loopified counted-buffer code in SoA;
+- fold-only examples such as `DecisionTree`, `KDTree`, and the OctTree fold drivers no longer show accidental `loop_mut` / scalar-count loopification markers.
+
+### Phase 2 Status
+
+Phase 2 is complete enough to proceed to Phase 3:
+
+- automatic source-candidate discovery exists behind an explicit flag;
+- manual annotation behavior is preserved;
+- generated helpers are protected from accidental inference;
+- parent-child dependency rejection was strengthened;
+- test coverage was added;
+- corpus validation passes for all successful benchmark variants.
+
+Next phase should address the mutable-cursor packed-field/lower-trivialization bug, starting with the `DomTree.hs` AoS failure.
