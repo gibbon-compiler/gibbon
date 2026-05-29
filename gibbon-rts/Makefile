@@ -66,7 +66,14 @@ ifeq ($(POINTER), 1)
 endif
 
 ifeq ($(PARALLEL), 1)
-	CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
+	# OpenCilk's clang uses -fopencilk; legacy gcc-7 used -fcilkplus.
+	# Modern gcc (>= 8) has no Cilk support at all, so parallel mode
+	# requires clang/OpenCilk when CC is not gcc-7.
+	ifneq (,$(findstring clang,$(CC)))
+		CFLAGS += -fopencilk -D_GIBBON_PARALLEL
+	else
+		CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
+	endif
 endif
 
 ifeq ($(BUMPALLOC), 1)
