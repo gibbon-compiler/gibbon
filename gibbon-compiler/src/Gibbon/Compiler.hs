@@ -130,7 +130,7 @@ configParser = Config <$> inputParser
                         , long "verbose"
                         , help "Set the debug output level, 1-5, mirrors DEBUG env var."
                         ]) <|> pure 1)
-                      <*> (strOption (long "cc" <> help "Set C compiler, default 'gcc'")
+                      <*> (strOption (long "cc" <> help "Set C compiler, default 'clang' (OpenCilk's clang in the nix shell)")
                            <|> pure (cc defaultConfig))
                       <*> (strOption (long "optc" <> help "Set C compiler options, default '-std=gnu11 -O3'")
                            <|> pure (optc defaultConfig))
