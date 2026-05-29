@@ -586,7 +586,7 @@ compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then " -D_GIBBON_BUMPALLOC_LISTS -D_GIBBON_BUMPALLOC_HEAP " else "")
                           ++(if pointer then " -D_GIBBON_POINTER " else "")
-                          ++(if parallel then " -fcilkplus -D_GIBBON_PARALLEL " else "")
+                          ++(if parallel then parallelFlag ++ " -D_GIBBON_PARALLEL " else "")
                           ++(if warnc
                              then " -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic "
                              else suppress_warnings)
@@ -602,6 +602,9 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         pointer = gopt Opt_Pointer dflags
         warnc = gopt Opt_Warnc dflags
         parallel = gopt Opt_Parallel dflags
+        -- OpenCilk's clang accepts -fopencilk; legacy gcc-7 used -fcilkplus.
+        -- Modern gcc (>= 8) has no Cilk support at all.
+        parallelFlag = if isClangCompiler (cc config) then " -fopencilk" else " -fcilkplus"
         rts_debug = gopt Opt_RtsDebug dflags
         print_gc_stats = gopt Opt_PrintGcStats dflags
         genGC = gopt Opt_GenGc dflags
