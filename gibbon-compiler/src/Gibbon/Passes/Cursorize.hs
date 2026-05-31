@@ -1682,15 +1682,30 @@ insertLocInVarEnv loc env = do
           return $ M.insert (fromLocVarToFreeVarsTy loc) name env
 
 -- Cursorize expressions producing `Packed` values
-unitizePackedMutableResult :: Exp3 -> Exp3
-unitizePackedMutableResult ex =
-  case ex of
-    LetE b bod -> LetE b (unitizePackedMutableResult bod)
-    IfE a b c -> IfE a (unitizePackedMutableResult b) (unitizePackedMutableResult c)
-    MkProdE _ -> MkProdE []
-    VarE _ -> MkProdE []
-    AppE{} -> LetE ("_", [], ProdTy [], ex) (MkProdE [])
-    _ -> MkProdE []
+unitizePackedMutableResult :: Ty2 -> Exp3 -> Exp3
+unitizePackedMutableResult ty ex =
+  case unTy2 ty of
+    PackedTy{} ->
+      case ex of
+        LetE b bod -> LetE b (unitizePackedMutableResult ty bod)
+        IfE a b c -> IfE a (unitizePackedMutableResult ty b) (unitizePackedMutableResult ty c)
+        AppE{} -> LetE ("_", [], ProdTy [], ex) (MkProdE [])
+        _ -> MkProdE []
+    ProdTy tys ->
+      case ex of
+        LetE b bod -> LetE b (unitizePackedMutableResult ty bod)
+        IfE a b c -> IfE a (unitizePackedMutableResult ty b) (unitizePackedMutableResult ty c)
+        MkProdE es | length es == length tys ->
+          MkProdE (zipWith unitizePackedMutableField tys es)
+        _ ->
+          MkProdE (zipWith (\i t -> unitizePackedMutableField t (mkProj i ex)) [0..] tys)
+    _ -> ex
+  where
+    unitizePackedMutableField fieldTy fieldExp =
+      case fieldTy of
+        PackedTy{} -> unitizePackedMutableResult (MkTy2 fieldTy) fieldExp
+        ProdTy{} -> unitizePackedMutableResult (MkTy2 fieldTy) fieldExp
+        _ -> fieldExp
 
 cursorizePackedExp ::
   MutableLocPtsToEnv ->
@@ -1849,8 +1864,9 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
       (a', env3, m1''', m2''') <- cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv a
       let m1'''' = M.unions [m1', m1'', m1''']
       let m2'''' = M.unions [m2', m2'', m2''']
-      let b_unit = if useMutableCursorsCall then unitizePackedMutableResult b' else b'
-          c_unit = if useMutableCursorsCall then unitizePackedMutableResult c' else c'
+      let branchTy = gRecoverType ddfs (Env2 tenv M.empty) b
+          b_unit = if useMutableCursorsCall then unitizePackedMutableResult branchTy b' else b'
+          c_unit = if useMutableCursorsCall then unitizePackedMutableResult branchTy c' else c'
       return (Di $ IfE a' b_unit c_unit, M.unions [env1, env2, env3], m1'''', m2'''')
 
     -- A case expression is eventually transformed into a ReadTag + switch stmt.
@@ -4299,13 +4315,22 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                        _ -> pure argexp
                      _ -> pure argexp
       starts' <- mapM (coerceMutToCursorIfNeeded tenv) starts
+      let hoistCallArgLets arg =
+            case arg of
+              LetE b@(_, _, _, Ext (DerefMutCursor{})) body ->
+                let (bnds, arg') = hoistCallArgLets body
+                 in (b : bnds, arg')
+              _ -> ([], arg)
+          mkCallApp callArgs =
+            let (callArgBnds, callArgs') = unzip (map hoistCallArgLets callArgs)
+             in mkLets (concat callArgBnds) (AppE f _cty [] callArgs')
       let ty3ToCallTy2 ty3 = MkTy2 (fmap (const (Single (toVar "_call_arg_loc"))) ty3)
       -- let loc_var = toLocVar loc
       -- let loc_to_variable = case (M.lookup (fromLocVarToFreeVarsTy loc_var) freeVarToVarEnv) of
       --                          Just v -> v
       --                          Nothing -> error "cursorizeAppE: unexpected location variable"
       bod <- case locs of
-            [] -> return $ AppE f _cty [] starts'
+            [] -> return $ mkCallApp starts'
             _ -> do
                 -- outs is where the output locations are stored. 
                 -- Vidush: We need to run through output locations
@@ -4400,7 +4425,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                                                                                                                      then do
                                                                                                                                       address <- gensym "address"
                                                                                                                                       let address_bnd = [(address, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_name))]
-                                                                                                                                      return $ (bnds, args ++ [mkLets address_bnd $ VarE address])
+                                                                                                                                      return $ (bnds ++ address_bnd, args ++ [VarE address])
                                                                                                                                      else do return $ (bnds, args ++ [VarE loc_name])
                                                                                                                         MutCursorTy -> return $ (bnds, args ++ [VarE loc_name]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]
                                                                                                                         _ -> return $ (bnds, args ++ [VarE loc_name])
@@ -4421,7 +4446,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                         additional_bnds
                 appe_args'' <- mapM (coerceCursorToMutIfNeeded tenvWithCallArgs) appe_args
                 appe_args' <- mapM (coerceMutToCursorIfNeeded tenvWithCallArgs) appe_args''
-                return $ mkLets additional_bnds (AppE f _cty [] (appe_args' ++ starts'))
+                return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
       asserts <-
         foldrM
           ( \loc acc ->
@@ -4571,17 +4596,44 @@ cursorizeProj m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit free
       (rhs', freeVarToVarEnv', m1', m2') <- go insideTimeit m1 m2 tenv rhs
       let ty' = gRecoverType ddfs (Env2 tenv M.empty) rhs
           ty'' = cursorizeTy freeVarToVarEnv' m1 m2 useMutableCursorsCall Nothing (unTy2 ty')
-          bnds =
-            if isPackedTy (unTy2 ty')
-              then
-                [ (v, [], projValTy ty'', mkProj 0 rhs'),
-                  (toEndV v, [], projEndsTy ty'', mkProj 1 rhs')
-                ]
-              else [(v, [], ty'', rhs')]
-          tenv' =
-            if isPackedTy (unTy2 ty')
-              then M.union (M.fromList [(v, ty'), (toEndV v, MkTy2 (projEndsTy (unTy2 ty')))]) tenv
-              else M.insert v ty' tenv
+          cursorizedToUnit t =
+            case t of
+              ProdTy [] -> True
+              _ -> False
+      bnds <-
+        case unTy2 ty' of
+          PackedTy _ loc | cursorizedToUnit ty'' -> do
+            let locTy = getCursorizeTyFromLocVar Nothing False loc
+                locTy2 = getCursorizeTyFromLocVar'' Nothing False loc
+                locName = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy loc)
+                start = case M.lookup loc m2' of
+                          Just (oldStart, _, _, _) -> VarE oldStart
+                          Nothing -> VarE locName
+            case M.lookup locName tenv of
+              Just (MkTy2 MutCursorTy) -> do
+                end <- gensym "deref"
+                pure [ (v, [], locTy, start),
+                       (end, [], locTy, Ext $ DerefMutCursor locName),
+                       (toEndV v, [], locTy2, VarE end)
+                     ]
+              _ ->
+                pure [ (v, [], locTy, start),
+                       (toEndV v, [], locTy2, VarE locName)
+                     ]
+          _ | isPackedTy (unTy2 ty') ->
+              pure [ (v, [], projValTy ty'', mkProj 0 rhs'),
+                     (toEndV v, [], projEndsTy ty'', mkProj 1 rhs')
+                   ]
+          _ ->
+              pure [(v, [], ty'', rhs')]
+      let tenv' =
+            case unTy2 ty' of
+              PackedTy _ loc | cursorizedToUnit ty'' ->
+                M.union (M.fromList [(v, ty'), (toEndV v, MkTy2 (getCursorizeTyFromLocVar'' Nothing False loc))]) tenv
+              _ | isPackedTy (unTy2 ty') ->
+                M.union (M.fromList [(v, ty'), (toEndV v, MkTy2 (projEndsTy (unTy2 ty')))]) tenv
+              _ ->
+                M.insert v ty' tenv
       (bod', freeVarToVarEnv'', m1', m2') <- go insideTimeit m1 m2 tenv' bod
       return (mkLets bnds bod', M.union freeVarToVarEnv' freeVarToVarEnv'', m1', m2') 
     _ -> error $ "cursorizeProj: Unexpected expression: " ++ sdoc ex
@@ -5396,9 +5448,25 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
       (_rhs, freeVarToVarEnv', m1', m2') <- cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       rhs' <- fromDi <$> return _rhs 
       fresh <- gensym "tup_haspacked"
-      let ty' = case locs of
+      let useMutableForPackedRhs =
+            case rhs of
+              AppE fn _ _ _ ->
+                case M.lookup fn fundefs of
+                  Just g ->
+                    let fnTy = funTy g
+                        isFunctionRec = case funRec (funMeta g) of
+                                          TailRec -> True
+                                          Rec -> True
+                                          _ -> False
+                        calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
+                        calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
+                     in useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
+                  Nothing -> False
+              _ -> False
+          ty' = case locs of
             [] -> cursorizeTy freeVarToVarEnv' m1' m2' useMutableCursorsCall Nothing ty
-            xs -> ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1' m2' useMutableCursorsCall Nothing ty])
+            _ | useMutableForPackedRhs -> cursorizeTy freeVarToVarEnv' m1' m2' useMutableCursorsCall Nothing ty
+            _ -> ProdTy (cursor_ty_locs ++ [cursorizeTy freeVarToVarEnv' m1' m2' useMutableCursorsCall Nothing ty])
           ty'' = stripTyLocs ty'
           tenv' =
             M.union
@@ -5434,19 +5502,46 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                       )
                       locs
 
+              mutableLocBnds =
+                case rhs of
+                  AppE _ _ rhsLocs _ ->
+                    concatMap
+                      ( \(loc, rhsLoc, n) ->
+                          case loc of
+                            EndOfReg{} ->
+                              let loc_var = fromLocArgToFreeVarsTy loc
+                                  loc_to_variable = case M.lookup loc_var freeVarToVarEnv' of
+                                    Just v' -> v'
+                                    Nothing -> error "cursorizeLet: unexpected location variable"
+                                  rhs_var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy rhsLoc)
+                                  cursorType = cursor_ty_locs' !! n
+                                  rhs_exp = case M.lookup rhs_var tenv of
+                                    Just rhs_ty ->
+                                      case unTy2 rhs_ty of
+                                        MutCursorTy -> Ext $ DerefMutCursor rhs_var
+                                        _ -> VarE rhs_var
+                                    Nothing -> VarE rhs_var
+                               in [(loc_to_variable, [], cursorType, rhs_exp)]
+                            _ -> []
+                      )
+                      (zip3 locs rhsLocs [0..])
+                  _ -> []
               bnds =
-                [(fresh, [], ty'', rhs')]
-                  ++ map
-                    ( \(loc, n) ->
-                        let loc_var = fromLocArgToFreeVarsTy loc
-                            loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
-                              Just v' -> v'
-                              Nothing -> error "cursorizeLet: unexpected location variable"
-                            cursorType = cursor_ty_locs' !! n
-                         in (loc_to_variable, [], cursorType, ProjE n (VarE fresh))
-                    )
-                    (zip locs [0 ..])
-                  ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) (VarE fresh))]
+                if useMutableForPackedRhs
+                then [(v, [], ty'', rhs')] ++ mutableLocBnds
+                else
+                  [(fresh, [], ty'', rhs')]
+                    ++ map
+                      ( \(loc, n) ->
+                          let loc_var = fromLocArgToFreeVarsTy loc
+                              loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
+                                Just v' -> v'
+                                Nothing -> error "cursorizeLet: unexpected location variable"
+                              cursorType = cursor_ty_locs' !! n
+                           in (loc_to_variable, [], cursorType, ProjE n (VarE fresh))
+                      )
+                      (zip locs [0 ..])
+                    ++ [(v, [], projTy (length locs) ty'', ProjE (length locs) (VarE fresh))]
           (bod', freeVarToVarEnv'', m1', m2') <- go insideTimeIt m1 m2 (M.union freeVarToVarEnv' freeVarToVarEnv) tenv'' bod
           return (mkLets bnds bod', freeVarToVarEnv'', m1', m2') 
 
