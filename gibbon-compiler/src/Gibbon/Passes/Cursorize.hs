@@ -4967,7 +4967,7 @@ Other bindings are straightforward projections of the processed RHS.
 packedMutableLetReturnsUnit :: FunDefs2 -> MutableLocPtsToEnv -> LocVar -> Exp2 -> Bool
 packedMutableLetReturnsUnit fundefs mutLocs startLoc rhs =
   case rhs of
-    DataConE _ _ _ -> True
+    DataConE _ _ _ -> False
     AppE f _ _ _ ->
       case M.lookup f fundefs of
         Just FunDef{funTy, funMeta} ->
@@ -5103,6 +5103,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
             then ProdTy []
             else ty''
           rhs'' = VarE fresh
+          rhsStillReturnsPackedEndpoints = fresh_ty /= ProdTy []
 
       (bnds, m11', m22') <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (ty', locs, m1', m2', start_loc, start_var, useMutableCursors)) dbgTrace (minChatLvl) "End cursorize Let 2\n" case locs of
             [] -> if M.member start_loc m2'
@@ -5153,9 +5154,13 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                       case (type_l2, M.lookup start_var tenv) of
                                         (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
                                         _ -> VarE start_var
+                                    end_rhs =
+                                      if rhsStillReturnsPackedEndpoints
+                                      then mkProj 1 rhs''
+                                      else start_rhs
                                  in pure ([ (fresh, [], fresh_ty, rhs')
                                           , (v, [], type_l2, start_rhs)
-                                          , (toEndV v, [], type_l2, start_rhs)
+                                          , (toEndV v, [], type_l2, end_rhs)
                                           ], m1', m2')
                               Just (l, endreg) -> do
                                         let type_l2 = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
@@ -5338,9 +5343,13 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                     case (type_l2, M.lookup start_var tenv) of
                                       (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
                                       _ -> VarE start_var
+                                  end_rhs =
+                                    if rhsStillReturnsPackedEndpoints
+                                    then mkProj 1 rhs''
+                                    else start_rhs
                                in pure ([ (fresh, [], fresh_ty, rhs')
                                         , (v, [], type_l2, start_rhs)
-                                        , (toEndV v, [], type_l2, start_rhs)
+                                        , (toEndV v, [], type_l2, end_rhs)
                                         ], m1', m2')
                   -- let nLocs = length locs
                   --     locBnds = map
