@@ -568,22 +568,28 @@ runTests tc tr = do
         else do
             -- Check if the global gRunModes or the test specific runModes was modified
             let testModes = if null (runModes test) then allModes else runModes test
-                chosenModes = if null (gRunModes tc)
-                              then testModes
-                              else testModes `intersect` gRunModes tc
+                chosenModes0 = if null (gRunModes tc)
+                               then testModes
+                               else testModes `intersect` gRunModes tc
+                chosenModes = if skipFailing tc
+                              then filter (\mode -> M.findWithDefault Pass mode (expectedResults test) == Pass) chosenModes0
+                              else chosenModes0
                 test' = test { runModes = chosenModes }
-            results <- if isBenchmark test' && (checkPerf tc || onlyPerf tc)
+            if null chosenModes
+            then return (acc { skipped = (name test):(skipped acc) })
+            else do
+              results <- if isBenchmark test' && (checkPerf tc || onlyPerf tc)
                        then runBenchmark tc test'
                        else runTest tc test'
-            let extend = M.insertWith (++) (name test')
-            foldrM
-                (\(mode,res) acc2 ->
-                     return $ case res of
-                        EP -> acc2 { expectedPasses = extend [mode] (expectedPasses acc2) }
-                        UP -> acc2 { unexpectedPasses = extend [mode] (unexpectedPasses acc2) }
-                        EF err -> acc2 { expectedFailures = extend [(mode,err)] (expectedFailures acc2) }
-                        UF err -> acc2 { unexpectedFailures = extend [(mode,err)] (unexpectedFailures acc2) })
-                acc results
+              let extend = M.insertWith (++) (name test')
+              foldrM
+                  (\(mode,res) acc2 ->
+                       return $ case res of
+                          EP -> acc2 { expectedPasses = extend [mode] (expectedPasses acc2) }
+                          UP -> acc2 { unexpectedPasses = extend [mode] (unexpectedPasses acc2) }
+                          EF err -> acc2 { expectedFailures = extend [(mode,err)] (expectedFailures acc2) }
+                          UF err -> acc2 { unexpectedFailures = extend [(mode,err)] (unexpectedFailures acc2) })
+                  acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
 runTest tc test@Test{name,expectedResults,runModes,compileOnly,compareWithBaseline} = do

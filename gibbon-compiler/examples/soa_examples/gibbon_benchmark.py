@@ -73,6 +73,10 @@ Usage:
 """
 
 import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime, math
+try:
+    import resource
+except ImportError:
+    resource = None
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -1855,6 +1859,11 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
 # ---------------------------------------------------------------------------
 # Run one executable  (always single-threaded)
 # ---------------------------------------------------------------------------
+def _disable_child_core_dumps() -> None:
+    if resource is not None:
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
 def run_exe(exe: Path, iterations: int,
             timeout: int = 600,
             dump_dir: Optional[Path] = None,
@@ -1890,9 +1899,15 @@ def run_exe(exe: Path, iterations: int,
         env = os.environ.copy()
         if env_override:
             env.update(env_override)
-        r = subprocess.run(
-            cmd, capture_output=True, text=True, env=env, timeout=timeout
-        )
+        run_kwargs = {
+            "capture_output": True,
+            "text": True,
+            "env": env,
+            "timeout": timeout,
+        }
+        if os.name == "posix":
+            run_kwargs["preexec_fn"] = _disable_child_core_dumps
+        r = subprocess.run(cmd, **run_kwargs)
         elapsed = time.time() - t0
         if dump_dir is not None:
             dump_dir.mkdir(parents=True, exist_ok=True)
@@ -4878,6 +4893,9 @@ def main():
                     help="Enable map-traversal loopification. The benchmark harness also passes "
                          "--auto-loopification, so supported maps no longer require manual "
                          "OPT:CanVectorize annotations.")
+    ap.add_argument("--auto-loopification", "--infer-can-vectorize",
+                    dest="auto_loopification", action="store_true",
+                    help=argparse.SUPPRESS)
     ap.add_argument("--enable-loop-fusion", action="store_true",
                     help="Enable post-loopification loop fusion for fully factored SoA scalar-buffer loops. "
                          "This flag is not passed to AoS variants.")

@@ -3222,3 +3222,320 @@ Phase 2 is complete enough to proceed to Phase 3:
 - corpus validation passes for all successful benchmark variants.
 
 Next phase should address the mutable-cursor packed-field/lower-trivialization bug, starting with the `DomTree.hs` AoS failure.
+
+
+## Phase 3 Progress Log - Mutable Cursor Packed Fields
+
+Date: 2026-05-29
+
+### Fixed: call-argument coercion lets escaping Cursorize
+
+DomTree.hs in the AoS mutable-cursor loopification configuration previously failed in Lower.triv because cursorizeAppE could place coercion lets such as DerefMutCursor directly inside an AppE argument list. Lower expects call operands to be trivial.
+
+Implemented a local hoist in gibbon-compiler/src/Gibbon/Passes/Cursorize.hs inside cursorizeAppE:
+
+- collect any LetE chain produced while coercing call arguments between Cursor and MutCursor;
+- place those bindings immediately before the generated AppE;
+- pass only final trivial argument expressions to the call.
+
+Validation performed:
+
+```text
+cabal build exe:gibbon
+./dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon --toC --packed --use-mutable-cursors --enable-loopification --auto-loopification --cfile /tmp/DomTree_aos_phase3.c gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs
+./dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon --run --packed --use-mutable-cursors --enable-loopification --auto-loopification gibbon-compiler/examples/soa_examples/programs/AOS/DomTree.hs
+```
+
+Result: both C generation and end-to-end execution succeed. DomTree.computeWidths remains recursive, as desired, because it has parent-child dependencies; scaleLayout remains eligible for loopification.
+
+### Next active failure: unbound mutable end cursor in layout benchmarks
+
+A focused reduced copy of examples/layout_benchmarks/Adts.hs was created under /tmp/gibbon_phase3_layout with the same size reductions used by the YAML test suite. Baseline packed execution succeeds and prints the expected small output.
+
+Failing optimization command:
+
+```text
+./dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon --run --packed --use-mutable-cursors --store-scalar-field-counts --enable-loopification --auto-loopification --cfile=/tmp/Adts_phase3_loopify.c --exefile=/tmp/Adts_phase3_loopify.exe /tmp/gibbon_phase3_layout/Adts.hs
+```
+
+Current failure:
+
+```text
+gibbon: Var end_r_2952_4066 not found. Checking:
+: Ext (DerefMutCursor "end_r_2952_4066")
+```
+
+The same unbound end_r_2952_4066 error occurs for loopify, selective sharing, vectorization, and int32-vectorization modes on the reduced Adts.hs test. This is now the next Phase 3 target. Likely area: mutable cursor environment threading for end-of-region variables in Cursorize, especially bindings created for end cursors that are referenced after packed value construction/call but not added to the L3 type environment.
+
+
+## Phase 3 Progress Log - Non-mutable SoA/Factored Validation Restart
+
+Date: 2026-05-29
+
+### Cursorize fixes completed in this slice
+
+1. Restricted inferred packed value-end variables in `cursorizeAppE` so names such as `end_acc` or `end_t` are only used when the corresponding `toEndV` variable is actually present in the type environment. This fixed the broad class of `Var end_* not found` failures that appeared after routing SoA redirection ends.
+
+2. Added conservative `toEndFromTaggedV` bindings for packed/cursor-array fields in SoA redirection unpacking. The outer SoA redirection end-array now has a bound end cursor for every component buffer, including packed fields that reuse the current cursor rather than reading a scalar tagged cursor. This fixed the reduced `reduceNestedList.hs` SoA failure (`end_from_tagged_fld_redir_* not found`).
+
+3. The earlier unaligned tagged-cursor load change remains in `Codegen.hs`: `ReadTaggedCursor` lowers through `gib_load_uintptr_unaligned`, matching how tagged pointers are written in packed buffers.
+
+### Validation after these fixes
+
+The compiler builds with `cabal build exe:gibbon`.
+
+Direct reduced SoA/factored checks that now compile and run correctly with `--run --packed`:
+
+- `ColorOctree.hs`: output `#(32768 1798260)`
+- `DecisionTree.hs`: output tuple ending `#(67 34 8 32921 21 0 34 7 109 -1 4 -89)`
+- `OctTree.hs`: output `#(98302 168666193 261 32768 449557 456751 163489516 261)`
+- `OctTree_fmmPotential.hs`: output `456751`
+- `OctTree_scaleEnergy.hs`: output `40351857`
+- `OctTree_sumEnergy.hs`: output `168666193`
+- `OctTree_sumMass.hs`: output `98302`
+- `reduceNestedList.hs`: output `2080`
+
+A rerun of `test-gibbon-examples --run-modes gibbon2` improved from 25 to 20 unexpected failures. The fixed failures include `DecisionTree`, `T64_1`, `test_addtrees`, `wildcard_case`, and the active SoA `reduceNestedList` entry.
+
+Remaining `gibbon2` failures are currently classified as follows:
+
+- Active SoA comparison rows for `ColorOctree` and some `OctTree*` still fail because the AoS baseline side crashes or returns mismatching values; direct SoA reduced runs are correct. This should be treated separately from the SoA/factored non-mutable backend fix.
+- Legacy or unrelated packed runtime failures remain (`NeedsClosure`, `Reverse`, `SS`, `bench_id`, several identity tests, etc.). Per the current scope, avoid chasing these unless they block the requested SoA/mutable/loopification/selective/vector/int32 modes.
+- `programs_not_using/list.hs` is a stale missing-file test entry.
+- `programs_not_using/packedList.hs` and `packedTree.hs` are legacy SoA experiments with separate failures; not part of the active reduced SoA benchmark set.
+
+### Next restart point
+
+Proceed to the mutable-cursor layer. Use focused reduced active examples first, especially layout benchmark `Adts.hs` and SoA programs, before broad loopification/selective/vectorization modes. Avoid overlapping Gibbon invocations because generated RTS artifacts can race.
+
+
+## Phase 3 Restart Log - Mutable Cursor Packed-Field Bug
+
+Date: 2026-05-30
+
+### Current principle for compiler fixes
+
+Do not fix failures by matching individual benchmark names. Each compiler change should capture a missing invariant in Cursorize / L3 lowering / backend conventions. Current allowed scope remains: SoA/factored layout, mutable cursors, loopification, selective buffer sharing, vectorization, and 32-bit mode. Avoid unrelated GC/runtime bugs.
+
+### What was fixed in Cursorize before this checkpoint
+
+1. `ReadTaggedCursor` codegen still lowers through `gib_load_uintptr_unaligned`, which is required because tagged cursors in packed buffers may be unaligned.
+
+2. `cursorizeAppE` now avoids using inferred packed end variables unless the corresponding `toEndV` variable is actually present in the type environment. This fixed broad `Var end_* not found` failures in non-mutable SoA/factored runs.
+
+3. SoA redirection unpacking now binds conservative `toEndFromTaggedV` witnesses for packed/cursor-array fields, so nested SoA packed fields have usable end cursors.
+
+4. `bindInputMutableEndWitnessFromStart` was added in `Cursorize.hs`. Its invariant: for input-mutable packed calls, an `EndWitness` names the cursor after the callee advances the exact start cursor passed by address. If the mutable-location environment does not have an exact entry, bind the witness to that packed start cursor rather than falling back to a region-wide cursor.
+
+5. `bindEndWitnessFromMutableLoc` was updated to use `cursorOrDeref`. Its invariant: a variable that denotes the current value of a mutable location is not itself necessarily a `MutCursor`; only variables typed `MutCursorTy` should be dereferenced.
+
+6. `cursorizeAppE` call coercion was tightened. `varIsAlreadyMutableIn` now returns true only when the variable is typed `MutCursorTy`; ordinary `CursorTy` values are wrapped with `AddrOfCursor` when a mutable callee expects `MutCursor`.
+
+7. `cursorizeAppE` computes mutable call convention from the global `--use-mutable-cursors` flag and the callee recursion/packed convention, not just the caller. Important caveat: keep the recursion check. Non-recursive packed consumers such as printers still use scalar tuple returns unless their specific call is rewritten to a mutable convention.
+
+8. For packed lets with `locs /= []`, the mutable fallback now binds fresh returned output region/end witnesses to the actual output end cursor passed to the mutable callee. This fixed the focused `Adts.hs` failure that previously reported unbound names such as `r_2949_4052` / `end_r_2949_4052` after `mkString`.
+
+### Latest validated state
+
+The compiler builds:
+
+```text
+cabal build exe:gibbon
+```
+
+The focused failing command now reaches C generation/compilation instead of failing L3 typecheck:
+
+```text
+env GIBBONDIR=/workdisk/git/gibbon ./dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon \
+  --run --packed --use-mutable-cursors \
+  --cfile=/tmp/Adts_mut_plain.c --exefile=/tmp/Adts_mut_plain.exe \
+  gibbon-compiler/examples/build_tmp/reduced_sources/examples_layout_benchmarks/Adts/Adts.hs
+```
+
+Current failure is a generated C type mismatch in `printContent`:
+
+```text
+/tmp/Adts_mut_plain.c:1715:47: error: request for member 'field0' in something not a structure or union
+return_40.field0 = tup_scalar_4929.field0;
+```
+
+The generated C has:
+
+```c
+unsigned char tup_scalar_4929 = printString(address_4927, address_4926);
+return_40.field0 = tup_scalar_4929.field0;
+```
+
+The relevant IR shape after Cursorize is:
+
+```text
+printContent :: Cursor -> Cursor -> (Cursor,Cursor,())
+...
+let address_4586 :: MutCursor = AddrOfCursor (VarE "end_r_2952")
+let address_4585 :: MutCursor = AddrOfCursor (VarE "n_324_1163_1831")
+let tup_scalar_4588 :: (Cursor,Cursor,()) = (printString ... address_4586 address_4585)
+```
+
+but `printString` has mutable recursive convention:
+
+```text
+printString :: MutCursor -> MutCursor -> ()
+```
+
+### Active missing invariant to fix next
+
+Scalar lets with location returns are still assuming that a mutable callee returns the full dilated scalar tuple. That is wrong. For mutable callees, the call returns only the scalar payload and advances cursor variables by address. The scalar let must reconstruct the dilated tuple from:
+
+- the updated input/end witnesses after the call, and
+- the scalar payload returned by the call.
+
+For a let like:
+
+```text
+let x :: [EndOfReg ..., EndWitness ...] () = printString mutable_args
+```
+
+Cursorize should emit approximately:
+
+```text
+let call_payload :: () = printString mutable_args
+let returned_region_end :: Cursor = <updated actual end cursor>
+let returned_location_end :: Cursor = <updated actual location cursor / witness>
+let x :: (Cursor, Cursor, ()) = (returned_region_end, returned_location_end, call_payload)
+```
+
+rather than binding `x` directly to the mutable callee call.
+
+This must be implemented generically in `cursorizeLet` for non-packed/scalar lets with `locs /= []` and `useMutableForRhs == True`, not as a `printString` or `Adts` special case.
+
+### Planned next edit
+
+In `gibbon-compiler/src/Gibbon/Passes/Cursorize.hs`, in the scalar `cursorizeLet` branch around the `locs /= []` case:
+
+1. When `useMutableForRhs` is true, continue generating loc bindings for `EndOfReg` and `EndWitness`, but handle both `Input` and `InputMutable` returned locs, since a read-only packed consumer may call a mutable recursive consumer through `AddrOfCursor` temporaries.
+
+2. For returned `EndOfReg` locs, map returned region/end names to the actual call loc args. If the RHS is `AppE _ _ rhsLocArgs _`, pair returned `EndOfReg`s from the let annotation with the actual `EndOfReg`s passed to the app. Bind both the returned region variable and returned end-region variable to the actual updated end cursor using `cursorOrDeref`.
+
+3. For `EndWitness`, use `bindInputMutableEndWitnessFromStart` for both `Input` and `InputMutable` modes when no exact mutable location is found. This captures the fact that the callee advanced the exact packed start cursor passed by address.
+
+4. Most importantly, change the binding shape for mutable scalar loc-return lets from:
+
+```haskell
+[(v, [], ty'', rhs')] ++ loc_bnds
+```
+
+to:
+
+```haskell
+[(fresh, [], curDict (stripTyLocs ty), rhs')]
+++ loc_bnds
+++ [(v, [], ty'', MkProdE (map VarE locReturnVars ++ [VarE fresh]))]
+```
+
+where `locReturnVars` are the variables corresponding to the returned loc annotations in `locs`. This reconstructs the dilated scalar tuple from updated cursor witnesses plus the scalar payload.
+
+Update: this scalar-let invariant is now implemented. `cursorizeLet` now detects mutable recursive callees using the same global `--use-mutable-cursors` convention as `cursorizeAppE`. For scalar lets with loc returns, non-mutable callers reconstruct the full dilated tuple from bound returned loc witnesses plus a fresh scalar payload temp. Mutable callers still bind only the scalar payload, because mutable callees advance loc/end cursor variables by address and the mutable function return convention remains scalar-only. Returned `EndOfReg` names are bound from explicit actual `EndOfReg` loc args when available, and otherwise from the mutable app arguments produced by Cursorize. `EndWitness` fallback now handles both `Input` and `InputMutable` modes via `bindInputMutableEndWitnessFromStart`.
+
+### Validation sequence for the next chat
+
+1. Apply the scalar-let invariant fix above.
+2. Rebuild:
+
+```text
+cabal build exe:gibbon
+```
+
+3. Run the focused witness:
+
+```text
+env GIBBONDIR=/workdisk/git/gibbon ./dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon \
+  --run --packed --use-mutable-cursors \
+  --cfile=/tmp/Adts_mut_plain.c --exefile=/tmp/Adts_mut_plain.exe \
+  gibbon-compiler/examples/build_tmp/reduced_sources/examples_layout_benchmarks/Adts/Adts.hs
+```
+
+4. If it passes, broaden only within scope:
+   - reduced layout benchmark examples with `--packed --use-mutable-cursors`;
+   - then loopification/selective/vector/int32 configurations from `test-gibbon-examples.yaml`.
+
+5. Keep logging failures and fixes here. Do not chase GC-only failures.
+
+### Validation update after scalar-let fix
+
+Completed on 2026-05-30:
+
+```text
+cabal build exe:gibbon
+```
+
+The focused reduced Adts mutable-cursor command now compiles and runs, producing:
+
+```text
+(CA Text (Char DEL End)  (CA Text End Nil ) ) '#()
+```
+
+Focused Adts variants that also passed with the same output:
+
+- `--packed --use-mutable-cursors --int32`
+- `--packed --use-mutable-cursors --store-scalar-field-counts --enable-loopification`
+- loopification plus `--enable-selective-buffer-sharing`
+- loopification plus selective sharing plus `--enable-vectorization`
+- vectorized configuration plus `--int32`
+
+One parallel validation attempt hit an RTS object-file race (`mv: cannot stat ... gibbon_rts.o`) while multiple compiler invocations rebuilt `gibbon-rts` at once. Rerunning the affected selective and vectorized modes sequentially passed, so this was not treated as a compiler regression.
+
+
+## Test-suite rerun notes - 2026-05-30
+
+Current objective: make the active `test-gibbon-examples` matrix green while staying scoped to the Phase 3 areas: packed SoA/factored layout, mutable cursors, loopification, selective sharing, vectorization, and int32.
+
+### How to run the examples suite from this workspace
+
+The test runner reads `tests/test-gibbon-examples.yaml` relative to `gibbon-compiler`, but its `make answers` phase resolves the compiler directory through `GIBBONDIR` when set. The reliable invocation from this checkout is:
+
+```text
+cd /workdisk/git/gibbon/gibbon-compiler
+env GIBBONDIR=/workdisk/git/gibbon cabal run test-gibbon-examples -- \
+  --skip-failing \
+  --test-summary-file /tmp/gibbon-skip-failing-summary.txt \
+  -v 1
+```
+
+Important: running from `gibbon-compiler` without `GIBBONDIR` failed before executing tests because `make answers` tried to `chdir` to a missing compiler directory. Running from the repo root also fails to find `tests/test-gibbon-examples.yaml`, because the config path is relative to `gibbon-compiler`.
+
+### No-skip full run finding
+
+A no-skip run was started with:
+
+```text
+cd /workdisk/git/gibbon/gibbon-compiler
+env GIBBONDIR=/workdisk/git/gibbon cabal run test-gibbon-examples -- \
+  --test-summary-file /tmp/gibbon-full-summary.txt \
+  -v 1
+```
+
+That run eventually hung in an expected-failing test, `examples/test_303.hs`, in loopify mode with `--auto-loopification`:
+
+```text
+gibbon --run --packed --use-mutable-cursors --store-scalar-field-counts \
+  --enable-loopification --auto-loopification \
+  --cfile=.../test_303_gibbonLoopify.c \
+  --exefile=.../test_303_gibbonLoopify.exe \
+  .../examples/test_303.hs
+```
+
+`test_303.hs` is already marked expected-failing for every active mode in the YAML, so the actionable suite run should use `--skip-failing`. The hung runner and stale `test_303_gibbonLoopify.exe` processes were killed before starting the skip-failing run.
+
+### Current active run
+
+The actionable run currently in progress is:
+
+```text
+cd /workdisk/git/gibbon/gibbon-compiler
+env GIBBONDIR=/workdisk/git/gibbon cabal run test-gibbon-examples -- \
+  --skip-failing \
+  --test-summary-file /tmp/gibbon-skip-failing-summary.txt \
+  -v 1
+```
+
+As of this note, it is still running and printing progress dots. Next step when it completes: inspect `/tmp/gibbon-skip-failing-summary.txt`, classify unexpected failures versus stale expected-failure metadata, and fix compiler invariants before broadening again.

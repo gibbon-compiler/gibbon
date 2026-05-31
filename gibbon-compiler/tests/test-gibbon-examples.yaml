@@ -604,22 +604,22 @@ tests:
 
   #simple SoA benchmarks
   - name: list.hs
-    dir: examples/soa_examples
+    dir: examples/soa_examples/programs_not_using
     failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_list.ans
 
   - name: tree.hs
-    dir: examples/soa_examples
+    dir: examples/soa_examples/programs_not_using
     failing: [interp1, gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_tree.ans
 
   - name: packedList.hs
-    dir: examples/soa_examples
+    dir: examples/soa_examples/programs_not_using
     failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_packed_list.ans
 
   - name: packedTree.hs
-    dir: examples/soa_examples
+    dir: examples/soa_examples/programs_not_using
     failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_packed_tree.ans
     
