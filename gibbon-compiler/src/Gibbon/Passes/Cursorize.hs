@@ -1372,24 +1372,14 @@ cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                     else
                       do 
                         (loc_bnds, m2_for_body) <- case ty3_of_loc of
-                          MutCursorTy -> do
-                            loc_cur <- gensym "loc_cursor"
-                            let old_entry = case M.lookup loc m2' of
-                                  Just (_, oldloc, ereg, aliases) -> (loc_cur, oldloc, ereg, aliases)
-                                  Nothing -> (loc_cur, Just loc, Just (toEndRegVar locarg), S.empty)
-                            pure ([(loc_cur, [], CursorTy, rhs'), (locs_var, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_cur))], M.insert loc old_entry m2')
+                          MutCursorTy -> bindMutableLetLoc loc locarg locs_var rhs' m2'
                           _ -> pure ([(locs_var, [], ty3_of_loc, rhs')], m2')
                         (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2_for_body useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
                         return (mkLets (bnds' ++ loc_bnds ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> do 
                      (loc_bnds, m2_for_body) <- case ty3_of_loc of
-                       MutCursorTy -> do
-                         loc_cur <- gensym "loc_cursor"
-                         let old_entry = case M.lookup loc m2' of
-                               Just (_, oldloc, ereg, aliases) -> (loc_cur, oldloc, ereg, aliases)
-                               Nothing -> (loc_cur, Just loc, Just (toEndRegVar locarg), S.empty)
-                         pure ([(loc_cur, [], CursorTy, rhs'), (locs_var, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_cur))], M.insert loc old_entry m2')
+                       MutCursorTy -> bindMutableLetLoc loc locarg locs_var rhs' m2'
                        _ -> pure ([(locs_var, [], ty3_of_loc, rhs')], m2')
                      (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2_for_body useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
                      if M.member loc m1 
@@ -1729,6 +1719,27 @@ unitizedPackedMutableTy ty =
     case mapPacked (\_ _ -> ProdTy []) (unTy2 ty) of
       SymDictTy a _ -> SymDictTy a CursorTy
       ty' -> ty'
+
+bindMutableLetLoc :: LocVar -> LocArg -> Var -> Exp3 -> MutableLocOldValueEnv -> PassM ([Binds Exp3], MutableLocOldValueEnv)
+bindMutableLetLoc loc locarg locsVar rhs mutOldVals =
+  case rhs of
+    Ext (AddrOfCursor cursorExp) -> do
+      (cursorVar, cursorBnds) <- case cursorExp of
+        VarE var -> pure (var, [])
+        _ -> do
+          locCur <- gensym "loc_cursor"
+          pure (locCur, [(locCur, [], CursorTy, cursorExp)])
+      let oldEntry = oldMutableLetLocEntry cursorVar
+      pure (cursorBnds ++ [(locsVar, [], MutCursorTy, Ext $ AddrOfCursor (VarE cursorVar))], M.insert loc oldEntry mutOldVals)
+    _ -> do
+      locCur <- gensym "loc_cursor"
+      let oldEntry = oldMutableLetLocEntry locCur
+      pure ([(locCur, [], CursorTy, rhs), (locsVar, [], MutCursorTy, Ext $ AddrOfCursor (VarE locCur))], M.insert loc oldEntry mutOldVals)
+  where
+    oldMutableLetLocEntry cursorVar =
+      case M.lookup loc mutOldVals of
+        Just (_, oldloc, ereg, aliases) -> (cursorVar, oldloc, ereg, aliases)
+        Nothing -> (cursorVar, Just loc, Just (toEndRegVar locarg), S.empty)
 
 cursorValueFromMaybeMut :: TyEnv Var Ty2 -> Var -> Exp3
 cursorValueFromMaybeMut tenv var =
