@@ -552,7 +552,7 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                        let var_for_loc = case (M.lookup (fromLocVarToFreeVarsTy l) freeVarToVarEnv'') of
                              Just v -> v
                              Nothing -> error "cursorizeFunDef: unexpected location variable"
-                           packed_cursor_ty = getCursorizeTyFromLocVar' (Just m) False l
+                           packed_cursor_ty = getCursorizeTyFromLocVar' (Just m) useMutableCursors l
                            loc_entry = (var_for_loc, packed_cursor_ty)
                            var_for_reg = case (M.lookup (fromRegVarToFreeVarsTy (toEndVRegVar $ regionToVar r)) freeVarToVarEnv'') of
                              Just v -> v
@@ -2997,6 +2997,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           (region_lets, freeVarToVarEnv') <- regionToBinds freeVarToVarEnv False r sz endmut
           let reg_var = regionToVar r
           let reg_ty = getCursorizeTyFromRegVar' Nothing useMutableCursorsCall reg_var
+          let end_reg_ty = case endmut of
+                                  L2.RegionImmutable -> MkTy2 CursorTy
+                                  L2.RegionMutable -> case reg_var of
+                                                           SingleR{} -> MkTy2 MutCursorTy
+                                                           SoARv{} -> reg_ty
 
           reg_var_name <- case (M.lookup (fromRegVarToFreeVarsTy reg_var) freeVarToVarEnv') of
             Just var -> return var
@@ -3021,7 +3026,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           let freeVarToVarEnv''' = M.insert (fromRegVarToFreeVarsTy (toEndVRegVar reg_var)) reg_var_name_end freeVarToVarEnv''
 
           let tenv' = M.insert reg_var_name reg_ty tenv
-          let tenv'' = M.insert reg_var_name_end reg_ty tenv'
+          let tenv'' = M.insert reg_var_name_end end_reg_ty tenv'
           (bod', freeVarToVarEnv'''', m1', m2') <- go insideTimeit m1 m2 freeVarToVarEnv''' tenv'' senv bod
           return (onDi (mkLets (region_lets)) bod', freeVarToVarEnv'''', m1', m2')  
         LetParRegionE r sz _ bod -> do
@@ -4081,7 +4086,58 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                         _ -> False
           calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
           calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
-          useMutForCall = useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
+          calleeHasPackedLocations = numRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null locs)
+          calleeHasMutableLocations =
+            not (null (L2.outRegVarsMutable fnTy))
+            || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
+            || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
+          useMutForCall = isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
+          cursorizeCallInTy ty =
+            case ty of
+              IntTy -> IntTy
+              CharTy -> CharTy
+              FloatTy -> FloatTy
+              SymTy -> SymTy
+              BoolTy -> BoolTy
+              ProdTy ls -> ProdTy $ L.map cursorizeCallInTy ls
+              SymDictTy ar _ty -> SymDictTy ar CursorTy
+              PDictTy k v -> PDictTy (cursorizeCallInTy k) (cursorizeCallInTy v)
+              PackedTy _ l ->
+                if useMutForCall
+                then case l of
+                       Single{} -> MutCursorTy
+                       SoA{} -> getCursorizeTyFromLocVar'' Nothing useMutForCall l
+                else getCursorizeTyFromLocVar'' Nothing useMutForCall l
+              VectorTy el_ty -> VectorTy $ cursorizeCallInTy el_ty
+              ListTy el_ty -> ListTy $ cursorizeCallInTy el_ty
+              PtrTy -> PtrTy
+              CursorTy -> CursorTy
+              MutCursorTy -> MutCursorTy
+              CursorArrayTy size -> CursorArrayTy size
+              ArenaTy -> ArenaTy
+              SymSetTy -> SymSetTy
+              SymHashTy -> SymHashTy
+              IntHashTy -> IntHashTy
+          cursorizedCallInputTys =
+            let outRegs =
+                  L.map
+                    (\r -> getCursorizeTyFromRegVar'' (Just Output) useMutForCall r)
+                    (outRegVars fnTy)
+                  ++ L.map
+                    (\r -> getCursorizeTyFromRegVar'' (Just OutputMutable) useMutForCall r)
+                    (L2.outRegVarsMutable fnTy)
+                outCurs =
+                  filter (\(LRM _ _ m) -> m == Output || m == OutputMutable) (locVars fnTy)
+                outCurTys =
+                  L.map
+                    (\(LRM l _ m) -> getCursorizeTyFromLocVar'' (Just m) useMutForCall l)
+                    outCurs
+                inRegs =
+                  L.map
+                    (\(LRM _ r m) -> getCursorizeTyFromRegVar'' (Just m) useMutForCall (regionToVar r))
+                    (L2.inRegVars' fnTy)
+                cursorizedInTys = inRegs ++ outRegs ++ outCurTys ++ map unTy2 in_tys
+             in map (stripTyLocs . cursorizeCallInTy) cursorizedInTys
           argTys = dbgTrace (minChatLvl) "Print locs in cursorize AppE " dbgTrace (minChatLvl) (sdoc (f, locs)) dbgTrace (minChatLvl) "End cursorize AppE\n" map (gRecoverType ddfs (Env2 tenv M.empty)) args
           -- In mutable calls, the callee's input EndOfReg argument is the
           -- end of the packed value, not necessarily the current chunk/region end.
@@ -4274,8 +4330,8 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                   MutCursorTy -> True
                   _ -> checkIfVarIsMutable varname m1
               Nothing -> checkIfVarIsMutable varname m1
-      let coerceCursorToMutIfNeeded tenvForCall argexp =
-            if useMutForCall
+      let coerceCursorToMutIfNeeded forceMut tenvForCall argexp =
+            if useMutForCall || forceMut
             then case argexp of
                    VarE varname ->
                      if varIsAlreadyMutableIn tenvForCall varname
@@ -4295,15 +4351,23 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                               pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
                    _ -> pure argexp
             else pure argexp
+      let expectedStartParamTys =
+            if length cursorizedCallInputTys == length starts0
+            then cursorizedCallInputTys
+            else map (stripTyLocs . unTy2) in_tys
+          forceMutableCursorArgs =
+            useMutableCursorsCall && isFunctionRec && null locs
       starts <- mapM
                   (\(paramTy, argexp) ->
-                    if hasPacked paramTy
-                    then coerceCursorToMutIfNeeded tenv argexp
+                    if hasPacked paramTy || paramTy == MutCursorTy || (forceMutableCursorArgs && paramTy == CursorTy)
+                    then coerceCursorToMutIfNeeded (paramTy == MutCursorTy || (forceMutableCursorArgs && paramTy == CursorTy)) tenv argexp
                     else pure argexp
                   )
-                  (zip (map unTy2 in_tys) starts0)
+                  (zip expectedStartParamTys starts0)
       let coerceMutToCursorIfNeeded tenvForCall argexp =
-            if useMutForCall
+            if useMutForCall || forceMutableCursorArgs
+            then pure argexp
+            else if not useMutableCursorsCall
             then pure argexp
             else case argexp of
                      VarE varname -> case M.lookup varname tenvForCall of
@@ -4318,6 +4382,9 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
       let hoistCallArgLets arg =
             case arg of
               LetE b@(_, _, _, Ext (DerefMutCursor{})) body ->
+                let (bnds, arg') = hoistCallArgLets body
+                 in (b : bnds, arg')
+              LetE b@(_, _, _, Ext (AddrOfCursor{})) body ->
                 let (bnds, arg') = hoistCallArgLets body
                  in (b : bnds, arg')
               _ -> ([], arg)
@@ -4400,10 +4467,13 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                                                                        case M.lookup varName tenv of
                                                                                               Nothing -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
                                                                                               Just ty -> case (unTy2 ty) of 
-                                                                                                              MutCursorTy -> do
-                                                                                                                              deref <- gensym "deref"
-                                                                                                                              let derefInst = [(deref, [], CursorTy, Ext $ DerefMutCursor varName)]
-                                                                                                                              return (bnds ++ derefInst, args ++ [VarE deref])
+                                                                                                              MutCursorTy ->
+                                                                                                                if useMutableCursorsCall
+                                                                                                                then do
+                                                                                                                  deref <- gensym "deref"
+                                                                                                                  let derefInst = [(deref, [], CursorTy, Ext $ DerefMutCursor varName)]
+                                                                                                                  return (bnds ++ derefInst, args ++ [VarE deref])
+                                                                                                                else return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
                                                                                                               CursorTy -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
                                                                                                               _ -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))])
 
@@ -4444,9 +4514,48 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                         (\(v, _, ty, _) env -> M.insert v (ty3ToCallTy2 ty) env)
                         tenv
                         additional_bnds
-                appe_args'' <- mapM (coerceCursorToMutIfNeeded tenvWithCallArgs) appe_args
+                appe_args'' <- mapM (coerceCursorToMutIfNeeded False tenvWithCallArgs) appe_args
                 appe_args' <- mapM (coerceMutToCursorIfNeeded tenvWithCallArgs) appe_args''
-                return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
+                if useMutForCall && any (\loc -> case loc of { Loc LREM{lremMode = m} -> m == Output || m == OutputMutable; _ -> False }) outs
+                then do
+                  let callArgs = appe_args' ++ starts'
+                      (callArgBnds, callArgs') = unzip (map hoistCallArgLets callArgs)
+                      endRegArgCount = length [() | EndOfReg{} <- outs]
+                      endRegArgs = take endRegArgCount callArgs'
+                      appeArgsHoisted = take (length appe_args') callArgs'
+                      outputLocArgs = [ (loc, arg) | (loc, arg) <- zip outs appeArgsHoisted, case loc of { Loc LREM{lremMode = m} -> m == Output || m == OutputMutable; _ -> False } ]
+                      inputValueArgs = take (length (locRets fnTy)) (reverse callArgs')
+                      callArgTyEnv =
+                        foldr
+                          (\(v, _, ty, _) env -> M.insert v (ty3ToCallTy2 ty) env)
+                          tenvWithCallArgs
+                          (concat callArgBnds)
+                      derefCursorArg :: Var -> Exp3 -> PassM ([(Var, [()], Ty3, Exp3)], Exp3)
+                      derefCursorArg prefix arg =
+                        case arg of
+                          VarE varname ->
+                            case M.lookup varname callArgTyEnv of
+                              Just ty | unTy2 ty == MutCursorTy -> do
+                                deref <- gensym prefix
+                                pure ([(deref, [], CursorTy, Ext $ DerefMutCursor varname)], VarE deref)
+                              _ -> pure ([], arg)
+                          _ -> pure ([], arg)
+                  (endRegDerefBnds, endRegVals) <- fmap unzip $ mapM (derefCursorArg "deref_end") endRegArgs
+                  (inputDerefBnds, inputEndVals) <- fmap unzip $ mapM (derefCursorArg "deref_input_end") inputValueArgs
+                  (packedBnds, packedVals) <- fmap unzip $ mapM
+                    (\(loc, arg) -> do
+                      let startVar = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
+                      (derefBnds, endVal) <- derefCursorArg "deref_out" arg
+                      pure (derefBnds, MkProdE [VarE startVar, endVal]))
+                    outputLocArgs
+                  callTmp <- gensym "void_call"
+                  let callBind = (callTmp, [], ProdTy [], AppE f _cty [] callArgs')
+                      resultTuple = MkProdE (endRegVals ++ inputEndVals ++ packedVals)
+                  return $ mkLets additional_bnds $
+                           mkLets (concat callArgBnds) $
+                           LetE callBind $
+                           mkLets (concat endRegDerefBnds ++ concat inputDerefBnds ++ concat packedBnds) resultTuple
+                else return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
       asserts <-
         foldrM
           ( \loc acc ->
@@ -5450,7 +5559,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
       fresh <- gensym "tup_haspacked"
       let useMutableForPackedRhs =
             case rhs of
-              AppE fn _ _ _ ->
+              AppE fn _ rhsLocs _ ->
                 case M.lookup fn fundefs of
                   Just g ->
                     let fnTy = funTy g
@@ -5460,7 +5569,13 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                           _ -> False
                         calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
                         calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
-                     in useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
+                        numCallRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
+                        calleeHasPackedLocations = numCallRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null rhsLocs)
+                        calleeHasMutableLocations =
+                          not (null (L2.outRegVarsMutable fnTy))
+                          || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
+                          || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
+                     in isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
                   Nothing -> False
               _ -> False
           ty' = case locs of
@@ -5565,7 +5680,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
   | otherwise = do
       let rhsCallInfo =
             case rhs of
-              AppE fn _ _ _ ->
+              AppE fn _ rhsLocs _ ->
                 case M.lookup fn fundefs of
                   Nothing -> error $ "cursorizeLet: unknown function in AppE: " ++ sdoc fn
                   Just g ->
@@ -5577,8 +5692,13 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                           _ -> False
                         calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
                         calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
-                        useMutForCall = useMutableCursorsCall && isFunctionRec && (calleeHasPackedInput || calleeHasPackedOutput)
                         numRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
+                        calleeHasPackedLocations = numRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null rhsLocs)
+                        calleeHasMutableLocations =
+                          not (null (L2.outRegVarsMutable fnTy))
+                          || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
+                          || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
+                        useMutForCall = isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
                         numOutCursors = numRegs + length (locRets fnTy)
                      in (useMutForCall, numOutCursors, calleeHasPackedOutput)
               _ -> (useMutableCursorsCall, 0, False)
