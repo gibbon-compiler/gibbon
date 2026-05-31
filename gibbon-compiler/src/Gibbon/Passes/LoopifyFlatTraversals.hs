@@ -79,21 +79,23 @@ rewriteFun auto ddefs f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
     then pure fRepaired
     else if hasParentChildDependency funName funBodyRepaired
       then pure fRepaired
-      else if hasMutFormalAddCursorUse funArgs (fst funTy) funBody
+      else if hasNonAbiMutFormalAddCursorUse funArgs (fst funTy) funBody
         then pure fRepaired
         else case flatCandidateInfo ddefs fRepaired of
-        Nothing -> pure fRepaired
-        Just FlatCandidate{fcInputEnd, fcInputCursor} -> do
-          let loopBody = exposeRhsLets (eraseSelfCalls funName funBodyRepaired)
-              body' = LetE (freshFlatLoopName funName, [], ProdTy [],
+          Nothing -> pure fRepaired
+          Just FlatCandidate{fcInputEnd, fcInputCursor} -> do
+            let loopBody = exposeRhsLets (eraseSelfCalls funName funBodyRepaired)
+                body' = LetE (freshFlatLoopName funName, [], ProdTy [],
                             Ext $ WhileCursorEnd fcInputCursor fcInputEnd loopBody)
                            (MkProdE [])
-          pure $ stampCanVectorize (fRepaired { funBody = body' })
+            pure $ stampCanVectorize (fRepaired { funBody = body' })
 
-hasMutFormalAddCursorUse :: [Var] -> [Ty3] -> Exp3 -> Bool
-hasMutFormalAddCursorUse args tys body =
-  let mutFormals = S.fromList [ arg | (arg, ty) <- zip args tys, isMutCursorTy ty ]
-   in not . S.null $ addCursorSources body `S.intersection` mutFormals
+hasNonAbiMutFormalAddCursorUse :: [Var] -> [Ty3] -> Exp3 -> Bool
+hasNonAbiMutFormalAddCursorUse args tys body =
+  let flatAbiArgs = S.fromList (take 4 args)
+      mutFormals = S.fromList [ arg | (arg, ty) <- zip args tys, isMutCursorTy ty ]
+      nonAbiMutFormals = mutFormals `S.difference` flatAbiArgs
+   in not . S.null $ addCursorSources body `S.intersection` nonAbiMutFormals
 
 isGeneratedPackedHelper :: Var -> Bool
 isGeneratedPackedHelper v =
@@ -191,10 +193,7 @@ flatCandidateInfo ddefs FunDef{funName, funArgs, funTy, funBody} = do
   _ <- singleMentionedNonSoATyCon ddefs funBody
   inputCursor <- topCaseInputCursor funBody
   inputEnd <- inferInputEndFromSelfCall funName inputCursor (S.fromList funArgs) funBody
-  let mutFormals = S.fromList
-        [ arg | (arg, ty) <- zip funArgs (fst funTy), isMutCursorTy ty ]
-      badAddCursorUses = addCursorSources funBody `S.intersection` mutFormals
-  guard (S.null badAddCursorUses)
+  guard (not (hasNonAbiMutFormalAddCursorUse funArgs (fst funTy) funBody))
   pure $ FlatCandidate inputEnd inputCursor
 
 singleMentionedNonSoATyCon :: DDefs3 -> Exp3 -> Maybe TyCon
