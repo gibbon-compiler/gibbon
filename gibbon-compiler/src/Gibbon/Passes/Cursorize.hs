@@ -1707,6 +1707,13 @@ unitizePackedMutableResult ty ex =
         ProdTy{} -> unitizePackedMutableResult (MkTy2 fieldTy) fieldExp
         _ -> fieldExp
 
+unitizedPackedMutableTy :: Ty2 -> Ty3
+unitizedPackedMutableTy ty =
+  stripTyLocs $
+    case mapPacked (\_ _ -> ProdTy []) (unTy2 ty) of
+      SymDictTy a _ -> SymDictTy a CursorTy
+      ty' -> ty'
+
 cursorizePackedExp ::
   MutableLocPtsToEnv ->
   MutableLocOldValueEnv ->
@@ -4548,13 +4555,16 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                       (derefBnds, endVal) <- derefCursorArg "deref_out" arg
                       pure (derefBnds, MkProdE [VarE startVar, endVal]))
                     outputLocArgs
-                  callTmp <- gensym "void_call"
-                  let callBind = (callTmp, [], ProdTy [], AppE f _cty [] callArgs')
-                      resultTuple = MkProdE (endRegVals ++ inputEndVals ++ packedVals)
+                  let callRetTy = unitizedPackedMutableTy (arrOut fnTy)
+                      callTmpPrefix = case callRetTy of
+                        ProdTy [] -> "void_call"
+                        _ -> "call"
+                  callTmp <- gensym callTmpPrefix
+                  let callBind = (callTmp, [], callRetTy, AppE f _cty [] callArgs')
+                      callResult = unitizePackedMutableResult (arrOut fnTy) (VarE callTmp)
                   return $ mkLets additional_bnds $
                            mkLets (concat callArgBnds) $
-                           LetE callBind $
-                           mkLets (concat endRegDerefBnds ++ concat inputDerefBnds ++ concat packedBnds) resultTuple
+                           LetE callBind callResult
                 else return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
       asserts <-
         foldrM
