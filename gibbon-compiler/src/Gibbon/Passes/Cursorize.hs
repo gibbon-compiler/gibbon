@@ -1371,14 +1371,30 @@ cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                     -- Discharge bindings that were waiting on 'loc'.
                     else
                       do 
-                        (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
-                        return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'')
+                        (loc_bnds, m2_for_body) <- case ty3_of_loc of
+                          MutCursorTy -> do
+                            loc_cur <- gensym "loc_cursor"
+                            let old_entry = case M.lookup loc m2' of
+                                  Just (_, oldloc, ereg, aliases) -> (loc_cur, oldloc, ereg, aliases)
+                                  Nothing -> (loc_cur, Just loc, Just (toEndRegVar locarg), S.empty)
+                            pure ([(loc_cur, [], CursorTy, rhs'), (locs_var, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_cur))], M.insert loc old_entry m2')
+                          _ -> pure ([(locs_var, [], ty3_of_loc, rhs')], m2')
+                        (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2_for_body useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv' bod
+                        return (mkLets (bnds' ++ loc_bnds ++ bnds_after ++ bnds) bod', env, m1'', m2'')
                 -- Discharge bindings that were waiting on 'loc'.
                 _ -> do 
-                     (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
+                     (loc_bnds, m2_for_body) <- case ty3_of_loc of
+                       MutCursorTy -> do
+                         loc_cur <- gensym "loc_cursor"
+                         let old_entry = case M.lookup loc m2' of
+                               Just (_, oldloc, ereg, aliases) -> (loc_cur, oldloc, ereg, aliases)
+                               Nothing -> (loc_cur, Just loc, Just (toEndRegVar locarg), S.empty)
+                         pure ([(loc_cur, [], CursorTy, rhs'), (locs_var, [], MutCursorTy, Ext $ AddrOfCursor (VarE loc_cur))], M.insert loc old_entry m2')
+                       _ -> pure ([(locs_var, [], ty3_of_loc, rhs')], m2')
+                     (bod', env, m1'', m2'') <- cursorizeExp m1mextended m2_for_body useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv (M.insert locs_var (MkTy2 ty2_of_loc) tenv''') senv bod
                      if M.member loc m1 
                      then return (mkLets (bnds' ++ bnds_after ++ bnds) bod', env, m1'', m2'')
-                     else return (mkLets (bnds' ++ [(locs_var, [], ty3_of_loc, rhs')] ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
+                     else return (mkLets (bnds' ++ loc_bnds ++ bnds_after ++ bnds) bod', env, m1'', m2'') 
             Left denv' -> cursorizeExp m1mextended m2' useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv' lenv ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
@@ -1714,6 +1730,13 @@ unitizedPackedMutableTy ty =
       SymDictTy a _ -> SymDictTy a CursorTy
       ty' -> ty'
 
+cursorValueFromMaybeMut :: TyEnv Var Ty2 -> Var -> Exp3
+cursorValueFromMaybeMut tenv var =
+  case M.lookup var tenv of
+    Just ty | unTy2 ty == CursorTy -> VarE var
+    Just ty | unTy2 ty == MutCursorTy -> Ext $ DerefMutCursor var
+    _ -> Ext $ DerefMutCursor var
+
 cursorizePackedExp ::
   MutableLocPtsToEnv ->
   MutableLocOldValueEnv ->
@@ -1739,11 +1762,8 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
             Just t -> t
             Nothing -> error $ sdoc v ++ " not found."
       case (unTy2 ty) of
-        PackedTy _ l -> -- For now we just return void, in case the function is Rec
-                        -- TODO: Vidush Audit this.
+        PackedTy _ l ->
                         if (M.member l m1) && useMutableCursorsCall
-                        -- TODO uncommented code needs to be put but commenting out so i get some output for now.
-                        -- return (mkDi (VarE v) [VarE (toEndV v)], freeVarToVarEnv)
                         then return (dl $ L3.MkProdE [], freeVarToVarEnv, m1, m2)
                         else return (mkDi (VarE v) [VarE (toEndV v)], freeVarToVarEnv, m1, m2)
         _ -> return (dl $ VarE v, freeVarToVarEnv, m1, m2)
@@ -2091,7 +2111,8 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                 d' <- gensym "writecur"
                 case ty of
                   _ | isPackedTy ty -> do
-                    (rnd', freeVarToVarEnv', m1', m2') <- go insideTimeit m1 m2 freeVarToVarEnv tenv senv rnd
+                    (rnd_di, freeVarToVarEnv', m1', m2') <- cursorizePackedExp mg1 mg2 False emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
+                    let rnd' = rnd_di
                     end_scalars_alloc <- gensym "end_scalars_alloc"
                     (res, m1g'', m2g'') <- case (isMutModality $ fromJust $ modality_sloc) of
                                        False -> do 
@@ -2116,9 +2137,20 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                                                   let sizeTy = sizeOfTyD dflags ty
                                                                   let add_bnds = [(void_var, [], ProdTy [], Ext $ BumpCursorMutable mlName (LitE (fromJust sizeTy)))]
                                                                   let m1'' = updateMutableLocPtsToEnv ml m1' (d', Just ml, Nothing, S.empty) False
-                                                                  return (add_bnds, m1'') 
+                                                                  return (add_bnds, m1'')
                     (res, m1g', m2g') <- go2 m1'' m2 marker_added d' rst
-                    let finalExpr = LetE (d', [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc, Ext $ WriteScalar (mkScalar ty) d rnd') (mkLets additional_bnds res)
+                    let dTy = getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc
+                    finalExpr <- case dTy of
+                      MutCursorTy -> do
+                        dCur <- gensym "writecur_cursor"
+                        pure $
+                          LetE (dCur, [], CursorTy, Ext $ WriteScalar (mkScalar ty) d rnd') $
+                          LetE (d', [], MutCursorTy, Ext $ AddrOfCursor (VarE dCur)) $
+                          mkLets additional_bnds res
+                      _ ->
+                        pure $
+                          LetE (d', [], dTy, Ext $ WriteScalar (mkScalar ty) d rnd') $
+                          mkLets additional_bnds res
                     return (finalExpr, m1g', m2g')
 
                   -- Write a pointer to a vector
@@ -4983,7 +5015,7 @@ packedMutableLetReturnsUnit fundefs mutLocs startLoc rhs =
         Just FunDef{funTy, funMeta} ->
           isRecursiveFun (funRec funMeta) && hasPacked (unTy2 (arrOut funTy))
         Nothing -> False
-    VarE _ -> M.member startLoc mutLocs
+    VarE _ -> False
     _ -> False
   where
     isRecursiveFun TailRec = True
@@ -5114,6 +5146,29 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
             else ty''
           rhs'' = VarE fresh
           rhsStillReturnsPackedEndpoints = fresh_ty /= ProdTy []
+          rhsLocs = case rhs of
+            AppE _ _ appLocs _ -> appLocs
+            _ -> []
+          rhsEndCursorReg locarg = case locarg of
+            Loc lrem -> Just (lremEndReg lrem)
+            EndWitness lrem _ -> Just (lremEndReg lrem)
+            Reg r _ -> Just (toEndVRegVar r)
+            EndOfReg _ _ r -> Just r
+            EndOfReg_Tagged r -> Just r
+          unitizedOutputEndRegBnds =
+            if useMutableCursors && not rhsStillReturnsPackedEndpoints
+            then
+              Mb.mapMaybe
+                ( \(loc, rhsLoc) -> case loc of
+                    EndOfReg _ Output dstEnd -> do
+                      srcEnd <- rhsEndCursorReg rhsLoc
+                      dstVar <- M.lookup (fromRegVarToFreeVarsTy dstEnd) freeVarToVarEnv'
+                      srcVar <- M.lookup (fromRegVarToFreeVarsTy srcEnd) freeVarToVarEnv'
+                      pure (dstVar, [], CursorTy, cursorValueFromMaybeMut tenv' srcVar)
+                    _ -> Nothing
+                )
+                (zip locs rhsLocs)
+            else []
 
       (bnds, m11', m22') <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (ty', locs, m1', m2', start_loc, start_var, useMutableCursors)) dbgTrace (minChatLvl) "End cursorize Let 2\n" case locs of
             [] -> if M.member start_loc m2'
@@ -5313,7 +5368,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                               mut_l_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
                                                                                                                                               loc_ty = getCursorizeTyFromLocVar Nothing False l
                                                                                                                                               bnd = case l of 
-                                                                                                                                                        Single{} -> [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_l_var)]
+                                                                                                                                                        Single{} -> [(locs_var, [], CursorTy, cursorValueFromMaybeMut tenv mut_l_var)]
                                                                                                                                                         SoA{} -> [(locs_var, [], loc_ty, Ext $ InitCursor loc_ty), ("_", [], ProdTy [], Ext $ MemCpy locs_var mut_l_var loc_ty)]
                                                                                                                                              in (lbndsi ++ bnd, m1i', m2i)
                                                                                                 _ -> (lbndsi, m1i, m2i)
@@ -5374,6 +5429,11 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                       new_deref <- gensym "deref"
                                       let tylocvar = getCursorizeTyFromLocVar Nothing useMutableCursors start_loc
                                       let varName = (getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l))
+                                      let start_rhs = case M.lookup l m2' of
+                                                        Just (oldvar, _oldloc, _ereg, _aliases) -> VarE oldvar
+                                                        Nothing -> case (tylocvar, M.lookup start_var tenv) of
+                                                          (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
+                                                          _ -> VarE start_var
                                       let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
                                                                                                               location_var = toLocVar loc
                                                                                                               cursor_ty = cursor_ty_locs' !! n
@@ -5478,7 +5538,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                               Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
                                                                                                                                                                                                               in case mut_loc of 
                                                                                                                                                                                                                         Single{} -> let locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
-                                                                                                                                                                                                                                        bnd = [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_loc_name)]
+                                                                                                                                                                                                                                        bnd = [(locs_var, [], CursorTy, cursorValueFromMaybeMut tenv mut_loc_name)]
                                                                                                                                                                                                                                         m1i' = updateMutableLocPtsToEnv l m1i (locs_var, Just l, Nothing, S.empty) True
                                                                                                                                                                                                                                      in (lbndsi ++ bnd, m1i', m2i)
                                                                                                                                                                                                                         SoA{} -> let locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
@@ -5492,7 +5552,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                                 locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
                                                                                                                                                                                 m1i' = updateMutableLocPtsToEnv l m1i (locs_var, Just l, Nothing, S.empty) True
                                                                                                                                                                                 mut_l_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
-                                                                                                                                                                                bnd = [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_l_var)]
+                                                                                                                                                                                bnd = [(locs_var, [], CursorTy, cursorValueFromMaybeMut tenv mut_l_var)]
                                                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case Single EndWitness Just case AppE 2.\n" (lbndsi ++ bnd, m1i', m2i)
                                                                                                                                                                     SoA{} -> 
                                                                                                                                                                               let 
@@ -5509,7 +5569,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                           let m1''' = updateMutableLocPtsToEnv l m1'' (toEndV v, Just l, Nothing, S.empty) True
                                                           let bnds' = [ (fresh, [], fresh_ty, rhs'),
                                                                         -- (v, [], projTy 0 $ projTy nLocs ty'', mkProj 0 $ mkProj nLocs rhs''),
-                                                                        (v, [], tylocvar, VarE start_var), 
+                                                                        (v, [], tylocvar, start_rhs), 
                                                                         --(toEndV v, [], projTy 1 $ projTy nLocs ty'', mkProj 1 $ mkProj nLocs rhs'')
                                                                         (new_deref, [], CursorTy, Ext $ DerefMutCursor varName),
                                                                         (toEndV v , [], tylocvar, VarE new_deref)
@@ -5521,7 +5581,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                        let m1''' = updateMutableLocPtsToEnv l m1'' (toEndV v, Just l, Nothing, S.empty) True
                                                        let bnds' = [ (fresh, [], fresh_ty, rhs'),
                                                                     -- (v, [], projTy 0 $ projTy nLocs ty'', mkProj 0 $ mkProj nLocs rhs''),
-                                                                    (v, [], tylocvar, VarE start_var), 
+                                                                    (v, [], tylocvar, start_rhs), 
                                                                     --(toEndV v, [], projTy 1 $ projTy nLocs ty'', mkProj 1 $ mkProj nLocs rhs'')
                                                                     --(new_deref, [], CursorTy, Ext $ DerefMutCursor varName),
                                                                     --(toEndV v , [], tylocvar, VarE new_deref)
@@ -5548,8 +5608,11 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
       case M.lookup (fromVarToFreeVarsTy (toEndV v)) denv of
         Just xs -> error $ "todo: " ++ sdoc xs
         Nothing -> return ()
+      let bndNames = S.fromList [bndVar | (bndVar, _, _, _) <- bnds]
+          bndsWithUnitizedEndRegs =
+            bnds ++ filter (\(bndVar, _, _, _) -> not (S.member bndVar bndNames)) unitizedOutputEndRegBnds
       (bod', freeVarToVarEnv'', m1'', m2'') <- go insideTimeIt m11' m22' (M.union freeVarToVarEnv' freeVarToVarEnv) tenv' bod
-      return (mkLets bnds bod', freeVarToVarEnv'', m1'', m2'')
+      return (mkLets bndsWithUnitizedEndRegs bod', freeVarToVarEnv'', m1'', m2'')
   | hasPacked ty = do
       let cursor_ty_locs =
             map
@@ -5906,7 +5969,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                               Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
                                                                                                                                                                                                               in case mut_loc of
                                                                                                                                                                                                                         Single{} -> let locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
-                                                                                                                                                                                                                                        bnd = [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_loc_name)]
+                                                                                                                                                                                                                                        bnd = [(locs_var, [], CursorTy, cursorValueFromMaybeMut tenv mut_loc_name)]
                                                                                                                                                                                                                                         m1i' = updateMutableLocPtsToEnv mut_loc m1i (locs_var, Just mut_loc, Nothing, S.empty) True
                                                                                                                                                                                                                                      in (lbndsi ++ bnd, m1i', m2i)
                                                                                                                                                                                                                         SoA{} -> let locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
@@ -5920,7 +5983,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                                 locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
                                                                                                                                                                                 m1i' = updateMutableLocPtsToEnv l m1i (locs_var, Just l, Nothing, S.empty) True
                                                                                                                                                                                 mut_l_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy l)
-                                                                                                                                                                                bnd = [(locs_var, [], CursorTy, Ext $ DerefMutCursor mut_l_var)]
+                                                                                                                                                                                bnd = [(locs_var, [], CursorTy, cursorValueFromMaybeMut tenv mut_l_var)]
                                                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case Single EndWitness Just case AppE 2.\n" (lbndsi ++ bnd, m1i', m2i)
                                                                                                                                                                     SoA{} ->
                                                                                                                                                                               let
