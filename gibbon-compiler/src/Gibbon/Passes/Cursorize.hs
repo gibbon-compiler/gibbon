@@ -5763,6 +5763,28 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                            in (loc_to_variable, MkTy2 cursorType)
                       )
                       locs
+          let fallbackScalarLocBnds =
+                case rhs of
+                  AppE _ _ rhsLocs _ | useMutableForRhs ->
+                    Mb.mapMaybe
+                      ( \(loc, rhsLoc, n) ->
+                          let loc_var = fromLocArgToFreeVarsTy loc
+                              loc_to_variable = case M.lookup loc_var freeVarToVarEnv' of
+                                Just v' -> v'
+                                Nothing -> error "cursorizeLet: unexpected location variable"
+                              rhs_var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy rhsLoc)
+                              cursorType = cursor_ty_locs' !! n
+                              rhs_exp = case M.lookup rhs_var tenv of
+                                Just rhs_ty -> case unTy2 rhs_ty of
+                                  MutCursorTy -> Ext $ DerefMutCursor rhs_var
+                                  _ -> VarE rhs_var
+                                Nothing -> VarE rhs_var
+                           in case cursorType of
+                                CursorArrayTy{} -> Nothing
+                                _ -> Just (loc_to_variable, [], cursorType, rhs_exp)
+                      )
+                      (zip3 locs rhsLocs [0..])
+                  _ -> []
           (bnds, m1b, m2b) <- if useMutableForRhs
                               then do
                                    let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
@@ -5891,7 +5913,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case SoA EndWitness Just case AppE 2.\n" (lbndsi ++ bnd, m1i', m2i)
                                                                                                                   _ -> (lbndsi, m1i, m2i)
                                                          ) ([], m1', m2') (zip locs [0 ..])
-                                   return ([(v, [], ty'', rhs')] ++ loc_bnds
+                                   return ([(v, [], ty'', rhs')] ++ fallbackScalarLocBnds ++ loc_bnds
                                      -- Vidush: TODO, we still need to handle the locs. 
                                      -- Instead of getting them from the projection, we need to dereference 
                                      -- the output mutable locations and regions in order to get them.

@@ -70,21 +70,30 @@ loopifyFlatTraversals prog@Prog{ddefs, fundefs} = do
   pure $ prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
 
 rewriteFun :: Bool -> DDefs3 -> FunDef3 -> PassM FunDef3
-rewriteFun auto ddefs f@FunDef{funName, funMeta, funBody}
-  | not explicitlyAnnotated && not canInfer = pure f
-  | hasParentChildDependency funName funBody = pure f
-  | otherwise =
-      case flatCandidateInfo ddefs f of
-        Nothing -> pure f
+rewriteFun auto ddefs f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
+  funBodyRepaired <- repairMutAddCursorSources (M.fromList (zip funArgs (fst funTy))) funBody
+  let fRepaired = f { funBody = funBodyRepaired }
+      explicitlyAnnotated = CanVectorize `elem` funOpt funMeta
+      canInfer = auto && not (isGeneratedPackedHelper funName)
+  if not explicitlyAnnotated && not canInfer
+    then pure fRepaired
+    else if hasParentChildDependency funName funBodyRepaired
+      then pure fRepaired
+      else if hasMutFormalAddCursorUse funArgs (fst funTy) funBody
+        then pure fRepaired
+        else case flatCandidateInfo ddefs fRepaired of
+        Nothing -> pure fRepaired
         Just FlatCandidate{fcInputEnd, fcInputCursor} -> do
-          let loopBody = exposeRhsLets (eraseSelfCalls funName funBody)
+          let loopBody = exposeRhsLets (eraseSelfCalls funName funBodyRepaired)
               body' = LetE (freshFlatLoopName funName, [], ProdTy [],
                             Ext $ WhileCursorEnd fcInputCursor fcInputEnd loopBody)
                            (MkProdE [])
-          pure $ stampCanVectorize (f { funBody = body' })
-  where
-    explicitlyAnnotated = CanVectorize `elem` funOpt funMeta
-    canInfer = auto && not (isGeneratedPackedHelper funName)
+          pure $ stampCanVectorize (fRepaired { funBody = body' })
+
+hasMutFormalAddCursorUse :: [Var] -> [Ty3] -> Exp3 -> Bool
+hasMutFormalAddCursorUse args tys body =
+  let mutFormals = S.fromList [ arg | (arg, ty) <- zip args tys, isMutCursorTy ty ]
+   in not . S.null $ addCursorSources body `S.intersection` mutFormals
 
 isGeneratedPackedHelper :: Var -> Bool
 isGeneratedPackedHelper v =
@@ -95,6 +104,75 @@ isGeneratedPackedHelper v =
      , isUnpackerName v
      , isRelOffsetsFunName v
      ]
+
+repairMutAddCursorSources :: M.Map Var Ty3 -> Exp3 -> PassM Exp3
+repairMutAddCursorSources env ex =
+  case ex of
+    LetE (v, locs, ty, rhs) bod -> do
+      rhs' <- repairMutAddCursorSources env rhs
+      bod' <- repairMutAddCursorSources (M.insert v ty env) bod
+      pure $ LetE (v, locs, ty, rhs') bod'
+    IfE a b c -> IfE <$> go a <*> go b <*> go c
+    MkProdE es -> MkProdE <$> mapM go es
+    ProjE i e -> ProjE i <$> go e
+    CaseE scrt brs -> do
+      scrt' <- go scrt
+      brs' <- mapM (\(dc, vs, rhs) -> do
+                       rhs' <- go rhs
+                       pure (dc, vs, rhs')) brs
+      pure $ CaseE scrt' brs'
+    DataConE loc dc es -> DataConE loc dc <$> mapM go es
+    TimeIt e ty b -> TimeIt <$> go e <*> pure ty <*> pure b
+    WithArenaE v e -> WithArenaE v <$> go e
+    SpawnE v loc es -> SpawnE v loc <$> mapM go es
+    MapE (v, ty, rhs) bod -> do
+      rhs' <- go rhs
+      bod' <- go bod
+      pure $ MapE (v, ty, rhs') bod'
+    FoldE (v1, t1, r1) (v2, t2, r2) bod -> do
+      r1' <- go r1
+      r2' <- go r2
+      bod' <- go bod
+      pure $ FoldE (v1, t1, r1') (v2, t2, r2') bod'
+    Ext ext -> repairMutAddCursorSourcesExt env ext
+    _ -> pure ex
+  where
+    go = repairMutAddCursorSources env
+
+repairMutAddCursorSourcesExt :: M.Map Var Ty3 -> E3Ext () Ty3 -> PassM Exp3
+repairMutAddCursorSourcesExt env ext =
+  case ext of
+    AddCursor cur rhs -> do
+      rhs' <- repairMutAddCursorSources env rhs
+      case M.lookup cur env of
+        Just MutCursorTy -> do
+          deref <- gensym "deref_addcursor"
+          pure $ LetE (deref, [], CursorTy, Ext $ DerefMutCursor cur)
+                      (Ext $ AddCursor deref rhs')
+        _ -> pure $ Ext $ AddCursor cur rhs'
+    WriteScalar s cur rhs -> Ext . WriteScalar s cur <$> repairMutAddCursorSources env rhs
+    WriteTagPacked cur rhs -> Ext . WriteTagPacked cur <$> repairMutAddCursorSources env rhs
+    WriteCursorSelectiveIndirection a b c rhs -> Ext . WriteCursorSelectiveIndirection a b c <$> repairMutAddCursorSources env rhs
+    WriteTaggedCursor cur rhs -> Ext . WriteTaggedCursor cur <$> repairMutAddCursorSources env rhs
+    WriteCursorMutable cur rhs -> Ext . WriteCursorMutable cur <$> repairMutAddCursorSources env rhs
+    WriteList cur rhs ty -> do
+      rhs' <- repairMutAddCursorSources env rhs
+      pure $ Ext $ WriteList cur rhs' ty
+    WriteVector cur rhs ty -> do
+      rhs' <- repairMutAddCursorSources env rhs
+      pure $ Ext $ WriteVector cur rhs' ty
+    BumpCursorMutable cur rhs -> Ext . BumpCursorMutable cur <$> repairMutAddCursorSources env rhs
+    AddrOfCursor rhs -> Ext . AddrOfCursor <$> repairMutAddCursorSources env rhs
+    LetAvail vs rhs -> Ext . LetAvail vs <$> repairMutAddCursorSources env rhs
+    ForE idx bound rhs -> do
+      bound' <- repairMutAddCursorSources env bound
+      rhs' <- repairMutAddCursorSources env rhs
+      pure $ Ext $ ForE idx bound' rhs'
+    WhileCursor cur rhs -> Ext . WhileCursor cur <$> repairMutAddCursorSources env rhs
+    WhileCursorEnd cur end rhs -> Ext . WhileCursorEnd cur end <$> repairMutAddCursorSources env rhs
+    RetE es -> Ext . RetE <$> mapM (repairMutAddCursorSources env) es
+    Assert rhs -> Ext . Assert <$> repairMutAddCursorSources env rhs
+    _ -> pure $ Ext ext
 
 stampCanVectorize :: FunDef3 -> FunDef3
 stampCanVectorize fn@FunDef{funMeta} =
@@ -113,6 +191,10 @@ flatCandidateInfo ddefs FunDef{funName, funArgs, funTy, funBody} = do
   _ <- singleMentionedNonSoATyCon ddefs funBody
   inputCursor <- topCaseInputCursor funBody
   inputEnd <- inferInputEndFromSelfCall funName inputCursor (S.fromList funArgs) funBody
+  let mutFormals = S.fromList
+        [ arg | (arg, ty) <- zip funArgs (fst funTy), isMutCursorTy ty ]
+      badAddCursorUses = addCursorSources funBody `S.intersection` mutFormals
+  guard (S.null badAddCursorUses)
   pure $ FlatCandidate inputEnd inputCursor
 
 singleMentionedNonSoATyCon :: DDefs3 -> Exp3 -> Maybe TyCon
@@ -204,6 +286,51 @@ collectAppsExt ext =
     RetE es -> concatMap collectApps es
     Assert rhs -> collectApps rhs
     _ -> []
+
+addCursorSources :: Exp3 -> S.Set Var
+addCursorSources ex =
+  case ex of
+    VarE{} -> S.empty
+    LitE{} -> S.empty
+    CharE{} -> S.empty
+    FloatE{} -> S.empty
+    LitSymE{} -> S.empty
+    AppE _ _ _ args -> S.unions (map addCursorSources args)
+    PrimAppE _ args -> S.unions (map addCursorSources args)
+    LetE (_, _, _, rhs) bod -> addCursorSources rhs `S.union` addCursorSources bod
+    IfE a b c -> S.unions (map addCursorSources [a, b, c])
+    MkProdE es -> S.unions (map addCursorSources es)
+    ProjE _ e -> addCursorSources e
+    CaseE scrt brs -> addCursorSources scrt `S.union` S.unions (map (addCursorSources . thd3) brs)
+    DataConE _ _ es -> S.unions (map addCursorSources es)
+    TimeIt e _ _ -> addCursorSources e
+    WithArenaE _ e -> addCursorSources e
+    SpawnE _ _ es -> S.unions (map addCursorSources es)
+    MapE (_, _, rhs) bod -> addCursorSources rhs `S.union` addCursorSources bod
+    FoldE (_, _, e1) (_, _, e2) e3 -> S.unions (map addCursorSources [e1, e2, e3])
+    Ext ext -> addCursorSourcesExt ext
+    _ -> S.empty
+
+addCursorSourcesExt :: E3Ext () Ty3 -> S.Set Var
+addCursorSourcesExt ext =
+  case ext of
+    WriteScalar _ _ rhs -> addCursorSources rhs
+    WriteTagPacked _ rhs -> addCursorSources rhs
+    WriteCursorSelectiveIndirection _ _ _ rhs -> addCursorSources rhs
+    WriteTaggedCursor _ rhs -> addCursorSources rhs
+    WriteCursorMutable _ rhs -> addCursorSources rhs
+    WriteList _ rhs _ -> addCursorSources rhs
+    WriteVector _ rhs _ -> addCursorSources rhs
+    AddCursor cur rhs -> S.insert cur (addCursorSources rhs)
+    BumpCursorMutable _ rhs -> addCursorSources rhs
+    AddrOfCursor rhs -> addCursorSources rhs
+    LetAvail _ rhs -> addCursorSources rhs
+    ForE _ bound rhs -> addCursorSources bound `S.union` addCursorSources rhs
+    WhileCursor _ rhs -> addCursorSources rhs
+    WhileCursorEnd _ _ rhs -> addCursorSources rhs
+    RetE es -> S.unions (map addCursorSources es)
+    Assert rhs -> addCursorSources rhs
+    _ -> S.empty
 
 -- | Turn recursive calls into unit effects; the enclosing cursor-end loop will
 -- visit the child nodes in packed order.  Parent-child dependencies are checked
