@@ -94,6 +94,7 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                       help "Gibbon1 mode") <|>
                    -- Default Opt_RemoveCopies
                    flag' Opt_No_RemoveCopies (long "no-rcopies" <>
+                                              long "no-indirections" <>
                                               help "Calls to copy functions are *not* converted to indirections") <|>
                    -- Default Opt_InfiniteRegions
                    flag' Opt_BigInfiniteRegions (long "biginf" <>

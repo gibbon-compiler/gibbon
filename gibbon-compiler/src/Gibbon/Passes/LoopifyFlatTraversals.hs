@@ -108,6 +108,7 @@ data FlatCandidate = FlatCandidate
 
 flatCandidateInfo :: DDefs3 -> FunDef3 -> Maybe FlatCandidate
 flatCandidateInfo ddefs FunDef{funName, funArgs, funTy, funBody} = do
+  guard (isVoidTy (snd funTy))
   guard (all isMutCursorTy (take 4 (fst funTy)))
   _ <- singleMentionedNonSoATyCon ddefs funBody
   inputCursor <- topCaseInputCursor funBody
@@ -128,6 +129,10 @@ singleMentionedNonSoATyCon ddefs body = do
                             , (dc, _) <- dataCons
                             , dc == dcon ]
       listToMaybe matches
+
+isVoidTy :: Ty3 -> Bool
+isVoidTy (ProdTy []) = True
+isVoidTy _ = False
 
 isMutCursorTy :: Ty3 -> Bool
 isMutCursorTy MutCursorTy = True
