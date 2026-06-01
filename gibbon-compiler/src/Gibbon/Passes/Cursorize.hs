@@ -1720,6 +1720,16 @@ unitizedPackedMutableTy ty =
       SymDictTy a _ -> SymDictTy a CursorTy
       ty' -> ty'
 
+mutableLocLetPayload :: Ty2 -> Exp3 -> Exp3
+mutableLocLetPayload ty ex =
+  case ex of
+    LetE b@(v, _, _, rhs) bod ->
+      case rhs of
+        AppE{} -> LetE b (unitizePackedMutableResult ty (VarE v))
+        _ -> LetE b (mutableLocLetPayload ty bod)
+    IfE a b c -> IfE a (mutableLocLetPayload ty b) (mutableLocLetPayload ty c)
+    _ -> unitizePackedMutableResult ty ex
+
 bindMutableLetLoc :: LocVar -> LocArg -> Var -> Exp3 -> MutableLocOldValueEnv -> PassM ([Binds Exp3], MutableLocOldValueEnv)
 bindMutableLetLoc loc locarg locsVar rhs mutOldVals =
   case rhs of
@@ -4614,7 +4624,8 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                       callResult =
                         case (locResults, hasPacked (unTy2 (arrOut fnTy)), callPayload) of
                           ([], _, _) -> callPayload
-                          (_, True, _) -> MkProdE locResults
+                          (_, True, MkProdE []) -> MkProdE locResults
+                          (_, True, _) -> callPayload
                           (_, _, _) -> MkProdE (locResults ++ [callPayload])
                   return $ mkLets additional_bnds $
                            mkLets (concat callArgBnds) $
@@ -6018,7 +6029,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case SoA EndWitness Just case AppE 2.\n" (lbndsi ++ bnd, m1i', m2i)
                                                                                                                   _ -> (lbndsi, m1i, m2i)
                                                          ) ([], m1', m2') (zip locs [0 ..])
-                                   return ([(v, [], ty'', rhs')] ++ fallbackScalarLocBnds ++ loc_bnds
+                                   return ([(v, [], ty'', mutableLocLetPayload (MkTy2 ty) rhs')] ++ fallbackScalarLocBnds ++ loc_bnds
                                      -- Vidush: TODO, we still need to handle the locs. 
                                      -- Instead of getting them from the projection, we need to dereference 
                                      -- the output mutable locations and regions in order to get them.
