@@ -4604,10 +4604,17 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                         _ -> "call"
                   callTmp <- gensym callTmpPrefix
                   let callBind = (callTmp, [], callRetTy, AppE f _cty [] callArgs')
-                      callResult = unitizePackedMutableResult (arrOut fnTy) (VarE callTmp)
+                      callPayload = unitizePackedMutableResult (arrOut fnTy) (VarE callTmp)
+                      locResults = endRegVals ++ inputEndVals ++ packedVals
+                      callResult =
+                        case (locResults, hasPacked (unTy2 (arrOut fnTy)), callPayload) of
+                          ([], _, _) -> callPayload
+                          (_, True, _) -> MkProdE locResults
+                          (_, _, _) -> MkProdE (locResults ++ [callPayload])
                   return $ mkLets additional_bnds $
                            mkLets (concat callArgBnds) $
-                           LetE callBind callResult
+                           LetE callBind $
+                           mkLets (concat endRegDerefBnds ++ concat inputDerefBnds ++ concat packedBnds) callResult
                 else return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
       asserts <-
         foldrM
