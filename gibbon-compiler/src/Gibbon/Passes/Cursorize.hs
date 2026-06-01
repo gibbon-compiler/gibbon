@@ -2099,6 +2099,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                                                                               Nothing -> return (Nothing, oldv, [])
                                                                                               Just ol -> return (Just ol, oldv, [])
                                                         else return (Just sloc_loc, getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy sloc_loc), []) 
+          let m1_dcon = if isMutModality $ fromJust modality_sloc
+                        then case M.lookup sloc_loc m1 of
+                               Nothing -> updateMutableLocPtsToEnv sloc_loc m1 (sloc, Just sloc_loc, Nothing, S.empty) False
+                               Just{} -> m1
+                        else m1
               -- sloc = case (M.lookup (fromLocVarToFreeVarsTy sloc_loc) freeVarToVarEnv) of
               --   Just v -> v
               --   Nothing -> error $ "cursorizeExp(988): DataConE: unexpected location variable" ++ "(" ++ show sloc_loc ++ ")" ++ show freeVarToVarEnv
@@ -2138,7 +2143,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                   -- Int, Float, Sym, or Bool
                   _ | isScalarTy ty -> do
                     (rnd', freeVarToVarEnv', m1', m2') <- cursorizeExp mg1 mg2 useMutableCursorsCall emitScalarCountBumps insideTimeit freeVarToVarEnv lenv ddfs fundefs denv tenv senv rnd
-                    let mut_loc_pts = dbgTrace (minChatLvl) "Print in DataConE: " dbgTrace (minChatLvl) (sdoc (additional_bnds, m1, m1')) dbgTrace (minChatLvl) "End in DataConE Case.\n" findMutableLocationPointingToVar d m1'
+                    let mut_loc_pts = dbgTrace (minChatLvl) "Print in DataConE: " dbgTrace (minChatLvl) (sdoc (additional_bnds, m1_dcon, m1')) dbgTrace (minChatLvl) "End in DataConE Case.\n" findMutableLocationPointingToVar d m1'
                     (additional_bnds, m1'') <- case mut_loc_pts of 
                                                       Nothing -> return ([], m1')
                                                       Just ml -> do
@@ -2191,12 +2196,12 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           start_tag_alloc <- gensym "start_tag_alloc"
           end_tag_alloc <- gensym "end_tag_alloc"
           start_scalars_alloc <- gensym "start_scalars_alloc"
-          needs_bump <- mutLocNeedsBump freeVarToVarEnv m1 m2 (Just sloc_loc) (Just sloc) (L3.LitE 1)
-          let (needs_bump_lts, m1') = dbgTrace (minChatLvl) "Print the bump let!!" dbgTrace (minChatLvl) (sdoc (m1, needs_bump)) dbgTrace (minChatLvl) "End printing in bump let!!" case needs_bump of 
+          needs_bump <- mutLocNeedsBump freeVarToVarEnv m1_dcon m2 (Just sloc_loc) (Just sloc) (L3.LitE 1)
+          let (needs_bump_lts, m1') = dbgTrace (minChatLvl) "Print the bump let!!" dbgTrace (minChatLvl) (sdoc (m1_dcon, needs_bump)) dbgTrace (minChatLvl) "End printing in bump let!!" case needs_bump of 
                                         Just (b, mut_loc) -> let 
-                                                    m1i = updateMutableLocPtsToEnv mut_loc m1 (after_tag, Just mut_loc, Nothing, S.empty) False
+                                                    m1i = updateMutableLocPtsToEnv mut_loc m1_dcon (after_tag, Just mut_loc, Nothing, S.empty) False
                                                    in ([b], m1i)
-                                        Nothing -> ([], m1)
+                                        Nothing -> ([], m1_dcon)
           (after_tag_res, m1env, m2env) <- go2 m1' m2 False after_tag (zip args (lookupDataCon ddfs dcon))
           (,,,) <$> dl
             <$> mkLets additional_bnds
