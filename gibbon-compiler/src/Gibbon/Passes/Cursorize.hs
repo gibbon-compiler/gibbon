@@ -1773,7 +1773,7 @@ cursorValueFromMaybeTrackedMut m1 tenv var =
     Just ty | unTy2 ty == CursorTy -> VarE var
     Just ty | unTy2 ty == MutCursorTy -> Ext $ DerefMutCursor var
     Just _ -> VarE var
-    Nothing | checkIfVarIsMutable var m1 || isGeneratedSoAFieldVar var -> Ext $ DerefMutCursor var
+    Nothing | isGeneratedSoAFieldVar var -> Ext $ DerefMutCursor var
     Nothing -> VarE var
 
 cursorizePackedExp ::
