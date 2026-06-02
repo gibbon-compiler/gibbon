@@ -1577,8 +1577,15 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                then pure []
                                else
                                  let [(VarTriv _reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
-                                 in pure
-                                 [ C.BlockStm [cstm| gib_free_region($id:endr_cur); |] ]
+                                 in case M.lookup endr_cur mutEndEnv of
+                                      Just{} ->
+                                        pure [ C.BlockStm [cstm| gib_free_region(*$id:endr_cur); |] ]
+                                      Nothing ->
+                                        case M.lookup endr_cur venv of
+                                          Just MutCursorTy ->
+                                            pure [ C.BlockStm [cstm| gib_free_region(*$id:endr_cur); |] ]
+                                          _ ->
+                                            pure [ C.BlockStm [cstm| gib_free_region($id:endr_cur); |] ]
 
                  WriteTag -> let [(outV,CursorTy)] = bnds
                                  [t@(TagTriv{}),(VarTriv cur)] = rnds in pure

@@ -1116,7 +1116,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (EndOfBuffer mul endregmod))) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul endregmod) [] <$>
+      let endTy = if endregmod == L2.RegionMutable then T.MutCursorTy else T.CursorTy
+      T.LetPrimCallT [(v,endTy)] (T.EndOfBuffer mul endregmod) [] <$>
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do
