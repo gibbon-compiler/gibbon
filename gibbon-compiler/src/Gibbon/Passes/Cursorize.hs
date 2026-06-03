@@ -513,6 +513,13 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
         [] -> (mkLets [], M.empty, M.empty)
         _ ->
           let projs = concatMap (\(e, t) -> mkInProjs e t) (zip (map VarE funArgs) in_tys)
+              inputLocOrder = concatMap (L2.locsInTy . unTy2) in_tys
+              inLocAByInputOrder =
+                [ loca
+                | inputLoc <- inputLocOrder
+                , loca <- inLocA
+                , toLocVar loca == inputLoc
+                ]
               (bnds, m1f, m2f) =
                 foldr
                   ( \(loca, proj) (bn, m11, m22) ->
@@ -540,7 +547,7 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                                                      in M.insert loc (varNameToUseForLoc, Just loc, Just reg, S.insert var_for_loc S.empty) m22
                                             False -> m22
                        in (bn ++ [(var_for_loc, [], packed_cursor_ty, proj)], m11', m22')
-                  ) ([], M.empty, M.empty) (zip inLocA projs)
+                  ) ([], M.empty, M.empty) (zip inLocAByInputOrder projs)
                   -- [((unwrapLocVar loc),[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
            in dbgTrace (minChatLvl) "Printing in inCurBinds: " dbgTrace (minChatLvl) (sdoc (bnds)) dbgTrace (minChatLvl) "End printing in inCurBinds.\n" (mkLets bnds, m1f, m2f)
 
@@ -3125,7 +3132,7 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
         BoundsCheck i bound cur -> return (dl <$> 
                                              Ext $ L3.BoundsCheck i (((unwrapLocVar . toLocVar)) bound) (((unwrapLocVar . toLocVar)) cur) Nothing Output
                                             , freeVarToVarEnv, m1, m2)
-        IndirectionE tycon dcon (from, from_reg) (to, to_reg) _ -> do
+        IndirectionE tycon dcon (from, from_reg) (to, to_reg) cpy -> do
           dflags <- getDynFlags
           if gopt Opt_DisableGC dflags
             -- \|| (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
@@ -3143,28 +3150,80 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                   let from_var = case M.lookup (fromLocArgToFreeVarsTy from) freeVarToVarEnv of
                         Nothing -> error "Did not find variable for location!"
                         Just var -> var
-                  let to_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of
+                  let metadata_to_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of
                         Nothing -> error "Did not find variable for location!"
                         Just var -> var
                   let reg_from_reg = fromLocVarToRegVar (toLocVar from_reg)
-                  let reg_to_reg = fromLocVarToRegVar (toLocVar to_reg)
+                  let metadata_to_reg = fromLocVarToRegVar (toLocVar to_reg)
+                  let payload_loc = case cpy of
+                        VarE payload ->
+                          let old_loc = L.foldr
+                                (\(loc, (oldv, _, _, _aliases)) acc ->
+                                  if payload == oldv
+                                  then Just loc
+                                  else acc)
+                                Nothing
+                                (M.toList m2)
+                              pts_loc = findMutableLocationPointingToVar payload m1
+                              env_loc = L.foldr
+                                (\(key, var) acc ->
+                                  case key of
+                                    FL loc | var == payload -> Just loc
+                                    _ -> acc)
+                                Nothing
+                                (M.toList freeVarToVarEnv)
+                          in case old_loc of
+                            Just loc -> Just loc
+                            Nothing -> case pts_loc of
+                              Just loc -> Just loc
+                              Nothing -> case env_loc of
+                                Just loc -> Just loc
+                                Nothing -> case M.lookup payload lenv >>= id of
+                                  Just loc -> Just loc
+                                  Nothing -> case M.lookup payload tenv of
+                                    Just (MkTy2 (PackedTy _ loc)) -> Just loc
+                                    _ -> Nothing
+                        _ -> Nothing
+                  let to_var = case payload_loc >>= (\loc -> M.lookup loc m2) of
+                        Just (oldv, _, _, _) -> oldv
+                        Nothing -> case payload_loc >>= (\loc -> M.lookup (fromLocVarToFreeVarsTy loc) freeVarToVarEnv) of
+                          Just var -> var
+                          Nothing -> metadata_to_var
+                  let payload_old_reg = payload_loc >>= (\loc -> case M.lookup loc m2 of
+                        Just (_, _, Just reg, _) -> Just reg
+                        _ -> Nothing)
+                  let reg_to_reg = case payload_old_reg of
+                        Just reg -> reg
+                        Nothing -> case payload_loc of
+                          Just loc -> fromLocVarToRegVar loc
+                          Nothing -> metadata_to_reg
                   let from_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_from_reg) freeVarToVarEnv of
                         Nothing -> error "Did not find variable for location!"
                         Just var -> var
-                  let to_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_to_reg) freeVarToVarEnv of
+                  let metadata_to_reg_var = case M.lookup (fromRegVarToFreeVarsTy metadata_to_reg) freeVarToVarEnv of
                         Nothing -> error "Did not find variable for location!"
+                        Just var -> var
+                  let to_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_to_reg) freeVarToVarEnv of
+                        Nothing -> metadata_to_reg_var
                         Just var -> var
                   -- VS : [09/20/2025 -- For SoA case, indirection with gc need a bit more thinking]
                   -- One way could be to call indirection barrier seperately on every buffer/region
                   -- Then follow them seperately for every region in the case.
                   -- For now i'm erroring out but this needs more thought.
+                  (need_deref, new_vars) <- foldlM (\(ls, nvs) v -> case M.lookup v tenv of
+                                                            Just (MkTy2 MutCursorTy) -> do
+                                                                          new_deref <- gensym "new_deref"
+                                                                          return (ls ++ [(new_deref, [], CursorTy, Ext $ DerefMutCursor v)], nvs ++ [new_deref])
+                                                            _ -> return (ls, nvs ++ [v])
+                                                       ) ([], []) [from_var, to_var, from_reg_var, to_reg_var]
                   return (
                     Di $
                       ( mkLets
-                          [ ("_", [], ProdTy [], Ext (IndirectionBarrier tycon ((from_var), (from_reg_var), (to_var), (to_reg_var)))),
-                            (start, [], CursorTy, VarE (from_var)),
-                            (end, [], CursorTy, Ext $ AddCursor (from_var) (L3.LitE 9))
-                          ]
+                          (need_deref ++
+                          [ ("_", [], ProdTy [], Ext (IndirectionBarrier tycon ((new_vars !! 0), (new_vars !! 2), (new_vars !! 1), (new_vars !! 3)))),
+                            (start, [], CursorTy, VarE (new_vars !! 0)),
+                            (end, [], CursorTy, Ext $ AddCursor (new_vars !! 0) (L3.LitE 9))
+                          ])
                           (MkProdE [VarE start, VarE end])
                       ), 
                       freeVarToVarEnv, m1, m2)

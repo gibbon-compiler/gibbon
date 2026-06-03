@@ -47,6 +47,7 @@ module Gibbon.Passes.LoopifyFlatTraversals
   ) where
 
 import           Control.Monad (guard)
+import           Data.List (elemIndex)
 import           Data.Maybe (listToMaybe, mapMaybe)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -192,7 +193,10 @@ flatCandidateInfo ddefs FunDef{funName, funArgs, funTy, funBody} = do
   guard (all isMutCursorTy (take 4 (fst funTy)))
   _ <- singleMentionedNonSoATyCon ddefs funBody
   inputCursor <- topCaseInputCursor funBody
-  inputEnd <- inferInputEndFromSelfCall funName inputCursor (S.fromList funArgs) funBody
+  inputEnd <- case inferInputEndFromABI funArgs inputCursor of
+                Just end -> Just end
+                Nothing -> inferInputEndFromSelfCall funName inputCursor (S.fromList funArgs) funBody
+  guard (not (hasNonTraversalInputUpdate funName funArgs inputCursor funBody))
   guard (not (hasNonAbiMutFormalAddCursorUse funArgs (fst funTy) funBody))
   pure $ FlatCandidate inputEnd inputCursor
 
@@ -232,6 +236,38 @@ topCaseInputCursor = go M.empty
         LetE _ bod -> go env bod
         CaseE (VarE scrut) _ -> M.lookup scrut env
         _ -> Nothing
+
+-- | Mutable flat AoS cursorization passes packed input end cursors first and the
+-- corresponding packed input starts near the end of the argument list.  Pair the
+-- top-level case cursor with its stable end by that ABI position before falling
+-- back to recursive-call evidence.
+inferInputEndFromABI :: [Var] -> Var -> Maybe Var
+inferInputEndFromABI funArgs inputCursor = do
+  inputIx <- elemIndex inputCursor (drop 4 funArgs)
+  listToMaybe (drop inputIx funArgs)
+
+hasNonTraversalInputUpdate :: Var -> [Var] -> Var -> Exp3 -> Bool
+hasNonTraversalInputUpdate funName funArgs inputCursor body =
+  case elemIndex inputCursor inputStartFormals of
+    Nothing -> False
+    Just traversalIx -> any (updatesOtherInput traversalIx) selfCallInputStarts
+  where
+    inputStartFormals = drop 4 funArgs
+    inputStartCount = length inputStartFormals
+    formals = S.fromList funArgs
+    selfCallInputStarts =
+      [ drop (length args - inputStartCount) args
+      | AppE fn _ _ args <- collectApps body
+      , fn == funName
+      , length args >= inputStartCount
+      ]
+    updatesOtherInput traversalIx starts =
+      or [ not (isFormalVar arg)
+         | (ix, arg) <- zip [0 :: Int ..] starts
+         , ix /= traversalIx
+         ]
+    isFormalVar (VarE v) = v `S.member` formals
+    isFormalVar _ = False
 
 -- | The stable input end is the first argument supplied to an ordinary
 -- recursive self-call.  Redirection branches pass the current cursor as the
