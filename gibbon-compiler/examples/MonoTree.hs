@@ -1,6 +1,8 @@
 -- test monomorphic things
 module MonoTree where
 
+{-# ANN type Tree "Factored" #-}
+
 data Tree = Leaf Int
           | Node Tree Tree
   deriving Show
@@ -21,6 +23,12 @@ sumTree :: Tree -> Int
 sumTree tr =
   case tr of
     Leaf n   -> n
+    Node l r -> (sumTree l) + (sumTree r)
+
+rightMost :: Tree -> Int
+rightMost tr =
+  case tr of 
+    Leaf n -> n
     Node l r -> (sumTree l) + (sumTree r)
 
 gibbon_main = sumTree (add1Tree (mkTree 10))
