@@ -1856,7 +1856,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                   ]
                         return [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
                               -}
-                            bck = [ C.BlockStm  [cstm|  gib_grow_region(& $id:cur, & $id:bound); |] ]
+                            bck = [ C.BlockStm  [cstm|  gib_grow_region_with_extra(& $id:cur, & $id:bound, $int:i); |] ]
                         pure [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
                      L2.OutputMutable -> do
                         let [(IntTriv i),(VarTriv bound), (VarTriv cur), (VarTriv mutbounds), (VarTriv mutcur)] = rnds
@@ -1872,7 +1872,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                   ]
                         return [ C.BlockStm [cstm| if (($id:cur + $int:i) > $id:bound) { $items:bck }  |] ]
                               -}
-                            bck = [ C.BlockStm  [cstm|  gib_grow_region($id:mutcur, $id:mutbounds); |]
+                            bck = [ C.BlockStm  [cstm|  gib_grow_region_with_extra($id:mutcur, $id:mutbounds, $int:i); |]
                                     , C.BlockStm  [cstm|  $id:bound = *($id:mutbounds); |]
                                     , C.BlockStm  [cstm|  $id:cur = *($id:mutcur); |]
                                   ]
@@ -1887,14 +1887,14 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                    ifConds <- mapM (\(ProdTriv [(IntTriv i),(VarTriv bound), (VarTriv cur), _]) -> 
                                            pure [cexp| ($id:cur + $int:i) > $id:bound |]
                                       ) rnds
-                   ifBody <- mapM (\(ProdTriv [_, _, _, ProdTriv [(VarTriv b), (VarTriv c)]]) -> do
+                   ifBody <- mapM (\(ProdTriv [(IntTriv i), _, _, ProdTriv [(VarTriv b), (VarTriv c)]]) -> do
                                        {- TODO: VS: Maybe we should check loc too, but i think we desinged this such that it is 
                                         not needed! -}
                                       -- Audit : Assumption, in mutable case both loc and reg are mutable.
                                        let bty = M.lookup b venv
                                        case bty of 
-                                            Just CursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region(& $id:c, & $id:b); |] ]
-                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region($id:c, $id:b); |] ]
+                                            Just CursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region_with_extra(& $id:c, & $id:b, $int:i); |] ]
+                                            Just MutCursorTy -> pure [ C.BlockStm  [cstm|  gib_grow_region_with_extra($id:c, $id:b, $int:i); |] ]
                                             _ -> error "Did not expect variable type in gib_grow_region!\n"
                                   ) rnds
                    ifBody_update <- mapM (\(ProdTriv [_, _, (VarTriv cur), ProdTriv [_, (VarTriv c)]]) -> do
@@ -2391,7 +2391,9 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                  IndexCursorArray -> do 
                                     let [(outV, outT)] = bnds
                                     let [ptr, idx] = rnds
-                                    pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $exp:(codegenTriv venv ptr)[$exp:(codegenTriv venv idx)]; |] ]
+                                    case outT of
+                                      MutCursorTy -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = &$exp:(codegenTriv venv ptr)[$exp:(codegenTriv venv idx)]; |] ]
+                                      _ -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $exp:(codegenTriv venv ptr)[$exp:(codegenTriv venv idx)]; |] ]
 
                  --AddP -> let [(outV,outT)] = bnds
                  --            [pleft,pright] = rnds in pure
@@ -2427,11 +2429,13 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                 -- add other Ty cases here if they also mean GibCursor*
                                 _ ->
                                   return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = &($exp:expr'); |] ]
+                        VarTriv v ->
+                          return [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = &($id:v); |] ]
                         _ -> do 
                              tmp <- gensym "tmp_copy"
                              return [ 
                               C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:tmp =  $exp:expr'; |],
-                              C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($id:tmp); |] ] 
+                              C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV =  &($id:tmp); |] ]
 
                  DerefMutCursor -> do 
                     let [(outV, outT)] = bnds

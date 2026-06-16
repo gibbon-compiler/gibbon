@@ -16,11 +16,12 @@
 ##   * 64-bit baseline packed execution,
 ##   * 32-bit packed execution,
 ##   * loopification,
+##   * no-RAN mutable loopification regressions,
 ##   * selective buffer sharing,
 ##   * SSE vectorization, and
 ##   * 32-bit SSE vectorization.
 
-run-modes: [gibbon2, int32, loopify, selective, vectorize, int32-vectorize]
+run-modes: [gibbon2, int32, loopify, noran-loopify, selective, vectorize, int32-vectorize]
 
 ## Specifiying an individual test:
 ##
@@ -605,7 +606,7 @@ tests:
   #simple SoA benchmarks
   - name: list.hs
     dir: examples/soa_examples/programs_not_using
-    failing: [gibbon3, int32, loopify, selective, vectorize, int32-vectorize]
+    failing: [gibbon2, gibbon3, noran, int32, loopify, selective, vectorize, int32-vectorize]
     answer-file: examples/soa_examples/test_list.ans
 
   - name: tree.hs
@@ -1227,7 +1228,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, noran-loopify, selective, vectorize]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA

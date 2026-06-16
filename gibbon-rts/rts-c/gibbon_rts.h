@@ -813,6 +813,7 @@ void gib_print_gc_config(void);
 GibChunk gib_alloc_region(size_t size);
 GibChunk gib_alloc_region_on_heap(size_t size);
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
+INLINE_HEADER void gib_grow_region_with_extra(char **writeloc_addr, char **footer_addr, size_t extra_bytes);
 void gib_grow_region_noinline(char **writeloc_addr, char **footer_addr);
 void gib_free_region(char *footer_ptr);
 void gib_scalar_count_footer_begin(void);
@@ -845,6 +846,7 @@ void *gib_alloc_counted_struct(size_t size);
 
 
 INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr);
+INLINE_HEADER void gib_grow_region_with_extra(char **writeloc_addr, char **footer_addr, size_t extra_bytes);
 INLINE_HEADER void gib_grow_region_in_nursery_fast(
     bool collected,
     bool old_chunk_in_nursery,
@@ -878,7 +880,7 @@ INLINE_HEADER void gib_scalar_count_footer_init(GibScalarCountFooter *footer)
 }
 
 
-INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
+INLINE_HEADER void gib_grow_region_with_extra(char **writeloc_addr, char **footer_addr, size_t extra_bytes)
 {
     char *footer_ptr = *footer_addr;
     size_t newsize;
@@ -897,6 +899,11 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
         if (newsize > GIB_MAX_CHUNK_SIZE) {
             newsize = GIB_MAX_CHUNK_SIZE;
         }
+    }
+
+    size_t min_newsize = old_chunk_in_nursery ? extra_bytes : extra_bytes + sizeof(GibOldgenChunkFooter);
+    if (newsize < min_newsize) {
+        newsize = min_newsize;
     }
 
 #if defined _GIBBON_EAGER_PROMOTION && _GIBBON_EAGER_PROMOTION == 0
@@ -931,6 +938,11 @@ INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
     );
 #endif
 
+}
+
+INLINE_HEADER void gib_grow_region(char **writeloc_addr, char **footer_addr)
+{
+    gib_grow_region_with_extra(writeloc_addr, footer_addr, 0);
 }
 
 INLINE_HEADER void gib_grow_region_in_nursery_fast(

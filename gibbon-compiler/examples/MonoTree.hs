@@ -29,9 +29,9 @@ rightMost :: Tree -> Int
 rightMost tr =
   case tr of 
     Leaf n -> n
-    Node l r -> (sumTree l) + (sumTree r)
+    Node l r -> (rightMost r)
 
-gibbon_main = sumTree (add1Tree (mkTree 10))
+gibbon_main = rightMost (add1Tree (mkTree 20))
 
 main :: IO ()
 main = print gibbon_main

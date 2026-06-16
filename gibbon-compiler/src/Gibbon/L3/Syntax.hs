@@ -11,6 +11,11 @@ module Gibbon.L3.Syntax
     -- * Extended language
     E3Ext(..), Prog3, DDef3, DDefs3, FunDef3, FunDefs3 , Exp3, Ty3
   , Scalar(..), mkScalar, scalarToTy
+  , MutableLocEntry(..)
+  , MutableLocEntryKind(..)
+  , mutableLocEntryPayload
+  , mutableLocEntryMatchesVar
+  , mutableLocEntryMatchesEndVar
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars
@@ -31,6 +36,11 @@ module Gibbon.L3.Syntax
   , isInputModality
   , checkIfLocIsPointedToByOutputMutLoc
   , checkIfVarIsMutable
+  , lookupMutableLocEntryPointingToVar
+  , lookupFutureMutableLocEntryPointingToVar
+  , lookupCurrentMutableLocEntryPointingToVar
+  , lookupMutableLocEntryPointingToEndVar
+  , findCurrentMutableLocationPointingToVar
   , findMutableLocationInSameRegion
   , findMutableLocationPointingToVar
   , findMutableLocationPointingToEndVar
@@ -60,7 +70,7 @@ import           Gibbon.Language                hiding (mapMExprs)
 import qualified Gibbon.NewL2.Syntax as L2
 import Gibbon.L2.Syntax (EndRegionModality)
 
--------------------------------------------------------------------------------- 
+--------------------------------------------------------------------------------
 
 type Prog3 = Prog Var Exp3
 
@@ -78,11 +88,49 @@ type Exp3 = PreExp E3Ext () Ty3
 
 type Ty3 = UrTy ()
 
--- Take the current snapshot of a Mutable location
--- For a Mutable Location, we store its current value in the env. (variable name, location value name)
--- We also store the mutable end region in scope if it exists for a mutable location
--- We also store any aliases that may exist for the loc we are keeping track of
-type MutableLocPtsToEnv = M.Map LocVar [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)]
+-- Take the current snapshot of a Mutable location.
+--
+-- A mutable location has one Current entry: the physical cursor slot that should
+-- be advanced by serial reads/writes. RAN unpacking can also discover child
+-- starts before the RHS consumes them, so those are retained as Future entries
+-- instead of overwriting the current slot. A future entry is selected by its
+-- static location or aliases when cursorizing the child call.
+data MutableLocEntryKind
+  = MutableCurrent
+  | MutableFuture
+  | MutableSnapshot
+  deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+instance Out MutableLocEntryKind
+
+data MutableLocEntry = MutableLocEntry
+  { mutableLocEntryKind :: MutableLocEntryKind
+  , mutableLocEntryVar :: Var
+  , mutableLocEntryLoc :: Maybe LocVar
+  , mutableLocEntryReg :: Maybe RegVar
+  , mutableLocEntryAliases :: S.Set Var
+  , mutableLocEntryTaggedEnd :: Maybe Var
+  }
+  deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+instance Out MutableLocEntry
+
+mutableLocEntryPayload :: MutableLocEntry -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
+mutableLocEntryPayload MutableLocEntry{mutableLocEntryVar, mutableLocEntryLoc, mutableLocEntryReg, mutableLocEntryAliases} =
+  (mutableLocEntryVar, mutableLocEntryLoc, mutableLocEntryReg, mutableLocEntryAliases)
+
+mutableLocEntryMatchesVar :: Var -> MutableLocEntry -> Bool
+mutableLocEntryMatchesVar v MutableLocEntry{mutableLocEntryVar, mutableLocEntryAliases} =
+  v == mutableLocEntryVar || S.member v mutableLocEntryAliases
+
+mutableLocEntryMatchesEndVar :: Var -> MutableLocEntry -> Bool
+mutableLocEntryMatchesEndVar v MutableLocEntry{mutableLocEntryVar, mutableLocEntryAliases} =
+  v == toEndV mutableLocEntryVar || S.member v mutableLocEntryAliases
+
+mutableLocEntryIsCurrent :: MutableLocEntry -> Bool
+mutableLocEntryIsCurrent entry = mutableLocEntryKind entry == MutableCurrent
+
+type MutableLocPtsToEnv = M.Map LocVar [MutableLocEntry]
 
 -- Store the old value of the mutable location.
 -- Also store the mutable loc of the end of region
@@ -121,7 +169,7 @@ data E3Ext loc dec =
   | ReadVector Var dec                             -- ^ Read a pointer to a vector
   | WriteVector Var (PreExp E3Ext loc dec) dec     -- ^ Write a pointer to a vector
   | MakeCursorArray Int [Var] -- ^ Make a Cursor Array from a list of Cursors. Returns a new variable for Cursor Array.
-  | IndexCursorArray Var Int                       -- ^ Index into a Cursor Array 
+  | IndexCursorArray Var Int                       -- ^ Index into a Cursor Array
   | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
   | BumpCursorMutable Var (PreExp E3Ext loc dec)   -- ^ Bump a mutable cursor, that is, a reference to a cursor by a constant amount.
   | AddrOfCursor (PreExp E3Ext loc dec)            -- ^ Take the address of a Cursor.
@@ -217,22 +265,22 @@ data E3Ext loc dec =
     -- ^ Analogous to L2's extensions.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
-isMutModality :: L2.Modality -> Bool 
-isMutModality modal = case modal of 
+isMutModality :: L2.Modality -> Bool
+isMutModality modal = case modal of
                           L2.InputMutable -> True
-                          L2.OutputMutable -> True 
+                          L2.OutputMutable -> True
                           _ -> False
 
 
 isInputModality :: Maybe L2.Modality -> Bool
-isInputModality modal = case modal of 
+isInputModality modal = case modal of
                               Just L2.Input -> True
-                              _ -> False 
+                              _ -> False
 
-isMutModality' :: Maybe L2.Modality -> Bool 
-isMutModality' modal = case modal of 
+isMutModality' :: Maybe L2.Modality -> Bool
+isMutModality' modal = case modal of
                           Just L2.InputMutable -> True
-                          Just L2.OutputMutable -> True 
+                          Just L2.OutputMutable -> True
                           _ -> False
 
 fst4 :: (a, b, c, d) -> a
@@ -479,7 +527,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       UnwrapSelectiveIndirections n ends curs -> UnwrapSelectiveIndirections n (go ends) (go curs)
       ReadTaggedCursor v -> ReadTaggedCursor (go v)
       WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
-      MemCpy a b ty -> MemCpy (go a) (go b) ty 
+      MemCpy a b ty -> MemCpy (go a) (go b) ty
       ReadCursor v       -> ReadCursor (go v)
       GrowRegion v w     -> GrowRegion (go v) (go w)
       WriteCursorMutable v bod  -> WriteCursorMutable (go v) (go bod)
@@ -571,167 +619,176 @@ scalarToTy BoolS = BoolTy
 
 -- Takes in a Loc and checks if a mutable locations points to that loc
 checkIfLocIsPointedToByOutputMutLoc :: LocVar -> MutableLocPtsToEnv -> Maybe LocVar
-checkIfLocIsPointedToByOutputMutLoc loc mlocenv = L.foldr (\(k, lst) mbl ->
-                                                            foldr (\(_v, mlv, _r, _aliases) mbl' -> case mlv of 
-                                                                                                      Nothing -> mbl'
-                                                                                                      Just lv -> if lv == loc
-                                                                                                               then Just k
-                                                                                                               else mbl'
-                                                                  ) mbl lst
-                                                          ) Nothing (M.toList mlocenv)
+checkIfLocIsPointedToByOutputMutLoc loc mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        if any (\entry -> mutableLocEntryLoc entry == Just loc) lst
+        then Just k
+        else acc)
+    Nothing
+    (M.toList mlocenv)
 
 -- Check if a Variable if a mutable variable or not
-checkIfVarIsMutable :: Var -> MutableLocPtsToEnv -> Bool 
-checkIfVarIsMutable var mlocenv = L.foldr (\(_k, lst) b -> 
-                                                  foldr (\(v, _mlv, _r, aliases) b'  -> 
-                                                                              if S.null aliases 
-                                                                              then (v == var) || b'
-                                                                              else let 
-                                                                                    isAlias = S.member var aliases 
-                                                                                    direct = v == var
-                                                                                   in isAlias || direct || b'
-                                                        ) b lst
-                                          ) False (M.toList mlocenv)
+checkIfVarIsMutable :: Var -> MutableLocPtsToEnv -> Bool
+checkIfVarIsMutable var mlocenv =
+  any (any (\entry -> mutableLocEntryIsCurrent entry && mutableLocEntryMatchesVar var entry) . snd) (M.toList mlocenv)
+
+lookupMutableLocEntryPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe (LocVar, MutableLocEntry)
+lookupMutableLocEntryPointingToVar v mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        let activeEntries = filter (\entry -> mutableLocEntryKind entry /= MutableSnapshot) lst
+            exactMatches = filter (\entry -> v == mutableLocEntryVar entry) activeEntries
+            aliasMatches = filter (\entry -> S.member v (mutableLocEntryAliases entry)) activeEntries
+            preferred =
+              case L.find (\entry -> mutableLocEntryKind entry == MutableFuture) exactMatches of
+                Just entry -> Just entry
+                Nothing -> case exactMatches of
+                  entry:_ -> Just entry
+                  [] -> case L.find (\entry -> mutableLocEntryKind entry == MutableFuture) aliasMatches of
+                    Just entry -> Just entry
+                    Nothing -> case aliasMatches of
+                      entry:_ -> Just entry
+                      [] -> Nothing
+        in case preferred of
+          Just entry -> Just (k, entry)
+          Nothing -> acc)
+    Nothing
+    (M.toList mlocenv)
+
+lookupFutureMutableLocEntryPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe (LocVar, MutableLocEntry)
+lookupFutureMutableLocEntryPointingToVar v mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        case L.find (\entry -> mutableLocEntryKind entry == MutableFuture && mutableLocEntryMatchesVar v entry) lst of
+          Just entry -> Just (k, entry)
+          Nothing -> acc)
+    Nothing
+    (M.toList mlocenv)
+
+lookupCurrentMutableLocEntryPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe (LocVar, MutableLocEntry)
+lookupCurrentMutableLocEntryPointingToVar v mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        case L.find (\entry -> mutableLocEntryIsCurrent entry && mutableLocEntryMatchesVar v entry) lst of
+          Just entry -> Just (k, entry)
+          Nothing -> acc)
+    Nothing
+    (M.toList mlocenv)
+
+lookupMutableLocEntryPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe (LocVar, MutableLocEntry)
+lookupMutableLocEntryPointingToEndVar v mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        case L.find (\entry -> mutableLocEntryKind entry /= MutableSnapshot && mutableLocEntryMatchesEndVar v entry) lst of
+          Just entry -> Just (k, entry)
+          Nothing -> acc)
+    Nothing
+    (M.toList mlocenv)
+
+findCurrentMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
+findCurrentMutableLocationPointingToVar v mlocenv =
+  fst <$> lookupCurrentMutableLocEntryPointingToVar v mlocenv
 
 findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc -> 
-                                                            foldr (\(vv, _mlv, _rr, aliases) acc' ->
-                                                                                             if v == vv || S.member v aliases 
-                                                                                             then Just k
-                                                                                             else acc'
-                                                                  ) acc lst 
-                                                    ) Nothing (M.toList mlocenv)
-
--- Vidush: Assumption, only the head of the list points to the current value of the mutable location!
--- findMutableLocationPointingToVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
--- findMutableLocationPointingToVar v mlocenv = L.foldr (\(k, lst) acc -> 
---                                                                 case lst of 
---                                                                      (vv, _mlv, _rr, aliases):_xs -> if v == vv || S.member v aliases 
---                                                                                                     then Just k
---                                                                                                     else acc
---                                                                      [] -> acc
---                                                     ) Nothing (M.toList mlocenv)
+findMutableLocationPointingToVar v mlocenv =
+  fst <$> lookupMutableLocEntryPointingToVar v mlocenv
 
 findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
-findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc ->
-                                                              foldr (\(vv, _mlv, _rr, aliases) acc' -> 
-                                                                                               if (v == (toEndV vv)) || S.member v aliases 
-                                                                                               then Just k
-                                                                                               else acc'
-                                                                    ) acc lst
-                                                    ) Nothing (M.toList mlocenv)
-
--- findMutableLocationPointingToEndVar :: Var -> MutableLocPtsToEnv -> Maybe LocVar
--- findMutableLocationPointingToEndVar v mlocenv = L.foldr (\(k, lst) acc -> case lst of 
---                                                                                 (vv, _mlv, _rr, aliases):_xs -> if (v == (toEndV vv)) || S.member v aliases 
---                                                                                                                 then Just k
---                                                                                                                 else acc
---                                                                                 [] -> acc
---                                                     ) Nothing (M.toList mlocenv)
-
+findMutableLocationPointingToEndVar v mlocenv =
+  fst <$> lookupMutableLocEntryPointingToEndVar v mlocenv
 
 findMutableLocationInSameRegion :: RegVar -> MutableLocPtsToEnv -> Maybe (Var, LocVar)
-findMutableLocationInSameRegion r mlocenv = L.foldr (\(k, lst) acc ->
-                                                            foldr (\(v, _mlv, rr, _aliases) acc' -> case rr of 
-                                                                                                        Nothing -> acc' 
-                                                                                                        Just rr' -> if r == rr' 
-                                                                                                                    then Just (v, k)
-                                                                                                                    else acc'
-                                                                  ) acc lst
-                                                    ) Nothing (M.toList mlocenv)
+findMutableLocationInSameRegion r mlocenv =
+  L.foldr
+    (\(k, lst) acc ->
+        case L.find (\entry -> mutableLocEntryIsCurrent entry && mutableLocEntryReg entry == Just r) lst of
+          Just entry -> Just (mutableLocEntryVar entry, k)
+          Nothing -> acc)
+    Nothing
+    (M.toList mlocenv)
 
 -- Vidush: Implement two functions that insert and update the key in the environment for both the pts to env and for the old env.
--- TODO: Implement some simple logic to tell if the old variable can be an alias. Tough problem. 
--- For starters, if its a concrete update like AddCursor then let us say no, they cannot alias 
+-- TODO: Implement some simple logic to tell if the old variable can be an alias. Tough problem.
+-- For starters, if its a concrete update like AddCursor then let us say no, they cannot alias
 -- For Make SoA locations, these might alias so we can store them as aliases in the updated entry.
 -- (Var, Maybe LocVar, Maybe RegVar, S.Set Var)
 
-
-findAValidRegion :: [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)] -> Maybe RegVar
-findAValidRegion lst = case lst of 
+findAValidRegion :: [MutableLocEntry] -> Maybe RegVar
+findAValidRegion lst = case lst of
                             [] -> Nothing
-                            -- Vidush: Maybe its good to assert that all the regions are the same.
-                            (_v, _lc, reg, _aliases):xs -> case reg of
-                                                              Nothing -> findAValidRegion xs
-                                                              Just{} -> reg
+                            entry:xs -> case mutableLocEntryReg entry of
+                                           Nothing -> findAValidRegion xs
+                                           Just{} -> mutableLocEntryReg entry
 
 
-findAValidRegion' :: [(Var, Maybe LocVar, Maybe RegVar, S.Set Var)] -> Maybe RegVar -> Maybe RegVar
-findAValidRegion' lst r = case lst of 
+findAValidRegion' :: [MutableLocEntry] -> Maybe RegVar -> Maybe RegVar
+findAValidRegion' lst r = case lst of
                             [] -> r
-                            -- Vidush: Maybe its good to assert that all the regions are the same.
-                            (_v, _lc, reg, _aliases):xs -> case reg of
-                                                              Nothing -> let found = findAValidRegion xs
-                                                                          in case found of 
-                                                                                    Nothing -> r 
-                                                                                    Just{} -> found  
-                                                              Just{} -> reg 
+                            entry:xs -> case mutableLocEntryReg entry of
+                                           Nothing -> let found = findAValidRegion xs
+                                                      in case found of
+                                                           Nothing -> r
+                                                           Just{} -> found
+                                           Just{} -> mutableLocEntryReg entry
+
+mkMutableLocEntry :: MutableLocEntryKind -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> MutableLocEntry
+mkMutableLocEntry kind (v, lc, reg, aliases) =
+  MutableLocEntry
+    { mutableLocEntryKind = kind
+    , mutableLocEntryVar = v
+    , mutableLocEntryLoc = lc
+    , mutableLocEntryReg = reg
+    , mutableLocEntryAliases = aliases
+    , mutableLocEntryTaggedEnd = Nothing
+    }
+
+isFutureMutableLocEntry :: MutableLocEntry -> Bool
+isFutureMutableLocEntry entry = mutableLocEntryKind entry == MutableFuture
 
 updateMutableLocPtsToEnv :: LocVar -> MutableLocPtsToEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> MutableLocPtsToEnv
-updateMutableLocPtsToEnv key env (v, lc, reg, aliases) isFuture = case M.lookup key env of 
-                                                                    -- If the key does not exists we just make an entry for it
-                                                                    -- in the env.
-                                                                    Nothing -> M.insert key [(v, lc, reg, aliases)] env
-                                                                    Just lst@(_x:_xs) ->  let reg' = findAValidRegion' lst reg
-                                                                                           in if isFuture
-                                                                                              then M.insert key ([(v, lc, reg', aliases)] ++ lst) env
-                                                                                              -- ++ xs
-                                                                                              -- Vidush: This might need to be more principled
-                                                                                              -- We might need to have a flag in the type
-                                                                                              -- saying that the value can be a future value
-                                                                                              -- If it is a future value, then we may need to
-                                                                                              -- set that bit and store it as a future value 
-                                                                                              else M.insert key ([(v, lc, reg', aliases)]) env
-                                                                    Just [] -> M.insert key ([(v, lc, reg, aliases)]) env
-                                                                      
-                                                                      
-                                                                      
-                                                                      -- let reg' = (findAValidRegion lst) 
-                                                                      --             in case reg' of 
-                                                                      --                         Nothing -> -- M.insert key (lst ++ [(v, lc, reg, aliases)]) env
-                                                                      --                                     if mayalias
-                                                                      --                                     then M.insert key (lst ++ [(v, lc, reg, aliases)]) env
-                                                                      --                                     else M.insert key ([(v, lc, reg, aliases)]) env
-                                                                      --                         Just rr -> case reg of 
-                                                                      --                                          Nothing -> -- M.insert key (lst ++ [(v, lc, reg, aliases)]) env
-                                                                      --                                                      if mayalias
-                                                                      --                                                      then M.insert key (lst ++ [(v, lc, reg', aliases)]) env
-                                                                      --                                                      else M.insert key ([(v, lc, reg', aliases)]) env
-                                                                      --                                          Just rr' -> if rr /= rr'
-                                                                      --                                                      then error "Expected the regions to be the same!\n"
-                                                                      --                                                      else if mayalias
-                                                                      --                                                      then M.insert key (lst ++ [(v, lc, reg', aliases)]) env
-                                                                      --                                                      else M.insert key ([(v, lc, reg', aliases)]) env
-                                                                                                            
-                                                                                                                     
+updateMutableLocPtsToEnv key env (v, lc, reg, aliases) isFuture = case M.lookup key env of
+                                                                    Nothing -> M.insert key [mkMutableLocEntry kind (v, lc, reg, aliases)] env
+                                                                    Just lst ->
+                                                                      let reg' = findAValidRegion' lst reg
+                                                                          entry = mkMutableLocEntry kind (v, lc, reg', aliases)
+                                                                      in if isFuture
+                                                                         then M.insert key (lst ++ [entry]) env
+                                                                         else
+                                                                           let futures = filter isFutureMutableLocEntry lst
+                                                                           in M.insert key (entry : futures) env
+  where
+    kind = if isFuture then MutableFuture else MutableCurrent
+
+
 
 updateMutableLocOldValueEnv :: LocVar -> MutableLocOldValueEnv -> (Var, Maybe LocVar, Maybe RegVar, S.Set Var) -> Bool -> PassM (MutableLocOldValueEnv, [Binds Exp3])
-updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of 
+updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.lookup key env of
                                                                               Nothing -> do
-                                                                                         case key of 
-                                                                                              Single{} -> do 
+                                                                                         case key of
+                                                                                              Single{} -> do
                                                                                                           deref_var <- gensym "deref"
-                                                                                                          let bnd = [(deref_var, [], CursorTy, Ext $ DerefMutCursor v)]                                                                                
-                                                                                                          pure (M.insert key (deref_var, lc, reg, aliases) env, bnd) 
-                                                                                              SoA{} -> do 
+                                                                                                          let bnd = [(deref_var, [], CursorTy, Ext $ DerefMutCursor v)]
+                                                                                                          pure (M.insert key (deref_var, lc, reg, aliases) env, bnd)
+                                                                                              SoA{} -> do
                                                                                                        cpy <- gensym "cpy"
                                                                                                        let cpy_ty = getCursorizeTyFromLocVar'' Nothing True key
                                                                                                        let memcpy_intr = [(cpy, [], cpy_ty, Ext $ InitCursor cpy_ty), ("_", [], ProdTy [], Ext $ MemCpy cpy v cpy_ty)]
-                                                                                                       pure (M.insert key (cpy, lc, reg, aliases) env, memcpy_intr) 
+                                                                                                       pure (M.insert key (cpy, lc, reg, aliases) env, memcpy_intr)
 
 
 
-                                                                              Just (v', lc', reg', aliases') -> case reg' of 
-                                                                                                                      Nothing -> if mayalias 
+                                                                              Just (v', lc', reg', aliases') -> case reg' of
+                                                                                                                      Nothing -> if mayalias
                                                                                                                                  then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
                                                                                                                                  else return (M.insert key (v', lc', reg, aliases') env, [])
-                                                                                                                      Just rr -> case reg of 
-                                                                                                                                      Nothing -> if mayalias 
+                                                                                                                      Just rr -> case reg of
+                                                                                                                                      Nothing -> if mayalias
                                                                                                                                                  then return (M.insert key (v, lc, reg', S.union (S.insert v' aliases') aliases) env, [])
                                                                                                                                                  else return (M.insert key (v', lc', reg', aliases') env, [])
                                                                                                                                       Just rr' -> if rr /= rr'
                                                                                                                                                   then error "Expected region for location to not change!!\n"
-                                                                                                                                                  else if mayalias 
+                                                                                                                                                  else if mayalias
                                                                                                                                                   then return (M.insert key (v, lc, reg, S.union (S.insert v' aliases') aliases) env, [])
                                                                                                                                                   else return (M.insert key (v', lc', reg', aliases') env, [])
 
@@ -739,15 +796,15 @@ updateMutableLocOldValueEnv key env (v, lc, reg, aliases) mayalias = case M.look
 
 
 
--- For a single location variable, its modality will determine which type of 
--- Cursor will be assigned to it. 
-singleLocToCursorBasedOnModality :: LocVar -> Maybe L2.Modality -> Bool -> Ty3 
-singleLocToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False 
+-- For a single location variable, its modality will determine which type of
+-- Cursor will be assigned to it.
+singleLocToCursorBasedOnModality :: LocVar -> Maybe L2.Modality -> Bool -> Ty3
+singleLocToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False
                                                                           then MutCursorTy
-                                                                          else case modality of 
+                                                                          else case modality of
                                                                                   Nothing -> if _isTailAndOverrideModality
                                                                                              then MutCursorTy
-                                                                                             else CursorTy 
+                                                                                             else CursorTy
                                                                                   Just m -> case (lc, m) of
                                                                                               (Single{}, L2.Input) -> CursorTy
                                                                                               (Single{}, L2.InputMutable) -> MutCursorTy
@@ -755,12 +812,12 @@ singleLocToCursorBasedOnModality lc modality _isTailAndOverrideModality = if Fal
                                                                                               (Single{}, L2.OutputMutable) -> MutCursorTy
                                                                                               _ -> error "Did not expect LocVar!!"
 
--- For a single location variable, its modality will determine which type of 
+-- For a single location variable, its modality will determine which type of
 -- Cursor will be assigned to it. Returns L2.Ty2
 singleLocToCursorBasedOnModalityL2 :: LocVar -> Maybe L2.Modality -> Bool -> L2.Ty2
 singleLocToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if False
                                                                             then L2.MkTy2 MutCursorTy
-                                                                            else case modality of 
+                                                                            else case modality of
                                                                              Nothing -> if _isTailAndOverrideModality
                                                                                         then L2.MkTy2 MutCursorTy
                                                                                         else L2.MkTy2 CursorTy
@@ -771,13 +828,13 @@ singleLocToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if F
                                                                                            (Single{}, L2.OutputMutable) -> L2.MkTy2 MutCursorTy
                                                                                            _ -> error "Did not expect LocVar!!"
 
--- For a single location variable, its modality will determine which type of 
+-- For a single location variable, its modality will determine which type of
 -- Cursor will be assigned to it. Returns UrTy loc
 singleLocToCursorBasedOnModalityUrTy :: LocVar -> Maybe L2.Modality -> Bool -> UrTy loc
 singleLocToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if False
-                                                                              then MutCursorTy 
-                                                                              else case modality of 
-                                                                                        Nothing -> if _isTailAndOverrideModality 
+                                                                              then MutCursorTy
+                                                                              else case modality of
+                                                                                        Nothing -> if _isTailAndOverrideModality
                                                                                                    then MutCursorTy
                                                                                                    else CursorTy
                                                                                         Just m -> case (lc, m) of
@@ -789,12 +846,12 @@ singleLocToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if
 
 
 
--- For a single region variable, its modality will determine which type of 
+-- For a single region variable, its modality will determine which type of
 -- Cursor will be assigned to it.
-singleRegToCursorBasedOnModality :: RegVar -> Maybe L2.Modality -> Bool -> Ty3 
+singleRegToCursorBasedOnModality :: RegVar -> Maybe L2.Modality -> Bool -> Ty3
 singleRegToCursorBasedOnModality lc modality _isTailAndOverrideModality = if False
                                                                                    then MutCursorTy
-                                                                                   else case modality of 
+                                                                                   else case modality of
                                                                                               Nothing -> if _isTailAndOverrideModality
                                                                                                          then MutCursorTy
                                                                                                          else CursorTy
@@ -805,14 +862,14 @@ singleRegToCursorBasedOnModality lc modality _isTailAndOverrideModality = if Fal
                                                                                                              (SingleR{}, L2.OutputMutable) -> MutCursorTy
                                                                                                              _ -> error "Did not expect LocVar!!"
 
--- For a single region variable, its modality will determine which type of 
+-- For a single region variable, its modality will determine which type of
 -- Cursor will be assigned to it.
-singleRegToCursorBasedOnModalityL2 :: RegVar -> Maybe L2.Modality -> Bool -> L2.Ty2 
+singleRegToCursorBasedOnModalityL2 :: RegVar -> Maybe L2.Modality -> Bool -> L2.Ty2
 singleRegToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if False
                                                                             then L2.MkTy2 MutCursorTy
                                                                             else
-                                                                             case modality of 
-                                                                              Nothing -> if _isTailAndOverrideModality 
+                                                                             case modality of
+                                                                              Nothing -> if _isTailAndOverrideModality
                                                                                          then L2.MkTy2 CursorTy
                                                                                          else L2.MkTy2 MutCursorTy
                                                                               Just m -> case (lc, m) of
@@ -823,13 +880,13 @@ singleRegToCursorBasedOnModalityL2 lc modality _isTailAndOverrideModality = if F
                                                                                                    _ -> error "Did not expect LocVar!!"
 
 
--- For a single region variable, its modality will determine which type of 
+-- For a single region variable, its modality will determine which type of
 -- Cursor will be assigned to it.
-singleRegToCursorBasedOnModalityUrTy :: RegVar -> Maybe L2.Modality -> Bool-> UrTy loc 
+singleRegToCursorBasedOnModalityUrTy :: RegVar -> Maybe L2.Modality -> Bool-> UrTy loc
 singleRegToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if False
-                                                                              then MutCursorTy 
-                                                                              else 
-                                                                               case modality of 
+                                                                              then MutCursorTy
+                                                                              else
+                                                                               case modality of
                                                                                     Nothing -> if _isTailAndOverrideModality
                                                                                                then MutCursorTy
                                                                                                else CursorTy
@@ -842,142 +899,142 @@ singleRegToCursorBasedOnModalityUrTy lc modality _isTailAndOverrideModality = if
 
 
 getIndexPositionOfSoALocVar :: Bool -> Maybe L2.Modality -> [((DataCon, Int), LocVar)] -> LocVar -> (Int, Int, Bool)
-getIndexPositionOfSoALocVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+getIndexPositionOfSoALocVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b
                                                                     then
                                                                       (s, e, True)
                                                                     else
                                                                       let seen = if fl == loc then True else False
-                                                                       in case fl of 
-                                                                          Single{} -> (e, e + 1, seen) 
-                                                                          SoA{} -> let (CursorArrayTy sz) = getCursorizeTyFromLocVar modality False fl 
+                                                                       in case fl of
+                                                                          Single{} -> (e, e + 1, seen)
+                                                                          SoA{} -> let (CursorArrayTy sz) = getCursorizeTyFromLocVar modality False fl
                                                                                     in (e, e + sz, seen)
-                                             ) (1, 1, False) flds 
+                                             ) (1, 1, False) flds
 
 getIndexPositionOfSoARegVar :: Bool -> Maybe L2.Modality -> [((DataCon, Int), RegVar)] -> RegVar -> (Int, Int, Bool)
-getIndexPositionOfSoARegVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b 
+getIndexPositionOfSoARegVar _isTailAndOverrideModality modality flds loc = foldl (\(s, e, b) (_, fl) -> if b
                                                                     then
                                                                       (s, e, True)
                                                                     else
                                                                       let seen = if fl == loc then True else False
-                                                                       in case fl of 
-                                                                          SingleR{} -> (e, e + 1, seen) 
-                                                                          SoARv{} -> let (CursorArrayTy sz) = getCursorizeTyFromRegVar modality False fl 
+                                                                       in case fl of
+                                                                          SingleR{} -> (e, e + 1, seen)
+                                                                          SoARv{} -> let (CursorArrayTy sz) = getCursorizeTyFromRegVar modality False fl
                                                                                     in (e, e + sz, seen)
-                                             ) (1, 1, False) flds 
+                                             ) (1, 1, False) flds
 
 linearizeLocVar :: LocVar -> [LocVar]
-linearizeLocVar loc = case loc of 
+linearizeLocVar loc = case loc of
                             Single{} -> [loc]
                             SoA dcloc flocs -> let flinear = concatMap (\(_, fl) -> linearizeLocVar fl) flocs
                                                  in [singleLocVar dcloc] ++ flinear
 
 
 linearizeRegVar :: RegVar -> [RegVar]
-linearizeRegVar loc = case loc of 
+linearizeRegVar loc = case loc of
                             SingleR{} -> [loc]
                             SoARv dcloc flocs -> let flinear = concatMap (\(_, fl) -> linearizeRegVar fl) flocs
                                                  in [dcloc] ++ flinear
 
 getCursorizeTyFromLocVar :: Maybe L2.Modality -> Bool -> LocVar -> Ty3
-getCursorizeTyFromLocVar modality _isTailAndOverrideModality lc = case lc of 
+getCursorizeTyFromLocVar modality _isTailAndOverrideModality lc = case lc of
                                   Single{} -> singleLocToCursorBasedOnModality lc modality False
-                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of
                                                                                                     Single{} -> len + 1
-                                                                                                    -- For an SoA location 
-                                                                                                    -- For now, outer modality also determines 
+                                                                                                    -- For an SoA location
+                                                                                                    -- For now, outer modality also determines
                                                                                                     -- the inner modality.
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
-                                                                                                              in case ty3 of 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc
+                                                                                                              in case ty3 of
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
                                                                                  ) 0 flds
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar :: Maybe L2.Modality -> Bool -> RegVar -> Ty3
-getCursorizeTyFromRegVar modality _isTailAndOverrideModality rv = case rv of 
+getCursorizeTyFromRegVar modality _isTailAndOverrideModality rv = case rv of
                                   SingleR{} -> singleRegToCursorBasedOnModality rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
                                                                                                 SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
-                                                                                                           in case ty3 of 
-                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                           in case ty3 of
+                                                                                                                  CursorArrayTy sz -> len + sz
                                                                                                                   _ -> error "Did not expect type!"
                                                                         ) 0 flds
                                                    in CursorArrayTy (1 + size_flds)
 
 
 getCursorizeTyFromLocVar' :: Maybe L2.Modality -> Bool -> LocVar -> L2.Ty2
-getCursorizeTyFromLocVar' modality _isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModalityL2 lc modality False 
-                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+getCursorizeTyFromLocVar' modality _isTailAndOverrideModality lc = case lc of
+                                  Single{} -> singleLocToCursorBasedOnModalityL2 lc modality False
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
-                                                                                                              in case ty3 of 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc
+                                                                                                              in case ty3 of
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
                                                                                  ) 0 flds
                                                   in L2.MkTy2 $ CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar' :: Maybe L2.Modality -> Bool -> RegVar -> L2.Ty2
-getCursorizeTyFromRegVar' modality _isTailAndOverrideModality rv = case rv of 
+getCursorizeTyFromRegVar' modality _isTailAndOverrideModality rv = case rv of
                                   SingleR{} -> singleRegToCursorBasedOnModalityL2 rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
                                                                                                 SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
-                                                                                                           in case ty3 of 
-                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                           in case ty3 of
+                                                                                                                  CursorArrayTy sz -> len + sz
                                                                                                                   _ -> error "Did not expect type!"
                                                                         ) 0 flds
                                                    in L2.MkTy2 $ CursorArrayTy (1 + size_flds)
 
 
 getCursorizeTyFromLocVar'' :: Maybe L2.Modality -> Bool -> LocVar -> UrTy loc
-getCursorizeTyFromLocVar'' modality _isTailAndOverrideModality lc = case lc of 
-                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality False 
-                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+getCursorizeTyFromLocVar'' modality _isTailAndOverrideModality lc = case lc of
+                                  Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality False
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
-                                                                                                              in case ty3 of 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc
+                                                                                                              in case ty3 of
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
                                                                                  ) 0 flds
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar'' :: Maybe L2.Modality -> Bool -> RegVar -> UrTy loc
-getCursorizeTyFromRegVar'' modality _isTailAndOverrideModality rv = case rv of 
+getCursorizeTyFromRegVar'' modality _isTailAndOverrideModality rv = case rv of
                                   SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality False
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
                                                                                                 SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
-                                                                                                           in case ty3 of 
-                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                           in case ty3 of
+                                                                                                                  CursorArrayTy sz -> len + sz
                                                                                                                   _ -> error "Did not expect type!"
                                                                         ) 0 flds
                                                    in CursorArrayTy (1 + size_flds)
 
 
 getCursorizeTyFromLocVar''' :: Maybe L2.Modality -> Bool -> LocVar -> UrTy ()
-getCursorizeTyFromLocVar''' modality _isTailAndOverrideModality lc = case lc of 
+getCursorizeTyFromLocVar''' modality _isTailAndOverrideModality lc = case lc of
                                   Single{} -> singleLocToCursorBasedOnModalityUrTy lc modality False
-                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of 
+                                  SoA _ flds -> let size_flds = foldr (\(_, flc) len -> case flc of
                                                                                                     Single{} -> len + 1
-                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc 
-                                                                                                              in case ty3 of 
+                                                                                                    SoA{} -> let ty3 = getCursorizeTyFromLocVar modality False flc
+                                                                                                              in case ty3 of
                                                                                                                        CursorArrayTy sz -> len + sz
                                                                                                                        _ -> error "Did not expect type!"
                                                                                  ) 0 flds
                                                   in CursorArrayTy (1 + size_flds)
 
 getCursorizeTyFromRegVar''' :: Maybe L2.Modality -> Bool -> RegVar -> UrTy ()
-getCursorizeTyFromRegVar''' modality _isTailAndOverrideModality rv = case rv of 
+getCursorizeTyFromRegVar''' modality _isTailAndOverrideModality rv = case rv of
                                   SingleR{} -> singleRegToCursorBasedOnModalityUrTy rv modality False
                                   -- For SoA regions, arrays, are addresses so we don't need to change their type
                                   -- in case we want to mutate them in place.
                                   SoARv _ flds -> let size_flds = foldr (\(_, flr) len -> case flr of
                                                                                                 SingleR{} -> len + 1
                                                                                                 SoARv{} -> let ty3 = getCursorizeTyFromRegVar modality False flr
-                                                                                                           in case ty3 of 
-                                                                                                                  CursorArrayTy sz -> len + sz 
+                                                                                                           in case ty3 of
+                                                                                                                  CursorArrayTy sz -> len + sz
                                                                                                                   _ -> error "Did not expect type!"
                                                                         ) 0 flds
                                                    in CursorArrayTy (1 + size_flds)
@@ -1007,11 +1064,11 @@ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality t
     ProdTy ls -> ProdTy $ L.map (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality) ls
     SymDictTy v _ -> SymDictTy v CursorTy
     PDictTy k v   -> PDictTy (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality k) (cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality v)
-    -- Check if location in the packed type is a locations pointer to by 
-    -- any mutable location, (We should not return start and end locations for such types) 
-    PackedTy _ l    -> let lname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l) 
+    -- Check if location in the packed type is a locations pointer to by
+    -- any mutable location, (We should not return start and end locations for such types)
+    PackedTy _ l    -> let lname = getVarNameFromFreeVar fenv (fromLocVarToFreeVarsTy l)
                            mut_l = findMutableLocationPointingToVar lname mutLocsEnv
-                        in 
+                        in
                           if Mb.isJust mut_l
                           then dbgTrace (minChatLvl) "Print env in cursorizeTy: " dbgTrace (minChatLvl) (sdoc (M.toList mutLocsEnv)) dbgTrace (minChatLvl) "End in cursorizeTy.\n" ProdTy []
                           -- If the location in questionk itself is a mutable location.
@@ -1023,7 +1080,7 @@ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality t
     ListTy el_ty'   -> ListTy $ cursorizeTy fenv mutLocsEnv oldLocsToMutEnv isTailAndOverrideModality modality el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
-    CursorArrayTy sz -> CursorArrayTy sz 
+    CursorArrayTy sz -> CursorArrayTy sz
     MutCursorTy -> MutCursorTy
     ArenaTy  -> ArenaTy
     SymSetTy -> SymSetTy

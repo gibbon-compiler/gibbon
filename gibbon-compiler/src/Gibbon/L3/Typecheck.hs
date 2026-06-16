@@ -1231,6 +1231,8 @@ ensureEqualTyModCursor _ddefs _exp CursorTy (PackedTy _ _) = return CursorTy
 ensureEqualTyModCursor _ddefs _exp (PackedTy _ _) CursorTy = return CursorTy
 ensureEqualTyModCursor _ddefs _exp IntTy CursorTy = return CursorTy
 ensureEqualTyModCursor _ddefs _exp CursorTy IntTy = return CursorTy
+ensureEqualTyModCursor _ddefs _exp CursorTy MutCursorTy = return MutCursorTy
+ensureEqualTyModCursor _ddefs _exp MutCursorTy CursorTy = return CursorTy
 
 ensureEqualTyModCursor ddefs exp (ProdTy ls1) (ProdTy ls2) =
   sequence_ [ ensureEqualTyModCursor ddefs exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor ddefs (ProdTy ls1))

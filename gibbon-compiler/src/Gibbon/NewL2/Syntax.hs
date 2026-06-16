@@ -686,14 +686,12 @@ isLocAlive loc exp accum = case exp of
                                                in checkE
                                 -- assuming scrutinee is in ANF
                                 CaseE _scrt mp ->
-                                  L.foldr (\(_,vlocs,e) acc ->
-                                            let (_vars,locs) = unzip vlocs
-                                                isLocUsedInLst = isLocAliveHelperList loc locs
-                                                checkE = isLocAlive loc e (acc || isLocUsedInLst)
-                                             in checkE
-                                          )
-                                          accum
-                                          mp
+                                  accum ||
+                                    L.any
+                                      (\(_,vlocs,e) ->
+                                         let (_vars,locs) = unzip vlocs
+                                          in isLocAliveHelperList loc locs || isLocAlive loc e False)
+                                      mp
                                 DataConE dl _ args -> let locFromLocArg = toLocVar dl
                                                           checkDconLoc = if loc == locFromLocArg 
                                                                          then True 
