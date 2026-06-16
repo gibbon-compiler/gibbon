@@ -93,6 +93,7 @@ library
                        Gibbon.Passes.LoopifiedTraversalFusion
                        Gibbon.Passes.VectorizeTraversals
                        Gibbon.Passes.ScalarCountPropagation
+                       Gibbon.Passes.MutableCursorFutures
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
                        Gibbon.Passes.RearrangeFree

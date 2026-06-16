@@ -94,6 +94,7 @@ import           Gibbon.Passes.LoopifyFlatTraversals (loopifyFlatTraversals)
 import           Gibbon.Passes.LoopifiedTraversalFusion (fuseLoopifiedTraversals)
 import           Gibbon.Passes.VectorizeTraversals (vectorizeTraversals)
 import           Gibbon.Passes.ScalarCountPropagation (propagateScalarCounts)
+import           Gibbon.Passes.MutableCursorFutures (repairMutableCursorFutures)
 import           Gibbon.Passes.SelectiveBufferSharing (selectiveBufferSharing)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
@@ -936,6 +937,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l3 <- go "loopifyFlatTraversals" loopifyFlatTraversals l3
               l3 <- go "loopifyTraversals" loopifyTraversals l3
               l3 <- go "propagateScalarCounts" propagateScalarCounts l3
+              l3 <- if gopt Opt_UseMutableCursors dynflags
+                    then go "repairMutableCursorFutures" repairMutableCursorFutures l3
+                    else pure l3
               l3 <- go "selectiveBufferSharing" selectiveBufferSharing l3
               l3 <- go "fuseLoopifiedTraversals" fuseLoopifiedTraversals l3
               l3 <- go "vectorizeTraversals" vectorizeTraversals l3
