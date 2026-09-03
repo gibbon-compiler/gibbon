@@ -17,17 +17,22 @@ jobs:
     - run: cabal update
     - run: cabal build exe:gibbon
     - run: cabal test gibbon --test-show-details=direct
+    - name: report OpenCilk toolchain versions
+      run: |
+        clang --version
+        llvm-ar --version
     # Smoke test: end-to-end build + run of a parallel example, proving the
     # OpenCilk wiring (Compiler.hs + gibbon-rts/Makefile + opencilk-clang
     # from the nix shell) holds together. Addresses @ulysses4ever's review
     # comment on PR #311 ("it'd be really nice to have a way to test opencilk").
     - name: parallel smoke test (OpenCilk)
       run: |
-        export GIBBONDIR=`pwd`
+        export GIBBONDIR=$(pwd)
         mkdir -p gibbon-compiler/examples/build_tmp
-        cabal v2-exec gibbon -- --parallel --cc=clang \
+        cabal v2-exec gibbon -- --to-exe --parallel \
           --cfile=gibbon-compiler/examples/build_tmp/BinTree_par.c \
           --exefile=gibbon-compiler/examples/build_tmp/BinTree_par.exe \
           gibbon-compiler/examples/parallel/BinTree.hs
-        # Args are <sizeParam> <iters>; keep both small for CI.
-        gibbon-compiler/examples/build_tmp/BinTree_par.exe 10 1
+        # Keep the generated program's size and iteration count small for CI.
+        gibbon-compiler/examples/build_tmp/BinTree_par.exe \
+          --size-param 10 --iterate 1

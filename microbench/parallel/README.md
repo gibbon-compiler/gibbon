@@ -32,8 +32,9 @@ Plots:
 There are two variants of packed parallel sumFoo which are described below.
 For both these variants, the threshold for parallelism was `size >= 64KB`. For the
 pointer variant, it was `depth > 12`.
-These benchmarks we run on Swarm (Ubuntu 18.04 / GCC-7 / 64GB RAM / 18 cores?) and used Cilk for
-parallel processing.
+These benchmarks were run on Swarm (Ubuntu 18.04 / GCC 7 / 64GB RAM / 18 cores?) and used Cilk for
+parallel processing. Those measurements are historical. The current Makefile requires OpenCilk's
+Clang and is easiest to run from the repository's `nix-shell`.
 
 We use different data constructors for granularity control i.e there's a special
 constructor `C_big` that `mkFoo` writes which tells `sumFoo` that it should process

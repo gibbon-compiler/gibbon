@@ -190,7 +190,7 @@ data E2Ext loc dec
   | TagCursor Var Var    -- Create a tagged cursor.
 
   | GetCilkWorkerNum
-    -- ^ Translates to  __cilkrts_get_worker_number().
+    -- ^ Translates to gib_get_thread_id().
   | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point.
   | AllocateTagHere LocVar TyCon
   | AllocateScalarsHere LocVar

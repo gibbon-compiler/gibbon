@@ -1304,7 +1304,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  GetCilkWorkerNum -> do
                    let [(outV, IntTy)] = bnds
-                   return $ [ C.BlockDecl [cdecl| int $id:outV = __cilkrts_get_worker_number(); |] ]
+                   return $ [ C.BlockDecl [cdecl| int $id:outV = gib_get_thread_id(); |] ]
 
                  IsBig -> do
                    let [(outV, BoolTy)] = bnds

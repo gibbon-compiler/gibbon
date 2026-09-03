@@ -33,7 +33,9 @@ Follow the instructions below to get all dependencies or enter the Nix shell
 with `nix-shell` to get them via [Nix](https://nix.dev/).
 
 #### Nix
-Use [`cachix`](https://docs.cachix.org/installation) to pull OpenCilk build artifacts.
+The supplied Nix shell includes OpenCilk 3.0, based on LLVM 19.1.7. It is the
+supported easy path for parallel builds. Use [`cachix`](https://docs.cachix.org/installation)
+to pull the OpenCilk build artifacts.
 - Run `cachix use opencilk` or if that fails add the following to `~/.config/nix/nix.conf`:
 ```
 extra-substituters = https://opencilk.cachix.org
@@ -41,8 +43,11 @@ extra-trusted-public-keys = opencilk.cachix.org-1:Mn07EJFLcPVB87uo9BtARGiMm7WoQ3
 ```
 - Then run `nix-shell`!
 
+Inside the shell, run parallel programs with `--parallel`; Clang is the default,
+so `--cc=clang` is optional. GCC remains available for sequential builds via
+`--cc=gcc`, but parallel builds require OpenCilk's Clang.
+
 - Ubuntu 22.04:
-(Parallelism support temporarily not available with ubuntu 22.04 as Cilk support is not avaiable with newer gcc)
 
 ```
  $ sudo apt-get update 

@@ -491,7 +491,7 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                                                      hcat (punctuate (text ",") [pprint l2, pprint v2]) <>
                                                      rparen <+>
                                                      pprint e
-          L2.GetCilkWorkerNum -> text "__cilkrts_get_worker_number()"
+          L2.GetCilkWorkerNum -> text "gib_get_thread_id()"
           L2.LetAvail vs e    -> text "letavail " <+> pprint vs $+$ pprint e
           L2.AllocateTagHere loc tycon -> text "allocateTagHere" <+> pprint loc <+> text tycon
           L2.AllocateScalarsHere loc -> text "allocateScalarsHere" <+> pprint loc

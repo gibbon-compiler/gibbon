@@ -26,8 +26,8 @@
 # ======================================================================
 
 
-CC        := gcc
-AR        := gcc-ar
+CC        := clang
+AR        := llvm-ar
 CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -Werror -std=gnu11 -flto
 RSC       := cargo
 RSFLAGS   := -v
@@ -66,14 +66,7 @@ ifeq ($(POINTER), 1)
 endif
 
 ifeq ($(PARALLEL), 1)
-	# OpenCilk's clang uses -fopencilk; legacy gcc-7 used -fcilkplus.
-	# Modern gcc (>= 8) has no Cilk support at all, so parallel mode
-	# requires clang/OpenCilk when CC is not gcc-7.
-	ifneq (,$(findstring clang,$(CC)))
-		CFLAGS += -fopencilk -D_GIBBON_PARALLEL
-	else
-		CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
-	endif
+	CFLAGS += -fopencilk -D_GIBBON_PARALLEL
 endif
 
 ifeq ($(BUMPALLOC), 1)
