@@ -6,7 +6,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: gcc # we use gcc's lto on the C side, so the rust side has to use gcc's linker as well (default Rust linker would go nuts)
+  # The C RTS is LLVM bitcode because its Clang build uses -flto. Use Clang
+  # for Rust's final link and enable LTO so the linker loads that bitcode.
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+  RUSTFLAGS: -C link-arg=-flto
 
 jobs:
   build_and_test:
@@ -16,8 +19,7 @@ jobs:
       - name: dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev gcc-11
-          sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-11 /usr/bin/gcc
+          sudo apt-get install -y libgc-dev libgmp-dev uthash-dev clang llvm
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: checkout
