@@ -1034,13 +1034,20 @@ summary tc tr = do
         , (case M.toList (unexpectedFailures tr) of
               [] -> emptyDoc
               ls -> vcat ["\nUnexpected failures:" , hline (docNameErrors ls)])
+        -- Names and modes at every verbosity, and never the error text.  The
+        -- five summary numbers count programs and a program can sit in several
+        -- buckets, so they do not reconcile by arithmetic and a run can only be
+        -- graded by name -- which needs every bucket's names present in every
+        -- log.  An expected failure's error output is not what a reader is here
+        -- for; run the test to see it.
         , (case M.toList (expectedFailures tr) of
                [] -> if skipFailing tc
                      then "Expected failures: skipped."
                      else emptyDoc
-               ls -> if (verbosity tc) >= 3
-                     then vcat ["\nExpected failures:" , hline (docNameErrors ls)]
-                     else emptyDoc)
+               ls -> vcat [ "\nExpected failures:"
+                          , hline (vcat (map (\(name, m_errors) ->
+                                                docNameModes name (map fst m_errors))
+                                             ls)) ])
         ]
 
 sdoc :: Show a => a -> Doc ann

@@ -60,7 +60,7 @@ timedProg flg =
             , funRetTy = ProdTy []
             , funBody = LetTimedT flg [] (RetValsT []) (RetValsT [])
             , isPure = False
-            , funMeta = FunMeta NotRec NoInline False []
+            , funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , mainExp = Nothing

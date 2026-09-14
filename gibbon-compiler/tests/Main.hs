@@ -33,12 +33,16 @@ import InferRegionScope
 import Unariser
 import AddRAN
 import LoopifyTraversals
+import LoopifyFlatTraversals
 import ReorderScalarWrites
 import AssignScalarCountSlots
+import L3Traverse
 import ScalarCountPropagation
 import SelectiveBufferSharing
 import VectorizeTraversals
 import CodegenSimd
+import CodegenInvariants
+import TagSpace
 import L1.Typecheck
 import L1.Interp
 import L2.Typecheck
@@ -55,11 +59,15 @@ main = defaultMain allTests
                    , timingOutputContractTests
                    , addRANTests
                    , loopifyTraversalsTests
+                   , loopifyFlatTraversalsTests
                    , reorderScalarWritesTests
                    , assignScalarCountSlotsTests, scalarCountPropagationTests
+                   , l3TraverseTests
                    , selectiveBufferSharingTests
                    , vectorizeTraversalsTests
                    , codegenSimdTests
+                   , codegenInvariantsTests
+                   , tagSpaceTests
                    , routeEnds2Tests
                    , intWidthTests
                    , intWidthPipelineTests

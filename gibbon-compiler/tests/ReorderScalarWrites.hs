@@ -74,7 +74,7 @@ runPass body =
     funBody (fds M.! "probe")
   where
     fn  = FunDef "probe" ["n"] ([IntTy W64], ProdTy []) body
-                 (FunMeta Rec NoInline False [])
+                 (FunMeta Rec NoInline False [] Nothing)
     prg = Prog M.empty (M.fromList [("probe", fn)]) Nothing
     Prog{fundefs = fds} = fst (defaultPackedRunPassM (reorderScalarWrites prg))
 

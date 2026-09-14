@@ -1810,8 +1810,6 @@ tests:
     run-modes: [gibbon2, loopify, selective, vectorize]
 
   - name: Contents.hs
-    # Phase 3: mutable-cursor packed-field/end-cursor issue.
-    failing: [loopify, selective, vectorize]
     dir: examples/layout_benchmarks
     answer-file: examples/layout_benchmarks/reduced_answers/Contents.ans
     source-replacements:

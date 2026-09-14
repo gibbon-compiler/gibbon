@@ -56,6 +56,8 @@ library
                        Gibbon.L2.Interp
                        Gibbon.L2.Examples
                        Gibbon.L3.Syntax
+                       Gibbon.L3.Abi
+                       Gibbon.L3.Traverse
                        Gibbon.L3.Typecheck
                        Gibbon.L4.Syntax
                        Gibbon.L4.Interp
@@ -202,12 +204,16 @@ test-suite test-gibbon
                        HoistBoundsCheck
                        AddRAN
                        LoopifyTraversals
+                       LoopifyFlatTraversals
                        ReorderScalarWrites
                        AssignScalarCountSlots
+                       L3Traverse
                        ScalarCountPropagation
                        SelectiveBufferSharing
                        VectorizeTraversals
                        CodegenSimd
+                       CodegenInvariants
+                       TagSpace
                        L1.Typecheck
                        L1.Interp
                        L2.Typecheck
