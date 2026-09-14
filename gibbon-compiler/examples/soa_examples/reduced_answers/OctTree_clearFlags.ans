@@ -1,5 +1,5 @@
 Running program OctTree Physics Simulation: 
-Running pass clearFlags (map, uses=15): 
+Running pass clearFlags (map, uses=15, shared=7): 
 ITERS: 1
 SIZE: 1
 End

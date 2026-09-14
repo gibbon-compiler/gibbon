@@ -23,11 +23,11 @@ Running pass lbDeuxLoadProxy (fold, uses=5):
 ITERS: 1
 SIZE: 1
 End
-Running pass addConstPW (map, uses=8): 
+Running pass addConstPW (map, uses=8, shared=5): 
 ITERS: 1
 SIZE: 1
 End
-Running pass diffPW (map, uses=8): 
+Running pass diffPW (map, uses=8, shared=4): 
 ITERS: 1
 SIZE: 1
 End

@@ -35,14 +35,17 @@ smoke fixture (Int8 + Int16 + Int32 + Int64 in one constructor).
 ## SSE2 and SSE4.1
 
 * Gibbon's explicit SIMD baseline is **SSE2**.
-* `--sse4.1` adds `-msse4.1` to the generated C translation unit.  It is an ISA
-  permission for the C compiler, independent of `--opt-vectorization`
-  (Gibbon's own SIMD pass) and of `--no-gcc-vectorize`.
-* W32 multiplication is emitted by Gibbon as a verified SSE2 `_mm_mul_epu32`
-  plus shuffle/interleave sequence.  A C compiler *may* recognize and replace
-  that sequence under SSE4.1, but Gibbon does not select `_mm_mullo_epi32`.
-* W64 equality does have an explicit `#ifdef __SSE4_1__` branch using
-  `_mm_cmpeq_epi64`.
+* `--sse4.1` raises the selected instruction set to `sse4.1`, equivalently
+  `--simd-isa=sse4.1`.  It adds `-msse4.1` to the generated C translation unit,
+  so it is still an ISA permission for the C compiler and its own
+  auto-vectorizer -- independent of `--opt-vectorization` (Gibbon's SIMD pass)
+  and of `--no-gcc-vectorize` -- but it now also changes what Gibbon emits.
+* W32 multiplication is emitted as `_mm_mullo_epi32` at `sse4.1` and above, and
+  as an equivalent `_mm_mul_epu32` plus shuffle/interleave sequence at baseline
+  SSE2.  Gibbon picks the one that matches the selected ISA; the generated C
+  contains only that one.
+* W64 equality is the same: `_mm_cmpeq_epi64` at `sse4.1` and above, a
+  lane-at-a-time comparison at baseline SSE2.
 * W64 ordered comparisons need SSE4.2 (`_mm_cmpgt_epi64`) or an emulation, and
   remain scalar.
 * General packed integer division/modulus does not exist in SSE4 and remains
@@ -208,14 +211,21 @@ carry the vectorizer columns. A program with only folds gets only a fold section
 ### Two report modes
 
 By default the sweep runs and reports **one** vectorized configuration —
-`loop+share both vec (SSE4.1)`: both vectorizers on, `-msse4.1`, i.e. every
-vectorization capability enabled. Splitting that into the full 2x2 (GCC's
-auto-vectorizer and Gibbon's SIMD pass varied independently) plus the SSE4.1
-axis exists to *attribute* a speedup between them, which is the point of the
+`loop+share both vec`: both vectorizers on, i.e. every vectorization capability
+the selected ISA offers. Splitting that into the full 2x2 (GCC's
+auto-vectorizer and Gibbon's SIMD pass varied independently) exists to
+*attribute* a speedup between them, which is the point of the
 arithmetic-intensity experiment and noise on application traversals — measured
-over the suite's 17 map passes, the six configurations differ by ~9% end to end
-and mostly reflect code layout. Five configurations are therefore neither built
-nor reported.
+over the suite's 17 map passes, the configurations differ by ~9% end to end
+and mostly reflect code layout. The rest are therefore neither built nor
+reported.
+
+The SSE4.1 axis (`ls_gibvec_sse41`, `ls_both_sse41`) is built only at
+`--simd-isa=sse2`. Every wider ISA already includes SSE4.1, so at the driver's
+`avx2` default those two configurations compiled identically to their
+non-SSE4.1 twins. **Any recorded number attributed to that axis at an ISA other
+than `sse2` — including the "fastest of the six" headline of 0.2773s against
+0.2800s — is two measurements of the same compile and needs re-measuring.**
 
 `--intensity-report` switches to **arithmetic-intensity mode** (and implies
 `--verify-intensity-codegen`): the full

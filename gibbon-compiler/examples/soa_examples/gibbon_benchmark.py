@@ -73,6 +73,7 @@ Usage:
 """
 
 import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime, math, signal
+import hashlib
 import platform
 try:
     import resource
@@ -396,7 +397,7 @@ DEFAULT_C_ARITH_MODE = "unsafe"
 # would let the C compiler's auto-vectorizer go wider than Gibbon's vectorizer
 # can (there is no 512-bit helper set), which is the same asymmetry again.
 DEFAULT_SIMD_ISA = "avx2"
-SIMD_ISA_CHOICES = ("sse2", "avx2", "native")
+SIMD_ISA_CHOICES = ("sse2", "sse4.1", "avx2", "native")
 
 
 # Routine per-item chatter (paths, mtimes, per-compile status) is suppressed
@@ -2241,7 +2242,8 @@ def effective_optimization_flags(variant: str,
                                  enable_loop_fusion: bool,
                                  enable_selective_buffer_sharing: bool,
                                  enable_vectorization: bool,
-                                 auto_loopification: bool = True) -> Dict[str, bool]:
+                                 auto_loopification: bool = True,
+                                 defer_scalar_counts: bool = False) -> Dict[str, bool]:
     """Return the flags that should actually be passed for this variant.
 
     AoS flat layouts can use only flat map loopification.  Scalar-count
@@ -2257,13 +2259,18 @@ def effective_optimization_flags(variant: str,
     `OPT:MayVectorize` may pass False to rely on the annotation alone.
     """
     is_soa = is_soa_gibbon_variant(variant)
+    counts = store_scalar_field_counts and is_soa
     return {
-        "store_scalar_field_counts": store_scalar_field_counts and is_soa,
+        "store_scalar_field_counts": counts,
         "enable_loopification": enable_loopification,
         "auto_loopification": auto_loopification,
         "enable_loop_fusion": enable_loop_fusion and is_soa,
         "enable_selective_buffer_sharing": enable_selective_buffer_sharing and is_soa,
         "enable_vectorization": enable_vectorization and is_soa,
+        # Deferred delivery of the counts the footers already record; without
+        # the footers there is nothing to defer, and the compiler rejects the
+        # pair outright rather than treating it as a no-op.
+        "defer_scalar_counts": defer_scalar_counts and counts,
     }
 
 # ---------------------------------------------------------------------------
@@ -2276,6 +2283,7 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
                          enable_papi: bool = False,
                          enable_papi_native: bool = False,
                          store_scalar_field_counts: bool = False,
+                         defer_scalar_counts: bool = False,
                          enable_loopification: bool = False,
                          enable_loop_fusion: bool = False,
                          enable_selective_buffer_sharing: bool = False,
@@ -2362,9 +2370,12 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
         enable_selective_buffer_sharing,
         enable_vectorization,
         auto_loopification,
+        defer_scalar_counts,
     )
     if effective_opts["store_scalar_field_counts"]:
         cmd.append("--store-scalar-field-counts")
+    if effective_opts["defer_scalar_counts"]:
+        cmd.append("--defer-scalar-counts")
     if effective_opts["enable_loopification"]:
         cmd.append("--opt-loopification")
         if effective_opts["auto_loopification"]:
@@ -2403,6 +2414,10 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 use_no_gcc_tail_calls: bool = False,
                 auto_loopification: bool = True,
                 simd_isa: str = DEFAULT_SIMD_ISA,
+                # Keep new parameters LAST: the parallel compile path calls
+                # this positionally, so an insert anywhere else silently
+                # shifts every argument after it.
+                defer_scalar_counts: bool = False,
                 ) -> Tuple[bool, float, Optional[str]]:
     _validate_c_arith_mode(c_arith_mode)
     source = source.resolve()
@@ -2460,6 +2475,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             enable_papi=enable_papi,
             enable_papi_native=enable_papi_native,
             store_scalar_field_counts=store_scalar_field_counts,
+            defer_scalar_counts=defer_scalar_counts,
             enable_loopification=enable_loopification,
             enable_loop_fusion=enable_loop_fusion,
             enable_selective_buffer_sharing=enable_selective_buffer_sharing,
@@ -2585,11 +2601,12 @@ def compile_parallel(tasks: List[Tuple]) -> Dict:
                         enable_papi_native, store_scalar_field_counts,
                         enable_loopification, enable_loop_fusion,
                         enable_selective_buffer_sharing, enable_vectorization,
-                        use_sse41, use_no_gcc_vec, use_no_ran, c_arith_mode): (prog, var)
+                        use_sse41, use_no_gcc_vec, use_no_ran, c_arith_mode,
+                        defer_scalar_counts=defer_counts): (prog, var)
             for prog, var, src, od, force, use_mut, enable_papi, enable_papi_native,
                 store_scalar_field_counts, enable_loopification, enable_loop_fusion,
                 enable_selective_buffer_sharing, enable_vectorization, use_sse41, use_no_gcc_vec,
-                use_no_ran, c_arith_mode in tasks
+                use_no_ran, c_arith_mode, defer_counts in tasks
         }
         for fut in as_completed(fmap):
             prog, var = fmap[fut]
@@ -2704,6 +2721,7 @@ def run_exe(exe: Path, iterations: int,
 def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
                          programs_dir: Path, out_dir: Path, iterations: int, force: bool,
                          store_scalar_field_counts: bool = False,
+                         defer_scalar_counts: bool = False,
                          enable_loopification: bool = False,
                          enable_loop_fusion: bool = False,
                          enable_selective_buffer_sharing: bool = False,
@@ -2774,6 +2792,7 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
         enable_papi=False,
         enable_papi_native=False,
         store_scalar_field_counts=store_scalar_field_counts,
+        defer_scalar_counts=defer_scalar_counts,
         enable_loopification=enable_loopification,
         enable_loop_fusion=enable_loop_fusion,
         enable_selective_buffer_sharing=enable_selective_buffer_sharing,
@@ -2819,6 +2838,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       enable_papi: bool = False,
                       enable_papi_native: bool = False,
                       store_scalar_field_counts: bool = False,
+                      defer_scalar_counts: bool = False,
                       enable_loopification: bool = False,
                       enable_loop_fusion: bool = False,
                       enable_selective_buffer_sharing: bool = False,
@@ -2880,6 +2900,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         variant_compile_opts[var] = {
             "use_mutable_cursors": use_mut_eff,
             "store_scalar_field_counts": store_scalar_field_counts,
+            "defer_scalar_counts": defer_scalar_counts,
             "enable_loopification": enable_loopification,
             "enable_loop_fusion": enable_loop_fusion,
             "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
@@ -2911,7 +2932,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                           enable_papi_native, store_scalar_field_counts,
                           enable_loopification, enable_loop_fusion,
                           enable_selective_buffer_sharing, enable_vectorization,
-                          use_sse41, use_no_gcc_vec, use_no_ran_eff, c_arith_mode))
+                          use_sse41, use_no_gcc_vec, use_no_ran_eff, c_arith_mode,
+                          defer_scalar_counts))
         else:
             print(f"  Warning: {src} not found")
 
@@ -2929,6 +2951,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
         compile_opts = variant_compile_opts.get(var, {
             "use_mutable_cursors": use_mut,
             "store_scalar_field_counts": store_scalar_field_counts,
+            "defer_scalar_counts": defer_scalar_counts,
             "enable_loopification": enable_loopification,
             "enable_loop_fusion": enable_loop_fusion,
             "enable_selective_buffer_sharing": enable_selective_buffer_sharing,
@@ -3085,6 +3108,7 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                         iterations=iterations,
                         force=force,
                         store_scalar_field_counts=compile_opts["store_scalar_field_counts"],
+                        defer_scalar_counts=compile_opts.get("defer_scalar_counts", False),
                         enable_loopification=compile_opts["enable_loopification"],
                         enable_loop_fusion=compile_opts["enable_loop_fusion"],
                         enable_selective_buffer_sharing=compile_opts["enable_selective_buffer_sharing"],
@@ -7699,8 +7723,79 @@ def _ser_result(r: Optional[BenchmarkResult]) -> Optional[Dict]:
     return rec
 
 
+def campaign_provenance(args) -> Dict[str, object]:
+    """Everything needed to attribute a number to a run.
+
+    The recorded campaign block used to hold three fields, none of which
+    identified the run: no commit, no machine, no compiler, no flags, no
+    iteration count.  A later reader could not tell whether a difference from
+    a recorded value came from a code change or from a different machine, so
+    the numbers could only be re-derived, never compared.
+
+    The Gibbon binary is identified by content, not by path: it is routinely
+    built from a worktree other than REPO_ROOT, so the repository's HEAD alone
+    can name a commit that did not produce it.
+    """
+    gib = resolve_gibbon()
+    gib_info: Dict[str, object] = {"path": str(gib.path) if gib.path else None,
+                                   "resolved_via": gib.origin,
+                                   "sha256": gib.sha256}
+    if gib.path:
+        try:
+            if not gib_info["sha256"]:
+                h = hashlib.sha256()
+                with open(gib.path, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(chunk)
+                gib_info["sha256"] = h.hexdigest()
+            st = os.stat(gib.path)
+            gib_info["size_bytes"] = st.st_size
+            gib_info["mtime"] = datetime.datetime.fromtimestamp(
+                st.st_mtime).isoformat(timespec="seconds")
+        except OSError as e:
+            gib_info["error"] = str(e)
+
+    def _git(*a) -> Optional[str]:
+        try:
+            r = subprocess.run(["git", "-C", str(REPO_ROOT), *a],
+                               capture_output=True, text=True, timeout=20)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    return {
+        "gibbon": gib_info,
+        "repo": {"root": str(REPO_ROOT), "head": _git("rev-parse", "HEAD"),
+                 "describe": _git("describe", "--always", "--dirty"),
+                 "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+                 "dirty_tracked_files": len([
+                     l for l in (_git("status", "--porcelain") or "").splitlines()
+                     if l.strip()])},
+        "cc": prov.cc_identity(resolve_cc()),
+        "machine": _machine_description(),
+        "timing": {"iterations": getattr(args, "iterations", None),
+                   "warmup_runs": getattr(args, "warmup_runs", None),
+                   "warmup_iterations": getattr(args, "warmup_iterations", None),
+                   "cooldown_seconds": getattr(args, "cooldown_seconds", None),
+                   "size_param": getattr(args, "size_param", None),
+                   "pin_cpu": getattr(args, "pin_cpu", None)},
+        "codegen": {"simd_isa": getattr(args, "simd_isa", None),
+                    "c_arithmetic": getattr(args, "c_arithmetic", None),
+                    "sse41": getattr(args, "use_sse41", None),
+                    "no_gcc_vectorize": getattr(args, "use_no_gcc_vec", None),
+                    "use_ran": getattr(args, "use_ran", None),
+                    "store_scalar_field_counts": getattr(args, "store_scalar_field_counts", None),
+                    "loopification": getattr(args, "enable_loopification", None),
+                    "loop_fusion": getattr(args, "enable_loop_fusion", None),
+                    "selective_buffer_sharing": getattr(args, "enable_selective_buffer_sharing", None),
+                    "vectorization": getattr(args, "enable_vectorization", None)},
+        "driver_argv": sys.argv,
+    }
+
+
 def write_json_results(all_results: List[Tuple], out_file: Path,
-                       all_variants_results: Optional[List[Dict]] = None):
+                       all_variants_results: Optional[List[Dict]] = None,
+                       campaign_extra: Optional[Dict] = None):
     variants_map: Dict[str, Dict] = {}
     if all_variants_results:
         for entry in all_variants_results:
@@ -7757,6 +7852,7 @@ def write_json_results(all_results: List[Tuple], out_file: Path,
             "c_arithmetic_modes_present": modes_present,
             "no_ran_values_present": no_ran_present,
             "arithmetic_mode_consistency_error": consistency_error,
+            **(campaign_extra or {}),
         },
         "results": data,
     }
@@ -8599,6 +8695,15 @@ def build_parser() -> argparse.ArgumentParser:
                     dest="enable_papi_native", action="store_true",
                     help="Compile with --enable-papi-native, parse PAPI_NATIVE stdout lines, "
                          "and add native PAPI columns to tables.")
+    ap.add_argument("--defer-scalar-counts", dest="defer_scalar_counts",
+                    action="store_true",
+                    help="Compile SoA variants with --defer-scalar-counts: the "
+                         "producer batches its per-element count increments into "
+                         "one global counter and flushes at growth and after a "
+                         "call, instead of bumping a footer per element. "
+                         "Requires --store-scalar-field-counts (there is nothing "
+                         "to defer without the footers), and the compiler rejects "
+                         "the pair with --gen-gc. Off by default.")
     ap.add_argument("--store-scalar-field-counts", action="store_true",
                     help="Enable scalar-count footer metadata for SoA builders annotated with OPT:StoreScalarCounts. "
                          "This flag is not passed to AoS variants.")
@@ -8655,13 +8760,12 @@ def build_parser() -> argparse.ArgumentParser:
                     action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--sse4.1", "--gibbon-sse41", dest="use_sse41", action="store_true",
                     help="Compile Gibbon variants with --sse4.1 (adds -msse4.1 to the generated C). "
-                         "Deliberately INDEPENDENT of --opt-vectorization: -msse4.1 affects the whole "
-                         "translation unit, including the scalar tail and GCC's own auto-vectorizer, so a "
-                         "scalar baseline must be compiled at the same ISA for the comparison to isolate "
-                         "the effect of Gibbon's vectorizer. Gibbon emits its own verified SSE2 W32 "
-                         "multiply sequence either way; a C compiler may recognise it under "
-                         "-msse4.1, but that is not a Gibbon codegen choice. "
-                         "and 64-bit compare (_mm_cmpeq_epi64), which are scalarized at baseline SSE2.")
+                         "-msse4.1 affects the whole translation unit, including the scalar tail and "
+                         "GCC's own auto-vectorizer, so a scalar baseline must be compiled at the same "
+                         "ISA for the comparison to isolate the effect of Gibbon's vectorizer. It is "
+                         "NOT independent of Gibbon's own codegen: it raises the selected ISA, and "
+                         "Gibbon then emits _mm_mullo_epi32 for the W32 multiply and _mm_cmpeq_epi64 "
+                         "for the 64-bit compare, instead of the baseline SSE2 sequences.")
     ap.add_argument("--no-gcc-vectorize", dest="use_no_gcc_vec", action="store_true",
                     help="Compile Gibbon variants with --no-gcc-vectorize (disables the C compiler's "
                          "own loop AND SLP auto-vectorization on the generated C only, not the RTS -- "
@@ -8801,7 +8905,9 @@ def main():
     print(f"  Paper mode   : {'YES' if args.generate_paper else 'no'}")
     print(f"  Dump raw     : {'YES → benchmark_output/raw_output/' if args.dump_raw else 'no'}")
     print(f"  Build pass   : {'YES (included in totals/tables)' if args.include_build_pass else 'no'}")
-    print(f"  Scalar counts: {'enabled for SoA (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'off'}")
+    print(f"  Scalar counts: {'enabled for SoA (--store-scalar-field-counts)' if args.store_scalar_field_counts else 'off'}"
+          + (", deferred delivery (--defer-scalar-counts)"
+             if args.store_scalar_field_counts and args.defer_scalar_counts else ""))
     print(f"  Loopification: {'enabled (--opt-loopification + --auto-loopification)' if args.enable_loopification else 'off'}")
     print(f"  Loop fusion  : {'enabled for SoA (--opt-loop-fusion)' if args.enable_loop_fusion else 'off'}")
     print(f"  Selective sh.: {'enabled for SoA (--opt-selective-buffer-sharing)' if args.enable_selective_buffer_sharing else 'off'}")
@@ -8904,6 +9010,7 @@ def main():
             enable_papi=args.enable_papi,
             enable_papi_native=args.enable_papi_native,
             store_scalar_field_counts=args.store_scalar_field_counts,
+            defer_scalar_counts=args.defer_scalar_counts,
             enable_loopification=args.enable_loopification,
             enable_loop_fusion=args.enable_loop_fusion,
             enable_selective_buffer_sharing=args.enable_selective_buffer_sharing,
@@ -8992,7 +9099,8 @@ def main():
 
     print("\nWriting reports ...")
     write_text_report(all_results, args.report, extended_results)
-    write_json_results(all_results, args.json, extended_results)
+    write_json_results(all_results, args.json, extended_results,
+                       campaign_extra=campaign_provenance(args))
 
     if args.generate_paper:
         print(f"\n{'='*72}")

@@ -23,11 +23,11 @@ Running pass fmmPotential (fold_like, uses=12):
 ITERS: 1
 SIZE: 1
 End
-Running pass scaleEnergy (map, uses=16): 
+Running pass scaleEnergy (map, uses=16, shared=6): 
 ITERS: 1
 SIZE: 1
 End
-Running pass clearFlags (map, uses=15): 
+Running pass clearFlags (map, uses=15, shared=7): 
 ITERS: 1
 SIZE: 1
 End

@@ -1,57 +1,57 @@
 Running program MapIntensityV2: 
-Running pass mapSer1 (map, uses=1, ilp=1): 
+Running pass mapSer1 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapSer2 (map, uses=1, ilp=1): 
+Running pass mapSer2 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapSer4 (map, uses=1, ilp=1): 
+Running pass mapSer4 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapSer8 (map, uses=1, ilp=1): 
+Running pass mapSer8 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapSer16 (map, uses=1, ilp=1): 
+Running pass mapSer16 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapChain1 (map, uses=1, ilp=2): 
+Running pass mapChain1 (map, uses=1, ilp=2, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapChain2 (map, uses=1, ilp=2): 
+Running pass mapChain2 (map, uses=1, ilp=2, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapChain4 (map, uses=1, ilp=2): 
+Running pass mapChain4 (map, uses=1, ilp=2, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapChain8 (map, uses=1, ilp=2): 
+Running pass mapChain8 (map, uses=1, ilp=2, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapPar1 (map, uses=1, ilp=1): 
+Running pass mapPar1 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapPar2 (map, uses=1, ilp=1): 
+Running pass mapPar2 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapPar4 (map, uses=1, ilp=1): 
+Running pass mapPar4 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapPar8 (map, uses=1, ilp=1): 
+Running pass mapPar8 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapPar16 (map, uses=1, ilp=1): 
+Running pass mapPar16 (map, uses=1, ilp=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End

@@ -188,3 +188,73 @@ _ = printsym (quote "Running pass <name> (<type>, uses=N): ")
 
 Buffer counts are derived automatically from the `data` declaration —
 no extra annotation needed for them.
+
+---
+
+## `OPT:` annotations — opting a function into an optimization
+
+These are **source annotations on functions**, distinct from the `@BENCH` comments above.
+They are parsed in `HaskellFrontend.hs` (`parseAnnotation`), and there are exactly three:
+
+```haskell
+{-# ANN mkTree     "OPT:StoreScalarCounts"     #-}
+{-# ANN add1Tree   "OPT:MayVectorize"          #-}
+{-# ANN someFn     "OPT:SelectiveBufferSharing" #-}
+```
+
+Layout annotations use the same pragma but attach to a **type**:
+
+```haskell
+{-# ANN type Tree "Factored" #-}   -- fully factored (SoA)
+{-# ANN type Tree "Linear"   #-}   -- flat (AoS)
+```
+
+**An unrecognised string is a hard error, not a silently ignored pragma.** A typo'd layout
+string, a different spelling such as `{-# ANN T (Layout "SoA") #-}`, or an unknown `OPT:`
+name aborts the compile naming the accepted forms. This matters most for layout: an
+unrecognised layout annotation must never let a datatype fall through to the Linear/AoS
+default as if nothing had been written.
+
+### What an `OPT:` annotation means
+
+**A promise the compiler is free to decline.** The annotation makes a function a *candidate*;
+every pass then applies its own legality checks and may silently leave the function alone.
+`OPT:MayVectorize` in particular is a promise that recursive calls are independent — it is
+not a request that anything be vectorized, and it does not guarantee a loop is emitted.
+
+To find out what actually happened, pass **`--loopification-report`**: it names every
+candidate function and, for each, whether it was rewritten and if not why not. Before that
+flag existed every decline was silent, which is how several of these annotations came to be
+believed effective when they were not.
+
+### The annotation's effect depends on CLI flags, silently in one direction
+
+`OPT:MayVectorize` does nothing without `--opt-loopification` (or `--auto-loopification`),
+and vectorization additionally requires `--use-mutable-cursors`. That last pair used to skip
+silently; it is now a hard error. `OPT:StoreScalarCounts` needs
+`--store-scalar-field-counts`, and `--defer-scalar-counts` without it is likewise refused
+rather than being a no-op.
+
+The general point for anyone reading a benchmark result: **a source annotation's effect is
+conditional on the compiler flags of the run**, so an annotated program is not evidence that
+the optimization ran.
+
+## `shared=N` — a hand-written claim, not a measurement
+
+Map-pass banners may carry `shared=N`:
+
+```
+_ = printsym (quote "Running pass targetReturnPass (map, uses=9, shared=6): ")
+```
+
+For a map, `shared=N` records how many scalar fields the pass leaves **unmodified**. A map
+copies every field into the output region, so "fields used" is vacuously all of them and
+distinguishes nothing; what separates one map from another is how much it merely *copies*,
+because those are the buffers selective buffer sharing can share instead of rewriting.
+`gibbon_benchmark.py` parses it out of the banner and reports it as `Σ_b`.
+
+**It is written by hand in the source and is never checked against the compiler.** It states
+what the author believed the pass leaves alone, not what selective buffer sharing achieved.
+A pass once carried `shared=1` while zero sharing occurred, which made an unrelated
+investigation look like a sharing bug. If you need to know what was actually shared, read
+`--loopification-report` or the generated C, not the banner.

@@ -19,11 +19,11 @@ Running pass countLazyNodes (fold, uses=4):
 ITERS: 1
 SIZE: 1
 End
-Running pass decayTrieStats (map, uses=10): 
+Running pass decayTrieStats (map, uses=10, shared=5): 
 ITERS: 1
 SIZE: 1
 End
-Running pass resetTraversalState (map, uses=10): 
+Running pass resetTraversalState (map, uses=10, shared=6): 
 ITERS: 1
 SIZE: 1
 End

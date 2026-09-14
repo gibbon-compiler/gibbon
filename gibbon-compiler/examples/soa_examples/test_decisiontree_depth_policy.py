@@ -128,17 +128,16 @@ class TestAosSoaSelectedDepthAgreement(unittest.TestCase):
                                  "%s/%s declares depth %s, expected %d" %
                                  (layout, program, m.group(1), want))
 
-    def test_each_half_binds_exactly_one_tree(self):
-        # Two trees in one gibbon_main is what triggers the SoA +
-        # --use-mutable-cursors compiler bug the split exists to avoid.
-        pat = re.compile(r"^\s*let\s+\w+\s*=\s*buildTree\b", re.M)
-        for program in ("DecisionTree.hs", "DecisionTreeClassify.hs"):
-            for layout in ("AOS", "SOA"):
-                text = self._text(layout, program)
-                main = text[text.index("\ngibbon_main ="):]
-                self.assertEqual(len(pat.findall(main)), 1,
-                                 "%s/%s binds more than one tree in main"
-                                 % (layout, program))
+    # `test_each_half_binds_exactly_one_tree` used to live here. It enforced that
+    # each program binds at most one tree, to dodge a SoA + --use-mutable-cursors
+    # defect asserted in a comment and recorded nowhere else -- no reproducer, no
+    # error text, no mechanism. It does not reproduce: sixteen configurations,
+    # including the real program with a second tree bound in the same
+    # gibbon_main under the full optimisation stack, all give correct and
+    # unchanged values. See TWO-TREES in llm-notes BUGS.md for the evidence and a
+    # reproduction recipe. Constraining the corpus shape against an
+    # uncharacterised defect costs freedom and returns no evidence; if it comes
+    # back, it should come back as a reproducer.
 
     def test_halves_do_not_overlap_in_passes(self):
         folds = self._text("AOS")

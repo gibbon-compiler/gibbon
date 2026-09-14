@@ -15,11 +15,11 @@ Running pass sumTextWidth (fold, uses=3):
 ITERS: 1
 SIZE: 1
 End
-Running pass computeWidths (map, uses=14): 
+Running pass computeWidths (map, uses=14, shared=12): 
 ITERS: 1
 SIZE: 1
 End
-Running pass scaleLayout (map, uses=15): 
+Running pass scaleLayout (map, uses=15, shared=7): 
 ITERS: 1
 SIZE: 1
 End

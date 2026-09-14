@@ -27,11 +27,11 @@ Running pass sumObjIds (fold, uses=3):
 ITERS: 1
 SIZE: 1
 End
-Running pass sweepUnmarked (map, uses=5): 
+Running pass sweepUnmarked (map, uses=5, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass touchHotObjects (map, uses=5): 
+Running pass touchHotObjects (map, uses=5, shared=1): 
 ITERS: 1
 SIZE: 1
 End

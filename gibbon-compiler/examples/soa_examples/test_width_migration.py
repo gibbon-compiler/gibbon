@@ -844,5 +844,85 @@ class TestSemanticFunctionWidths(unittest.TestCase):
         self.assertEqual(hits, [])
 
 
+class TestNarrowWidthContractComments(unittest.TestCase):
+    """Comments that assert the opposite of the code, and have before.
+
+    Five contract comments across the compiler and the RTS header claimed
+    narrow-width support was absent or unsafe while the code implemented it.
+    One of them is emitted verbatim into every generated `.c`, so a maintainer
+    reading a generated file was told in-band that W8 multiply loops stay
+    scalar, thirty lines above the packed W8 multiply.  One had already been
+    corrected once and was wrong again afterwards.
+
+    A comment that has been wrong twice needs a test rather than a third
+    correction, so these are phrase-greps over the tree.  They are deliberately
+    about the CLAIM, not about any particular wording of the fix: if narrow
+    widths are ever genuinely withdrawn, delete the corresponding assertion
+    along with the support.
+    """
+
+    SRC = HERE.parent.parent / "src"
+    RTS = HERE.parent.parent.parent / "gibbon-rts" / "rts-c"
+
+    def _sources(self):
+        for root, suffixes in ((self.SRC, (".hs",)), (self.RTS, (".h", ".c"))):
+            if not root.exists():
+                continue
+            for path in sorted(root.rglob("*")):
+                if path.suffix in suffixes and path.is_file():
+                    yield path
+
+    def _assert_absent(self, pattern, why):
+        rx = re.compile(pattern, re.I | re.S)
+        hits = []
+        for path in self._sources():
+            try:
+                text = path.read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if rx.search(text):
+                hits.append(str(path))
+        self.assertEqual(hits, [], why)
+
+    def test_no_source_claims_narrow_width_codegen_is_unsafe(self):
+        # Lower.hs propagates `intPrimWidth` into every L4 prim and `L4.Ty`
+        # carries `IntTy IntWidth`, so there is no width erasure point.
+        self._assert_absent(
+            r"width\s+erasure\s+point|narrow-width\s+code\s+generation\s+is\s+"
+            r"therefore\s+unsafe",
+            "a comment still claims narrow-width codegen is unsafe or erased",
+        )
+
+    def test_no_source_claims_narrow_simd_stays_scalar(self):
+        # `gib_vec_mul_int8x16` exists and `simdCapable` enables VecOpMul for
+        # IntS W8; `simdScalarEnabled` is True for every scalar.
+        self._assert_absent(
+            r"no\s+packed\s+8-bit\s+multiply\s+at\s+all|"
+            r"no\s+emitted\s+helpers\s+yet",
+            "a comment still claims W8/W16 have no SIMD helpers",
+        )
+
+    def test_no_source_references_compatDefaultIntWidth(self):
+        # The function does not exist anywhere in the tree, and bare `Int`
+        # maps to W64, not to a 32-bit default.
+        self._assert_absent(
+            r"compatDefaultIntWidth",
+            "a comment cites Gibbon.L0.Typecheck.compatDefaultIntWidth, "
+            "which does not exist",
+        )
+
+    def test_no_source_claims_the_conversions_are_unimplemented(self):
+        # All sixteen toInt8/16/32/64 source/destination pairs work.
+        #
+        # `\s` alone will not span a comment continuation: the real text wrapped
+        # as "not yet\n-- implemented", so the gap has to admit the leading `--`
+        # or `*` that starts the next comment line.
+        self._assert_absent(
+            r"toInt(8|16|32|64)[^.]{0,240}?planned\s*(?:--|\*)?\s*but"
+            r"\s*(?:--|\*)?\s*not\s*(?:--|\*)?\s*yet\s*(?:--|\*)?\s*implemented",
+            "a comment still claims the width-conversion primitives are unimplemented",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

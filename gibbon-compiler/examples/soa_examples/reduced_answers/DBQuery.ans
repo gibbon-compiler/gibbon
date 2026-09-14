@@ -23,11 +23,11 @@ Running pass filterSelectivitySkew (fold, uses=5):
 ITERS: 1
 SIZE: 1
 End
-Running pass scaleCosts (map, uses=15): 
+Running pass scaleCosts (map, uses=15, shared=9): 
 ITERS: 1
 SIZE: 1
 End
-Running pass clearQueryFlags (map, uses=14): 
+Running pass clearQueryFlags (map, uses=14, shared=11): 
 ITERS: 1
 SIZE: 1
 End

@@ -1,5 +1,5 @@
 Running program List: 
-Running pass add1 List (map, uses=2): 
+Running pass add1 List (map, uses=2, shared=0): 
 ITERS: 1
 SIZE: 1
 End

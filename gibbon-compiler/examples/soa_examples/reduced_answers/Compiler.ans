@@ -35,11 +35,11 @@ Running pass throughputModelPass (fold, uses=3):
 ITERS: 1
 SIZE: 1
 End
-Running pass targetReturnPass (map, uses=9): 
+Running pass targetReturnPass (map, uses=9, shared=6): 
 ITERS: 1
 SIZE: 1
 End
-Running pass stripSideEffectsPass (map, uses=7): 
+Running pass stripSideEffectsPass (map, uses=7, shared=6): 
 ITERS: 1
 SIZE: 1
 End

@@ -115,10 +115,11 @@ VERSIONS: Tuple[Version, ...] = (
     Version("ls_both", "loop+share both vec", "ls_both", "soa",
             "Loopified + shared, both vectorizers (this is what the old 'vectorized' column was)"),
     Version("ls_gibvec_sse41", "loop+share Gibbonvec (SSE4.1)", "ls_gibvec_sse41", "soa",
-            "Gibbon SIMD only, compiled with -msse4.1 (an ISA permission for the C "
-            "compiler; Gibbon still emits its own SSE2 W32 multiply sequence)"),
+            "Gibbon SIMD only at --simd-isa=sse4.1: -msse4.1 for the C compiler AND "
+            "Gibbon's own _mm_mullo_epi32 W32 multiply. Only run at --simd-isa=sse2, "
+            "since every wider ISA already has SSE4.1"),
     Version("ls_both_sse41", "loop+share both vec (SSE4.1)", "ls_both_sse41", "soa",
-            "Both vectorizers, compiled with -msse4.1"),
+            "Both vectorizers at --simd-isa=sse4.1. Only run at --simd-isa=sse2"),
 )
 
 
@@ -145,14 +146,16 @@ def versions_for_kind(kind: str) -> Tuple[Version, ...]:
 # vectorized configuration, and the detailed matrix is enabled by
 # --verify-intensity-codegen along with the intensity table.
 #
-# ls_both_sse41 is the representative: both vectorizers plus -msse4.1, i.e.
-# every vectorization capability switched on.  Measured over the 17 map passes
-# of the application suite it is also the fastest of the six (0.2773s total vs
-# 0.2800s for the next best), though the spread is small because these
-# traversals are memory-bound.
-HEADLINE_VECTOR_RUN_KEY = "ls_both_sse41"
+# ls_both is the representative: both vectorizers, every vectorization
+# capability the driver's ISA offers switched on.  It was ls_both_sse41, on the
+# strength of being "the fastest of the six" at 0.2773s against 0.2800s -- but
+# at the driver's avx2 default that configuration compiled to the same bytes as
+# ls_both, so the two numbers were the same compile measured twice and the gap
+# was noise.  THAT COMPARISON, AND EVERY NUMBER RECORDED FOR ls_both_sse41 OR
+# ls_gibvec_sse41 AT AN ISA OTHER THAN sse2, NEEDS RE-MEASURING.
+HEADLINE_VECTOR_RUN_KEY = "ls_both"
 DETAIL_ONLY_RUN_KEYS = frozenset(
-    {"ls_scalar", "ls_gccvec", "ls_gibvec", "ls_both", "ls_gibvec_sse41"}
+    {"ls_scalar", "ls_gccvec", "ls_gibvec", "ls_gibvec_sse41", "ls_both_sse41"}
 )
 
 
@@ -209,12 +212,30 @@ RUN_CONFIGS: Tuple[RunConfig, ...] = (
     # SSE4.1 is kept on its own axis: -msse4.1 applies to the whole translation
     # unit, so folding it into --opt-vectorization would make the delta
     # un-attributable.
+    #
+    # The axis only means something when the rest of the run is at sse2.  Every
+    # wider ISA already HAS SSE4.1 -- -mavx2 and -march=native both define
+    # __SSE4_1__ and Gibbon's own sse4.1 tier is below avx2 -- so at the
+    # driver's avx2 default these two compiled identically to their non-SSE4.1
+    # twins, and the difference reported between them was noise.
+    # `sse41_axis_is_real` gates them; see `apply_report_mode`.
     RunConfig("ls_gibvec_sse41",
               LOOP_SHARE + ("--opt-vectorization", "--no-gcc-vectorize", "--sse4.1"),
               tuple(v for v in VERSIONS if v.run_key == "ls_gibvec_sse41"), map_only=True),
     RunConfig("ls_both_sse41", LOOP_SHARE + ("--opt-vectorization", "--sse4.1"),
               tuple(v for v in VERSIONS if v.run_key == "ls_both_sse41"), map_only=True),
 )
+
+SSE41_RUN_KEYS = frozenset({"ls_gibvec_sse41", "ls_both_sse41"})
+
+
+def sse41_axis_is_real(simd_isa: str) -> bool:
+    """Does asking for SSE4.1 change anything at this ISA?
+
+    Only at sse2.  Everything wider already includes SSE4.1, so the axis would
+    compare a configuration against an identical one.
+    """
+    return simd_isa == "sse2"
 
 
 def short_status_line(line: str, limit: int = 86) -> str:
@@ -1294,15 +1315,18 @@ def apply_report_mode(args: argparse.Namespace) -> None:
     configuration cannot be run but not reported, or vice versa.
     """
     global RUN_CONFIGS, VERSIONS
+    if not sse41_axis_is_real(getattr(args, "simd_isa", "avx2")):
+        RUN_CONFIGS = tuple(c for c in RUN_CONFIGS if c.key not in SSE41_RUN_KEYS)
+        VERSIONS = tuple(v for v in VERSIONS if v.run_key not in SSE41_RUN_KEYS)
     if detailed_mode(args):
         return
     RUN_CONFIGS = tuple(c for c in RUN_CONFIGS if c.key not in DETAIL_ONLY_RUN_KEYS)
-    # With the matrix collapsed to one column, "both vec (SSE4.1)" no longer
-    # contrasts with anything; name it for what it is in this report.
+    # With the matrix collapsed to one column, the headline no longer contrasts
+    # with anything; name it for what it is in this report.
     VERSIONS = tuple(
         replace(v, title="SoA mut loop+share+vec",
                 description="SoA, mutable cursors, loopification plus selective buffer sharing "
-                            "plus SIMD vectorization (both vectorizers, -msse4.1)")
+                            "plus SIMD vectorization (both vectorizers)")
         if v.run_key == HEADLINE_VECTOR_RUN_KEY else v
         for v in VERSIONS if v.run_key not in DETAIL_ONLY_RUN_KEYS
     )

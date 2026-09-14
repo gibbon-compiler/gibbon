@@ -1,25 +1,25 @@
 Running program MapIntensity: 
-Running pass mapAI0 (map, uses=1): 
+Running pass mapAI0 (map, uses=1, shared=2): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapAI1 (map, uses=1): 
+Running pass mapAI1 (map, uses=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapAI2 (map, uses=1): 
+Running pass mapAI2 (map, uses=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapAI4 (map, uses=1): 
+Running pass mapAI4 (map, uses=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapAI8 (map, uses=1): 
+Running pass mapAI8 (map, uses=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End
-Running pass mapAI16 (map, uses=1): 
+Running pass mapAI16 (map, uses=1, shared=1): 
 ITERS: 1
 SIZE: 1
 End

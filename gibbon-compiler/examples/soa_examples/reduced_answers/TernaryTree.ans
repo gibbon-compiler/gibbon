@@ -1,5 +1,5 @@
 Running program Ternary Heap: 
-Running pass add 1 tree (map, uses=5): 
+Running pass add 1 tree (map, uses=5, shared=0): 
 ITERS: 1
 SIZE: 1
 End
