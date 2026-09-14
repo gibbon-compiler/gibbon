@@ -589,6 +589,19 @@ desugarExp type_syns toplevel e =
       then pure SyncE
       else if v == "lsync"
       then pure SyncE
+      -- No backend implements this at any width: L2 typechecking rejects it
+      -- for --packed, codegen rejects it for --pointer, and neither
+      -- interpreter has a case for it.  Say so here, where the source location
+      -- is still available, instead of surfacing an internal error from a
+      -- later pass.
+      else if str == "readint"
+      then error $
+        "readint is not implemented.\n" ++
+        "No backend supports it: --packed fails in L2 typechecking, --pointer\n" ++
+        "fails in codegen, and neither interpreter has a case for it.  This is\n" ++
+        "not a width limitation -- it fails for Int64 exactly as it does for the\n" ++
+        "narrow widths.\n" ++
+        "Read the input another way, e.g. --bench-input with a packed file."
       else if M.member str primMap
       then pure $ PrimAppE (primMap M.! str) []
       else case M.lookup v toplevel of
@@ -1098,6 +1111,7 @@ collectTopLevel type_syns env decl =
                                                                        , funInline = NoInline
                                                                        , funCanTriggerGC = False
                                                                        , funOpt = []
+                                                                       , funCursorAbi = Nothing
                                                                        }
                                                    })
 
@@ -1114,6 +1128,7 @@ collectTopLevel type_syns env decl =
                                                                    , funInline = NoInline
                                                                    , funCanTriggerGC = False
                                                                    , funOpt = []
+                                                                   , funCursorAbi = Nothing
                                                                    }
                                                })
 
@@ -1127,6 +1142,7 @@ collectTopLevel type_syns env decl =
                                                                       , funInline = NoInline
                                                                       , funCanTriggerGC = False
                                                                       , funOpt = []
+                                                                      , funCursorAbi = Nothing
                                                                       }
                                                   })
 

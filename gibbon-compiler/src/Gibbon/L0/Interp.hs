@@ -5,6 +5,8 @@
 -- | Interpreter for the source language (L0)
 module Gibbon.L0.Interp where
 
+import           Data.ByteString.Builder ( string8 )
+import           Control.Monad.Writer ( tell )
 import qualified Data.Map.Lazy as M
 
 import           Gibbon.Common
@@ -27,7 +29,14 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) Var where
         BenchE fn locs args _b ->
           gInterpExp rc valenv ddefs fundefs (AppE fn NotTailRec locs args)
         ParE0 ls -> gInterpExp rc valenv ddefs fundefs (MkProdE ls)
-        PrintPacked _ty _arg -> pure $ VProd []
+        -- The compiled backends print the value; returning unit here made
+        -- `printPacked` vanish from --interp1 output entirely.  'Show' for
+        -- 'Value' already emits the `(Node (Leaf 1) ...)` form the C backend
+        -- prints.
+        PrintPacked _ty arg -> do
+          v <- gInterpExp rc valenv ddefs fundefs arg
+          tell $ string8 (show v)
+          pure $ VProd []
         CopyPacked _ty arg -> gInterpExp rc valenv ddefs fundefs arg
         TravPacked _ty _arg -> pure $ VProd []
         Gibbon.L0.Syntax.L _ e -> gInterpExp rc valenv ddefs fundefs e

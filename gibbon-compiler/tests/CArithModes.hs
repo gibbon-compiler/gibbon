@@ -161,7 +161,7 @@ arithProbe w mkPrim =
                                 [L4.VarTriv "x", L4.VarTriv "y"]
                                 (L4.RetValsT [L4.VarTriv "out"])
             , L4.isPure = True
-            , L4.funMeta = FunMeta NotRec NoInline False []
+            , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , L4.mainExp = Nothing
@@ -185,7 +185,7 @@ cursorAddProbe =
                                 [L4.VarTriv "c", L4.VarTriv "n"]
                                 (L4.RetValsT [L4.VarTriv "out"])
             , L4.isPure = True
-            , L4.funMeta = FunMeta NotRec NoInline False []
+            , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , L4.mainExp = Nothing
@@ -208,7 +208,7 @@ cursorSubProbe =
                                 [L4.VarTriv "c1", L4.VarTriv "c2"]
                                 (L4.RetValsT [L4.VarTriv "out"])
             , L4.isPure = True
-            , L4.funMeta = FunMeta NotRec NoInline False []
+            , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , L4.mainExp = Nothing

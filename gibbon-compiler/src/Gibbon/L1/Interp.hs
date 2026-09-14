@@ -10,6 +10,7 @@ module Gibbon.L1.Interp ( interpProg, interp, applyPrim ) where
 import           Data.ByteString.Builder ( toLazyByteString, string8)
 import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char ( ord )
+import           Numeric ( showFFloat )
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.State
@@ -22,6 +23,7 @@ import           System.Random
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
+import           Gibbon.Language.Constants ( symbolText )
 import           Gibbon.L1.Syntax as L1
 
 
@@ -302,19 +304,20 @@ applyPrim rc p args =
    (PrintInt{}, [VInt n]) -> do
        tell $ string8 (show n)
        pure $ VProd []
+   -- Formatted as the C backend formats them ("%.2f" and "%d"), so that a
+   -- program's output does not depend on which backend ran it.
    (PrintFloat, [VFloat n]) -> do
-       tell $ string8 (show n)
+       tell $ string8 (showFFloat (Just 2) n "")
        pure $ VProd []
    (PrintBool, [VBool n]) -> do
-       tell $ string8 (show n)
+       tell $ string8 (if n then "1" else "0")
        pure $ VProd []
+   -- Everything this interpreter prints goes into the log builder and nowhere
+   -- else, so that one writer decides both the content and the order.  Writing
+   -- the raw symbol into the log while printing the translated one to stdout
+   -- made the two disagree on every special symbol.
    (PrintSym, [VSym s]) -> do
-       tell $ string8 s
-       let v' = case s of
-                  "NEWLINE" -> "\n"
-                  "SPACE"   -> " "
-                  _oth -> s
-       liftIO $ putStr v'
+       tell $ string8 (symbolText s)
        pure $ VProd []
    (PrintSym, [VInt n]) -> do
        tell $ string8 (show n)

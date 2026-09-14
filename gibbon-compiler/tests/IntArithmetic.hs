@@ -320,7 +320,7 @@ arithProgWith w mkPrim outTy =
                                 [L4.VarTriv "x", L4.VarTriv "y"]
                                 (L4.RetValsT [L4.VarTriv "out"])
             , L4.isPure = True
-            , L4.funMeta = FunMeta NotRec NoInline False []
+            , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , L4.mainExp = Nothing
@@ -452,7 +452,7 @@ case_codegen_keeps_cursor_arithmetic_native = sequence_
                                     [L4.VarTriv "x", L4.VarTriv "y"]
                                     (L4.RetValsT [L4.VarTriv "out"])
                 , L4.isPure = True
-                , L4.funMeta = FunMeta NotRec NoInline False []
+                , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
                 }
             ]
         , L4.mainExp = Nothing

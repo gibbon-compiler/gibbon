@@ -99,7 +99,7 @@ import           Gibbon.Passes.ReorderScalarWrites  ( reorderScalarWrites, write
 import           Gibbon.Passes.LoopifyTraversals (loopifyTraversals)
 import           Gibbon.Passes.LoopifyFlatTraversals (loopifyFlatTraversals)
 import           Gibbon.Passes.LoopifiedTraversalFusion (fuseLoopifiedTraversals)
-import           Gibbon.Passes.VectorizeTraversals (vectorizeTraversals)
+import           Gibbon.Passes.VectorizeTraversals (vectorizeTraversals, validateVectorizationFired)
 import           Gibbon.Passes.AssignScalarCountSlots (assignScalarCountSlots)
 import           Gibbon.Passes.ScalarCountPropagation (propagateScalarCounts)
 import           Gibbon.Passes.MutableCursorFutures (repairMutableCursorFutures)
@@ -269,10 +269,47 @@ data CompileState a = CompileState
 
 -- | Compiler entrypoint, given a full configuration and a list of
 -- files to process, do the thing.
+-- | Flag combinations that cannot do what they say, rejected before any
+-- pipeline runs.
+--
+-- These belong here rather than in the pass that consumes them, because a
+-- pass only runs on the pipeline that reaches it: 'assignScalarCountSlots'
+-- sits in the packed branch, so a @--pointer@ build never reached the
+-- @--gen-gc@ rejection it used to carry, and a @--defer-scalar-counts@ build
+-- without @--store-scalar-field-counts@ reached no scalar-count pass at all
+-- and silently produced a binary with no counts in it.
+validateDynFlags :: DynFlags -> IO ()
+validateDynFlags dflags
+  | deferring && not (gopt Opt_StoreScalarFieldCounts dflags) =
+      error $
+        requested ++ " was passed without --store-scalar-field-counts.\n" ++
+        "Deferred counting maintains the scalar-count footers that\n" ++
+        "--store-scalar-field-counts creates; with no footers to maintain it has\n" ++
+        "nothing to do, and the build silently contains no scalar counts at all.\n" ++
+        "Add --store-scalar-field-counts to the compile command."
+  | deferring && gopt Opt_GenGc dflags =
+      error $
+        requested ++ " is not compatible with --gen-gc.\n" ++
+        "A deferred slot caches the GibRegionInfo * of the region it counts for, but under\n" ++
+        "the generational GC a region is nursery-allocated and the copying collector\n" ++
+        "relocates it and rewrites reg_info, with no hook back into the C-side slot\n" ++
+        "table.  The cached binding then goes stale and every count after the\n" ++
+        "collection is written to a footer nothing reads -- silently.\n" ++
+        "The per-element bump does not have this problem because it re-resolves the\n" ++
+        "footer on every element.\n" ++
+        "Drop the deferred counting (counts stay correct, just slower), or drop --gen-gc."
+  | otherwise = pure ()
+  where
+    deferring = gopt Opt_DeferScalarCounts dflags || gopt Opt_ScalarCountDiff dflags
+    requested
+      | gopt Opt_ScalarCountDiff dflags = "--scalar-counts-diff (which implies deferred counting)"
+      | otherwise = "--defer-scalar-counts"
+
 compile :: Config -> FilePath -> IO ()
 compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   -- set the env var DEBUG, to verbosity, when > 1
   setDebugEnvVar verbosity
+  validateDynFlags (dynflags config)
 
   -- Use absolute path
   dir <- getCurrentDirectory
@@ -289,12 +326,14 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
                  (\fresh -> dbgTrace 5 ("\nFreshen:\n"++sepline++ "\n" ++pprender fresh) (L0.tcProg fresh)))
 
   case mode of
+    -- 'runL0' prints the interpreter's output log as well as the return value.
+    -- Discarding the log here dropped every `printint`, `printPacked`, float
+    -- and bool the program produced, leaving only the return value and
+    -- whatever the interpreter happened to write to stdout directly.
     Interp1 -> do
         dbgTrace passChatterLvl ("\nParsed:\n"++sepline++ "\n" ++ sdoc l0) (pure ())
         dbgTrace passChatterLvl ("\nTypechecked:\n"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
-        runConf <- getRunConfig []
-        (_s1,val,_stdout) <- gInterpProg () runConf initTypeChecked
-        print val
+        runL0 initTypeChecked
 
 
     ToParse -> dbgPrintLn 0 $ pprender l0
@@ -698,7 +737,10 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++ (if lazyPromote then " -D_GIBBON_EAGER_PROMOTION=0 " else " -D_GIBBON_EAGER_PROMOTION=1 ")
                           ++ (if papi || papi_native then " -D_GIBBON_ENABLE_PAPI " else "")
                           ++ (if papi_native then " -D_GIBBON_ENABLE_PAPI_NATIVE " else "")
-                          ++ (if sse41 then " -msse4.1 " else "")
+                          -- @--sse4.1@ raises the selected ISA, and the ISA
+                          -- carries its own C flags; a second -msse4.1 here
+                          -- would let the two disagree about what was asked
+                          -- for.
                           ++ simdIsaCcFlags (simdIsaOf dflags)
                           ++ (if noGccVec then noAutoVectorizeFlags (cc config) else "")
                           ++ (if noGccTailCalls then " -fno-optimize-sibling-calls " else "")
@@ -717,7 +759,6 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         lazyPromote = gopt Opt_NoEagerPromote dflags
         papi = gopt Opt_PapiInstrumentation dflags
         papi_native = gopt Opt_PapiNativeInstrumentation dflags
-        sse41 = gopt Opt_Sse41 dflags
         noGccVec = gopt Opt_NoGccVectorize dflags
         noGccTailCalls = gopt Opt_NoGccTailCalls dflags
 
@@ -741,8 +782,11 @@ clearFile fileName = removeFile fileName `catch` handleErr
 
 -- | SML Codegen
 
+-- | @-default-type int64@ is required, not cosmetic: MLton's default @Int@ is
+-- 32 bits and traps on overflow, so without it every @Int64@ in the emitted
+-- program is silently computed in 32 bits.
 mplCompiler :: String
-mplCompiler = "mlton"  -- temporary until mpl is installed
+mplCompiler = "mlton -default-type int64"  -- temporary until mpl is installed
 
 goIO :: Functor m => a1 -> m a2 -> StateT b m a1
 goIO prog io = StateT $ \x -> io $> (prog, x)
@@ -1039,6 +1083,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l3 <- go "selectiveBufferSharing" selectiveBufferSharing l3
               l3 <- go "fuseLoopifiedTraversals" fuseLoopifiedTraversals l3
               l3 <- go "vectorizeTraversals" vectorizeTraversals l3
+              lift $ validateVectorizationFired dynflags l3
               l3 <- go "assignScalarCountSlots" assignScalarCountSlots l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3

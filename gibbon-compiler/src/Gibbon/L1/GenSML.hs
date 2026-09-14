@@ -25,10 +25,11 @@ ppExt ext0 = case ext0 of
 ppE :: Exp1 -> Doc
 ppE e0 = case e0 of
   VarE var -> ppVar var
-  LitE _ n -> integer n
+  -- SML negates with `~`; `-7` parses as subtraction.
+  LitE _ n -> ppInteger n
   CharE c -> char c
   FloatE x -> double x
-  LitSymE var -> doubleQuotes $ ppVar var
+  LitSymE var -> ppSymLit (fromVar var)
   AppE var _cty _ pes -> ppAp (ppVar var) pes
   PrimAppE pr pes -> ppPrim pr pes
   LetE (v, _, _, e) pe' ->
@@ -109,6 +110,30 @@ interleave sepr lst = case lst of
   [] -> mempty
   d : ds -> (d <+>) $ fold $ (sepr <+>) <$> ds
 
+-- | SML writes negative literals with a leading `~`.
+ppInteger :: Integer -> Doc
+ppInteger n
+  | n < 0 = "~" <> integer (negate n)
+  | otherwise = integer n
+
+-- | A symbol literal denotes the text the symbol prints as.  The special
+-- symbols print as punctuation, exactly as the C backend's symbol table
+-- installs them.
+ppSymLit :: String -> Doc
+ppSymLit s = text (show (symbolText s))
+
+-- | @IntInf.pow@ widens its base and returns @IntInf.int@; Gibbon's `^` is an
+-- `Int` operation at both ends.
+ppIntInfPow :: [Exp1] -> Doc
+ppIntInfPow pes = case pes of
+  [b, e] ->
+    parens $ hsep
+      [ "Int.fromLarge"
+      , parens $ "IntInf.pow" <> parens (interleave ","
+          [ parens $ hsep ["IntInf.fromInt", ppE b], ppE e ])
+      ]
+  _ -> error "GenSML: ExpP expects exactly two arguments"
+
 binary :: String -> [Exp1] -> Doc
 binary opSym pes =
   parens $ hsep [l, text opSym, r]
@@ -162,11 +187,16 @@ ppPrim pr pes = case pr of
   -- (and therefore Gibbon's) truncate toward zero and give ~2 and ~1.  This
   -- backend used `div`/`mod` and so disagreed with every other one on every
   -- negative division.
-  DivP a -> narrowOnly "/" a  $ binary "quot" pes
-  ModP a -> narrowOnly "%" a  $ binary "rem" pes
+  -- `Int.quot`/`Int.rem`, applied rather than infix: SML has no top-level
+  -- infix `quot`/`rem`, so an infix emission does not parse.
+  DivP a -> narrowOnly "/" a  $ ppAp "Int.quot" pes
+  ModP a -> narrowOnly "%" a  $ ppAp "Int.rem" pes
   -- SML has no `**` on `Int` at all (`**` is Real-only), so the old emission
   -- did not even typecheck downstream.
-  ExpP a -> narrowOnly "^" a  $ ppAp "IntInf.pow" pes
+  -- `IntInf.pow : IntInf.int * int -> IntInf.int`, so the base is widened and
+  -- the result narrowed; without that the result is a `LargeInt.int` handed to
+  -- something expecting an `int`.
+  ExpP a -> narrowOnly "^" a  $ ppIntInfPow pes
   RandP -> ppCurried "MltonRandom.rand()" pes
   EqIntP{} -> binary "=" pes
   LtP{} -> binary "<" pes
@@ -211,10 +241,12 @@ ppPrim pr pes = case pr of
   SizeParam -> int 1  -- ?
   IsBig -> error "IsBig"
   GetNumProcessors -> error "GetNumProcessors"
-  PrintInt{} -> printer "Int" $ ppE $ Sf.headErr pes
-  PrintChar -> printer "Char" $ ppE $ Sf.headErr pes
-  PrintFloat -> printer "Float" $ ppE $ Sf.headErr pes
-  PrintBool -> ppAp "(fn true => \"True\" | false => \"False\")" pes
+  PrintInt{} -> printer "gibPrintInt" $ ppE $ Sf.headErr pes
+  PrintChar -> printer "gibPrintChar" $ ppE $ Sf.headErr pes
+  PrintFloat -> printer "gibPrintFloat" $ ppE $ Sf.headErr pes
+  -- The old emission built a string and then dropped it, so `printbool`
+  -- printed nothing at all.
+  PrintBool -> printer "gibPrintBool" $ ppE $ Sf.headErr pes
   PrintSym -> ppAp "print" pes
   ReadInt -> error "ReadInt"  -- Have every program read from stdin?
   DictInsertP _ -> error "DictInsertP"
@@ -279,9 +311,25 @@ ppPrim pr pes = case pr of
   RequestSizeOf -> error "RequestSizeOf"
   Gensym -> error "Gensym"
 
+-- | Printing helpers, emitted ahead of the program.
+--
+-- SML has no @Float@ structure, prints a negative sign as @~@, and has no
+-- default fixed-point real format.  These reproduce the C backend's output
+-- exactly: @-@ for negatives, @%.2f@ for floats and @1@/@0@ for bools.
+smlPrelude :: Doc
+smlPrelude = vcat
+  [ "fun gibDash s = String.map (fn #\"~\" => #\"-\" | c => c) s"
+  , "fun gibPrintInt n = print (gibDash (Int.toString n))"
+  , "fun gibPrintChar c = print (String.str c)"
+  , "fun gibPrintFloat x = print (gibDash (Real.fmt (StringCvt.FIX (SOME 2)) x))"
+  , "fun gibPrintBool b = print (if b then \"1\" else \"0\")"
+  , ""
+  ]
+
 ppProgram :: Prog1 -> Doc
 ppProgram prog = hcat
-  [ ppDDefs $ ddefs prog
+  [ smlPrelude
+  , ppDDefs $ ddefs prog
   , ppFunDefs $ fundefs prog
   , ppMainExpr $ mainExp prog
   , "\n"
@@ -401,18 +449,20 @@ ppTy1 ty1 = case ty1 of
 
 printerTy1 :: Ty1 -> Doc -> Doc
 printerTy1 ty1 d = case ty1 of
-  IntTy{} -> printer "Int" d
-  CharTy -> printer "Char" d
-  FloatTy -> printer "Float" d
+  IntTy{} -> printer "gibPrintInt" d
+  CharTy -> printer "gibPrintChar" d
+  FloatTy -> printer "gibPrintFloat" d
   SymTy -> _
-  BoolTy -> parens $ "(fn true => print \"True\" | false => print \"False\") " <> d
-  ProdTy [] -> "let val () = " <> d <> " in (print \"#()\") end"
+  BoolTy -> printer "gibPrintBool" d
+  -- The C backend writes tuples as `\'#(a b)`; the leading quote is part of
+  -- the output every recorded result was produced with.
+  ProdTy [] -> "let val () = " <> d <> " in (print \"'#()\") end"
   ProdTy uts -> 
     parens $ hsep
       [ "case", d, "of"
       , parens $ interleave comma $ ("x__" <>) . int . fst <$> zip [1..] uts
       , "=> let"
-      , "val _ = print \"#(\""
+      , "val _ = print \"'#(\""
       , foldMap ppSub $ zip [1..] uts
       , "val _ = print \")\""
       , "in () end"
@@ -486,8 +536,9 @@ printerTy1 ty1 d = case ty1 of
   CursorTy -> _
   _ -> error "printerTy1: unexpected type"
 
+-- | Apply one of 'smlPrelude'\'s printing helpers.
 printer :: Doc -> Doc -> Doc
-printer p d = parens $ "print" <> parens (p <> ".toString" <> parens d)
+printer p d = parens $ p <> parens d
 
 toss :: Doc -> Doc
 toss s = "let val _ = " <> s <> " in "

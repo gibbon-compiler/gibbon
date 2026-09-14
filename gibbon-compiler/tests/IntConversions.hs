@@ -552,7 +552,7 @@ convProg src dst =
                                 [L4.VarTriv "x"]
                                 (L4.RetValsT [L4.VarTriv "out"])
             , L4.isPure = True
-            , L4.funMeta = FunMeta NotRec NoInline False []
+            , L4.funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , L4.mainExp = Nothing
