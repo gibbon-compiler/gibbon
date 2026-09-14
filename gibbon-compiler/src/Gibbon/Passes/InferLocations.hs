@@ -2463,51 +2463,25 @@ freshSoALoc lc = do
                                      return newSoALoc
 
 
-freshSoALocHelper :: DDefs Ty2 -> TyCon -> [(DataCon,[(IsBoxed, Ty2)])] -> TiM [((DataCon, Int), LocVar)]
-freshSoALocHelper ddefs tyvar lst = do 
-                        case lst of
-                          [] -> do 
-                                 pure []
-                          (a, flds):rst -> do
-                                            fieldLocs <- fmap concat $ mapM (\(e@(_, ty), idx) -> do 
-                                                                              case ty of 
-                                                                                PackedTy tyc _ -> do
-                                                                                                if tyvar == tyc 
-                                                                                                then return []
-                                                                                                else do 
-                                                                                                  -- determine the type of the location 
-                                                                                                  -- from the meta-data 
-                                                                                                  let cursorTy = getCursorTypeFromTy tyc ddefs
-                                                                                                  case cursorTy of 
-                                                                                                      CursorArrayTy{} -> do 
-                                                                                                                          newLoc <- freshSoALoc2 ddefs tyc
-                                                                                                                          --let Just idx = L.elemIndex e flds
-                                                                                                                          return $ [((a, idx), newLoc)]
-                                                                                                      _ -> do 
-                                                                                                                  newLoc <- fresh
-                                                                                                                  --let Just idx = L.elemIndex e flds
-                                                                                                                  return $ [((a, idx), newLoc)]
-                                                                                -- no new buffers for shortcut pointers
-                                                                                CursorTy -> return []
-                                                                                CursorArrayTy{} -> return []
-                                                                                _ -> do
-                                                                                     newLoc <- fresh
-                                                                                     --let Just idx = L.elemIndex e flds
-                                                                                     return $ [((a, idx), newLoc)]
-                                                             ) (zip flds [0..L.length(flds)])
-                                            rst' <- freshSoALocHelper ddefs tyvar rst
-                                            return $ fieldLocs ++ rst'
-
-freshSoALoc2 :: DDefs Ty2 -> TyCon -> TiM LocVar 
+-- | A fresh SoA location: one for the tag buffer, one per buffered field.
+--
+-- The buffers, and their order, come from 'soaBufferedFields' -- the same
+-- enumeration the cursor array's length in every cursorized type comes from.
+-- See Note [One enumeration of SoA buffers].  A packed field of a different
+-- type gets a nested SoA location, whose own flattened width is that type's
+-- cursor array length, which is what 'soaBufferedFields' counted for it.
+freshSoALoc2 :: DDefs Ty2 -> TyCon -> TiM LocVar
 freshSoALoc2 ddfs tyc = do
-                       -- let (tyc, (don, flds)) = lkp ddfs con
-                       let DDef{dataCons} = lookupDDef ddfs tyc
-                       let dataCons' = filterRanDatacons dataCons
-                       fields <- freshSoALocHelper ddfs tyc dataCons'
-                       newdcLoc <- fresh
-                       return $ SoA (unwrapLocVar newdcLoc) fields
-
-
+  fields <- mapM freshFieldLoc (soaBufferedFields ddfs tyc)
+  newdcLoc <- fresh
+  return $ SoA (unwrapLocVar newdcLoc) fields
+  where
+    freshFieldLoc (dcon, ix, ty, _n) = do
+      loc <- case ty of
+               PackedTy tyc' _
+                 | CursorArrayTy{} <- getCursorTypeFromTy tyc' ddfs -> freshSoALoc2 ddfs tyc'
+               _ -> fresh
+      return ((dcon, ix), loc)
 
 freshSoALocHelper3 :: DDefs Ty1 -> TyCon -> [(DataCon,[(IsBoxed, Ty1)])] -> TiM [((DataCon, Int), LocVar)]
 freshSoALocHelper3 ddefs tyvar lst = do 

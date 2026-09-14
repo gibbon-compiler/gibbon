@@ -248,6 +248,7 @@ if a thing is a type variable or a data constructor.
                                                 , funInline = NoInline
                                                 , funCanTriggerGC = False
                                                 , funOpt = []
+                                                , funCursorAbi = Nothing
                                                 }
                             } : fds)
             cds mn

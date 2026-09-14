@@ -133,7 +133,7 @@ t1Prog = Prog {ddefs = M.fromList [],
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False,
                                                 funOpt = []
-
+                                                , funCursorAbi = Nothing
                                               }
                            }),
                    ("add2",
@@ -147,6 +147,7 @@ t1Prog = Prog {ddefs = M.fromList [],
                                                 funRec = NotRec,
                                                 funCanTriggerGC = False,
                                                 funOpt = []
+                                                , funCursorAbi = Nothing
                                               }
                            })],
         mainExp = Just

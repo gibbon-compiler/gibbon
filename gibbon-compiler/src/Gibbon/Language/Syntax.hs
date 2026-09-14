@@ -17,10 +17,11 @@ module Gibbon.Language.Syntax
     DDefs, TyCon, Tag, IsBoxed, MemoryLayout(..), DDef(..), TailRecType(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef, 
-  getCursorTypeForDataCon, getCursorTypeFromTy
+  getCursorTypeForDataCon, getCursorTypeFromTy, soaBufferedFields
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), FunMeta(..), FunRec(..), FunInline(..), FunOpt(..)
+  , AbiRole(..), abiPositions
   , insertFD, fromListFD, initFunEnv, initFunEnv'
 
     -- * Programs
@@ -194,74 +195,95 @@ lkp dds con =
     _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
           ++", in datatypes:\n  "++sdoc dds
 
+-- | The fields of a fully factored value that get a buffer of their own, in
+-- the order the SoA cursor array holds them, with the number of buffers each
+-- contributes.
+--
+-- Note [One enumeration of SoA buffers]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Two things need this list and must agree about it: the cursor array's LENGTH,
+-- which is part of every cursorized type, and its LAYOUT -- which buffer holds
+-- which constructor field -- which 'Gibbon.Passes.InferLocations.freshSoALoc2'
+-- decides.  They are the same list, so they are computed here once.
+--
+-- A field gets a buffer unless it is a cursor, or a packed field of the type
+-- being laid out (which shares its parent's buffers).  A packed field of a
+-- DIFFERENT type contributes that type's whole cursor array.
+--
+-- Random access is where the two readings could come apart.  'AddRAN' replaces
+-- a constructor @D@ with a variant @D^@ carrying extra fields, and the layout
+-- is over the variant, because that is what the program's case branches are
+-- rewritten to.  The two agree on the count only because the fields AddRAN adds
+-- are cursors, and cursors get no buffer -- a variant carrying a scalar would
+-- silently give the layout more buffers than the type says there are.  That is
+-- checked here rather than assumed.
+soaBufferedFields :: Out a => DDefs (UrTy a) -> TyCon -> [(DataCon, Int, UrTy a, Int)]
+soaBufferedFields ddefs tycon =
+  checkRanVariantsAddNoBuffers
+    [ (dcon, ix, ty, n)
+    | (dcon, flds) <- filterRanDcons' (dataCons ddef)
+    , (ix, (_, ty)) <- zip [0 ..] flds
+    , Just n <- [bufferCount ty]
+    ]
+  where
+    ddef@DDef{tyName} = lookupDDef ddefs tycon
+
+    bufferCount ty =
+      case ty of
+        PackedTy tycon' _
+          | toVar tycon' == tyName -> Nothing
+          | otherwise ->
+              case getCursorTypeFromTy tycon' ddefs of
+                CursorTy -> Just 1
+                CursorArrayTy sz -> Just sz
+                _ -> error "soaBufferedFields: unexpected cursor type for a packed field"
+        CursorTy -> Nothing
+        CursorArrayTy _ -> Nothing
+        _ -> Just 1
+
+    -- Keep the `^` variant and drop the constructor it replaced: the layout is
+    -- keyed on the constructors the program actually writes.
+    filterRanDcons' dcons =
+      let replaced = [ init dcon | (dcon, _) <- dcons, "^" `L.isSuffixOf` dcon ]
+       in [ d | d@(dcon, _) <- dcons, dcon `notElem` replaced ]
+
+    checkRanVariantsAddNoBuffers out
+      | all sameBufferCount ranPairs = out
+      | otherwise =
+          error $
+            "soaBufferedFields: " ++ tycon ++ " has a random-access variant that "
+              ++ "adds a buffered field, so its layout and its cursor array "
+              ++ "length disagree."
+      where
+        ranPairs =
+          [ (base, variant)
+          | (vname, variant) <- dataCons ddef
+          , "^" `L.isSuffixOf` vname
+          , (bname, base) <- dataCons ddef
+          , bname == init vname
+          ]
+        sameBufferCount (base, variant) =
+          buffersOf base == buffersOf variant
+        buffersOf flds = sum [ n | (_, ty) <- flds, Just n <- [bufferCount ty] ]
+
+-- | The cursor type a value of this datatype is addressed by: one cursor for a
+-- 'Linear' layout, an array of @1 + buffers@ for a 'FullyFactored' one (the
+-- tag buffer plus one per buffered field).
 getCursorTypeForDataCon :: Out a => DDefs (UrTy a) -> DDef (UrTy a) -> UrTy a
-getCursorTypeForDataCon _ddefs DDef{tyName, dataCons, memLayout} =
-  -- remove data constructors introduced by RAN
-  let _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
-                                       then []
-                                       else [e]
-                      ) dataCons
-   in case memLayout of
-       -- VS: For now, in the design we just always ensure 
-       -- that a random access node is a CursorTy. 
-        --_ -> CursorTy
-         Linear -> CursorTy 
-         FullyFactored -> 
-           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon _ddefs dcon 
-                                                            c' = foldr (\ty c'' -> case ty of 
-                                                                              PackedTy tycon _ ->
-                                                                                 if (toVar tycon) == tyName 
-                                                                                 then c'' 
-                                                                                 else 
-                                                                                   let ddef_for_tycon = lookupDDef _ddefs tycon
-                                                                                       ty_of_packed_field = getCursorTypeForDataCon _ddefs ddef_for_tycon
-                                                                                     in case ty_of_packed_field of 
-                                                                                                CursorTy -> c'' + 1
-                                                                                                CursorArrayTy sz -> c'' + sz 
-                                                                                                _ -> error "Did not expect type"
-                                                                              CursorTy -> c''
-                                                                              CursorArrayTy _ -> c''
-                                                                              _ -> c'' + 1 
-                                                                       ) c fields
-                                                           in c'
-                                ) 0 _dataCons'
-             in CursorArrayTy (numFieldBuffers + 1)
-         _ -> error "Memory Layout is not implemented!"
+getCursorTypeForDataCon ddefs DDef{tyName, memLayout} =
+  case memLayout of
+    Linear -> CursorTy
+    FullyFactored ->
+      CursorArrayTy (1 + sum [ n | (_, _, _, n) <- soaBufferedFields ddefs (fromVar tyName) ])
+    _ -> error "Memory Layout is not implemented!"
 
 getCursorTypeFromTy :: Out a => TyCon -> DDefs (UrTy a) -> UrTy a
 getCursorTypeFromTy tycon ddefs =
-  let _ddef@DDef{tyName, dataCons, memLayout} = lookupDDef ddefs tycon
-  -- remove data constructors introduced by RAN
-      _dataCons' = concatMap (\e@(dcon, _) -> if ('^' `elem` dcon)
-                                       then []
-                                       else [e]
-                      ) dataCons
-   in case memLayout of
-       -- VS: For now, in the design we just always ensure 
-       -- that a random access node is a CursorTy. 
-        --_ -> CursorTy
-         Linear -> CursorTy 
-         FullyFactored -> 
-           let numFieldBuffers = foldr (\(dcon, _) c -> let fields = lookupDataCon ddefs dcon 
-                                                            c' = foldr (\ty c'' -> case ty of 
-                                                                              PackedTy tycon' _ ->
-                                                                                 if (toVar tycon') == tyName 
-                                                                                 then c'' 
-                                                                                 else 
-                                                                                   let ddef_for_tycon = lookupDDef ddefs tycon'
-                                                                                       ty_of_packed_field = getCursorTypeForDataCon ddefs ddef_for_tycon
-                                                                                     in case ty_of_packed_field of 
-                                                                                                CursorTy -> c'' + 1
-                                                                                                CursorArrayTy sz -> c'' + sz 
-                                                                                                _ -> error "Did not expect type"
-                                                                              CursorTy -> c''
-                                                                              CursorArrayTy _ -> c''
-                                                                              _ -> c'' + 1 
-                                                                       ) c fields
-                                                           in c'
-                                ) 0 _dataCons'
-             in CursorArrayTy (numFieldBuffers + 1)
-         _ -> error "Memory Layout is not implemented!"
+  case memLayout (lookupDDef ddefs tycon) of
+    Linear -> CursorTy
+    FullyFactored ->
+      CursorArrayTy (1 + sum [ n | (_, _, _, n) <- soaBufferedFields ddefs tycon ])
+    _ -> error "Memory Layout is not implemented!"
 
 insertDD :: DDef a -> DDefs a -> DDefs a
 insertDD d = M.insertWith err' (tyName d) d
@@ -309,8 +331,43 @@ data FunMeta = FunMeta
     -- Whether the transitive closure of this function can trigger GC.
   , funCanTriggerGC :: Bool
   , funOpt :: [FunOpt]
+  , funCursorAbi :: Maybe [AbiRole]
+    -- ^ One role per formal, set by cursorization.  See 'AbiRole'.
+    -- 'Nothing' on any function cursorization did not produce.
   }
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
+-- | What cursorization made a formal parameter.
+--
+-- Note [The cursorized calling convention]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- 'Gibbon.Passes.Cursorize.cursorizeFunDef' builds a cursorized function's
+-- parameter list as
+--
+-- > input region ends ++ output region ends ++ output cursors ++ original args
+--
+-- and @cursorizeArrowTy@ builds the matching type list the same way, so the
+-- convention is positional by construction.  Several later passes need to know
+-- which formal plays which role, and each of them used to recover it by
+-- re-reading argument order -- four separate derivations of one fact, none of
+-- them checked against the construction that decided it.  Recording the roles
+-- where they are decided is what makes the convention a single source of truth;
+-- a pass that reads this cannot disagree with cursorization about which array
+-- is the output.
+--
+-- A pass handed 'Nothing' must decline rather than guess: that is a function
+-- cursorization did not produce, so it has no cursorized convention at all.
+data AbiRole
+  = AbiInEnd   -- ^ End cursor of an input region.
+  | AbiOutEnd  -- ^ End cursor of an output region.
+  | AbiOutCur  -- ^ Cursor an output value is written through.
+  | AbiInCur   -- ^ An original argument cursorization turned into a read cursor.
+  | AbiOther   -- ^ An original argument that stayed a value.
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
+-- | Positions of the formals with this role, ascending.
+abiPositions :: AbiRole -> [AbiRole] -> [Int]
+abiPositions role roles = [ ix | (ix, r) <- zip [0 ..] roles, r == role ]
 
 -- | A function definiton indexed by a type and expression.
 data FunDef var ex = FunDef {   funName   :: Var
@@ -832,10 +889,10 @@ data Prim ty
 -- | Width of a machine integer, in bits.  Gibbon's surface `Int` is `W64`;
 -- `Int8`/`Int16`/`Int32`/`Int64` (and the parameterized `Int 8` … `Int 64`)
 -- select the others.  Widths never mix implicitly: the only operation that
--- crosses widths will be the explicit conversion primitives `toInt8`,
--- `toInt16`, `toInt32` and `toInt64`, which are planned but not yet
--- implemented.  (There is no `IntCastP` constructor; an earlier comment here
--- named one that never existed.)
+-- crosses widths is the explicit conversion primitives `toInt8`, `toInt16`,
+-- `toInt32` and `toInt64`, which are implemented and work for all sixteen
+-- source/destination pairs.  A conversion is a distinct primitive rather than
+-- a cast on an existing one, so there is no `IntCastP` constructor.
 data IntWidth = W8 | W16 | W32 | W64
   deriving (Show, Read, Ord, Eq, Generic, NFData, Out, Bounded, Enum)
 

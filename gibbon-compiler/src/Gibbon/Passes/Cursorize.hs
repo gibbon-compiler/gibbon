@@ -11,7 +11,7 @@
 module Gibbon.Passes.Cursorize
   (cursorize) where
 
-import Control.Monad (forM, zipWithM)
+import Control.Monad (forM, when, zipWithM)
 import Data.Foldable (foldlM, foldrM)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -634,8 +634,27 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
         (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
         return funBody'
 
+  -- See Note [The cursorized calling convention] in Gibbon.Language.Syntax.
+  -- Built from the same three lists `funargs` is, in the same order, so the
+  -- roles and the formals cannot drift apart.
+  let abiRoles =
+        L.replicate (length inRegs) AbiInEnd
+          ++ L.replicate (length outRegs) AbiOutEnd
+          ++ L.replicate (length outCurBinds) AbiOutCur
+          ++ L.map (\ty -> if hasPacked (unTy2 ty) then AbiInCur else AbiOther) in_tys
+  -- The formal names come from `inRegVars`, the formal types from
+  -- `inRegVars'`, and the two nub on different keys.  Equal lengths is the
+  -- assumption every positional reading of this convention rested on.
+  when (length abiRoles /= length funargs || length abiRoles /= length (fst funTy')) $
+    error $
+      "cursorizeFunDef: " ++ fromVar funName ++ " has " ++ show (length funargs)
+        ++ " formals and " ++ show (length (fst funTy'))
+        ++ " formal types, but the calling convention accounts for "
+        ++ show (length abiRoles) ++ " of them."
+
   let bod' = inCurBinds bod
-      fn = FunDef funName funargs funTy' bod' funMeta
+      fn = FunDef funName funargs funTy' bod'
+             funMeta { funCursorAbi = Just abiRoles }
   dbgTrace (minChatLvl) "Print in cursorizeFunDef: " dbgTrace (minChatLvl) (sdoc (initTyEnv, locVars funTy)) dbgTrace (minChatLvl) "End cursorizeFunDef\n" return fn
   where
     -- \| The only difference between this and L3.cursorizeTy is that here,
