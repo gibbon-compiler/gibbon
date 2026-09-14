@@ -156,6 +156,35 @@ class TestOverlayPoints(unittest.TestCase):
         self.assertEqual(pts[0]["iterations"], 51)
         self.assertEqual(pts[0]["measured_at"], "2026-09-14T17:00:00")
 
+    def test_a_dram_reading_below_the_models_own_bound_is_rejected(self):
+        """The model counts the Leaf field and nothing else, so real traffic
+        can only exceed it. A counter that has stopped reporting yields a
+        few MB against a gigabyte-per-iteration kernel, and the resulting
+        x-coordinate -- which is the one that gets plotted -- lands three
+        orders of magnitude out with nothing saying so."""
+        res = self._res(32, "soa_simd", 0.5)
+        pts = gb.roofline_overlay_points(
+            {32: {"soa_simd": res}}, leaf_count=1_000_000,
+            measured_bytes={(32, "soa_simd"): 1_000_000.0})
+        model = gb.arith_intensity_metrics(32)["ops_per_byte"]
+        self.assertAlmostEqual(pts[0]["ops_per_byte"], model)
+        self.assertIsNone(pts[0]["ops_per_byte_measured"])
+        self.assertIsNone(pts[0]["dram_bytes_per_iteration"])
+        self.assertIn("rejected a DRAM reading", pts[0]["intensity_source"])
+
+    def test_a_plausible_dram_reading_is_still_used(self):
+        leaves = 1_000_000
+        ops = leaves * gb.arith_intensity_metrics(32)["ops_per_element"]
+        model = gb.arith_intensity_metrics(32)["ops_per_byte"]
+        # Ten times the model's byte count, i.e. an ops/byte a tenth of it.
+        big = ops / (model / 10.0)
+        pts = gb.roofline_overlay_points(
+            {32: {"soa_simd": self._res(32, "soa_simd", 0.5)}},
+            leaf_count=leaves, measured_bytes={(32, "soa_simd"): big})
+        self.assertAlmostEqual(pts[0]["ops_per_byte"], model / 10.0)
+        self.assertEqual(pts[0]["dram_bytes_per_iteration"], big)
+        self.assertIn("measured DRAM traffic", pts[0]["intensity_source"])
+
     def test_missing_per_measurement_provenance_is_null_not_absent(self):
         # A consumer must be able to tell "one iteration" from "unknown".
         pts = gb.roofline_overlay_points({32: {"soa_mut": self._res(32, "soa_mut", 0.5)}},

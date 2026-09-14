@@ -5675,11 +5675,26 @@ def roofline_overlay_points(
                     "measured_at": getattr(res, "run_finished_at", None),
                 }
                 bytes_meas = (measured_bytes or {}).get((width, cfg))
-                if bytes_meas:
+                # The model counts only the Leaf field loaded and stored. Real
+                # DRAM traffic also carries tags, cursors, 64-byte line
+                # granularity for a sub-line field, and the output tree a map
+                # allocates, so it can only be LARGER -- measured ops/byte can
+                # only be SMALLER than the model's. A measured value above the
+                # model is not a tighter measurement, it is a broken counter,
+                # and it is what gets plotted: an IMC counter that has stopped
+                # reporting yields a differential of a few MiB against a
+                # gigabyte-per-iteration kernel and an x-coordinate three
+                # orders of magnitude out. Fall back to the model and say so.
+                if bytes_meas and total_ops / bytes_meas <= metrics["ops_per_byte"]:
                     point["dram_bytes_per_iteration"] = bytes_meas
                     point["ops_per_byte_measured"] = total_ops / bytes_meas
                     point["ops_per_byte"] = point["ops_per_byte_measured"]
                     point["intensity_source"] = "measured DRAM traffic (perf uncore IMC)"
+                elif bytes_meas:
+                    point["intensity_source"] = (
+                        "analytical model (rejected a DRAM reading of %.1f MB/"
+                        "iteration: below the model's own lower bound on "
+                        "traffic)" % (bytes_meas / 1e6))
                 points.append(point)
     return points
 
