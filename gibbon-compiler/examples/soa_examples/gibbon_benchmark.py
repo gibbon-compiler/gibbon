@@ -3825,13 +3825,19 @@ def collect_add1tree_width_results(programs_dir: Path, out_dir: Path, cc: str,
                                    simd_isa: str = DEFAULT_SIMD_ISA,
                                    pin_cpu: Optional[int] = None,
                                    ) -> Dict[int, Dict[str, BenchmarkResult]]:
-    """Compiles and runs (once, no --iterate warmup campaign) all four
-    Add1TreeIntN.hs programs under the four ADD1TREE_WIDTH_CONFIGS, exactly
-    the same compile_one/run_exe/qualify_variant path as every other row in
-    this file. Returns {width: {config_name: BenchmarkResult}}. This
-    function performs real executions -- callers that must not produce
-    timing evidence must not call it outside a synthetic test that stubs it
-    out.
+    """Compiles and runs all four Add1TreeIntN.hs programs under the four
+    ADD1TREE_WIDTH_CONFIGS, exactly the same compile_one/run_exe/
+    qualify_variant path as every other row in this file. Returns
+    {width: {config_name: BenchmarkResult}}. This function performs real
+    executions -- callers that must not produce timing evidence must not
+    call it outside a synthetic test that stubs it out.
+
+    `iterations` is the --iterate count each configuration is run at, and
+    the caller is expected to pass the driver's real --iterations value.
+    The 1 default exists for structural and correctness tests only: at one
+    iteration each cell is a single cold measurement with no median behind
+    it, and a single cold run of these kernels is occasionally several
+    times its own median.
 
     `c_arith_mode` defaults to the same driver-wide `unsafe` default --
     this table retains its own width policy (Int8/16/32/64 are the
@@ -4089,6 +4095,13 @@ def collect_arithintensity_width_results(programs_dir: Path, out_dir: Path, cc: 
     collect_add1tree_width_results. For width 64, ARITHINTENSITY_WIDTH_CONFIGS
     has no "soa_simd" entry at all, so this function structurally never
     builds one -- not a runtime skip, an absent config.
+
+    `iterations` is the --iterate count each configuration is run at, and
+    the caller is expected to pass the driver's real --iterations value.
+    The 1 default exists for structural and correctness tests only: at one
+    iteration each cell is a single cold measurement with no median behind
+    it, and a single cold run of these kernels is occasionally several
+    times its own median.
 
     `c_arith_mode` defaults to the driver-wide `unsafe` default -- this
     table retains its own width policy independent of it."""
@@ -9162,14 +9175,16 @@ def main():
             print("  Collecting Add1TreeIntN.hs width results ...")
             add1tree_width_results = collect_add1tree_width_results(
                 args.programs_dir, args.output_dir, resolve_cc(args.cc),
-                args.force_recompile, gibbon_exe=None, c_arith_mode=args.c_arithmetic,
+                args.force_recompile, gibbon_exe=None, iterations=args.iterations,
+                c_arith_mode=args.c_arithmetic,
                 simd_isa=args.simd_isa, pin_cpu=args.pin_cpu)
         arithintensity_width_results = None
         if args.arithintensity_widths or args.roofline_overlay:
             print("  Collecting ArithmeticIntensityIntN.hs width results ...")
             arithintensity_width_results = collect_arithintensity_width_results(
                 args.programs_dir, args.output_dir, resolve_cc(args.cc),
-                args.force_recompile, gibbon_exe=None, c_arith_mode=args.c_arithmetic,
+                args.force_recompile, gibbon_exe=None, iterations=args.iterations,
+                c_arith_mode=args.c_arithmetic,
                 simd_isa=args.simd_isa, pin_cpu=args.pin_cpu)
         if args.roofline:
             # After the campaign, so the overlay has measurements to place.

@@ -27,6 +27,7 @@ Four layers:
     eligibility mutations, applied to real files with restore-and-reverify
     where applicable.
 """
+import inspect
 import re
 import sys
 import unittest
@@ -318,6 +319,55 @@ class TestArithIntensitySourceWidths(unittest.TestCase):
                     "%s column %r does not set use_no_gcc_vec; a column "
                     "compiled with GCC's vectorizer cannot be compared "
                     "against one compiled without it" % (table_name, col))
+
+    def test_width_sweeps_run_at_the_drivers_iteration_count(self):
+        """Both width sweeps must be handed --iterations, not left at the
+        collector's 1 default.
+
+        At one iteration a cell is a single cold sample with no median
+        behind it, and these kernels are not reliable at one sample: the
+        campaign's own Int8 SIMD binary measures 0.0916 s as a 21-iteration
+        median, and one single-shot run in twelve of that same binary reads
+        0.21 s -- 2.3x, enough to rank the width last when it is second
+        fastest. The rest of the report is medians over --iterations, so a
+        single-shot table is also not comparable with any other table
+        here."""
+        src = inspect.getsource(gb.main)
+        for fn in ("collect_add1tree_width_results",
+                   "collect_arithintensity_width_results"):
+            call = re.search(re.escape(fn) + r"\((.*?)\)\n", src, re.S)
+            self.assertIsNotNone(call, "%s is not called in main()" % fn)
+            self.assertIn("iterations=args.iterations", call.group(1),
+                          "%s is called without the driver's iteration "
+                          "count" % fn)
+
+    def test_collector_forwards_its_iteration_count_to_the_executable(self):
+        """The parameter has to reach --iterate, not merely be accepted."""
+        seen = []
+        real_compile, real_run = gb.compile_one, gb.run_exe
+        gb.compile_one = lambda *a, **k: (False, 0.0, "stubbed")
+        gb.run_exe = lambda exe, iterations, **k: (
+            seen.append(iterations) or (False, 0.0, None, "stubbed", -1))
+        try:
+            gb.collect_arithintensity_width_results(
+                PROGRAMS_AOS.parent, Path("/nonexistent-out"), "gcc",
+                False, None, iterations=7)
+        finally:
+            gb.compile_one, gb.run_exe = real_compile, real_run
+        # compile_one is stubbed to fail, so run_exe is never reached; the
+        # point of the stub is that the call SHAPE is exercised. Re-run with
+        # a succeeding compile stub to see the iteration count itself.
+        gb.compile_one = lambda *a, **k: (True, 0.0, None)
+        gb.run_exe = lambda exe, iterations, **k: (
+            seen.append(iterations) or (False, 0.0, None, "stubbed", -1))
+        try:
+            gb.collect_arithintensity_width_results(
+                PROGRAMS_AOS.parent, Path("/nonexistent-out"), "gcc",
+                False, None, iterations=7)
+        finally:
+            gb.compile_one, gb.run_exe = real_compile, real_run
+        self.assertTrue(seen, "run_exe was never called")
+        self.assertEqual(set(seen), {7})
 
     def test_no_gcc_vec_caption_note_states_the_flag_and_its_cost(self):
         """The caption has to say the C vectorizer is off in every column.
