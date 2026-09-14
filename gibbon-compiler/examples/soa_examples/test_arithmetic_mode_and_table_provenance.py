@@ -336,6 +336,60 @@ class TestTableProvenanceAndDeadRatio(unittest.TestCase):
             self.assertIn("unsafe", tex)
             self.assertIn("no-ran", tex.lower())
 
+    def test_18c_the_tex_carries_the_same_campaign_block_as_the_json(self):
+        """The .tex is the file that travels into a paper; the .json does
+        not go with it. A table lifted out of this file has to name the
+        commit, the compiler binary, the C compiler, the machine, the
+        iteration count and the flags on its own."""
+        aos = _make_result("List.hs", "aos", True, median_time=1.0)
+        soa = _make_result("List.hs", "soa", True, median_time=0.9)
+        campaign = {
+            "gibbon": {"sha256": "deadbeef", "resolved_via": "cabal"},
+            "repo": {"head": "241098df", "branch": "fix/audit-2026-09-12"},
+            "cc": {"version": "gcc-16 (GCC) 16.2.0"},
+            "machine": {"cpu": "i7-12700K"},
+            "timing": {"iterations": 51, "pin_cpu": None},
+            "driver_argv": ["gibbon_benchmark.py", "--iterations", "51"],
+        }
+        with tempfile.TemporaryDirectory() as td:
+            tex_file = Path(td) / "t.tex"
+            gb.write_latex_tables([(aos, soa)], tex_file, campaign=campaign)
+            tex = tex_file.read_text()
+        for needle in ("repo.head = 241098df",
+                       "repo.branch = fix/audit-2026-09-12",
+                       "gibbon.sha256 = deadbeef",
+                       "cc.version = gcc-16 (GCC) 16.2.0",
+                       "machine.cpu = i7-12700K",
+                       "timing.iterations = 51",
+                       "driver_argv = gibbon_benchmark.py --iterations 51"):
+            self.assertIn("% Provenance: " + needle, tex)
+        # An absent value is named, not dropped -- "unknown" and "not
+        # recorded at all" are different claims about a campaign.
+        self.assertIn("% Provenance: timing.pin_cpu = unknown", tex)
+        # Every provenance line must be a comment for its whole length, so
+        # a stray value cannot put text into the document body.
+        for line in tex.splitlines():
+            if "Provenance:" in line:
+                self.assertTrue(line.startswith("%"), line)
+
+    def test_18d_no_campaign_block_emits_no_provenance_lines_and_no_error(self):
+        aos = _make_result("List.hs", "aos", True, median_time=1.0)
+        soa = _make_result("List.hs", "soa", True, median_time=0.9)
+        with tempfile.TemporaryDirectory() as td:
+            tex_file = Path(td) / "t.tex"
+            gb.write_latex_tables([(aos, soa)], tex_file)
+            tex = tex_file.read_text()
+        self.assertNotIn("repo.head", tex)
+        self.assertEqual(gb.latex_provenance_comments(None), "")
+        self.assertEqual(gb.latex_provenance_comments({}), "")
+
+    def test_18e_a_percent_in_a_value_cannot_escape_the_comment(self):
+        # A value containing % would comment out the rest of its own line
+        # and hide whatever followed it.
+        out = gb.latex_provenance_comments({"driver_argv": ["--x", "50%"]})
+        self.assertIn("50\\%", out)
+        self.assertTrue(all(l.startswith("%") for l in out.splitlines()))
+
     def test_18b_mixed_mode_report_is_flagged_not_silently_averaged(self):
         aos = _make_result("List.hs", "aos", True, median_time=1.0, arith_mode="unsafe")
         soa = _make_result("List.hs", "soa", True, median_time=0.9, arith_mode="wrapv")

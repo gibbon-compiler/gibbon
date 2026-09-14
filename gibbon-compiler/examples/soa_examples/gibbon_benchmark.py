@@ -659,6 +659,9 @@ class BenchmarkResult:
         # Exit status of the run, kept so a stack-exhaustion crash can be
         # told apart from any other run failure.
         self.run_returncode: Optional[int] = None
+        # When this variant's timed run finished, so a single measurement
+        # can be attributed to a moment rather than only to the campaign.
+        self.run_finished_at: Optional[str] = None
         self.error_message: Optional[str] = None
         self.adt_fields: Optional[int]    = None
         self.adt_info:   Optional[Dict]   = None   # from parse_adt_buffers
@@ -3875,6 +3878,7 @@ def collect_add1tree_width_results(programs_dir: Path, out_dir: Path, cc: str,
                 run_ok, elapsed, out, err2, rc = run_exe(exe, iterations, use_iterate_flag=True, pin_cpu=pin_cpu)
                 res.run_success = run_ok
                 res.run_returncode = rc
+                res.run_finished_at = datetime.datetime.now().isoformat(timespec="seconds")
                 res.output = out
                 res.exec_wall_time = elapsed
                 if run_ok and out:
@@ -4138,6 +4142,7 @@ def collect_arithintensity_width_results(programs_dir: Path, out_dir: Path, cc: 
                 run_ok, elapsed, out, err2, rc = run_exe(exe, iterations, use_iterate_flag=True, pin_cpu=pin_cpu)
                 res.run_success = run_ok
                 res.run_returncode = rc
+                res.run_finished_at = datetime.datetime.now().isoformat(timespec="seconds")
                 res.output = out
                 res.exec_wall_time = elapsed
                 if run_ok and out:
@@ -5661,6 +5666,13 @@ def roofline_overlay_points(
                     "gops": total_ops / t_med / 1e9,
                     "median_time": t_med,
                     "total_ops": total_ops,
+                    # Per-MEASUREMENT provenance. The campaign block says
+                    # what the run as a whole used; these two say what this
+                    # one point actually had behind it, which is what
+                    # distinguishes a median from a single cold sample when
+                    # a cell is questioned later.
+                    "iterations": pdata.get("n"),
+                    "measured_at": getattr(res, "run_finished_at", None),
                 }
                 bytes_meas = (measured_bytes or {}).get((width, cfg))
                 if bytes_meas:
@@ -5841,6 +5853,38 @@ def _run_roofline_only(args) -> int:
     return 0
 
 
+def latex_provenance_comments(campaign: Optional[Dict]) -> str:
+    """The campaign block as LaTeX comment lines.
+
+    `benchmark_results.json` records what produced a campaign, but the
+    `.tex` is the file that travels into a paper and the JSON does not go
+    with it.  Emitting the same block here means a table lifted out of this
+    file still names the commit, the compiler binary, the C compiler, the
+    machine, the iteration count and the flags behind every number in it.
+
+    Nested dicts are flattened to `parent.child`; lists are joined with
+    spaces.  A `%` inside a value would start a LaTeX comment mid-line, so
+    it is escaped.
+    """
+    if not campaign:
+        return ""
+    lines: List[str] = []
+
+    def emit(prefix: str, value) -> None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                emit(f"{prefix}.{k}" if prefix else str(k), v)
+            return
+        if isinstance(value, (list, tuple)):
+            value = " ".join(str(x) for x in value)
+        text = "unknown" if value is None else str(value)
+        lines.append("%% Provenance: %s = %s\n"
+                     % (prefix, text.replace("%", "\\%")))
+
+    emit("", campaign)
+    return "".join(lines)
+
+
 def write_latex_tables(all_results: List[Tuple], out_file: Path,
                        all_variants_results: Optional[List[Dict]] = None,
                        include_build_pass: bool = False,
@@ -5848,7 +5892,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                        add1tree_width_results: Optional[Dict[int, Dict[str, BenchmarkResult]]] = None,
                        arithintensity_width_results: Optional[Dict[int, Dict[str, BenchmarkResult]]] = None,
                        pldi_variant_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None,
-                       simd_isa: str = DEFAULT_SIMD_ISA):
+                       simd_isa: str = DEFAULT_SIMD_ISA,
+                       campaign: Optional[Dict] = None):
     # Name the SIMD target in this report's captions.  One report is one ISA:
     # the driver passes a single --simd-isa to every compile it issues.
     set_report_simd_isa(simd_isa)
@@ -5888,7 +5933,9 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                 f"{', '.join(seen_modes) if seen_modes else 'unknown'}"
                 f"{'  *** INCONSISTENT -- DO NOT TRUST ***' if len(seen_modes) > 1 else ''}\n")
         f.write(f"% Provenance: no-RAN in effect = "
-                f"{', '.join(str(x) for x in seen_no_ran) if seen_no_ran else 'unknown'}\n\n")
+                f"{', '.join(str(x) for x in seen_no_ran) if seen_no_ran else 'unknown'}\n")
+        f.write(latex_provenance_comments(campaign))
+        f.write("\n")
         _table_summary(f, all_results, all_variants_results,
                        include_build_pass=include_build_pass,
                        pldi_variant_results=pldi_variant_results)
@@ -9163,8 +9210,9 @@ def main():
 
     print("\nWriting reports ...")
     write_text_report(all_results, args.report, extended_results)
+    campaign_block = campaign_provenance(args)
     write_json_results(all_results, args.json, extended_results,
-                       campaign_extra=campaign_provenance(args))
+                       campaign_extra=campaign_block)
 
     if args.generate_paper:
         print(f"\n{'='*72}")
@@ -9264,6 +9312,7 @@ def main():
             arithintensity_width_results=arithintensity_width_results,
             pldi_variant_results=pldi_variant_results,
             simd_isa=args.simd_isa,
+            campaign=campaign_block,
         )
         compile_latex_preview(args.latex_table, args.figures_dir)
         # Release the terminal before the closing summary, so the final

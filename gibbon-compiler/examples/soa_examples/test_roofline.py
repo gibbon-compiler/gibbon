@@ -142,6 +142,29 @@ class TestOverlayPoints(unittest.TestCase):
         self.assertEqual(gb.roofline_overlay_points(None), [])
         self.assertEqual(gb.roofline_overlay_points({}), [])
 
+    def test_each_point_carries_its_own_iteration_count_and_timestamp(self):
+        """Per-MEASUREMENT provenance, not just per-campaign.
+
+        A single overlay entry is the only record of what produced it, and
+        without the iteration count behind it a median and a single cold
+        sample are indistinguishable after the fact -- which is exactly the
+        question asked of a cell that reads several times its neighbours."""
+        res = self._res(32, "soa_simd", 0.5)
+        res.passes["arithKernel"]["n"] = 51
+        res.run_finished_at = "2026-09-14T17:00:00"
+        pts = gb.roofline_overlay_points({32: {"soa_simd": res}}, leaf_count=1000)
+        self.assertEqual(pts[0]["iterations"], 51)
+        self.assertEqual(pts[0]["measured_at"], "2026-09-14T17:00:00")
+
+    def test_missing_per_measurement_provenance_is_null_not_absent(self):
+        # A consumer must be able to tell "one iteration" from "unknown".
+        pts = gb.roofline_overlay_points({32: {"soa_mut": self._res(32, "soa_mut", 0.5)}},
+                                         leaf_count=1000)
+        self.assertIn("iterations", pts[0])
+        self.assertIn("measured_at", pts[0])
+        self.assertIsNone(pts[0]["iterations"])
+        self.assertIsNone(pts[0]["measured_at"])
+
 
 class TestOutputs(unittest.TestCase):
     RESULTS = {"BANDWIDTH_GB_S": 28.11, "FP64_GFLOPS": 77.2,
