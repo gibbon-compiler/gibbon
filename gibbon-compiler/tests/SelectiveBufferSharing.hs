@@ -1,9 +1,12 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module SelectiveBufferSharing
   ( selectiveBufferSharingTests
   ) where
 
+import Control.Exception (ErrorCall, evaluate, try)
+import qualified Data.List as L
 import qualified Data.Map as M
 
 import Test.Tasty
@@ -15,6 +18,13 @@ import Gibbon.DynFlags
 import Gibbon.Language
 import qualified Gibbon.L3.Syntax as L3
 import Gibbon.Passes.SelectiveBufferSharing
+
+
+-- The cursorized calling convention these hand-built functions stand for.
+-- Cursorize records it; a function without it has no convention to read, so
+-- the passes under test decline rather than fall back to argument order.
+abiTraversal :: Maybe [AbiRole]
+abiTraversal = Just [AbiInEnd, AbiOutEnd, AbiOutCur, AbiInCur]
 
 -- | The pass's own hard error requires --auto-loopification or
 -- --opt-loopification to also be present -- selective buffer sharing only
@@ -54,7 +64,7 @@ loopifiedFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     (replicate 4 (L3.CursorArrayTy 3), L3.ProdTy [])
     loopifiedBody
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] abiTraversal)
 
 loopifiedProducerFun :: L3.FunDef3
 loopifiedProducerFun =
@@ -65,7 +75,7 @@ loopifiedProducerFun =
     , L3.ProdTy []
     )
     loopifiedBody
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] abiTraversal)
 
 -- A fold over *two* packed SoA inputs.  After cursorization this has exactly
 -- the same shape as a one-in/one-out map -- four equal-length cursor arrays --
@@ -77,7 +87,7 @@ consumer2Fun =
     ["endsX", "endsY", "cursX", "cursY"]
     (replicate 4 (L3.CursorArrayTy 3), L3.IntTy W64)
     (L3.mkLitE64 1)
-    (FunMeta TailRec NoInline False [])
+    (FunMeta TailRec NoInline False [] Nothing)
 
 twoInputCallSiteProg :: L3.Prog3
 twoInputCallSiteProg =
@@ -94,6 +104,39 @@ twoInputCallSiteMain =
     ]
     (L3.VarE "consume")
 
+-- A call whose argument is itself a call.  The rewriting walk rebuilds an
+-- 'AppE' from its arguments without descending into them, so a consumer in
+-- that position is never handed an unwrap.
+nestedCallProg :: L3.Prog3
+nestedCallProg =
+  Prog
+    M.empty
+    (M.fromList
+       [ ("producer", loopifiedProducerFun)
+       , ("consumer", consumerFun)
+       , ("identity", identityFun)
+       ])
+    (Just (nestedCallMain, L3.IntTy W64))
+
+identityFun :: L3.FunDef3
+identityFun =
+  FunDef
+    "identity"
+    ["n"]
+    ([L3.IntTy W64], L3.IntTy W64)
+    (L3.VarE "n")
+    (FunMeta NotRec NoInline False [] Nothing)
+
+nestedCallMain :: L3.Exp3
+nestedCallMain =
+  L3.mkLets
+    [ ("produce", [], L3.ProdTy [], L3.AppE "producer" UnknownTailType [] [L3.VarE "inEnds", L3.VarE "outEnds", L3.VarE "outCurs", L3.VarE "inCurs"])
+    , ("consume", [], L3.IntTy W64
+      , L3.AppE "identity" UnknownTailType []
+          [L3.AppE "consumer" UnknownTailType [] [L3.VarE "outEnds", L3.VarE "outCurs"]])
+    ]
+    (L3.VarE "consume")
+
 consumerFun :: L3.FunDef3
 consumerFun =
   FunDef
@@ -101,7 +144,7 @@ consumerFun =
     ["ends", "curs"]
     ([L3.CursorArrayTy 3, L3.CursorArrayTy 3], L3.IntTy W64)
     (L3.mkLitE64 1)
-    (FunMeta TailRec NoInline False [])
+    (FunMeta TailRec NoInline False [] Nothing)
 
 callSiteProg :: L3.Prog3
 callSiteProg =
@@ -138,11 +181,17 @@ loopifiedBody =
     (L3.MkProdE [])
 
 preludeFor :: Int -> [(Var, [()], L3.Ty3, L3.Exp3)]
-preludeFor ix =
-  let pfx = "loop_probe_buf" ++ show ix
+preludeFor = preludeForSeed "loop_probe"
+
+preludeForSeed :: String -> Int -> [(Var, [()], L3.Ty3, L3.Exp3)]
+preludeForSeed seed ix =
+  let pfx = seed ++ "_buf" ++ show ix
    in [ (toVar (pfx ++ "_input_end"), [], L3.CursorTy, L3.Ext $ L3.IndexCursorArray "inEnds" ix)
       , (toVar (pfx ++ "_in_loc"), [], L3.MutCursorTy, L3.Ext $ L3.AddrOfCursor (L3.Ext $ L3.IndexCursorArray "inCurs" ix))
       , (toVar (pfx ++ "_out_loc"), [], L3.MutCursorTy, L3.Ext $ L3.AddrOfCursor (L3.Ext $ L3.IndexCursorArray "outCurs" ix))
+        -- Sharing writes the wrapper in one go and so needs somewhere to grow
+        -- the output chunk; a buffer whose end loc it cannot see is declined.
+      , (toVar (pfx ++ "_out_end_loc"), [], L3.MutCursorTy, L3.Ext $ L3.AddrOfCursor (L3.Ext $ L3.IndexCursorArray "outEnds" ix))
       ]
 
 dconLoop :: (Var, [()], L3.Ty3, L3.Exp3)
@@ -161,6 +210,71 @@ dconForBody =
   L3.mkLets
     [("loop_probe_buf0_write_tag", [], L3.CursorTy, L3.Ext $ L3.WriteTagPacked "out_dcon" (L3.mkLitE64 1))]
     (L3.MkProdE [])
+
+-- | A copy loop over buffer 1 of the named loop.
+copyLoopSeed :: String -> (Var, [()], L3.Ty3, L3.Exp3)
+copyLoopSeed seed =
+  ( toVar (seed ++ "_buf1_loop")
+  , []
+  , L3.ProdTy []
+  , L3.Ext $ L3.WhileCursor (toVar (seed ++ "_buf1_count_footer_loc")) $
+      L3.mkLets
+        [ ( toVar (seed ++ "_buf1_inner_loop"), [], L3.ProdTy []
+          , L3.Ext $ L3.ForE "i" (L3.mkLitE64 8) $
+              L3.mkLets
+                [ (toVar (seed ++ "_buf1_inner_body"), [], L3.ProdTy []
+                  , copyScalarBodySeed seed 1) ]
+                (L3.MkProdE []) ) ]
+        (L3.MkProdE [])
+  )
+
+copyScalarBodySeed :: String -> Int -> L3.Exp3
+copyScalarBodySeed seed ix =
+  let pfx = seed ++ "_buf" ++ show ix
+   in L3.mkLets
+        [ (toVar (pfx ++ "_read_pair"), [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 (toVar (pfx ++ "_read_cur")))
+        , (toVar (pfx ++ "_read_val"), [], L3.IntTy W64, L3.ProjE 0 (L3.VarE (toVar (pfx ++ "_read_pair"))))
+        , (toVar (pfx ++ "_write_val"), [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 (toVar (pfx ++ "_write_cur")) (L3.VarE (toVar (pfx ++ "_read_val"))))
+        ]
+        (L3.MkProdE [])
+
+-- | Two loops, from different loopifications, both copying their buffer 1.
+--
+-- Both preludes are learned before either loop is reached, so a per-buffer
+-- environment keyed on the index alone has only the second loop's cursors by
+-- then and would write both wrappers through them.
+twoSeedProg :: L3.Prog3
+twoSeedProg =
+  Prog
+    M.empty
+    (M.fromList [("loopifiedMap", loopifiedFun { funBody = twoSeedBody })])
+    Nothing
+
+twoSeedBody :: L3.Exp3
+twoSeedBody =
+  L3.mkLets
+    ( concatMap (preludeForSeed "loop_probe") [0, 1]
+        ++ concatMap (preludeForSeed "loop_other") [0, 1]
+        ++ [ dconLoopSeed "loop_probe", copyLoopSeed "loop_probe"
+           , dconLoopSeed "loop_other", copyLoopSeed "loop_other" ] )
+    (L3.MkProdE [])
+
+-- | A tag-only loop over buffer 0 of the named loop.
+dconLoopSeed :: String -> (Var, [()], L3.Ty3, L3.Exp3)
+dconLoopSeed seed =
+  ( toVar (seed ++ "_buf0_loop")
+  , []
+  , L3.ProdTy []
+  , L3.Ext $ L3.WhileCursor (toVar (seed ++ "_buf0_count_footer_loc")) $
+      L3.mkLets
+        [ ( toVar (seed ++ "_buf0_inner_loop"), [], L3.ProdTy []
+          , L3.Ext $ L3.ForE "i" (L3.mkLitE64 8) $
+              L3.mkLets
+                [ ( toVar (seed ++ "_buf0_write_tag"), [], L3.CursorTy
+                  , L3.Ext $ L3.WriteTagPacked "out_dcon" (L3.mkLitE64 1) ) ]
+                (L3.MkProdE []) ) ]
+        (L3.MkProdE [])
+  )
 
 copyLoop :: (Var, [()], L3.Ty3, L3.Exp3)
 copyLoop =
@@ -316,6 +430,13 @@ countTimedSelectiveUnwraps ex =
         L3.Assert rhs -> countTimedSelectiveUnwraps rhs
         _ -> 0
 
+-- | Bounds checks sized for a selective-indirection wrapper.
+countWrapperBoundsChecks :: L3.Exp3 -> Int
+countWrapperBoundsChecks = countExt p
+  where
+    p (L3.BoundsCheck n _ _ _ _) = n == selectiveIndirectionSize
+    p _ = False
+
 countWhileCursors :: L3.Exp3 -> Int
 countWhileCursors = countExt p
   where
@@ -374,6 +495,48 @@ case_shares_dcon_and_copy_buffers =
         2 @=? countIndirections body
         1 @=? countWhileCursors body
 
+-- | The wrapper is written in one go at whatever cursor the replaced loop left
+-- behind, so it needs its own room: the per-element growth the loop did is
+-- gone with the loop.  One check per wrapper, sized to the wrapper.
+-- | Two loops in one body must not answer for each other's buffers.
+--
+-- Buffer indices restart at zero in every loop, so a per-buffer environment
+-- keyed on the index alone holds only the later loop's cursors by the time
+-- either loop is rewritten, and both wrappers would be written through them --
+-- into the wrong buffer for the earlier loop.  Each wrapper must dereference
+-- its own loop's out loc.
+case_two_loops_do_not_share_each_others_cursors :: Assertion
+case_two_loops_do_not_share_each_others_cursors =
+  let body = getFunBody "loopifiedMap" (runnerEnabled twoSeedProg)
+      derefs = wrapperOutLocs body
+   in do
+        -- Two loops, each sharing its tag buffer and its copied buffer 1.
+        4 @=? countIndirections body
+        [ "loop_other_buf0_out_loc", "loop_other_buf1_out_loc"
+          , "loop_probe_buf0_out_loc", "loop_probe_buf1_out_loc" ] @=? L.sort derefs
+
+-- | The out loc each selective wrapper writes through, by name.
+wrapperOutLocs :: L3.Exp3 -> [String]
+wrapperOutLocs ex = go ex
+  where
+    go e =
+      case e of
+        L3.LetE (_, _, _, L3.Ext (L3.WriteCursorMutable loc _)) bod
+          | "_out_loc" `L.isSuffixOf` fromVar loc -> fromVar loc : go bod
+        L3.LetE (_, _, _, rhs) bod -> go rhs ++ go bod
+        L3.IfE a b c -> go a ++ go b ++ go c
+        L3.Ext (L3.WhileCursor _ bod) -> go bod
+        L3.Ext (L3.ForE _ _ bod) -> go bod
+        L3.TimeIt e' _ _ -> go e'
+        _ -> []
+
+case_each_shared_buffer_gets_room_for_its_wrapper :: Assertion
+case_each_shared_buffer_gets_room_for_its_wrapper =
+  let body = getFunBody "loopifiedMap" (runnerEnabled loopifiedProg)
+   in do
+        2 @=? countIndirections body
+        2 @=? countWrapperBoundsChecks body
+
 case_does_not_add_entry_unwrap_for_soa_input :: Assertion
 case_does_not_add_entry_unwrap_for_soa_input =
   let prg = Prog M.empty (M.fromList [("consumer", consumerFun)]) Nothing
@@ -416,6 +579,21 @@ case_adds_unwrap_for_two_input_consumer =
    in case mainExp prg of
         Just (main, _) -> 1 @=? countSelectiveUnwraps main
         Nothing -> error "expected two-input call-site test main expression"
+
+-- A consumer of a shared value reached only through another call's argument
+-- gets no unwrap: the walk rebuilds a call from its arguments without
+-- descending into them.  The closed-world sweep must refuse it rather than let
+-- the consumer read the 25-byte wrapper as data.
+case_sweep_refuses_a_consumer_nested_in_a_call_argument :: Assertion
+case_sweep_refuses_a_consumer_nested_in_a_call_argument = do
+  r <- try (evaluate (length (show (runnerEnabled nestedCallProg))))
+  case r :: Either ErrorCall Int of
+    Right _ ->
+      assertFailure
+        "a marked (ends, curs) pair reaching a call with no unwrap must be refused"
+    Left e ->
+      assertBool ("unexpected error: " ++ show e)
+        ("no UnwrapSelectiveIndirections" `L.isInfixOf` show e)
 
 selectiveBufferSharingTests :: TestTree
 selectiveBufferSharingTests = $(testGroupGenerator)

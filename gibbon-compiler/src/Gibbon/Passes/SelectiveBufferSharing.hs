@@ -38,16 +38,58 @@ module Gibbon.Passes.SelectiveBufferSharing
   ( selectiveBufferSharing
   ) where
 
-import Data.Char (isDigit)
+import Control.Monad.State.Strict (StateT, lift, modify', runStateT)
 import qualified Data.List as L
 import qualified Data.Map as M
-import Data.Maybe (fromMaybe, mapMaybe, maybeToList)
+import Data.Maybe (fromMaybe, isNothing, mapMaybe, maybeToList)
 import qualified Data.Set as S
 
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Language
+import Gibbon.L2.Syntax (Modality(..))
 import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L3.Abi ( CursorPairShape(..), soaOutputCursorShape )
+import Gibbon.L3.Traverse (extExps, traverseExtExps)
+import Gibbon.Passes.LoopifyTraversals
+  ( LoopBufferKey
+  , LoopBufferSuffix(..)
+  , isLoopBufferName
+  , isOwnLoopBufferName
+  , loopBufferIx
+  , loopBufferKey
+  , loopBufferSeed
+  , loopificationReport
+  )
+
+{-
+Note [Normalisation coverage is closed over the whole body]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sharing is committed in 'rewriteLoopifiedFun' BEFORE any consumer is examined,
+so every consumer of a shared value must afterwards be found and given an
+'UnwrapSelectiveIndirections'.  The guarantee is program-wide: no marked
+@(ends, curs)@ pair reaches a call without an unwrap for it already in scope.
+
+Two checks establish it, and both read the SAME selective-pair state.
+
+At each call site, 'checkConsumerArgsResolved' refuses a consumer whose
+cursor-array argument does not resolve to a variable -- such a call cannot be
+looked up in the selective-pair set at all, so no unwrap could be emitted for
+it -- and 'rewriteSpawn' routes a spawned consumer through the same path an
+ordinary one takes.
+
+After the walk, 'sweepUnwrapCoverage' re-reads the finished body and refuses
+any call handed a marked pair with no unwrap for it in the enclosing let
+chain.  The pairs it tests are the walk's OWN accumulated 'ShareEnv', threaded
+out of the walk rather than rebuilt: a predicate that must mirror an emitter
+but is written twice drifts from it.  The sweep is total over 'PreExp' and
+reaches into extension forms through 'extExps', so a call in a position the
+rewriting walk does not open up is a refusal rather than an unnormalised
+consumer.
+
+Sharing is all-or-nothing per function, so both refusals are available: the
+program compiles without @--opt-selective-buffer-sharing@.
+-}
 
 selectiveBufferSharing :: L3.Prog3 -> PassM L3.Prog3
 selectiveBufferSharing prog@Prog{fundefs, mainExp} = do
@@ -66,15 +108,22 @@ selectiveBufferSharing prog@Prog{fundefs, mainExp} = do
     then pure prog
     else do
       rewritten <- mapM rewriteSelectiveFun (M.elems fundefs)
-      let fds' = map fst rewritten
+      let fds' = [ fd | (fd, _, _) <- rewritten ]
           producerShapes =
             M.fromList
               [ (funName fd, shape)
-              | (fd, Just shape) <- rewritten
+              | (fd, Just shape, _) <- rewritten
               ]
+          shareLines =
+            [ fromVar (funName fd) ++ ": " ++
+              either (("no buffers shared: " ++) . shareDeclineReason)
+                     (const "buffers shared")
+                     outcome
+            | (fd, _, outcome) <- rewritten
+            ]
           consumerShapes =
             M.fromList
-              [ (funName fd, soaInputCursorShapes (funArgs fd) (fst (funTy fd)))
+              [ (funName fd, candidateInputCursorShapes (funArgs fd) (fst (funTy fd)))
               | fd <- fds'
               ]
       fds'' <- mapM (rewriteSelectiveCallSites producerShapes consumerShapes) fds'
@@ -85,17 +134,12 @@ selectiveBufferSharing prog@Prog{fundefs, mainExp} = do
               pure (mainBody', mainTy))
           mainExp
       pure $
+        loopificationReport (gopt Opt_LoopificationReport dflags)
+                            "selective buffer sharing" shareLines $
         prog
           { fundefs = M.fromList [ (funName f, f) | f <- fds'' ]
           , mainExp = mainExp'
           }
-
-data CursorPairShape = CursorPairShape
-  { cpsLen :: Int
-  , cpsEndArgIx :: Int
-  , cpsCurArgIx :: Int
-  }
-  deriving (Eq, Ord, Show)
 
 -- | Rewrite one function, sharing copied buffers where that is legal.
 --
@@ -108,13 +152,14 @@ data CursorPairShape = CursorPairShape
 -- produced value as selectively shared, so no call site would ever be
 -- normalized and the consumer would read the raw wrapper tag.  Therefore:
 -- refuse to share at all unless the output cursor ABI is recognized.
-rewriteSelectiveFun :: L3.FunDef3 -> PassM (L3.FunDef3, Maybe CursorPairShape)
+rewriteSelectiveFun :: L3.FunDef3
+                    -> PassM (L3.FunDef3, Maybe CursorPairShape, Either ShareDecline ())
 rewriteSelectiveFun fn =
-  case soaOutputCursorShape (funArgs fn) (fst (funTy fn)) of
-    Nothing -> pure (fn, Nothing)
+  case soaOutputCursorShape fn of
+    Nothing -> pure (fn, Nothing, Left ShareNoOutputAbi)
     Just outputShape -> do
       (fn', shared) <- rewriteLoopifiedFun fn
-      pure (fn', if shared then Just outputShape else Nothing)
+      pure (fn', either (const Nothing) (const (Just outputShape)) shared, shared)
 
 -- | Every ordered (ends, cursors) argument pair a consumer *might* be handed.
 --
@@ -132,8 +177,12 @@ rewriteSelectiveFun fn =
 -- variables flowing into the call, not on positions -- decide which pairs are
 -- really selectively shared values.  Over-approximating here is harmless: a
 -- pair that is not a marked selective pair produces no unwrap.
-soaInputCursorShapes :: [Var] -> [L3.Ty3] -> [CursorPairShape]
-soaInputCursorShapes args tys =
+--
+-- Deliberately NOT the recorded convention (`Gibbon.L3.Abi`): this runs over a
+-- CALLEE whose formals the caller's arguments flow into, and narrowing it to
+-- the pairs the convention names would drop an unwrap the call site needs.
+candidateInputCursorShapes :: [Var] -> [L3.Ty3] -> [CursorPairShape]
+candidateInputCursorShapes args tys =
   [ CursorPairShape n1 endIx curIx
   | (endIx, _, n1) <- cursorArrays
   , (curIx, _, n2) <- cursorArrays
@@ -147,62 +196,78 @@ soaInputCursorShapes args tys =
       | (ix, (v, L3.CursorArrayTy n)) <- zip [0..] (zip args tys)
       ]
 
--- | The (output ends, output cursors) argument pair of a shape-preserving SoA
--- producer.
---
--- This deliberately matches the *exact* four-cursor-array ABI
--- @(in_ends, out_ends, out_curs, in_curs)@, the same shape
--- `Gibbon.Passes.ScalarCountPropagation.soaOutputCursorShape` recognizes.  The
--- old "at least four" pattern also matched, e.g., a two-packed-input map
--- (@in_ends_x, in_ends_y, out_ends, out_curs, in_curs_x, in_curs_y@) and
--- reported @(in_ends_y, out_ends)@ as the output pair.  Marking the wrong pair
--- is worse than marking none: the real output pair stays unmarked, no consumer
--- is normalized, and the wrapper tag leaks into the consumer.
-soaOutputCursorShape :: [Var] -> [L3.Ty3] -> Maybe CursorPairShape
-soaOutputCursorShape args tys =
-  case cursorArrays of
-    [_, (outEndIx, _, n2), (outCurIx, _, n3), _]
-      | n2 == n3 && n2 > 1 -> Just (CursorPairShape n2 outEndIx outCurIx)
-    _ -> Nothing
-  where
-    cursorArrays =
-      [ (ix, v, n)
-      | (ix, (v, L3.CursorArrayTy n)) <- zip [0..] (zip args tys)
-      ]
-
-rewriteLoopifiedFun :: L3.FunDef3 -> PassM (L3.FunDef3, Bool)
+rewriteLoopifiedFun :: L3.FunDef3 -> PassM (L3.FunDef3, Either ShareDecline ())
 rewriteLoopifiedFun fn@FunDef{funMeta, funBody}
-  | Loopified `notElem` funOpt funMeta = pure (fn, False)
+  | Loopified `notElem` funOpt funMeta = pure (fn, Left ShareNotLoopified)
   | otherwise = do
       (body', shared) <- rewriteLoopifiedBody funBody
       pure (fn { funBody = body' }, shared)
+
+-- | Why no buffer was shared in a function.
+data ShareDecline
+  = ShareNotLoopified
+    -- ^ Loopification did not rewrite it, so there are no per-buffer loops.
+  | ShareNoOutputAbi
+    -- ^ The output cursor ABI is unrecognized, so consumers could not be found
+    -- and normalized; sharing would leave them reading a raw wrapper tag.
+  | ShareNothingToShare
+    -- ^ No buffer in the function is copied unchanged.
+  | ShareNoTagBuffer
+    -- ^ The tag buffer is not among the shared ones; the wrapper is written
+    -- into it, so it has to be.
+  | ShareNegativeIx
+  | ShareTooWide Int
+    -- ^ A buffer index at or past the bitmask's usable width.
+  deriving (Eq, Show)
+
+-- | Buffer indices the wrapper's bitmask can represent.  The mask is a 64-bit
+-- word with the top two bits reserved.
+shareMaskMaxIx :: Int
+shareMaskMaxIx = 62
+
+shareDeclineReason :: ShareDecline -> String
+shareDeclineReason d =
+  case d of
+    ShareNotLoopified -> "not loopified, so there are no per-buffer loops to share between"
+    ShareNoOutputAbi -> "the output cursor ABI is unrecognized, so consumers could not be normalized"
+    ShareNothingToShare -> "no buffer is copied unchanged"
+    ShareNoTagBuffer -> "the tag buffer is not among the shareable ones"
+    ShareNegativeIx -> "a negative buffer index"
+    ShareTooWide ix ->
+      "buffer index " ++ show ix ++ " is at or past the share bitmask's limit of " ++
+      show shareMaskMaxIx ++ ", so this datatype gets no sharing at all"
 
 data BufferLocs = BufferLocs
   { blInputEnd :: Maybe Var
   , blInLoc :: Maybe Var
   , blOutLoc :: Maybe Var
+  , blOutEndLoc :: Maybe Var
   }
   deriving Show
 
 emptyBufferLocs :: BufferLocs
-emptyBufferLocs = BufferLocs Nothing Nothing Nothing
+emptyBufferLocs = BufferLocs Nothing Nothing Nothing Nothing
 
+-- | Per-buffer cursors learned from the binds preceding a loop.
+--
+-- Keyed on the loop too: buffer indices restart at zero in every loop, so
+-- keying on the index alone lets one loop's cursors answer for another's.
 data BufferEnv = BufferEnv
-  { beLocs :: M.Map Int BufferLocs
+  { beLocs :: M.Map LoopBufferKey BufferLocs
   }
 
 emptyBufferEnv :: BufferEnv
 emptyBufferEnv = BufferEnv M.empty
 
-rewriteLoopifiedBody :: L3.Exp3 -> PassM (L3.Exp3, Bool)
+rewriteLoopifiedBody :: L3.Exp3 -> PassM (L3.Exp3, Either ShareDecline ())
 rewriteLoopifiedBody ex = do
   let (binds, tailExp) = unLets3 ex
       globalShares = collectSharePlan binds
   case shareMask globalShares of
-    Nothing -> pure (ex, False)
-    Just mask -> do
+    Left d -> pure (ex, Left d)
+    Right mask -> do
       (binds', tail') <- go mask emptyBufferEnv binds tailExp
-      pure (L3.mkLets binds' tail', True)
+      pure (L3.mkLets binds' tail', Right ())
   where
     collectSharePlan :: [(Var, [()], L3.Ty3, L3.Exp3)] -> S.Set ShareInfo
     collectSharePlan = goPlan emptyBufferEnv S.empty
@@ -212,18 +277,21 @@ rewriteLoopifiedBody ex = do
       case rhs of
         L3.Ext (L3.WhileCursor _ bod) ->
           let loopInfo = classifyLoop bod
-              loopShares = S.fromList $ mapMaybeShare env (liShareIxs loopInfo)
+              loopShares = S.fromList $ mapMaybeShare env (liShareKeys loopInfo)
            in goPlan env (shares <> loopShares) bs
         _ ->
           goPlan (learnBufferBind env b) shares bs
 
-    shareMask :: S.Set ShareInfo -> Maybe Int
+    shareMask :: S.Set ShareInfo -> Either ShareDecline Int
     shareMask shares
-      | S.null shares = Nothing
-      | 0 `S.notMember` ixs = Nothing
-      | any (< 0) (S.toList ixs) = Nothing
-      | any (>= 62) (S.toList ixs) = Nothing
-      | otherwise = Just $ sum [ 2 ^ ix | ix <- S.toList ixs ]
+      | S.null shares = Left ShareNothingToShare
+      | 0 `S.notMember` ixs = Left ShareNoTagBuffer
+      | any (< 0) (S.toList ixs) = Left ShareNegativeIx
+      -- The wrapper carries the share set as a bitmask in a 64-bit word, with
+      -- the top two bits reserved.  A datatype wide enough to reach buffer 62
+      -- therefore gets no sharing at all, silently.
+      | Just ix <- L.find (>= shareMaskMaxIx) (S.toList ixs) = Left (ShareTooWide ix)
+      | otherwise = Right $ sum [ 2 ^ ix | ix <- S.toList ixs ]
       where
         ixs = S.map siIx shares
 
@@ -251,13 +319,26 @@ rewriteLoopifiedBody ex = do
         _ -> ([], e)
 
     mkShareBinds :: Int -> ShareInfo -> PassM [(Var, [()], L3.Ty3, L3.Exp3)]
-    mkShareBinds mask ShareInfo{siIx, siInputEnd, siInLoc, siOutLoc} = do
+    mkShareBinds mask ShareInfo{siIx, siInputEnd, siInLoc, siOutLoc, siOutEndLoc} = do
       dst <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_dst")
       src <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_src")
+      bound <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_bound")
+      room <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_room")
       written <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_written")
       update <- gensym $ toVar ("selective_share_buf" ++ show siIx ++ "_update")
       pure
         [ (dst, [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor siOutLoc)
+        , (bound, [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor siOutEndLoc)
+          -- The loop this replaces wrote one element at a time and grew the
+          -- chunk as it went; the wrapper is written in one go, at whatever
+          -- cursor the loop left behind, so it needs its own room.  Growing
+          -- rewrites both the cursor and the bound through their loc, so the
+          -- write below sees the new chunk.
+          -- Bound at IntTy W64, the placeholder the L3 typechecker expects
+          -- for this side-effecting form.
+        , (room, [], L3.IntTy W64
+          , L3.Ext $ L3.BoundsCheck selectiveIndirectionSize bound dst
+                       (Just (siOutEndLoc, siOutLoc)) OutputMutable)
         , (src, [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor siInLoc)
         , (written, [], L3.CursorTy, L3.Ext $ L3.WriteCursorSelectiveIndirection dst src siInputEnd (L3.mkLitE64 mask))
         , (update, [], L3.ProdTy [], L3.Ext $ L3.WriteCursorMutable siOutLoc (L3.VarE written))
@@ -271,6 +352,21 @@ data ShareEnv = ShareEnv
 
 emptyShareEnv :: ShareEnv
 emptyShareEnv = ShareEnv S.empty M.empty
+
+-- | Everything either side marked, for accumulating a whole body's marks out
+-- of the scoped environments the walk makes its decisions with.
+unionShareEnv :: ShareEnv -> ShareEnv -> ShareEnv
+unionShareEnv a b =
+  ShareEnv (seSelectivePairs a `S.union` seSelectivePairs b)
+           (seAliases a `M.union` seAliases b)
+
+-- | The rewriting walk, carrying the union of every scoped 'ShareEnv' it
+-- decided with.  'sweepUnwrapCoverage' reads that union, so the sweep and the
+-- emitter cannot disagree about which pairs are selectively shared.
+type Learn = StateT ShareEnv PassM
+
+learn :: ShareEnv -> Learn ()
+learn env = modify' (unionShareEnv env)
 
 rewriteSelectiveCallSites
   :: M.Map Var CursorPairShape
@@ -286,9 +382,19 @@ rewriteSelectiveCallSiteExp
   -> M.Map Var [CursorPairShape]
   -> L3.Exp3
   -> PassM L3.Exp3
-rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
+rewriteSelectiveCallSiteExp producers consumers body = do
+  (body', marked) <- runStateT (rewriteWalk producers consumers body) emptyShareEnv
+  sweepUnwrapCoverage producers consumers marked body'
+  pure body'
+
+rewriteWalk
+  :: M.Map Var CursorPairShape
+  -> M.Map Var [CursorPairShape]
+  -> L3.Exp3
+  -> Learn L3.Exp3
+rewriteWalk producers consumers = go emptyShareEnv
   where
-    go :: ShareEnv -> L3.Exp3 -> PassM L3.Exp3
+    go :: ShareEnv -> L3.Exp3 -> Learn L3.Exp3
     go env ex =
       case ex of
         L3.LetE (v, locs, ty, rhs) bod -> do
@@ -296,6 +402,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
           let envAfterPre =
                 foldl (learnCallSiteBind producers) env preBinds
               env' = learnCallSiteBind producers envAfterPre (v, locs, ty, rhs')
+          learn env'
           bod' <- go env' bod
           pure $ L3.mkLets preBinds (L3.LetE (v, locs, ty, rhs') bod')
         L3.AppE fn cty locs args -> do
@@ -310,7 +417,9 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
         L3.PrimAppE p args -> L3.PrimAppE p <$> mapM (go env) args
         L3.TimeIt e ty b -> L3.TimeIt <$> go env e <*> pure ty <*> pure b
         L3.WithArenaE v e -> L3.WithArenaE v <$> go env e
-        L3.SpawnE fn locs args -> L3.SpawnE fn locs <$> mapM (go env) args
+        L3.SpawnE fn locs args -> do
+          (preBinds, spawn') <- rewriteSpawn env fn locs args
+          pure $ L3.mkLets preBinds spawn'
         L3.MapE (v, ty, rhs) bod -> L3.MapE <$> ((v, ty,) <$> go env rhs) <*> go env bod
         L3.FoldE (v1, ty1, rhs1) (v2, ty2, rhs2) bod ->
           L3.FoldE
@@ -321,7 +430,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
         L3.Ext ext -> L3.Ext <$> rewriteExt env ext
         _ -> pure ex
 
-    rewriteRhs :: ShareEnv -> L3.Exp3 -> PassM ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
+    rewriteRhs :: ShareEnv -> L3.Exp3 -> Learn ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
     rewriteRhs env rhs =
       case rhs of
         L3.AppE fn cty locs args ->
@@ -347,7 +456,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
     rewriteTimedBody
       :: ShareEnv
       -> L3.Exp3
-      -> PassM ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
+      -> Learn ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
     rewriteTimedBody env timed =
       case timed of
         L3.AppE fn cty locs args ->
@@ -357,6 +466,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
           let envAfterPre =
                 foldl (learnCallSiteBind producers) env preBinds
               env' = learnCallSiteBind producers envAfterPre (v, locs, ty, rhs')
+          learn env'
           bod' <- go env' bod
           pure (preBinds, L3.LetE (v, locs, ty, rhs') bod')
         _ -> do
@@ -369,13 +479,63 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
       -> TailRecType
       -> [()]
       -> [L3.Exp3]
-      -> PassM ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
-    rewriteApp env fn cty locs args = do
-      (argBinds, args') <- materializeConsumerCursorArgs fn args
-      let envAfterArgs =
-            foldl (learnCallSiteBind producers) env argBinds
-      unwrapBinds <- unwrapBindsForCall consumers envAfterArgs fn args'
-      pure (argBinds ++ unwrapBinds, L3.AppE fn cty locs args')
+      -> Learn ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
+    rewriteApp env fn cty locs args =
+      rewriteCall env fn args (\args' -> L3.AppE fn cty locs args')
+
+    -- A spawned consumer needs the same unwrap an ordinary one does; it used
+    -- to get none, because `go` mapped over a 'SpawnE's arguments and never
+    -- reached here.
+    rewriteSpawn
+      :: ShareEnv
+      -> Var
+      -> [()]
+      -> [L3.Exp3]
+      -> Learn ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
+    rewriteSpawn env fn locs args =
+      rewriteCall env fn args (\args' -> L3.SpawnE fn locs args')
+
+    rewriteCall
+      :: ShareEnv
+      -> Var
+      -> [L3.Exp3]
+      -> ([L3.Exp3] -> L3.Exp3)
+      -> Learn ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
+    rewriteCall env fn args rebuild = do
+      let (argBinds, args') = materializeConsumerCursorArgs fn args
+          envAfterArgs = foldl (learnCallSiteBind producers) env argBinds
+      learn envAfterArgs
+      lift $ checkConsumerArgsResolved envAfterArgs fn args'
+      unwrapBinds <- lift $ unwrapBindsForCall consumers envAfterArgs fn args'
+      pure (argBinds ++ unwrapBinds, rebuild args')
+
+    -- See Note [Normalisation coverage is checked here, not program-wide].
+    --
+    -- A consumer's cursor-array argument that does not resolve to a variable
+    -- cannot be looked up in the selective-pair set, so the call would proceed
+    -- UNNORMALISED and the consumer would read the 25-byte wrapper as data --
+    -- a loud "Unknown tag" for buffer 0, a silent wrong number for a scalar
+    -- buffer.  Only a body where some producer output was actually marked can
+    -- contain a wrapper, so the refusal is scoped to those.
+    checkConsumerArgsResolved :: ShareEnv -> Var -> [L3.Exp3] -> PassM ()
+    checkConsumerArgsResolved env fn args
+      | S.null (seSelectivePairs env) = pure ()
+      | otherwise =
+          case [ ix
+               | shape <- fromMaybe [] (M.lookup fn consumers)
+               , ix <- [cpsEndArgIx shape, cpsCurArgIx shape]
+               , isNothing (argVar ix args)
+               ] of
+            [] -> pure ()
+            ixs -> error $
+              "selectiveBufferSharing: call to " ++ show fn ++ " passes a " ++
+              "cursor-array argument at position(s) " ++ show ixs ++ " that " ++
+              "is not a variable, in a function where selective buffer " ++
+              "sharing marked a producer output.\n" ++
+              "The call cannot be checked against the shared-buffer set, so " ++
+              "no UnwrapSelectiveIndirections can be emitted for it, and the " ++
+              "consumer would read the 25-byte sharing wrapper as data.\n" ++
+              "Compile without --opt-selective-buffer-sharing."
 
     -- Cursorized main expressions often pass a packed value start cursor array
     -- through an inline copy expression:
@@ -389,7 +549,7 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
     materializeConsumerCursorArgs
       :: Var
       -> [L3.Exp3]
-      -> PassM ([(Var, [()], L3.Ty3, L3.Exp3)], [L3.Exp3])
+      -> ([(Var, [()], L3.Ty3, L3.Exp3)], [L3.Exp3])
     materializeConsumerCursorArgs fn args =
       goArgs 0 args
       where
@@ -400,14 +560,14 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
               | shape <- fromMaybe [] (M.lookup fn consumers)
               ]
 
-        goArgs _ [] = pure ([], [])
-        goArgs ix (arg:rest) = do
+        goArgs _ [] = ([], [])
+        goArgs ix (arg:rest) =
           let (argBinds, arg') =
                 if ix `elem` argIxs
                 then materializeCursorArrayArg arg
                 else ([], arg)
-          (restBinds, rest') <- goArgs (ix + 1) rest
-          pure (argBinds ++ restBinds, arg' : rest')
+              (restBinds, rest') = goArgs (ix + 1) rest
+           in (argBinds ++ restBinds, arg' : rest')
 
     materializeCursorArrayArg
       :: L3.Exp3
@@ -427,26 +587,8 @@ rewriteSelectiveCallSiteExp producers consumers = go emptyShareEnv
     cursorArrayResult v =
       any (\(v', _, ty, _) -> v == v' && isCursorArrayTy ty)
 
-    rewriteExt :: ShareEnv -> L3.E3Ext () L3.Ty3 -> PassM (L3.E3Ext () L3.Ty3)
-    rewriteExt env ext =
-      case ext of
-        L3.ForE idx bound bod -> L3.ForE idx <$> go env bound <*> go env bod
-        L3.WhileCursor cur bod -> L3.WhileCursor cur <$> go env bod
-        L3.WhileCursorEnd cur end bod -> L3.WhileCursorEnd cur end <$> go env bod
-        L3.WriteScalar s cur rhs -> L3.WriteScalar s cur <$> go env rhs
-        L3.WriteTagPacked cur rhs -> L3.WriteTagPacked cur <$> go env rhs
-        L3.WriteTaggedCursor cur rhs -> L3.WriteTaggedCursor cur <$> go env rhs
-        L3.WriteCursorMutable cur rhs -> L3.WriteCursorMutable cur <$> go env rhs
-        L3.WriteList cur rhs ty -> (\rhs' -> L3.WriteList cur rhs' ty) <$> go env rhs
-        L3.WriteVector cur rhs ty -> (\rhs' -> L3.WriteVector cur rhs' ty) <$> go env rhs
-        L3.AddCursor cur rhs -> L3.AddCursor cur <$> go env rhs
-        L3.BumpCursorMutable cur rhs -> L3.BumpCursorMutable cur <$> go env rhs
-        L3.AddrOfCursor rhs -> L3.AddrOfCursor <$> go env rhs
-        L3.LetAvail vars bod -> L3.LetAvail vars <$> go env bod
-        L3.Assert rhs -> L3.Assert <$> go env rhs
-        L3.WriteCursorSelectiveIndirection cur target end mask ->
-          L3.WriteCursorSelectiveIndirection cur target end <$> go env mask
-        _ -> pure ext
+    rewriteExt :: ShareEnv -> L3.E3Ext () L3.Ty3 -> Learn (L3.E3Ext () L3.Ty3)
+    rewriteExt env = traverseExtExps (go env)
 
 learnCallSiteBind
   :: M.Map Var CursorPairShape
@@ -492,8 +634,11 @@ producerOutputPairs producers ex =
       producerOutputPairs producers rhs
     L3.WithArenaE _ rhs ->
       producerOutputPairs producers rhs
-    L3.SpawnE _ _ args ->
-      concatMap (producerOutputPairs producers) args
+    L3.SpawnE fn _ args ->
+      (case M.lookup fn producers of
+         Just shape -> maybeToList (cursorPairArgs shape args)
+         Nothing -> [])
+        ++ concatMap (producerOutputPairs producers) args
     L3.MapE (_, _, rhs) bod ->
       producerOutputPairs producers rhs ++ producerOutputPairs producers bod
     L3.FoldE (_, _, rhs1) (_, _, rhs2) bod ->
@@ -506,23 +651,7 @@ producerOutputPairs producers ex =
 
 producerOutputPairsExt :: M.Map Var CursorPairShape -> L3.E3Ext () L3.Ty3 -> [(Var, Var)]
 producerOutputPairsExt producers ext =
-  case ext of
-    L3.ForE _ bound bod -> producerOutputPairs producers bound ++ producerOutputPairs producers bod
-    L3.WhileCursor _ bod -> producerOutputPairs producers bod
-    L3.WhileCursorEnd _ _ bod -> producerOutputPairs producers bod
-    L3.WriteScalar _ _ rhs -> producerOutputPairs producers rhs
-    L3.WriteTagPacked _ rhs -> producerOutputPairs producers rhs
-    L3.WriteTaggedCursor _ rhs -> producerOutputPairs producers rhs
-    L3.WriteCursorMutable _ rhs -> producerOutputPairs producers rhs
-    L3.WriteList _ rhs _ -> producerOutputPairs producers rhs
-    L3.WriteVector _ rhs _ -> producerOutputPairs producers rhs
-    L3.AddCursor _ rhs -> producerOutputPairs producers rhs
-    L3.BumpCursorMutable _ rhs -> producerOutputPairs producers rhs
-    L3.AddrOfCursor rhs -> producerOutputPairs producers rhs
-    L3.LetAvail _ bod -> producerOutputPairs producers bod
-    L3.Assert rhs -> producerOutputPairs producers rhs
-    L3.WriteCursorSelectiveIndirection _ _ _ mask -> producerOutputPairs producers mask
-    _ -> []
+  concatMap (producerOutputPairs producers) (extExps ext)
 
 unwrapBindsForCall
   :: M.Map Var [CursorPairShape]
@@ -544,6 +673,94 @@ unwrapBindsForCall consumers env fn args = do
     mkUnwrap (arrLen, ends, curs) = do
       v <- gensym "unwrap_selective_call"
       pure (v, [], L3.ProdTy [], L3.Ext $ L3.UnwrapSelectiveIndirections arrLen ends curs)
+
+-- | What the sweep knows at one point in a body: which selectively shared
+-- pairs have been produced, and which of those an unwrap has already
+-- normalised.
+data SweepState = SweepState
+  { ssShared :: S.Set (Var, Var)
+  , ssUnwrapped :: S.Set (Var, Var)
+  }
+
+-- | Refuse any call handed a selectively shared @(ends, curs)@ pair with no
+-- 'UnwrapSelectiveIndirections' for it in the enclosing let chain.
+--
+-- The marked pairs are the rewriting walk's own accumulated 'ShareEnv', so
+-- this cannot disagree with the emitter about what was shared; what it adds is
+-- the closed world.  It is total over 'PreExp' and descends into extension
+-- forms through 'extExps', so a call the walk never opened up is a compile
+-- time refusal rather than a consumer that reads the 25-byte sharing wrapper
+-- as data.  See Note [Normalisation coverage is closed over the whole body].
+sweepUnwrapCoverage
+  :: M.Map Var CursorPairShape
+  -> M.Map Var [CursorPairShape]
+  -> ShareEnv
+  -> L3.Exp3
+  -> PassM ()
+sweepUnwrapCoverage producers consumers env body
+  | S.null (seSelectivePairs env) = pure ()
+  | otherwise = go (SweepState S.empty S.empty) body
+  where
+    go :: SweepState -> L3.Exp3 -> PassM ()
+    go unwrapped ex =
+      case ex of
+        L3.VarE{} -> pure ()
+        L3.LitE{} -> pure ()
+        L3.CharE{} -> pure ()
+        L3.FloatE{} -> pure ()
+        L3.LitSymE{} -> pure ()
+        L3.SyncE -> pure ()
+        L3.AppE fn _ _ args -> checkCall unwrapped fn args >> mapM_ (go unwrapped) args
+        L3.SpawnE fn _ args -> checkCall unwrapped fn args >> mapM_ (go unwrapped) args
+        L3.PrimAppE _ args -> mapM_ (go unwrapped) args
+        L3.LetE (_, _, _, rhs) bod -> do
+          go unwrapped rhs
+          go (record unwrapped rhs) bod
+        L3.IfE a b c -> mapM_ (go unwrapped) [a, b, c]
+        L3.MkProdE ls -> mapM_ (go unwrapped) ls
+        L3.ProjE _ e -> go unwrapped e
+        L3.CaseE scrt brs ->
+          go unwrapped scrt >> mapM_ (\(_, _, rhs) -> go unwrapped rhs) brs
+        L3.DataConE _ _ args -> mapM_ (go unwrapped) args
+        L3.TimeIt e _ _ -> go unwrapped e
+        L3.WithArenaE _ e -> go unwrapped e
+        L3.MapE (_, _, rhs) bod -> go unwrapped rhs >> go unwrapped bod
+        L3.FoldE (_, _, r1) (_, _, r2) bod -> mapM_ (go unwrapped) [r1, r2, bod]
+        L3.Ext ext -> mapM_ (go unwrapped) (extExps ext)
+
+    -- A pair is only in play once the producer call that shares it has run,
+    -- and only until an unwrap for it appears.  Both are read off the finished
+    -- binds with the same 'producerOutputPairs' the walk marks with, so the
+    -- call that establishes a pair is never itself asked to unwrap it.
+    record st rhs =
+      let st' = case rhs of
+                  L3.Ext (L3.UnwrapSelectiveIndirections _ ends curs) ->
+                    st { ssUnwrapped =
+                           S.insert (key ends curs) (ssUnwrapped st) }
+                  _ -> st
+       in st' { ssShared =
+                  foldr (\(ends, curs) -> S.insert (key ends curs))
+                        (ssShared st')
+                        (producerOutputPairs producers rhs) }
+
+    key ends curs = (canonicalVar env ends, canonicalVar env curs)
+
+    checkCall st fn args =
+      case [ (ends, curs)
+           | shape <- fromMaybe [] (M.lookup fn consumers)
+           , Just (ends, curs) <- [cursorPairArgs shape args]
+           , isSelectivePair ends curs env
+           , key ends curs `S.member` ssShared st
+           , key ends curs `S.notMember` ssUnwrapped st
+           ] of
+        [] -> pure ()
+        ((ends, curs) : _) -> error $
+          "selectiveBufferSharing: call to " ++ show fn ++ " is handed the " ++
+          "selectively shared cursor arrays (" ++ fromVar ends ++ ", " ++
+          fromVar curs ++ ") with no UnwrapSelectiveIndirections for them in " ++
+          "scope, so the consumer would read the 25-byte sharing wrapper as " ++
+          "data.\n" ++
+          "Compile without --opt-selective-buffer-sharing."
 
 cursorPairArgs :: CursorPairShape -> [L3.Exp3] -> Maybe (Var, Var)
 cursorPairArgs CursorPairShape{cpsEndArgIx, cpsCurArgIx} args = do
@@ -592,6 +809,7 @@ data ShareInfo = ShareInfo
   , siInputEnd :: Var
   , siInLoc :: Var
   , siOutLoc :: Var
+  , siOutEndLoc :: Var
   }
   deriving (Eq, Ord, Show)
 
@@ -600,7 +818,7 @@ rewriteTopBind env b@(v, locs, ty, rhs) =
   case rhs of
     L3.Ext (L3.WhileCursor cond bod) ->
       let loopInfo = classifyLoop bod
-          shares = S.fromList $ mapMaybeShare env (liShareIxs loopInfo)
+          shares = S.fromList $ mapMaybeShare env (liShareKeys loopInfo)
        in if S.null shares
             then TopBindNormal env b
             else
@@ -614,33 +832,35 @@ rewriteTopBind env b@(v, locs, ty, rhs) =
     _ ->
       TopBindNormal (learnBufferBind env b) b
 
-mapMaybeShare :: BufferEnv -> S.Set Int -> [ShareInfo]
+mapMaybeShare :: BufferEnv -> S.Set LoopBufferKey -> [ShareInfo]
 mapMaybeShare env =
-  mapMaybe (\ix -> shareInfoFor ix env) . S.toList
+  mapMaybe (\k -> shareInfoFor k env) . S.toList
 
-shareInfoFor :: Int -> BufferEnv -> Maybe ShareInfo
-shareInfoFor ix BufferEnv{beLocs} = do
-  BufferLocs{blInputEnd, blInLoc, blOutLoc} <- M.lookup ix beLocs
-  ShareInfo ix <$> blInputEnd <*> blInLoc <*> blOutLoc
+shareInfoFor :: LoopBufferKey -> BufferEnv -> Maybe ShareInfo
+shareInfoFor key@(_, ix) BufferEnv{beLocs} = do
+  BufferLocs{blInputEnd, blInLoc, blOutLoc, blOutEndLoc} <- M.lookup key beLocs
+  ShareInfo ix <$> blInputEnd <*> blInLoc <*> blOutLoc <*> blOutEndLoc
 
 learnBufferBind :: BufferEnv -> (Var, [()], L3.Ty3, L3.Exp3) -> BufferEnv
 learnBufferBind env@(BufferEnv locs) (v, _, ty, rhs) =
-  case (bufferIxFromVar v, ty, rhs) of
+  case (loopBufferKey v, ty, rhs) of
     (Just ix, L3.CursorTy, _)
-      | hasSuffix "_input_end" v ->
+      | isLoopBufferName LbInputEnd v ->
           update ix (\bl -> bl { blInputEnd = Just v })
     (Just ix, L3.MutCursorTy, L3.Ext (L3.AddrOfCursor (L3.Ext L3.IndexCursorArray{})))
-      | hasSuffix "_in_loc" v ->
+      | isLoopBufferName LbInLoc v ->
           update ix (\bl -> bl { blInLoc = Just v })
-      | hasSuffix "_out_loc" v ->
+      | isLoopBufferName LbOutLoc v ->
           update ix (\bl -> bl { blOutLoc = Just v })
+      | isLoopBufferName LbOutEndLoc v ->
+          update ix (\bl -> bl { blOutEndLoc = Just v })
     _ -> env
   where
     update ix f =
       BufferEnv $ M.alter (Just . f . fromMaybe emptyBufferLocs) ix locs
 
 data LoopInfo = LoopInfo
-  { liShareIxs :: S.Set Int
+  { liShareKeys :: S.Set LoopBufferKey
   , liKeepLoop :: Bool
   }
 
@@ -649,15 +869,25 @@ classifyLoop bod =
   case findForBody bod of
     Just forBody
       | containsWriteTagPacked forBody && not (containsWriteScalar forBody) ->
-          LoopInfo (S.singleton 0) False
+          -- The tag stream is buffer 0 of whichever loop this is; a body with
+          -- no named buffer at all names no loop, and shares nothing.
+          LoopInfo (S.fromList [ (seed, 0) | seed <- maybeToList (loopSeedOf forBody) ]) False
       | otherwise ->
-          let scalarIxs = scalarInnerBodyIxs forBody
-              copyIxs = scalarCopyIxs forBody
+          let scalarKeys = scalarInnerBodyKeys forBody
+              copyKeys = scalarCopyKeys forBody
            in LoopInfo
-                copyIxs
-                (not (scalarIxs `S.isSubsetOf` copyIxs))
+                copyKeys
+                (not (scalarKeys `S.isSubsetOf` copyKeys))
     Nothing ->
       LoopInfo S.empty True
+
+-- | The loop a body's bindings belong to, if they agree on one.
+loopSeedOf :: L3.Exp3 -> Maybe String
+loopSeedOf ex =
+  case L.nub [ seed | (v, _, _, _) <- fst (unLetsL3 ex)
+                    , Just seed <- [loopBufferSeed v] ] of
+    [seed] -> Just seed
+    _ -> Nothing
 
 rewriteLoopBodyForSharing :: S.Set Int -> L3.Exp3 -> L3.Exp3
 rewriteLoopBodyForSharing shareIxs = go
@@ -690,19 +920,19 @@ rewriteForBody shareIxs ex =
         [ b
         | b@(v, _, _, rhs) <- binds
         , not (maybe False (\ix -> ix `S.member` shareIxs && isScalarCopyInner ix rhs)
-                           (bufferIxFromVar v))
+                           (loopBufferIx v))
         ]
    in L3.mkLets binds' tailExp
 
 shouldDropLoopBind :: S.Set Int -> (Var, [()], L3.Ty3, L3.Exp3) -> Bool
 shouldDropLoopBind shareIxs (v, _, _, rhs) =
-  case bufferIxFromVar v of
+  case loopBufferIx v of
     Nothing -> False
     Just ix
       | ix `S.notMember` shareIxs -> False
-      | hasSuffix "_current_out_end" v -> True
-      | hasSuffix "_set_chunk_count" v -> True
-      | hasSuffix "_grow_out" v -> True
+      | isLoopBufferName LbCurrentOutEnd v -> True
+      | isLoopBufferName LbSetChunkCount v -> True
+      | isLoopBufferName LbGrowOut v -> True
       | otherwise ->
           case rhs of
             L3.Ext (L3.GrowRegion _ _) -> True
@@ -718,21 +948,21 @@ findForBody ex =
     L3.Ext (L3.WhileCursorEnd _ _ bod) -> findForBody bod
     _ -> Nothing
 
-scalarInnerBodyIxs :: L3.Exp3 -> S.Set Int
-scalarInnerBodyIxs ex =
+scalarInnerBodyKeys :: L3.Exp3 -> S.Set LoopBufferKey
+scalarInnerBodyKeys ex =
   S.fromList
-    [ ix
+    [ key
     | (v, _, _, rhs) <- fst (unLetsL3 ex)
-    , Just ix <- [bufferIxFromVar v]
+    , Just key <- [loopBufferKey v]
     , containsWriteScalar rhs
     ]
 
-scalarCopyIxs :: L3.Exp3 -> S.Set Int
-scalarCopyIxs ex =
+scalarCopyKeys :: L3.Exp3 -> S.Set LoopBufferKey
+scalarCopyKeys ex =
   S.fromList
-    [ ix
+    [ key
     | (v, _, _, rhs) <- fst (unLetsL3 ex)
-    , Just ix <- [bufferIxFromVar v]
+    , Just key@(_, ix) <- [loopBufferKey v]
     , isScalarCopyInner ix rhs
     ]
 
@@ -753,7 +983,7 @@ isScalarCopyInner ix ex =
         S.fromList
           [ v
           | (v, _, _, L3.Ext (L3.ReadScalar _ cur)) <- binds
-          , isOwnLoopCursor ix "read_cur" cur
+          , isOwnLoopBufferName ix LbReadCur cur
           ]
       readVals =
         S.fromList
@@ -767,7 +997,7 @@ isScalarCopyInner ix ex =
           | (v, _, _, L3.VarE rhs) <- binds
           ]
       writes =
-        [ (isOwnLoopCursor ix "write_cur" cur, rhs)
+        [ (isOwnLoopBufferName ix LbWriteCur cur, rhs)
         | (_, _, _, L3.Ext (L3.WriteScalar _ cur rhs)) <- binds
         ]
       resolveVar v =
@@ -781,16 +1011,6 @@ isScalarCopyInner ix ex =
    in case writes of
         [(ownWriteCur, rhs)] -> ownWriteCur && resolvesToReadVal rhs
         _ -> False
-
--- | Does @v@ name loop buffer @ix@'s own @<suffix>@ cursor?
---
--- Loop-local cursors are named @<seed>_buf<ix>_<suffix>@ by
--- `LoopifyTraversals.loopBufferName`; cross-buffer dependency cursors for the
--- same buffer are named @<seed>_buf<ix>_dep<n>_<suffix>@ and are deliberately
--- rejected by the exact suffix match below.
-isOwnLoopCursor :: Int -> String -> Var -> Bool
-isOwnLoopCursor ix suffix v =
-  ("_buf" ++ show ix ++ "_" ++ suffix) `L.isSuffixOf` fromVar v
 
 containsWriteScalar :: L3.Exp3 -> Bool
 containsWriteScalar = containsExt p
@@ -820,25 +1040,12 @@ containsExt p ex =
     L3.SpawnE _ _ args -> any (containsExt p) args
     L3.MapE (_, _, e1) e2 -> containsExt p e1 || containsExt p e2
     L3.FoldE (_, _, e1) (_, _, e2) e3 -> any (containsExt p) [e1, e2, e3]
+    -- Fails CLOSED via 'extExps': an unlisted form's expression children are
+    -- still visited, so e.g. a 'WriteScalar' reachable only through a 'RetE'
+    -- still surfaces here instead of making a tag+scalar loop look pure.
     L3.Ext ext
       | p ext -> True
-      | otherwise ->
-          case ext of
-            L3.ForE _ bound bod -> containsExt p bound || containsExt p bod
-            L3.WhileCursor _ bod -> containsExt p bod
-            L3.WhileCursorEnd _ _ bod -> containsExt p bod
-            L3.WriteScalar _ _ rhs -> containsExt p rhs
-            L3.WriteTagPacked _ rhs -> containsExt p rhs
-            L3.WriteTaggedCursor _ rhs -> containsExt p rhs
-            L3.WriteCursorMutable _ rhs -> containsExt p rhs
-            L3.WriteList _ rhs _ -> containsExt p rhs
-            L3.WriteVector _ rhs _ -> containsExt p rhs
-            L3.AddCursor _ rhs -> containsExt p rhs
-            L3.BumpCursorMutable _ rhs -> containsExt p rhs
-            L3.AddrOfCursor rhs -> containsExt p rhs
-            L3.LetAvail _ bod -> containsExt p bod
-            L3.Assert rhs -> containsExt p rhs
-            _ -> False
+      | otherwise -> any (containsExt p) (extExps ext)
     _ -> False
 
 unLetsL3 :: L3.Exp3 -> ([(Var, [()], L3.Ty3, L3.Exp3)], L3.Exp3)
@@ -848,25 +1055,6 @@ unLetsL3 ex =
       let (bs, tailExp) = unLetsL3 bod
        in (b : bs, tailExp)
     _ -> ([], ex)
-
-bufferIxFromVar :: Var -> Maybe Int
-bufferIxFromVar v = parseAfterBuf (fromVar v)
-  where
-    parseAfterBuf s =
-      case L.stripPrefix "_buf" =<< findBufSuffixes s of
-        Just rest ->
-          let (digits, afterDigits) = span isDigit rest
-           in case afterDigits of
-                '_':_ | not (null digits) -> Just (read digits)
-                _ -> Nothing
-        Nothing -> Nothing
-
-    findBufSuffixes [] = Nothing
-    findBufSuffixes str@('_':'b':'u':'f':_) = Just str
-    findBufSuffixes (_:xs) = findBufSuffixes xs
-
-hasSuffix :: String -> Var -> Bool
-hasSuffix suffix = L.isSuffixOf suffix . fromVar
 
 (<|>) :: Maybe a -> Maybe a -> Maybe a
 Nothing <|> y = y
