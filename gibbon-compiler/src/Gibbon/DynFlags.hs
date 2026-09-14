@@ -5,7 +5,8 @@ module Gibbon.DynFlags
   ( DynFlags(..), GeneralFlag(..), DebugFlag(..)
   , defaultDynFlags, dynflagsParser
   , gopt, gopt_set, dopt, dopt_set
-  , SimdIsa(..), simdIsaOf, simdIsaName, simdIsaRegisterBytes, simdIsaCcFlags
+  , SimdIsa(..), simdIsaOf, simdIsaWithReason, simdIsaName, simdIsaRegisterBytes
+  , simdIsaCcFlags, simdIsaCpuFeature
   , parseSimdIsa
   ) where
 
@@ -73,6 +74,9 @@ data GeneralFlag
                             --   compile error otherwise, whenever an SoA candidate exists).
   | Opt_AutoLoopification -- ^ Infer loopification candidates for map-like traversals structurally,
                           --   instead of requiring an OPT:MayVectorize annotation.
+  | Opt_LoopificationReport -- ^ Print one line per function for each loopification pass:
+                            --   whether it was rewritten, or the specific reason it was
+                            --   declined.  Turns nothing on by itself.
   | Opt_EnableLoopFusion -- ^ Enable scalar-buffer loop fusion inside loopified SoA traversals.
                          --   Requires Opt_EnableLoopification or Opt_AutoLoopification (hard
                          --   compile error otherwise): it only fuses loops loopification produced.
@@ -92,6 +96,7 @@ data GeneralFlag
   -- baseline it was measured against was left at the x86-64 default, where
   -- GCC's auto-vectorizer can only reach SSE2.
   | Opt_SimdIsaSse2    -- ^ @--simd-isa=sse2@
+  | Opt_SimdIsaSse41   -- ^ @--simd-isa=sse4.1@
   | Opt_SimdIsaAvx2    -- ^ @--simd-isa=avx2@
   | Opt_SimdIsaNative  -- ^ @--simd-isa=native@
   | Opt_MarchNative -- ^ Compile the generated C with -march=native, so the SIMD helpers'
@@ -218,6 +223,10 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                                           "does not guarantee a given function is actually rewritten.")) <|>
                    flag' Opt_AutoLoopification (long "auto-loopification" <>
                                                   help "Infer map-like traversal candidates for loopification instead of requiring OPT:MayVectorize annotations. Still rejects parent-child dependencies and unsupported traversal shapes.") <|>
+                   flag' Opt_LoopificationReport (long "loopification-report" <>
+                                                    help ("Print one line per function for each loopification pass: whether it " ++
+                                                          "was rewritten, or the specific reason it was declined. Reports only; " ++
+                                                          "turns no optimisation on.")) <|>
                    flag' Opt_EnableLoopFusion (long "opt-loop-fusion" <>
                                                  help ("Fuse the per-buffer loops loopification produced for fully factored SoA " ++
                                                        "scalar-buffer traversals. Requires --opt-loopification or " ++
@@ -285,6 +294,7 @@ parseSimdIsaFlag :: String -> Either String GeneralFlag
 parseSimdIsaFlag isaStr = toFlag <$> parseSimdIsa isaStr
   where
     toFlag SimdSse2 = Opt_SimdIsaSse2
+    toFlag SimdSse41 = Opt_SimdIsaSse41
     toFlag SimdAvx2 = Opt_SimdIsaAvx2
     toFlag SimdNative = Opt_SimdIsaNative
 
@@ -295,7 +305,7 @@ parseSimdIsaFlag isaStr = toFlag <$> parseSimdIsa isaStr
 -- @-march=native@.  On a machine with AVX-512 that lets the C compiler's
 -- auto-vectorizer go wider than Gibbon's vectorizer can, so @avx2@ is the
 -- value to use when the point is to compare the two.
-data SimdIsa = SimdSse2 | SimdAvx2 | SimdNative
+data SimdIsa = SimdSse2 | SimdSse41 | SimdAvx2 | SimdNative
   deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 -- | Parse a @--simd-isa@ value.  Exact spellings only; anything else is
@@ -304,14 +314,16 @@ parseSimdIsa :: String -> Either String SimdIsa
 parseSimdIsa s =
   case s of
     "sse2"   -> Right SimdSse2
+    "sse4.1" -> Right SimdSse41
     "avx2"   -> Right SimdAvx2
     "native" -> Right SimdNative
     _ -> Left $ "invalid --simd-isa value " ++ show s ++
-                "; must be one of: sse2, avx2, native"
+                "; must be one of: sse2, sse4.1, avx2, native"
 
 -- | Inverse of 'parseSimdIsa', for captions and provenance strings.
 simdIsaName :: SimdIsa -> String
 simdIsaName SimdSse2 = "sse2"
+simdIsaName SimdSse41 = "sse4.1"
 simdIsaName SimdAvx2 = "avx2"
 simdIsaName SimdNative = "native"
 
@@ -323,18 +335,36 @@ simdIsaName SimdNative = "native"
 -- means asking for the widest registers it can emit, and a build that is not
 -- vectorizing stays on the portable baseline.
 simdIsaOf :: DynFlags -> SimdIsa
-simdIsaOf dflags
-  | gopt Opt_SimdIsaSse2 dflags = SimdSse2
-  | gopt Opt_SimdIsaAvx2 dflags = SimdAvx2
-  | gopt Opt_SimdIsaNative dflags = SimdNative
-  | gopt Opt_SimdBaselineSse2 dflags = SimdSse2
-  | gopt Opt_MarchNative dflags = SimdNative
-  | gopt Opt_EnableVectorization dflags = SimdAvx2
-  | otherwise = SimdSse2
+simdIsaOf = fst . simdIsaWithReason
+
+-- | 'simdIsaOf' together with the flag that chose it, so a diagnostic naming
+-- the flag cannot name a different one from the selection.
+simdIsaWithReason :: DynFlags -> (SimdIsa, String)
+simdIsaWithReason dflags = withSse41 (baseIsa dflags)
+  where
+    -- @--sse4.1@ names a capability, not a register width, so it raises the
+    -- 128-bit tier and leaves a wider selection alone.  Gibbon emits a
+    -- different multiply sequence for it, so it has to be part of the ISA the
+    -- backend reads rather than a separate flag only the C command line sees.
+    withSse41 (isa, why)
+      | isa == SimdSse2, gopt Opt_Sse41 dflags = (SimdSse41, "--sse4.1")
+      | otherwise = (isa, why)
+
+baseIsa :: DynFlags -> (SimdIsa, String)
+baseIsa dflags
+  | gopt Opt_SimdIsaSse2 dflags = (SimdSse2, "--simd-isa=sse2")
+  | gopt Opt_SimdIsaSse41 dflags = (SimdSse41, "--simd-isa=sse4.1")
+  | gopt Opt_SimdIsaAvx2 dflags = (SimdAvx2, "--simd-isa=avx2")
+  | gopt Opt_SimdIsaNative dflags = (SimdNative, "--simd-isa=native")
+  | gopt Opt_SimdBaselineSse2 dflags = (SimdSse2, "--simd-baseline-sse2")
+  | gopt Opt_MarchNative dflags = (SimdNative, "--march-native")
+  | gopt Opt_EnableVectorization dflags = (SimdAvx2, "--opt-vectorization")
+  | otherwise = (SimdSse2, "the default")
 
 -- | Width in bytes of the SIMD register Gibbon's own vectorizer targets.
 simdIsaRegisterBytes :: SimdIsa -> Int
 simdIsaRegisterBytes SimdSse2 = 16
+simdIsaRegisterBytes SimdSse41 = 16
 simdIsaRegisterBytes SimdAvx2 = 32
 simdIsaRegisterBytes SimdNative = 32
 
@@ -347,5 +377,18 @@ simdIsaRegisterBytes SimdNative = 32
 -- is NOT enough: AVX1 has no 256-bit integer operations.)
 simdIsaCcFlags :: SimdIsa -> String
 simdIsaCcFlags SimdSse2 = ""
+simdIsaCcFlags SimdSse41 = " -msse4.1 "
 simdIsaCcFlags SimdAvx2 = " -mavx2 "
 simdIsaCcFlags SimdNative = " -march=native "
+
+-- | The @__builtin_cpu_supports@ feature a binary compiled for this ISA needs
+-- at run time, or 'Nothing' when the x86-64 baseline already provides it.
+--
+-- @native@ compiles for the BUILD machine, whose full instruction set cannot
+-- be named here; AVX2 is the part of it Gibbon's own vectorizer emits, so that
+-- is what gets checked.
+simdIsaCpuFeature :: SimdIsa -> Maybe String
+simdIsaCpuFeature SimdSse2 = Nothing
+simdIsaCpuFeature SimdSse41 = Just "sse4.1"
+simdIsaCpuFeature SimdAvx2 = Just "avx2"
+simdIsaCpuFeature SimdNative = Just "avx2"

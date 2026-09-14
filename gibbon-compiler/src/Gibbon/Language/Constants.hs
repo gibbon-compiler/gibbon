@@ -31,6 +31,23 @@ indirectionAlt = 254
 selectiveIndirectionAlt :: Num a => a
 selectiveIndirectionAlt = 249
 
+-- | Bytes a selective-indirection wrapper occupies.
+--
+-- Tag, the pointer, the pointee's end, and the share bitmask.  The cursor
+-- advances by exactly this much, so a writer must have this much room.
+selectiveIndirectionSize :: Num a => a
+selectiveIndirectionSize = 25
+
+-- | Where random-access datacon tags start.
+--
+-- A tag is one byte and the space is split three ways: @[0, ranTagBase)@ are
+-- ordinary constructors, @[ranTagBase, selectiveIndirectionAlt)@ are the
+-- random-access variants -- which a reader identifies by the tag alone, to
+-- know a size field follows -- and the rest are reserved.  'getTagOfDataCon'
+-- checks a program stays inside the first two.
+ranTagBase :: Num a => a
+ranTagBase = 150
+
 toAbsRANDataCon :: DataCon -> DataCon
 toAbsRANDataCon dcon = dcon ++ "^"
 
@@ -85,3 +102,23 @@ mkRelOffsetsFunName dcon = "_add_size_and_rel_offsets_" `varAppend` (toVar dcon)
 
 isRelOffsetsFunName :: Var -> Bool
 isRelOffsetsFunName = L.isPrefixOf "_add_size_and_rel_offsets_" . fromVar
+
+-- | Symbols whose printed form is not their name.
+--
+-- @Passes.Codegen.initSymTable@ installs these into the RTS symbol table with
+-- dedicated setters rather than @gib_add_symbol@, so a compiled program prints
+-- the text below.  Every other backend has to agree, or the same program
+-- prints different things depending on how it was run.
+specialSymbolText :: String -> Maybe String
+specialSymbolText s =
+  case s of
+    "NEWLINE" -> Just "\n"
+    "SPACE" -> Just " "
+    "COMMA" -> Just ","
+    "LEFTPAREN" -> Just "("
+    "RIGHTPAREN" -> Just ")"
+    _ -> Nothing
+
+-- | The text a symbol prints as: its special form if it has one, else itself.
+symbolText :: String -> String
+symbolText s = maybe s id (specialSymbolText s)

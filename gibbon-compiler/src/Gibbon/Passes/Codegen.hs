@@ -244,12 +244,22 @@ needsIterReset ty =
     CursorArrayTy{} -> True
     _ -> False
 
+-- | The mutable cursor state a timed block must save and restore per iteration.
+--
+-- Ordered by name, not by 'M.toList': 'Var' compares on an interned 'Symbol',
+-- so a map of them enumerates in the order the strings were first interned --
+-- a function of everything the compiler happened to intern earlier in the run,
+-- not of the program.  The saves and their restores stay paired either way, so
+-- this only moves declarations around; but it makes generated C differ between
+-- runs that should agree, which is exactly what a byte-level regression check
+-- cannot tolerate.
 timedStateVars :: M.Map Var Ty -> Tail -> [(Var, Ty)]
 timedStateVars venv _rhs =
-  [ (v, ty)
-  | (v, ty) <- M.toList venv
-  , needsIterReset ty
-  ]
+  L.sortOn (fromVar . fst)
+    [ (v, ty)
+    | (v, ty) <- M.toList venv
+    , needsIterReset ty
+    ]
 
 sortFns :: Prog -> S.Set Var
 sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
@@ -313,6 +323,11 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
       sort_fns = sortFns prg
 
+      -- The instruction set this compilation selected.  The emitted helpers
+      -- are chosen from it here, so the generated C names one sequence and the
+      -- C preprocessor is not asked to pick.
+      (selectedIsa, isaSelectedBy) = simdIsaWithReason (dynflags cfg)
+
       defs = fst $ runPassM cfg 0 $ do
         (prots,funs') <- (unzip . concat) <$> mapM codegenFun funs
         main_expr' <- main_expr
@@ -339,7 +354,13 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
                        ]
             init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
             init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
-        let bod = init_gib ++ init_info_table ++ init_symbol_table
+        -- Before anything else, including gib_init: the whole translation
+        -- unit is compiled for `selectedIsa`, so an unsupported CPU faults on
+        -- whatever instruction the C compiler chose to put first.
+        let require_isa =
+              [ C.BlockStm [cstm| gib_require_simd_isa(); |]
+              | Just _ <- [simdIsaCpuFeature selectedIsa] ]
+        let bod = require_isa ++ init_gib ++ init_info_table ++ init_symbol_table
                   ++ (if gen_gc then ssDecls else [])
                   ++ e ++ exit_gib
         pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
@@ -438,9 +459,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <errno.h>\n\
         \#include <xmmintrin.h>\n\
         \#include <emmintrin.h>\n\
-        \#ifdef __SSE4_1__\n\
-        \#include <smmintrin.h>\n\
-        \#endif\n\
+        \" ++ (if simdIsaHasSse41 selectedIsa then "#include <smmintrin.h>\n" else "") ++ "\
         \#include <uthash.h>\n\n\
         \static inline __m128i gib_vec_broadcast_int64x2(GibInt x) {\n\
         \  return _mm_set1_epi64x((long long) x);\n\
@@ -516,15 +535,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \}\n\
         \\n\
         \static inline __m128i gib_vec_eq_int64x2(__m128i a, __m128i b) {\n\
-        \#ifdef __SSE4_1__\n\
-        \  return _mm_cmpeq_epi64(a, b);\n\
-        \#else\n\
-        \  int64_t av[2], bv[2];\n\
-        \  _mm_storeu_si128((__m128i *) av, a);\n\
-        \  _mm_storeu_si128((__m128i *) bv, b);\n\
-        \  return _mm_set_epi64x(av[1] == bv[1] ? -1LL : 0LL, av[0] == bv[0] ? -1LL : 0LL);\n\
-        \#endif\n\
-        \}\n\
+        \" ++ eqInt64x2Body selectedIsa ++ "}\n\
         \\n\
         \static inline __m128i gib_vec_select_int64x2(__m128i mask, __m128i thenv, __m128i elsev) {\n\
         \  return _mm_or_si128(_mm_and_si128(mask, thenv), _mm_andnot_si128(mask, elsev));\n\
@@ -541,12 +552,14 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \ * Load/store are UNALIGNED (`_mm_loadu_si128`/`_mm_storeu_si128`)\n\
         \ * because a packed SoA field buffer makes no alignment promise.\n\
         \ *\n\
-        \ * There are deliberately no mul/div/mod helpers here.  `_mm_mullo_epi32`\n\
-        \ * is SSE4.1, and SSE2 has no packed signed 32-bit divide or modulus; the\n\
-        \ * only implementations would spill the register and loop over lanes,\n\
-        \ * which is slower than the scalar loop it replaced.  `L3.simdCapable`\n\
-        \ * therefore reports them unsupported and such loops stay entirely\n\
-        \ * scalar.  See the W32 rows of the capability matrix.\n\
+        \ * There IS a multiply helper, below: at SSE4.1 it is `_mm_mullo_epi32`,\n\
+        \ * and at baseline SSE2 an equivalent sequence built from `_mm_mul_epu32`.\n\
+        \ * Which one appears is decided by the ISA Gibbon was asked for, not by\n\
+        \ * this translation unit's preprocessor.  There are no div/mod helpers:\n\
+        \ * SSE2 has no packed signed 32-bit divide or modulus, the only\n\
+        \ * implementations would spill the register and loop over lanes, and\n\
+        \ * `L3.simdCapable` reports them unsupported so such loops stay scalar.\n\
+        \ * See the W32 rows of the capability matrix.\n\
         \ */\n\
         \static inline __m128i gib_vec_broadcast_int32x4(GibInt32 x) {\n\
         \  return _mm_set1_epi32((int32_t) x);\n\
@@ -564,10 +577,12 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \  return _mm_sub_epi32(a, b);\n\
         \}\n\
         \\n\
-        \/* Packed signed 32-bit multiply on BASELINE SSE2 (no _mm_mullo_epi32,\n\
-        \ * which is SSE4.1).  The low 32 bits of a signed product equal the low\n\
-        \ * 32 bits of the unsigned product -- both are arithmetic in Z/2^32 --\n\
-        \ * so the unsigned _mm_mul_epu32 computes exactly the bits we keep.\n\
+        \/* Packed signed 32-bit multiply.  At SSE4.1 this is one _mm_mullo_epi32;\n\
+        \ * the baseline SSE2 body below is the fallback, selected by Gibbon from\n\
+        \ * the ISA it was asked for.  The low 32 bits of a signed product equal\n\
+        \ * the low 32 bits of the unsigned product -- both are arithmetic in\n\
+        \ * Z/2^32 -- so the unsigned _mm_mul_epu32 computes exactly the bits we\n\
+        \ * keep.\n\
         \ *\n\
         \ * _mm_mul_epu32 multiplies lanes 0 and 2 into two 64-bit results.\n\
         \ * Shifting each vector right by 4 bytes moves lanes 1 and 3 into\n\
@@ -576,21 +591,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \ * lane order.  All four lanes are computed in registers: no scalar\n\
         \ * array, no per-lane imul. */\n\
         \static inline __m128i gib_vec_mul_int32x4(__m128i a, __m128i b) {\n\
-        \#if defined(__SSE4_1__)\n\
-        \  /* One instruction when the target allows it.  The SSE2 fallback below is\n\
-        \   * seven, four of which are shuffles competing for a single port, which made\n\
-        \   * a multiply-heavy W32 loop slower vectorized than scalar.  GCC does not\n\
-        \   * pattern-match that sequence back to `_mm_mullo_epi32`, so selecting it\n\
-        \   * here is what actually makes `-msse4.1` pay off. */\n\
-        \  return _mm_mullo_epi32(a, b);\n\
-        \#else\n\
-        \  __m128i even = _mm_mul_epu32(a, b);\n\
-        \  __m128i odd = _mm_mul_epu32(_mm_srli_si128(a, 4), _mm_srli_si128(b, 4));\n\
-        \  __m128i e = _mm_shuffle_epi32(even, _MM_SHUFFLE(0, 0, 2, 0));\n\
-        \  __m128i o = _mm_shuffle_epi32(odd, _MM_SHUFFLE(0, 0, 2, 0));\n\
-        \  return _mm_unpacklo_epi32(e, o);\n\
-        \#endif\n\
-        \}\n\
+        \" ++ mulInt32x4Body selectedIsa ++ "}\n\
         \\n\
         \static inline __m128i gib_vec_eq_int32x4(__m128i a, __m128i b) {\n\
         \  return _mm_cmpeq_epi32(a, b);\n\
@@ -718,9 +719,11 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \ * `_mm_cmpeq_epi8` compares the bytes bitwise, so a correctly\n\
         \ * broadcast INT8_MIN compares equal to a stored INT8_MIN.\n\
         \ *\n\
-        \ * No mul/div/mod: SSE2 has no packed 8-bit multiply at all (it would\n\
-        \ * need unpack/widen/repack, which is out of scope), and no packed\n\
-        \ * signed divide or modulus.  Those loops stay scalar. */\n\
+        \ * There IS a multiply, below: SSE2 has no packed 8-bit multiply\n\
+        \ * instruction, so `gib_vec_mul_int8x16` unpacks to 16-bit lanes,\n\
+        \ * multiplies with `_mm_mullo_epi16`, masks and repacks -- all sixteen\n\
+        \ * lanes in registers.  There is no divide or modulus: SSE2 has no\n\
+        \ * packed signed form of either, and those loops do stay scalar. */\n\
         \static inline __m128i gib_vec_broadcast_int8x16(GibInt8 x) {\n\
         \  return _mm_set1_epi8((signed char) x);\n\
         \}\n\
@@ -1327,11 +1330,49 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \    gibbon_native_papi_inited = 1;\n\
         \}\n\
         \#endif\n\n\
+        \" ++ simdIsaGuard selectedIsa isaSelectedBy ++ "\
         \/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
         \ * Program starts here\n\
         \ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
         \ */\n\n"
 
+
+-- | A startup check that this CPU has the instruction set the binary was
+-- compiled for.
+--
+-- The whole translation unit is compiled with the selected @-m@ flag, so on a
+-- machine without that instruction set the program takes SIGILL at whatever
+-- instruction the C compiler happened to emit first, with no diagnostic.  One
+-- call at the top of @main@ replaces that with a message naming the required
+-- ISA and the flag that asked for it; there is no per-loop cost.
+--
+-- The check itself is compiled only for x86, and is empty for an ISA the
+-- x86-64 baseline already guarantees.
+simdIsaGuard :: SimdIsa -> String -> String
+simdIsaGuard isa selectedBy =
+  case simdIsaCpuFeature isa of
+    Nothing -> ""
+    Just feature ->
+      unlines
+        [ "static void gib_require_simd_isa(void)"
+        , "{"
+        , "#if defined(__x86_64__) || defined(__i386__)"
+        , "    __builtin_cpu_init();"
+        , "    if (!__builtin_cpu_supports(" ++ show feature ++ ")) {"
+        , "        fprintf(stderr, " ++ show message ++ ");"
+        , "        exit(1);"
+        , "    }"
+        , "#endif"
+        , "}"
+        , ""
+        ]
+      where
+        message =
+          "This program was compiled for the " ++ simdIsaName isa ++
+          " instruction set (" ++ selectedBy ++ ", which compiles the generated C with " ++
+          unwords (words (simdIsaCcFlags isa)) ++
+          "), and this CPU does not support " ++ feature ++ ".\n" ++
+          "Recompile with --simd-isa=sse2.\n"
 
 builtinFieldTys :: [String]
 builtinFieldTys =
@@ -1346,7 +1387,7 @@ initSymTable sym_tbl =
           (\(k,v) -> case v of
                        -- Special symbols that get handled differently
                        "NEWLINE" -> C.BlockStm [cstm| gib_set_newline($k); |]
-                       "COMMA" -> C.BlockStm [cstm| set_comma($k); |]
+                       "COMMA" -> C.BlockStm [cstm| gib_set_comma($k); |]
                        "SPACE" -> C.BlockStm [cstm| gib_set_space($k); |]
                        "LEFTPAREN" -> C.BlockStm [cstm| gib_set_leftparen($k); |]
                        "RIGHTPAREN" -> C.BlockStm [cstm| gib_set_rightparen($k); |]
@@ -1508,7 +1549,75 @@ codegenTriv venv (IndexCursorArrayTriv idx v) = [cexp| $(codegenTriv venv v)[$in
 
 -- Type environment
 type FEnv = M.Map Var ([Ty], Ty)
+-- | Does this ISA have SSE4.1?
+--
+-- A capability question, asked of the ISA Gibbon selected rather than of the C
+-- preprocessor's @__SSE4_1__@.  Deciding in the generated C would let the
+-- instruction set Gibbon reports and the instruction set it emits disagree --
+-- and @-mavx2@ and @-march=native@ both define @__SSE4_1__@, so the C-side
+-- answer is not even specific to asking for SSE4.1.
+simdIsaHasSse41 :: SimdIsa -> Bool
+simdIsaHasSse41 isa =
+  case isa of
+    SimdSse2 -> False
+    SimdSse41 -> True
+    SimdAvx2 -> True
+    SimdNative -> True
+
+-- | The body of @gib_vec_mul_int32x4@ for this ISA.
+--
+-- SSE2 has no packed signed 32-bit multiply, so the baseline sequence builds
+-- the four low halves out of two @_mm_mul_epu32@ and four shuffles -- seven
+-- instructions, four of them competing for one shuffle port, which made a
+-- multiply-heavy W32 loop slower vectorized than scalar.  @_mm_mullo_epi32@ is
+-- one instruction and GCC does not pattern-match the sequence back to it, so
+-- the choice has to be made here.
+mulInt32x4Body :: SimdIsa -> String
+mulInt32x4Body isa
+  | simdIsaHasSse41 isa =
+      "  return _mm_mullo_epi32(a, b);\n"
+  | otherwise = concat
+      [ "  __m128i even = _mm_mul_epu32(a, b);\n"
+      , "  __m128i odd = _mm_mul_epu32(_mm_srli_si128(a, 4), _mm_srli_si128(b, 4));\n"
+      , "  __m128i e = _mm_shuffle_epi32(even, _MM_SHUFFLE(0, 0, 2, 0));\n"
+      , "  __m128i o = _mm_shuffle_epi32(odd, _MM_SHUFFLE(0, 0, 2, 0));\n"
+      , "  return _mm_unpacklo_epi32(e, o);\n"
+      ]
+
+-- | The body of @gib_vec_eq_int64x2@ for this ISA.
+--
+-- @_mm_cmpeq_epi64@ is SSE4.1; SSE2 has to spill both registers and compare
+-- the lanes one at a time.
+eqInt64x2Body :: SimdIsa -> String
+eqInt64x2Body isa
+  | simdIsaHasSse41 isa =
+      "  return _mm_cmpeq_epi64(a, b);\n"
+  | otherwise = concat
+      [ "  int64_t av[2], bv[2];\n"
+      , "  _mm_storeu_si128((__m128i *) av, a);\n"
+      , "  _mm_storeu_si128((__m128i *) bv, b);\n"
+      , "  return _mm_set_epi64x(av[1] == bv[1] ? -1LL : 0LL, av[0] == bv[0] ? -1LL : 0LL);\n"
+      ]
+
+-- | 'selectiveIndirectionSize' at the type the C quasiquoter needs.
+selectiveIndirectionSizeI :: Int
+selectiveIndirectionSizeI = L3.selectiveIndirectionSize
+
 type VEnv = M.Map Var Ty
+
+-- | The type of a trivial, where it is knowable from the trivial alone.
+--
+-- 'Nothing' for an uninitialised binding (which is emitted without a cast),
+-- for a variable the environment does not carry, and for the product forms,
+-- whose element types come from those same lookups.
+trivTyMaybe :: VEnv -> Triv -> Maybe Ty
+trivTyMaybe venv trv =
+  case trv of
+    VarTriv v -> M.lookup v venv
+    UninitTriv{} -> Nothing
+    ProdTriv{} -> Nothing
+    ProjTriv{} -> Nothing
+    _ -> Just (typeOfTriv venv trv)
 type MutEndEnv = M.Map Var Var
 type SyncDeps = [(Var, C.BlockItem)]
 
@@ -1601,7 +1710,19 @@ codegenTail _ _ _ _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n",
 
 -- We could eliminate these earlier
 codegenTail venv mutEndEnv fenv sort_fns (LetTrivT (vr,rty,rhs) body) ty sync_deps =
-    do let venv' = M.insert vr rty venv
+    do -- The binding is emitted with a C cast to its declared type, which
+       -- accepts anything of the same size: a narrower integer, or a cursor
+       -- where a count was meant, would be reinterpreted with no diagnostic
+       -- from the C compiler either.  Nothing upstream guarantees the two
+       -- agree, so check it here.
+       case trivTyMaybe venv rhs of
+         Just aty
+           | aty /= rty ->
+               error $ "codegenTail: LetTrivT binds " ++ fromVar vr ++ " :: "
+                 ++ sdoc rty ++ " to a trivial of type " ++ sdoc aty
+                 ++ "; the cast to the declared type would reinterpret it."
+         _ -> pure ()
+       let venv' = M.insert vr rty venv
            mutEndEnv' =
              case rhs of
                VarTriv src ->
@@ -1733,7 +1854,9 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
        papi_after <- gensym "papi_after"
        papi_samples <- gensym "papi_samples"
        let timedResetVars = timedStateVars venv rhs
-           timedEndResetVars = S.toList $ S.fromList $
+           -- Deduplicated by name rather than through a 'S.Set Var', for the
+           -- reason given at 'timedStateVars'.
+           timedEndResetVars = L.nubBy (\a b -> fromVar a == fromVar b) $
              mapMaybe (\(v, vty) -> case vty of
                                       MutCursorTy -> M.lookup v mutEndEnv
                                       _ -> Nothing)
@@ -2530,7 +2653,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                                        , C.BlockStm [cstm| *($ty:tagged_ptr_t *)($exp:cur' + sizeof(GibPackedTag)) = ($ty:tagged_ptr_t) $exp:to'; |]
                                        , C.BlockStm [cstm| *($ty:tagged_ptr_t *)($exp:cur' + sizeof(GibPackedTag) + sizeof(uintptr_t)) = ($ty:tagged_ptr_t) $exp:toEnd'; |]
                                        , C.BlockStm [cstm| *($ty:mask_t *)($exp:cur' + sizeof(GibPackedTag) + (2 * sizeof(uintptr_t))) = ($ty:mask_t) $exp:mask'; |]
-                                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($exp:cur') + 25; |]
+                                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($exp:cur') + $int:selectiveIndirectionSizeI; |]
                                        ]
 
                  UnwrapSelectiveIndirections len ->
@@ -3395,21 +3518,24 @@ simdScalarWidthBytes _ = L3.simdScalarBytes
 -- emitting a short or overlong memory access.  Returns 'Nothing' when sound.
 vecRegisterWidthError :: DynFlags -> L3.VecOp -> Scalar -> Int -> Maybe String
 vecRegisterWidthError dflags op scalar lanes
-  -- EITHER register width is acceptable, because both helper sets are emitted
-  -- into every translation unit: the 128-bit SSE2 helpers and the 256-bit
-  -- vector-extension ones.  So the backend can lower any node whose lanes
-  -- exactly fill one of them, whichever width the vectorizer chose.  What is
-  -- still rejected -- loudly -- is a count that fills NEITHER, such as
-  -- @(IntS W32, 2)@ or a hand-built @(IntS W64, 3)@: that is malformed IR and
-  -- would emit a short or overlong memory access.
-  | L3.simdLanesValidAny scalar lanes = Nothing
+  -- Against the register width THIS compilation selected, not against either
+  -- width the backend can emit helpers for.  The vectorizer derives every lane
+  -- count it emits from that same width, so a node of the other width did not
+  -- come from it, and lowering it would quietly put a 256-bit access in an
+  -- SSE2 build -- or a half-empty 128-bit one in an AVX2 build, which is not
+  -- wrong but is not what was asked for either.  A count filling NEITHER, such
+  -- as @(IntS W32, 2)@, was already rejected and still is.
+  | L3.simdLanesValid regBytes scalar lanes = Nothing
   | otherwise = Just $
       "Codegen: SIMD op " ++ show (L3.vecOpName op) ++ " on " ++ show (scalar, lanes) ++
-      " fills neither a 128- nor a 256-bit register: " ++
+      " does not fill a " ++ show (8 * regBytes) ++ "-bit register, which is what " ++
+      "--simd-isa=" ++ simdIsaName isa ++ " selects: " ++
       show lanes ++ " lanes * " ++ show width ++ " bytes = " ++
-      show (lanes * width) ++ " bytes (expected " ++
-      show L3.simdRegisterBytes ++ " or " ++ show L3.simdRegisterBytesAvx2 ++ ")"
-  where width = simdScalarWidthBytes dflags scalar
+      show (lanes * width) ++ " bytes (expected " ++ show regBytes ++ ")"
+  where
+    width = simdScalarWidthBytes dflags scalar
+    isa = simdIsaOf dflags
+    regBytes = simdIsaRegisterBytes isa
 
 -- | 'vecHelperName', with the 128-bit register invariant checked.  Use this
 -- from lowering, never the pure version.

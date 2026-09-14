@@ -109,7 +109,7 @@ genUnpacker DDef{tyName, dataCons} = do
                     T.funRetTy = T.ProdTy [T.PtrTy, T.CursorTy],
                     T.funBody  = bod,
                     T.isPure   = False,
-                    T.funMeta  = FunMeta NotRec NoInline False []
+                    T.funMeta  = FunMeta NotRec NoInline False [] Nothing
                   }
 
 
@@ -332,6 +332,13 @@ addPrintToTail ty tl0 = do
           T.EndOfMain  -- marker of the end of main expression
 
 -- | Look up the numeric tag for a dataCon
+--
+-- A tag is one byte, so a type with enough constructors runs its ordinary tags
+-- into the random-access range -- where a reader would take the next bytes for
+-- a size field -- or its random-access tags into the reserved range, where a
+-- traversal would take the node for an indirection.  Neither is caught later:
+-- both produce a tag some reader accepts, just not as the constructor written.
+-- See 'ranTagBase'.
 getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
@@ -340,10 +347,18 @@ getTagOfDataCon dds dcon =
     then redirectionAlt
     else if isRelRANDataCon dcon
     -- So that is_big in the RTS can identify which nodes have size information.
-    then 150 + (fromIntegral ix)
-    else fromIntegral ix
+    then checked (ranTagBase + ix) "a random-access tag"
+    else checked ix "a constructor tag"
   where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
         (tycon,_) = lkp dds dcon
+        limit = if isRelRANDataCon dcon then selectiveIndirectionAlt else ranTagBase
+        checked t what
+          | t < limit = fromIntegral t
+          | otherwise =
+              error $ "getTagOfDataCon: " ++ fromVar tycon ++ " has too many "
+                ++ "constructors: " ++ dcon ++ " would take tag " ++ show t
+                ++ " as " ++ what ++ ", but those run out at " ++ show (limit :: Int)
+                ++ "."
 
 
 -- The compiler pass
@@ -1457,15 +1472,6 @@ typ t =
 typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t
 
--- | THE WIDTH ERASURE POINT (L3 -> L4).
---
--- L4's Prim is width-less, so the IntPrimAnn carried faithfully through L0,
--- L1, L2 and L3 is dropped here and every integer operation becomes 64-bit in
--- the generated C.  Narrow-width code generation is therefore UNSAFE and is
--- deliberately out of scope until L4 carries widths: `sizeOfTy` already
--- reports 1 byte for Int8 while codegen would write 8.
---
--- Do not "fix" this by widening at L3; fix it by giving L4 a width.
 -- | Every width-sensitive int-arithmetic/comparison primitive carries its
 -- 'L1.IntPrimAnn' from L0 all the way to here, so its width is always
 -- resolved by construction ('intPrimWidth' errors on an unresolved one rather

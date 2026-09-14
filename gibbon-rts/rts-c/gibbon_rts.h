@@ -92,10 +92,10 @@
  * never defined `GIBBON_INT32`) kept `GibInt` as `int64_t`.  That split is
  * gone.
  *
- * `--int32` is now a FRONTEND default: a bare, unannotated source `Int`
- * desugars to a 32-bit program type (see `Gibbon.HaskellFrontend.desugarType`
- * and `Gibbon.L0.Typecheck.compatDefaultIntWidth`), and the compiler carries
- * that width through L0-L4 like any other explicit one (`GibInt32`, below).
+ * `--int32` is gone entirely, and a bare, unannotated source `Int` is `W64`
+ * (`Gibbon.HaskellFrontend.desugarType`).  A narrow program type comes from
+ * writing `Int8`/`Int16`/`Int32`/`Int64`, and the compiler carries that width
+ * through L0-L4 like any other explicit one (`GibInt32`, below).
  * `GibInt` itself no longer changes meaning: it is `int64_t`, unconditionally,
  * on every generated translation unit and in the RTS, matching every other
  * shared struct/prototype that already had to be pinned this way (like
@@ -513,6 +513,12 @@ GibSym gib_read_gensym_counter(void);
 
 
 // Must be same as "Gibbon.Language.Constants".
+//
+// These are the top of a one-byte space the compiler fills from below:
+// [0, 150) ordinary constructor tags, [150, 249) their random-access variants,
+// which carry a size field.  A new reserved tag must come out of the range
+// below 249 only by lowering GIB_SELECTIVE_INDIRECTION_TAG and `ranTagBase`
+// together; `getTagOfDataCon` rejects a program that would otherwise overrun.
 #define GIB_REDIRECTION_TAG 255
 #define GIB_INDIRECTION_TAG 254
 #define GIB_SELECTIVE_INDIRECTION_TAG 249
