@@ -121,6 +121,66 @@ case_guarded_division_stays_scalar =
 
 -- A loop-invariant division must not be hoisted in front of the loop (it would
 -- run even for a zero trip count); it stays inside the loop as a vector op.
+-- | A call in the loop body keeps the loop scalar.
+--
+-- `safeEffect` used to accept every non-`Ext` right-hand side as effect-free,
+-- so a call was carried into the vector body and would have run once per vector
+-- iteration instead of once per element.
+case_call_in_loop_body_keeps_the_loop_scalar :: Assertion
+case_call_in_loop_body_keeps_the_loop_scalar =
+  countVecStores (funBodyOf "callInLoop" (runner64 vectorizeProg)) @?= 0
+
+-- | An arm writing two scalars keeps the loop scalar, rather than losing one.
+--
+-- The paired one-write program below vectorizes, so this is the multi-write
+-- rejection and not the conditional shape being unsupported outright.
+case_multi_write_arm_keeps_the_loop_scalar :: Assertion
+case_multi_write_arm_keeps_the_loop_scalar =
+  countVecStores (funBodyOf "twoWriteArm" (runner64 vectorizeProg)) @?= 0
+
+case_single_write_arm_still_vectorizes :: Assertion
+case_single_write_arm_still_vectorizes =
+  assertBool "the one-write conditional must still vectorize"
+    (countVecStores (funBodyOf "oneWriteArm" (runner64 vectorizeProg)) > 0)
+
+-- | A cursor that is read by one op and skipped by another is advanced ONCE.
+--
+-- The read list and the skip list were deduplicated separately, so a cursor in
+-- both emitted two bumps and advanced 32 bytes per 16-byte vector iteration.
+case_shared_input_cursor_is_bumped_once :: Assertion
+case_shared_input_cursor_is_bumped_once =
+  let body = funBodyOf "sharedInputConst" (runner64 vectorizeProg)
+      inBumps = countBumpsOfRef "sharedloop_buf2_in_loc" body
+      outBumps = countBumpsOfRef "sharedloop_buf1_out_loc" body
+   in do
+        -- The loop vectorizes at all.
+        assertBool "expected the loop to vectorize" (countVecStores body > 0)
+        -- Every cursor advances the same distance per iteration; the shared
+        -- input must not advance twice for appearing in two roles.
+        assertBool
+          ("buf2 input bumped " ++ show inBumps ++ " times, buf1 output "
+             ++ show outBumps)
+          (inBumps == outBumps)
+
+-- | A constant write borrows an input cursor to advance, because the scalar
+-- loop it replaces advanced one.  The borrow is the nearest preceding read of
+-- the same scalar kind, which is only its own buffer's cursor because
+-- loopification emits a read for every buffer.  Without that read the borrow
+-- would cross buffers, and the loop must stay scalar rather than advance a
+-- peer buffer's cursor.
+case_cross_buffer_borrow_keeps_the_loop_scalar :: Assertion
+case_cross_buffer_borrow_keeps_the_loop_scalar =
+  countVecStores (funBodyOf "crossBufferBorrow" (runner64 vectorizeProg)) @?= 0
+
+-- | A conversion from a width to itself computes nothing, so it must not stop
+-- the loop it appears in from vectorizing.  A conversion that really changes
+-- width still does: every operand of a DAG is loaded with the write's own lane
+-- count, so a narrower one would be loaded wrong.
+case_identity_width_conversion_still_vectorizes :: Assertion
+case_identity_width_conversion_still_vectorizes = do
+  countVecStores (funBodyOf "identityConv" (runner64 vectorizeProg)) @?= 2
+  countVecStores (funBodyOf "wideningConv" (runner64 vectorizeProg)) @?= 0
+
 case_invariant_division_is_not_hoisted :: Assertion
 case_invariant_division_is_not_hoisted =
   let body = funBodyOf "invariantDiv" (runner64 vectorizeProg)
@@ -139,8 +199,192 @@ vectorizeProg =
        , ("partialUnsupported", partialUnsupportedFun)
        , ("guardedDiv", guardedDivFun)
        , ("invariantDiv", invariantDivFun)
+       , ("callInLoop", callInLoopFun)
+       , ("twoWriteArm", twoWriteArmFun)
+       , ("oneWriteArm", oneWriteArmFun)
+       , ("sharedInputConst", sharedInputConstFun)
+       , ("crossBufferBorrow", crossBufferBorrowFun)
+       , ("identityConv", identityConvFun)
+       , ("wideningConv", wideningConvFun)
        ])
     Nothing
+
+-- | A loop body containing a CALL, whose right-hand side is not an `Ext`.
+--
+-- Vectorizing it would run the call once per vector iteration instead of once
+-- per element.  Nothing about a call is visible in the effect whitelist, which
+-- only inspected `Ext` forms, so it has to be classified rather than assumed
+-- effect-free.
+callInLoopFun :: L3.FunDef3
+callInLoopFun =
+  L3.FunDef
+    "callInLoop"
+    []
+    ([], L3.ProdTy [])
+    (loopBody callInLoopBody)
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+callInLoopBody :: L3.Exp3
+callInLoopBody =
+  L3.mkLets
+    [ ("in_cur", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "call_in")
+    , ("read_pair", [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 "in_cur")
+    , ("x", [], L3.IntTy W64, L3.ProjE 0 (L3.VarE "read_pair"))
+    , ("side", [], L3.IntTy W64, L3.AppE "sideEffect" UnknownTailType [] [L3.VarE "x"])
+    , ("out_cur", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "call_out")
+    , ("write", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur" (L3.VarE "x"))
+    , ("bump_in", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "call_in" (L3.mkLitE64 8))
+    , ("bump_out", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "call_out" (L3.mkLitE64 8))
+    ]
+    (L3.MkProdE [])
+
+-- | A conditional whose THEN arm writes two scalars.
+--
+-- Flattening kept only the first write, so the second was silently dropped.
+twoWriteArmFun :: L3.FunDef3
+twoWriteArmFun =
+  L3.FunDef
+    "twoWriteArm"
+    []
+    ([], L3.ProdTy [])
+    (loopBody (condWriteLoopBody True))
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+-- | The same shape with one write per arm: the false-positive guard.
+oneWriteArmFun :: L3.FunDef3
+oneWriteArmFun =
+  L3.FunDef
+    "oneWriteArm"
+    []
+    ([], L3.ProdTy [])
+    (loopBody (condWriteLoopBody False))
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+condWriteLoopBody :: Bool -> L3.Exp3
+condWriteLoopBody twoWrites =
+  L3.mkLets
+    [ ("in_cur", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "cond_in")
+    , ("read_pair", [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 "in_cur")
+    , ("x", [], L3.IntTy W64, L3.ProjE 0 (L3.VarE "read_pair"))
+    , ("out_cur", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "cond_out")
+      -- Before the conditional: flattening treats the `IfE` as the body's
+      -- tail, so anything after it would not be seen.
+    , ("bump_in", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "cond_in" (L3.mkLitE64 8))
+    , ("bump_out", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "cond_out" (L3.mkLitE64 8))
+    ]
+    (L3.IfE
+       (L3.PrimAppE eqIntP64 [L3.VarE "x", L3.mkLitE64 0])
+       (L3.mkLets
+          ( [ ("w1", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur" (L3.mkLitE64 1)) ]
+              ++ [ ("w2", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur" (L3.mkLitE64 2))
+                 | twoWrites ] )
+          (L3.MkProdE []))
+       (L3.mkLets
+          [ ("w3", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur" (L3.VarE "x")) ]
+          (L3.MkProdE [])))
+
+-- | Two writes from one input cursor, one of which ignores the value.
+--
+-- An op whose expression reads nothing is attributed to the nearest preceding
+-- read's cursor, so that cursor is a READ cursor for the first write and a
+-- SKIPPED one for the second.  Both lists emitted a bump, so the cursor
+-- advanced twice per vector iteration and the loop walked past its own data.
+sharedInputConstFun :: L3.FunDef3
+sharedInputConstFun =
+  L3.FunDef
+    "sharedInputConst"
+    []
+    ([], L3.ProdTy [])
+    (loopBody sharedInputConstBody)
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+-- | Buffer 1 reads both buffers; buffer 2 writes a constant.
+--
+-- Buffer 2's cursor is therefore a READ cursor for buffer 1's op and the
+-- borrowed input of buffer 2's own constant write, which is the shape that
+-- advanced it twice per vector iteration.  Cursor names follow the loop buffer
+-- name contract because the borrow is only accepted when it stays inside one
+-- buffer, which is read off those names.
+sharedInputConstBody :: L3.Exp3
+sharedInputConstBody =
+  L3.mkLets
+    [ ("in_cur_a", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "sharedloop_buf1_in_loc")
+    , ("read_pair_a", [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 "in_cur_a")
+    , ("x", [], L3.IntTy W64, L3.ProjE 0 (L3.VarE "read_pair_a"))
+    , ("in_cur_b", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "sharedloop_buf2_in_loc")
+    , ("read_pair_b", [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 "in_cur_b")
+    , ("y", [], L3.IntTy W64, L3.ProjE 0 (L3.VarE "read_pair_b"))
+    , ("out_cur_a", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "sharedloop_buf1_out_loc")
+    , ("write_a", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur_a" (L3.PrimAppE addP64 [L3.VarE "x", L3.VarE "y"]))
+    , ("out_cur_b", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "sharedloop_buf2_out_loc")
+    , ("write_b", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur_b" (L3.mkLitE64 7))
+    , ("bump_in_a", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "sharedloop_buf1_in_loc" (L3.mkLitE64 8))
+    , ("bump_in_b", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "sharedloop_buf2_in_loc" (L3.mkLitE64 8))
+    , ("bump_out_a", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "sharedloop_buf1_out_loc" (L3.mkLitE64 8))
+    , ("bump_out_b", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "sharedloop_buf2_out_loc" (L3.mkLitE64 8))
+    ]
+    (L3.MkProdE [])
+
+-- | A write whose operand carries a conversion from W64 to W64.
+identityConvFun :: L3.FunDef3
+identityConvFun =
+  L3.FunDef
+    "identityConv"
+    []
+    ([], L3.ProdTy [])
+    (loopBody identityConvLoopBody)
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+identityConvLoopBody :: L3.Exp3
+identityConvLoopBody =
+  intWriteLoopBody 8 "idconv_in" "idconv_out" $
+    L3.PrimAppE addP64
+      [ L3.VarE "x"
+      , L3.PrimAppE (IntConvertP (IntPrimWidth W64) W64) [L3.mkLitE64 7] ]
+
+-- | The same write with a conversion that really changes width.
+wideningConvFun :: L3.FunDef3
+wideningConvFun =
+  L3.FunDef
+    "wideningConv"
+    []
+    ([], L3.ProdTy [])
+    (loopBody wideningConvLoopBody)
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+wideningConvLoopBody :: L3.Exp3
+wideningConvLoopBody =
+  intWriteLoopBody 8 "widening_in" "widening_out" $
+    L3.PrimAppE addP64
+      [ L3.VarE "x"
+      , L3.PrimAppE (IntConvertP (IntPrimWidth W32) W64) [L3.LitE (LitWidth W32) 7] ]
+
+-- | The same loop with buffer 2's own read removed, so the constant write's
+-- borrowed input cursor would come from buffer 1.
+crossBufferBorrowFun :: L3.FunDef3
+crossBufferBorrowFun =
+  L3.FunDef
+    "crossBufferBorrow"
+    []
+    ([], L3.ProdTy [])
+    (loopBody crossBufferBorrowBody)
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
+
+crossBufferBorrowBody :: L3.Exp3
+crossBufferBorrowBody =
+  L3.mkLets
+    [ ("in_cur_a", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "crossloop_buf1_in_loc")
+    , ("read_pair_a", [], L3.ProdTy [L3.IntTy W64, L3.CursorTy], L3.Ext $ L3.ReadScalar L3.intS64 "in_cur_a")
+    , ("x", [], L3.IntTy W64, L3.ProjE 0 (L3.VarE "read_pair_a"))
+    , ("out_cur_a", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "crossloop_buf1_out_loc")
+    , ("write_a", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur_a" (L3.PrimAppE addP64 [L3.VarE "x", L3.mkLitE64 1]))
+    , ("out_cur_b", [], L3.CursorTy, L3.Ext $ L3.DerefMutCursor "crossloop_buf2_out_loc")
+    , ("write_b", [], L3.CursorTy, L3.Ext $ L3.WriteScalar L3.intS64 "out_cur_b" (L3.mkLitE64 7))
+    , ("bump_in_a", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "crossloop_buf1_in_loc" (L3.mkLitE64 8))
+    , ("bump_out_a", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "crossloop_buf1_out_loc" (L3.mkLitE64 8))
+    , ("bump_out_b", [], L3.ProdTy [], L3.Ext $ L3.BumpCursorMutable "crossloop_buf2_out_loc" (L3.mkLitE64 8))
+    ]
+    (L3.MkProdE [])
 
 guardedDivFun :: L3.FunDef3
 guardedDivFun =
@@ -149,7 +393,7 @@ guardedDivFun =
     []
     ([], L3.ProdTy [])
     (loopBody guardedDivLoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 guardedDivLoopBody :: L3.Exp3
 guardedDivLoopBody =
@@ -166,7 +410,7 @@ invariantDivFun =
     []
     ([], L3.ProdTy [])
     (loopBody invariantDivLoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 invariantDivLoopBody :: L3.Exp3
 invariantDivLoopBody =
@@ -180,7 +424,7 @@ intAdd64Fun =
     []
     ([], L3.ProdTy [])
     (loopBody intAdd64LoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 intSelectFun :: L3.FunDef3
 intSelectFun =
@@ -189,7 +433,7 @@ intSelectFun =
     []
     ([], L3.ProdTy [])
     (loopBody intSelectLoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 mixedSelectFun :: L3.FunDef3
 mixedSelectFun =
@@ -198,7 +442,7 @@ mixedSelectFun =
     []
     ([], L3.ProdTy [])
     (loopBody mixedSelectLoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 partialUnsupportedFun :: L3.FunDef3
 partialUnsupportedFun =
@@ -207,7 +451,7 @@ partialUnsupportedFun =
     []
     ([], L3.ProdTy [])
     (loopBody partialUnsupportedLoopBody)
-    (FunMeta TailRec NoInline False [Loopified])
+    (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 loopBody :: L3.Exp3 -> L3.Exp3
 loopBody body =
@@ -252,7 +496,7 @@ widthWriteLoopBody w bumpBytes inRef outRef writeExpr =
 w32Fun :: Var -> L3.Exp3 -> L3.FunDef3
 w32Fun nm body =
   L3.FunDef nm [] ([], L3.ProdTy []) (loopBody body)
-            (FunMeta TailRec NoInline False [Loopified])
+            (FunMeta TailRec NoInline False [Loopified] Nothing)
 
 -- out = x + invariant
 w32AddLoopBody :: L3.Exp3
@@ -618,6 +862,13 @@ countVecLoadsOf scalar lanes = countExt p
 
 -- | Constant cursor bumps of exactly @n@ bytes.  The vectorized loop has to
 -- advance one full 128-bit register per group, i.e. lanes * scalar width.
+-- | Vector-register bumps of one cursor.
+countBumpsOfRef :: Var -> L3.Exp3 -> Int
+countBumpsOfRef ref = countExt p
+  where
+    p (L3.BumpCursorMutable r (L3.LitE _ m)) = r == ref && m == 16
+    p _ = False
+
 countBumpsBy :: Int -> L3.Exp3 -> Int
 countBumpsBy n = countExt p
   where

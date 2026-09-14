@@ -30,6 +30,21 @@ import Gibbon.Passes.Codegen (codegenProg, vecHelperName)
 config64 :: Config
 config64 = defaultConfig
 
+-- | The same, with the 256-bit instruction set selected.
+--
+-- The register-width check is asked of the ISA this compilation selected, so
+-- a lane count is valid or not only relative to one of these.
+configAvx2 :: Config
+configAvx2 =
+  defaultConfig
+    { dynflags = gopt_set Opt_SimdIsaAvx2 (dynflags defaultConfig) }
+
+-- | The 128-bit tier that has SSE4.1.
+configSse41 :: Config
+configSse41 =
+  defaultConfig
+    { dynflags = gopt_set Opt_SimdIsaSse41 (dynflags defaultConfig) }
+
 -- | An otherwise empty L4 program whose single function body is @tal@.
 progWith :: Tail -> Prog
 progWith tal =
@@ -43,7 +58,7 @@ progWith tal =
             , funRetTy = ProdTy []
             , funBody = tal
             , isPure = False
-            , funMeta = FunMeta NotRec NoInline False []
+            , funMeta = FunMeta NotRec NoInline False [] Nothing
             }
         ]
     , mainExp = Nothing
@@ -202,7 +217,7 @@ case_lane_count_filling_no_register_is_rejected = do
   case r of
     Left e ->
       assertBool ("error must explain the register invariant, got: " ++ show e)
-        ("neither a 128- nor a 256-bit register" `L.isInfixOf` show e)
+        ("does not fill a 128-bit register" `L.isInfixOf` show e)
     Right _ -> assertFailure "codegen accepted (intS64,3)"
 
 -- | And every combination the vectorizer can actually produce must still lower.
@@ -692,22 +707,26 @@ case_w32_mul_vector_ir_is_rejected = do
 
 case_w32_wrong_lane_count_is_rejected :: Assertion
 case_w32_wrong_lane_count_is_rejected = do
-  -- 4 tiles a 128-bit register and 8 tiles a 256-bit one, so neither is an
-  -- error any more; everything else at W32 still is.
+  -- A lane count is valid against the SELECTED register width, not against
+  -- either width the backend can emit helpers for.  So 4 is right at sse2 and
+  -- wrong at avx2, and 8 the other way round; the rest are wrong at both.
   sequence_
-    [ do r <- genC config64 (progWith (broadcastBody (L3.IntS L3.W32) n))
+    [ do r <- genC cfg (progWith (broadcastBody (L3.IntS L3.W32) n))
          case r of
            Left e -> assertBool ("must explain the register invariant, got: " ++ show e)
-                                ("neither a 128- nor a 256-bit register" `L.isInfixOf` show e)
-           Right _ -> assertFailure ("codegen accepted (IntS W32, " ++ show n ++ ")")
-    | n <- [2, 16, 32] ]
+                                (("does not fill a " ++ bits ++ "-bit register")
+                                   `L.isInfixOf` show e)
+           Right _ -> assertFailure ("codegen accepted (IntS W32, " ++ show n
+                                       ++ ") at " ++ bits ++ " bits")
+    | (cfg, bits, ns) <- [(config64, "128", [2, 8, 16, 32]), (configAvx2, "256", [2, 4, 16, 32])]
+    , n <- ns ]
   sequence_
-    [ do r <- genC config64 (progWith (broadcastBody (L3.IntS L3.W32) n))
+    [ do r <- genC cfg (progWith (broadcastBody (L3.IntS L3.W32) n))
          case r of
            Left e -> assertFailure ("codegen rejected valid (IntS W32, " ++ show n
                                       ++ "): " ++ show e)
            Right _ -> pure ()
-    | n <- [4, 8] ]
+    | (cfg, n) <- [(config64, 4), (configAvx2, 8)] ]
 
 case_w32_simd_register_type_is_m128i :: Assertion
 case_w32_simd_register_type_is_m128i = do
@@ -716,6 +735,81 @@ case_w32_simd_register_type_is_m128i = do
              ("__m128i" `L.isInfixOf` c)
 
 --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- Which instruction sequence the helpers use is Gibbon's choice, not the C
+-- preprocessor's.
+--------------------------------------------------------------------------------
+
+-- | The first line of the baseline W32 multiply body.
+--
+-- Specific to W32: the W64 multiply helper uses @_mm_mul_epu32@ too, at every
+-- ISA, so the bare intrinsic name does not distinguish the two sequences.
+w32BaselineMul :: String
+w32BaselineMul = "__m128i even = _mm_mul_epu32(a, b);"
+
+-- | At baseline SSE2 the emitted multiply is the _mm_mul_epu32 sequence.
+case_sse2_emits_the_baseline_multiply :: Assertion
+case_sse2_emits_the_baseline_multiply = do
+  src <- genC' config64 emptyProg
+  assertBool "expected the baseline W32 _mm_mul_epu32 sequence"
+    (w32BaselineMul `L.isInfixOf` src)
+  assertBool "must not emit the SSE4.1 multiply at baseline SSE2"
+    (not ("return _mm_mullo_epi32" `L.isInfixOf` src))
+  assertBool "must not emit the SSE4.1 64-bit compare at baseline SSE2"
+    (not ("return _mm_cmpeq_epi64" `L.isInfixOf` src))
+
+-- | At the SSE4.1 tier it is the single instruction, and only that.
+case_sse41_emits_the_single_instruction_multiply :: Assertion
+case_sse41_emits_the_single_instruction_multiply = do
+  src <- genC' configSse41 emptyProg
+  assertBool "expected _mm_mullo_epi32 at the SSE4.1 tier"
+    ("return _mm_mullo_epi32" `L.isInfixOf` src)
+  assertBool "expected _mm_cmpeq_epi64 at the SSE4.1 tier"
+    ("return _mm_cmpeq_epi64" `L.isInfixOf` src)
+  assertBool "the baseline W32 multiply sequence must not also be emitted"
+    (not (w32BaselineMul `L.isInfixOf` src))
+
+-- | And the generated C never asks the preprocessor which one to use.
+--
+-- Inferring the instruction set from `__SSE4_1__` is what VW-17 forbids: the
+-- C compiler's own target, which -mavx2 and -march=native also set, decided
+-- what Gibbon emitted while Gibbon reported something else.
+case_generated_c_does_not_consult_the_preprocessor_for_sse41 :: Assertion
+case_generated_c_does_not_consult_the_preprocessor_for_sse41 =
+  mapM_
+    (\(cfg, nm) -> do
+       src <- genC' cfg emptyProg
+       assertBool (nm ++ ": generated C must not branch on __SSE4_1__")
+         (not ("__SSE4_1__" `L.isInfixOf` src)))
+    [(config64, "sse2"), (configSse41, "sse4.1"), (configAvx2, "avx2")]
+
+-- | A binary compiled for an instruction set above the x86-64 baseline checks
+-- for it once, at the top of main, before anything else runs.  Without that a
+-- pre-AVX2 machine takes SIGILL at whatever instruction the C compiler put
+-- first, with no diagnostic.
+case_avx2_binary_checks_the_cpu_at_startup :: Assertion
+case_avx2_binary_checks_the_cpu_at_startup = do
+  c <- genC' configAvx2 emptyProg
+  assertBool "expected a startup ISA check"
+    ("__builtin_cpu_supports(\"avx2\")" `L.isInfixOf` c)
+  -- One definition and one call: a startup branch, not a per-loop one.
+  2 @=? length (filter ("gib_require_simd_isa" `L.isInfixOf`) (lines c))
+  assertBool "the check must name the flag that selected the ISA"
+    ("--opt-vectorization" `L.isInfixOf` c || "--simd-isa=avx2" `L.isInfixOf` c)
+
+case_sse41_binary_checks_for_sse41 :: Assertion
+case_sse41_binary_checks_for_sse41 = do
+  c <- genC' configSse41 emptyProg
+  assertBool "expected an sse4.1 startup check"
+    ("__builtin_cpu_supports(\"sse4.1\")" `L.isInfixOf` c)
+
+-- | SSE2 is the x86-64 baseline, so a baseline build gets no check at all.
+case_baseline_binary_has_no_startup_check :: Assertion
+case_baseline_binary_has_no_startup_check = do
+  c <- genC' config64 emptyProg
+  assertBool "a baseline build must not emit a CPU check"
+    (not ("gib_require_simd_isa" `L.isInfixOf` c))
 
 codegenSimdTests :: TestTree
 codegenSimdTests = testGroup "CodegenSimd" [tests]

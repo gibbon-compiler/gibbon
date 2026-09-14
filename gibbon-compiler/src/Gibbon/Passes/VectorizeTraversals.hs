@@ -21,6 +21,7 @@
 -- traversal into one primitive.
 module Gibbon.Passes.VectorizeTraversals
   ( vectorizeTraversals
+  , validateVectorizationFired
   ) where
 
 import Control.Monad (guard, forM, foldM)
@@ -29,13 +30,59 @@ import Control.Monad.Trans.Class (lift)
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Language
 import qualified Gibbon.L3.Syntax as L3
-import Gibbon.Passes.LoopifyTraversals ( EffectClass(..), scalarExprClass )
+import Gibbon.Passes.LoopifyTraversals
+  ( EffectClass(..), collectMentionedDataCons, isGeneratedPackedHelper
+  , loopBufferKey, scalarExprClass )
+
+{-
+Note [What the vectorizer assumes LoopifyTraversals guarantees]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This pass only ever rewrites a loop 'LoopifyTraversals' emitted -- the gate is
+the internal 'Loopified' marker in 'vectorizeFun', not the @OPT:MayVectorize@
+source annotation.  Four properties of such a loop are what make the rewrite
+legal, and each is established by a specific refusal or emission over there.
+
+* NO LOOP-CARRIED DEPENDENCY.  The vector body computes @lanes@ elements at
+  once, so element @i+1@ may not depend on element @i@.  Established by
+  'LoopifyTraversals.hasParentChildDependency', asked from
+  'extractTraversalPlan' before any plan exists, and by 'scanBranchBody',
+  which admits a per-element body only if every binding in it is a read of
+  this element, a whitelisted scalar computation, or the write.
+
+* UNIT STRIDE.  Each cursor must advance exactly one element per iteration, or
+  a vector group would straddle records.  Established by 'mkScalarLoopBody',
+  which emits @BumpCursorMutable cur (LitE scalarBytes)@ for the input and the
+  output of every buffer.  Checked here: 'opHasRequiredBumps' and
+  'hasCursorBump' require that literal bump, at exactly
+  @simdScalarBytes scalar@, for every cursor of every op.  That check is also
+  what keeps an AoS-loopified body out: its loops are 'WhileCursor', never
+  'ForE', and it emits no such per-element bump.
+
+* UNIFORM ELEMENT WIDTH PER CURSOR.  One cursor advanced once per group has
+  one distance to advance by.  A fused loop may mix widths ACROSS buffers --
+  'matchSimdLoop' handles that with a logical stride -- but not within one
+  cursor.  Checked here: 'mkVectorLoopBody' errors on a cursor appearing under
+  two scalar widths in one iteration.
+
+* EFFECTS LIMITED TO THE RECOGNISED READS, WRITES AND BUMPS.
+  'mkVectorLoopBody' rebuilds the vector body from the matched ops alone, so
+  anything else in the scalar body would simply be dropped.  Established by
+  'scanBranchBody' and 'branchDropsEffect' upstream; checked here by
+  'loopEffectsSafe', which admits an 'Ext' binding only if it is a recognised
+  read, deref, write or expected bump, and every other right-hand side only if
+  'scalarExprClass' -- the same rule the loopifier admitted it under -- can
+  classify it.
+
+The buffer identity behind these is the loop buffer name contract
+('LoopifyTraversals.loopBufferKey'), which is what 'sameLoopBuffer' below reads
+when it has to decide whether two cursors belong to the same buffer.
+-}
 
 type Bind3 = (Var, [()], L3.Ty3, L3.Exp3)
 
@@ -328,17 +375,40 @@ mkVectorLoopBody cfg stride ops = do
       maxGroups = maximum (map (groupsOf . poScalar) ops)
   groups <- forM [0 .. maxGroups - 1] $ \groupIx -> do
     let groupOps = filter (\op -> groupIx < groupsOf (poScalar op)) ops
-        readKeys = L.nub
+        readPairs =
           [ (poScalar op, ref)
           | op <- groupOps
           , ref <- S.toList (vectorReadRefs (poDag op))
           ]
-        skipKeys = L.nub
+        skipPairs =
           [ (poScalar op, ref)
           | op <- groupOps
           , ref <- S.toList (poInRefs op `S.difference` vectorReadRefs (poDag op))
           ]
+        -- Deduplicated by CURSOR, not by (scalar, cursor).  Each entry emits a
+        -- bump, so one cursor appearing under two scalars -- or once as a read
+        -- and once as a skip -- advanced it twice in one iteration, walking
+        -- past its own data.  Keying on the cursor collapses the repeats; a
+        -- genuine disagreement about the width is caught below.
+        readKeys = L.nubBy (\a b -> snd a == snd b) readPairs
+        skipKeys =
+          [ k
+          | k <- L.nubBy (\a b -> snd a == snd b) skipPairs
+          , snd k `notElem` map snd readKeys
+          ]
+        widthConflicts =
+          [ ref
+          | ref <- L.nub (map snd (readPairs ++ skipPairs))
+          , let ss = L.nub [ sc | (sc, r) <- readPairs ++ skipPairs, r == ref ]
+          , length (L.nub (map (scalarWidthBytes cfg) ss)) > 1
+          ]
         unitTy = ProdTy []
+    case widthConflicts of
+      [] -> pure ()
+      (ref:_) ->
+        error $ "mkVectorLoopBody: cursor " ++ fromVar ref ++ " is read at more "
+          ++ "than one scalar width in one vector iteration, so there is no one "
+          ++ "distance to advance it by."
     loaded <- forM readKeys $ \(scalar, ref) -> do
       loadV <- gensym "simd_load"
       bumpIn <- gensym "simd_bump_in"
@@ -500,16 +570,41 @@ matchWrite binds idx (writeIx, (_writeVal, _, _writeTy, Ext (L3.WriteScalar scal
              VarE opVar -> resolveVarRhs binds S.empty opVar
              _ -> rhs
   dag <- matchScalarDag scalar idx binds op
-  inRefs <- inputRefsForDag binds writeIx scalar dag
+  inRefs <- inputRefsForDag binds writeIx scalar outRef dag
   pure $ SimdOp scalar inRefs outRef dag
 matchWrite _ _ _ = Nothing
 
-inputRefsForDag :: [Bind3] -> Int -> L3.Scalar -> ScalarDag -> Maybe (S.Set Var)
-inputRefsForDag binds writeIx scalar dag =
+-- | The input cursors one write's DAG advances.
+--
+-- A write whose expression reads nothing -- a constant field -- still has to
+-- advance an input cursor, because the scalar loop it replaces advanced one
+-- per element.  There is no read in the DAG to name it, so it is borrowed from
+-- the nearest preceding read of the same scalar kind.  That borrow is only
+-- meaningful if it lands on the SAME buffer the write is writing: borrowing a
+-- peer buffer's cursor would advance a cursor this write has no business
+-- advancing.  'sameLoopBuffer' decides that from the loop buffer name
+-- contract rather than from position, and a borrow it cannot confirm leaves
+-- the whole loop scalar.
+inputRefsForDag :: [Bind3] -> Int -> L3.Scalar -> Var -> ScalarDag -> Maybe (S.Set Var)
+inputRefsForDag binds writeIx scalar outRef dag =
   let refs = readRefs dag
   in if S.null refs
-     then S.singleton <$> nearestInputRefBefore binds writeIx scalar
+     then do
+       ref <- nearestInputRefBefore binds writeIx scalar
+       guard (sameLoopBuffer ref outRef)
+       pure (S.singleton ref)
      else Just refs
+
+-- | Do these two loop bindings belong to the same buffer of the same loop?
+--
+-- Buffer indices restart at zero in every loop, so the loop seed is part of
+-- the identity.  A name that is not a loop buffer binding at all answers
+-- False: this is asked where being unable to tell means declining.
+sameLoopBuffer :: Var -> Var -> Bool
+sameLoopBuffer a b =
+  case (loopBufferKey a, loopBufferKey b) of
+    (Just ka, Just kb) -> ka == kb
+    _ -> False
 
 nearestInputRefBefore :: [Bind3] -> Int -> L3.Scalar -> Maybe Var
 nearestInputRefBefore binds writeIx scalar =
@@ -537,7 +632,12 @@ loopEffectsSafe cfg ops binds =
         L3.WriteScalar{} -> True
         L3.BumpCursorMutable ref (LitE _ n) -> (ref, fromIntegral n) `elem` expected
         _ -> False
-    safeEffect _ = True
+    -- Everything else has to be a pure scalar computation, judged by the same
+    -- rule the loopifier admitted the expression under.  Accepting whatever
+    -- was left over meant a call, a region operation or an allocation in the
+    -- loop body was carried into the vector body, where it would run once per
+    -- vector iteration instead of once per element.
+    safeEffect (_, _, _, rhs) = isJust (scalarExprClass rhs)
 
 expectedBumps :: SimdCfg -> [SimdOp] -> [(Var, Int)]
 expectedBumps cfg ops = L.nub $ concatMap opBumps ops
@@ -585,10 +685,14 @@ branchScalarWrite ex = do
           VarE v -> resolveVarRhs bs S.empty v
           _ -> val
   guard (tailExp == MkProdE [])
-  listToMaybe
-    [ (bind, scalar, cur, normalize val)
-    | bind@(_, _, _, Ext (L3.WriteScalar scalar cur val)) <- bs
-    ]
+  -- Exactly one.  Taking the first of several turned the arm into a single
+  -- conditional write and dropped the rest, silently losing every write but
+  -- one.
+  case [ (bind, scalar, cur, normalize val)
+       | bind@(_, _, _, Ext (L3.WriteScalar scalar cur val)) <- bs
+       ] of
+    [w] -> Just w
+    _ -> Nothing
 
 mentionsVar :: Var -> L3.Exp3 -> Bool
 mentionsVar v ex = v `S.member` expVars ex
@@ -780,6 +884,13 @@ matchScalarDagM scalar idx outer binds expr0 =
               pure (DagInvariant deps ex)
         Nothing ->
           case expr of
+            -- A conversion between one width and itself is the identity, so
+            -- match its operand instead of declining.  Widening or narrowing
+            -- is NOT looked through: 'matchScalarDagM' threads the write's
+            -- scalar into every operand, so an operand of a different width
+            -- would be loaded with the wrong lane count.
+            PrimAppE prim [a]
+              | identityIntConvert prim -> recur a
             PrimAppE prim [a, b]
               | simdPrimSupported scalar prim ->
                   DagBin prim <$> recur a <*> recur b
@@ -1156,9 +1267,24 @@ isSimpleScalarExpr expr =
     CharE{} -> True
     FloatE{} -> True
     LitSymE{} -> True
+    PrimAppE p [arg]
+      | identityIntConvert p -> isSimpleScalarExpr arg
     PrimAppE p args
       | isSimpleArithPrim p ->
           all isSimpleScalarExpr args
+    _ -> False
+
+-- | An integer conversion from a width to itself.
+--
+-- It computes nothing, but it is not an arithmetic primitive either, so
+-- without this it disqualifies whatever expression it appears in -- and with
+-- it the whole loop, because a loop is vectorized only when every one of its
+-- writes matches.  Conversions that really change width stay out: see
+-- 'matchScalarDagM'.
+identityIntConvert :: Prim ty -> Bool
+identityIntConvert p =
+  case p of
+    IntConvertP (IntPrimWidth src) dst -> src == dst
     _ -> False
 
 -- | The vector operation a scalar primitive would lower to, if any.
@@ -1242,3 +1368,51 @@ infixl 3 <|>
 (<|>) :: Maybe a -> Maybe a -> Maybe a
 Just x <|> _ = Just x
 Nothing <|> y = y
+
+-- | @--opt-vectorization@ with nothing to vectorize.
+--
+-- The asymmetry this removes: omitting @--opt-loopification@ is the hard error
+-- in 'vectorizeTraversals', while omitting @--use-mutable-cursors@ produced a
+-- silent exit 0 with no vectorized call site anywhere.  In the real pipeline
+-- neither loopification pass can emit a loop without it -- the AoS pass
+-- requires mutable-cursor ABI formals, which only 'InferCallType' installs
+-- under the flag, and an SoA candidate's returned cursors, threaded through
+-- the recursion, read as a parent-child dependency.
+--
+-- Checked here rather than inside 'vectorizeTraversals' because it is a
+-- property of the whole compile: the pass on its own can be handed a program
+-- already in mutable-cursor form, and then it does loopify.
+--
+-- Asked of the program, not of the flags alone: a program that nominated no
+-- function has nothing to vectorize either way, and saying so would be a false
+-- alarm.
+validateVectorizationFired :: DynFlags -> L3.Prog3 -> IO ()
+validateVectorizationFired dflags Prog{fundefs}
+  | gopt Opt_EnableVectorization dflags
+  , not (gopt Opt_UseMutableCursors dflags)
+  , not (any (\fd -> Loopified `elem` funOpt (funMeta fd)) (M.elems fundefs))
+  , (gopt Opt_AutoLoopification dflags && hasPackedTraversal) || not (null nominated)
+  = error $
+      "vectorizeTraversals: --opt-vectorization is enabled and " ++
+      described ++ ", but --use-mutable-cursors is not.\n" ++
+      "Without it neither loopification pass emits a loop, so no function is " ++
+      "vectorized and the compile would otherwise succeed silently with no " ++
+      "vectorized call site at all.\n" ++
+      "Add --use-mutable-cursors to the compile command."
+  | otherwise = pure ()
+  where
+    nominated =
+      L.sort [ fromVar (funName fd)
+             | fd <- M.elems fundefs
+             , MayVectorize `elem` funOpt (funMeta fd) ]
+    -- Under --auto-loopification nothing is annotated, so the question is
+    -- whether the program has any packed traversal to infer from at all.  A
+    -- program with no packed data has nothing to vectorize with or without
+    -- mutable cursors.
+    hasPackedTraversal =
+      any (not . null . collectMentionedDataCons . funBody)
+          [ fd | fd <- M.elems fundefs, not (isGeneratedPackedHelper (funName fd)) ]
+    described =
+      case nominated of
+        (f0 : _) -> show f0 ++ " carries OPT:MayVectorize"
+        [] -> "--auto-loopification is inferring candidates"

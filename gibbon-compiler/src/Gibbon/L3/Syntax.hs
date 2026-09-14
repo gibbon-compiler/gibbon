@@ -765,10 +765,10 @@ simdStrideValid regBytes stride scalars =
 
 -- | Is @scalar@ eligible for the SIMD path at all?
 --
--- W32 and W64 have emitted SIMD helpers.  W16 and W8 have correct lane counts
--- above and correct helper naming below, but no emitted helpers yet, so they
--- stay scalar -- adding them is a matter of writing the helpers and flipping
--- these two cases, not another representation change.
+-- Every scalar is, W8 and W16 included: all of them have emitted helpers.  The
+-- predicate is kept as the one place a whole scalar type could be withdrawn
+-- from the SIMD path, but it currently withdraws none, so what actually decides
+-- whether a loop vectorizes is 'simdCapable' -- per operation, not per scalar.
 simdScalarEnabled :: Scalar -> Bool
 simdScalarEnabled s =
   case s of
@@ -794,11 +794,11 @@ simdScalarEnabled s =
 --   * add\/sub\/eq are single instructions (@_mm_add_epi32@, @_mm_sub_epi32@,
 --     @_mm_cmpeq_epi32@); select is three bitwise ops; broadcast\/load\/store
 --     are @_mm_set1_epi32@ \/ @_mm_loadu_si128@ \/ @_mm_storeu_si128@.
---   * mul IS supported, but not as @_mm_mullo_epi32@, which is SSE4.1.  Gibbon
---     emits a verified baseline-SSE2 sequence instead: two @_mm_mul_epu32@ plus
---     shuffle\/interleave, which computes the low 32 bits of each product.  A C
---     compiler given @-msse4.1@ may recognise and replace that sequence, but
---     Gibbon does not select @_mm_mullo_epi32@ itself.
+--   * mul IS supported, by one of two sequences Gibbon selects from the ISA it
+--     was asked for: @_mm_mullo_epi32@ at @--simd-isa=sse4.1@ or above, and at
+--     baseline SSE2 two @_mm_mul_epu32@ plus shuffle\/interleave, which computes
+--     the low 32 bits of each product.  The choice is made in the compiler, not
+--     left to the generated translation unit's @__SSE4_1__@.
 --   * div and mod are NOT: SSE2 has no packed signed integer divide, and no
 --     emulation is planned.
 --
@@ -837,10 +837,11 @@ simdCapable op scalar
         -- ('dagSpeculatesPartialOp' and the tests that pin it) exercising
         -- nothing.
         IntS W64 -> op /= VecOpMul && op `notElem` orderedCmps
-        -- W32 has a packed multiply: SSE2 has no
-        -- _mm_mullo_epi32, but two _mm_mul_epu32 plus shuffles compute the low
-        -- 32 bits of all four products in registers, and it measured faster
-        -- than the scalar loop.  Divide/modulus have no packed form at all.
+        -- W32 has a packed multiply at every ISA: _mm_mullo_epi32 from SSE4.1
+        -- up, and at baseline SSE2 two _mm_mul_epu32 plus shuffles, which
+        -- compute the low 32 bits of all four products in registers and
+        -- measured faster than the scalar loop.  Divide/modulus have no packed
+        -- form at all.
         IntS W32 -> op `elem` (VecOpMul : movementAndAddSub)
         -- W16 additionally gets a GENUINE packed multiply: `_mm_mullo_epi16`
         -- is baseline SSE2 (unlike `_mm_mullo_epi32`, which is SSE4.1).
