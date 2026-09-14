@@ -4040,14 +4040,27 @@ ARITHINTENSITY_WIDTH_CONFIGS: Dict[int, Dict[str, Dict]] = {
             "soa_mut": dict(use_mutable_cursors=True, use_no_gcc_vec=True),
             "soa_loopify": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
                                 enable_loopification=True, use_no_gcc_vec=True),
+            "soa_loopify_shared": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
+                                       enable_loopification=True,
+                                       enable_selective_buffer_sharing=True,
+                                       use_no_gcc_vec=True),
         } if width == 64 else
         {
             "aos_mut": dict(use_mutable_cursors=True, use_no_gcc_vec=True),
             "soa_mut": dict(use_mutable_cursors=True, use_no_gcc_vec=True),
             "soa_loopify": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
                                 enable_loopification=True, use_no_gcc_vec=True),
+            "soa_loopify_shared": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
+                                       enable_loopification=True,
+                                       enable_selective_buffer_sharing=True,
+                                       use_no_gcc_vec=True),
+            # Selective buffer sharing is ON here so this column differs from
+            # soa_loopify_shared by the vectorizer alone, and matches the
+            # per-program map tables, whose SoA columns also enable it.
             "soa_simd": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
-                             enable_loopification=True, enable_vectorization=True,
+                             enable_loopification=True,
+                             enable_selective_buffer_sharing=True,
+                             enable_vectorization=True,
                              use_no_gcc_vec=True),
         }
     )
@@ -5164,6 +5177,13 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
     f.write("\\caption{Integer-width high-arithmetic-intensity vectorization. "
             + simd_isa_caption_note()
             + no_gcc_vec_caption_note()
+            + "Selective buffer sharing is enabled from the \\textbf{SoA loopify "
+              "shared} column onwards, including the SIMD column, so those cells are "
+              "directly comparable with the per-program map tables, whose SoA columns "
+              "also enable it. \\textbf{SIMD spd.} divides the shared column by the "
+              "SIMD one -- the two differ by the vectorizer alone, so it reports what "
+              "vectorization buys and nothing else; \\textbf{AoS-vs-SIMD} keeps AoS "
+              "as its baseline and therefore includes every SoA-side optimization. "
             + "Int64 does not vectorize its multiplies: a packed 64-bit multiply "
               "costs seven instructions for two lanes (four under AVX2) against "
               "one \\texttt{imul} per lane scalar, so it is a measured LOSS -- "
@@ -5173,10 +5193,10 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
               "rather than a slowdown.}\n")
     f.write("\\label{tab:arith_intensity}\n\\small\n")
     f.write("\\resizebox{\\textwidth}{!}{%\n")
-    f.write("\\begin{tabular}{lcccccccccccc}\n\\toprule\n")
+    f.write("\\begin{tabular}{lccccccccccccc}\n\\toprule\n")
     f.write("Width & Ops/elem & Bytes ld/elem & Bytes st/elem & Ops/byte & "
-            "AoS raw & SoA raw & SoA loopify & SoA SIMD & SIMD spd. & "
-            "AoS-vs-SIMD & Status & Qual. \\\\\n\\midrule\n")
+            "AoS raw & SoA raw & SoA loopify & SoA loopify shared & SoA SIMD & "
+            "SIMD spd. & AoS-vs-SIMD & Status & Qual. \\\\\n\\midrule\n")
 
     def cell(res: Optional[BenchmarkResult]) -> str:
         t = total_pass_time(res)
@@ -5191,6 +5211,7 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
         aos = cfgs.get("aos_mut")
         soa = cfgs.get("soa_mut")
         loop = cfgs.get("soa_loopify")
+        shared = cfgs.get("soa_loopify_shared")
 
         if width == 64:
             # Hardcoded FIRST: no lookup into cfgs.get("soa_simd") at all --
@@ -5204,7 +5225,9 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
             status = "N/A (%s)" % W64_SIMD_NA_REASON.split(":", 1)[0]
         else:
             simd = cfgs.get("soa_simd")
-            simd_spd, simd_reason = prov.safe_speedup(loop, simd, total_pass_time)
+            # Against the shared rung, not the unshared one: the two differ by
+            # the vectorizer alone, so this is what vectorization buys.
+            simd_spd, simd_reason = prov.safe_speedup(shared, simd, total_pass_time)
             aos_vs_simd, aos_vs_simd_reason = prov.safe_speedup(aos, simd, total_pass_time)
             simd_cell = cell(simd)
             simd_spd_cell = spd_or_na(simd_spd, simd_reason)
@@ -5219,6 +5242,7 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
                f" & {cell(aos)}"
                f" & {cell(soa)}"
                f" & {cell(loop)}"
+               f" & {cell(shared)}"
                f" & {simd_cell}"
                f" & {simd_spd_cell}"
                f" & {aos_vs_simd_cell}"
