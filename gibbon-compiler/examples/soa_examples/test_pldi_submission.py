@@ -1172,6 +1172,29 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
         self.assertIn("tab:summary", cap)
         self.assertIn("reverse which one leads", cap)
 
+    def test_map_caption_does_not_present_an_annotation_as_an_achievement(self):
+        """$\\Sigma_b$ is read from a `shared=N` string literal in the
+        benchmark source. It says what the pass writes, not what the
+        optimization did.
+
+        DomTree's `computeWidths` renders 13/14 = 93% and its
+        $\\Delta^{S}_{b}$ is +0.10%: enabling selective buffer sharing
+        produces a gensym-identical function, because sharing is
+        implemented on the loopified form and that pass declines
+        loopification. A caption calling 93% "the buffers sharing shares
+        rather than rewrites" states the opposite of what happened."""
+        results = {"aos_mut": _make_result("P.hs", "aos_mut", {
+            "m": {"median_time": 0.02, "pass_type": "map"}})}
+        buf = io.StringIO()
+        gb._table_pldi_map(buf, "P.hs", results)
+        cap = buf.getvalue()
+        self.assertIn("leaves unmodified", cap)
+        self.assertIn("upper bound", cap)
+        self.assertIn("NOT a measurement", cap)
+        self.assertIn("\\Delta^{S}_{b}", cap)
+        # The old wording asserted the optimization had done it.
+        self.assertNotIn("sharing ($b$) shares rather than rewrites", cap)
+
     def test_map_caption_says_the_summary_is_a_pass_sum(self):
         """The map table DOES show the summary's pair, so the remaining way
         the two can disagree is aggregation: one row here against a sum
