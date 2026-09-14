@@ -70,11 +70,27 @@ module Gibbon.Passes.LoopifyTraversals
   , loopifyCandidateInfoWith
   , collectMentionedDataCons
   , hasParentChildDependency
+  , isGeneratedPackedHelper
+  -- Shared with 'LoopifyFlatTraversals': which formals the recursion really
+  -- leaves alone.  Both passes read non-cursor arguments once at function
+  -- entry, so both need the same answer.
+  , trulyInvariantArgs
+  -- Shared with 'LoopifyFlatTraversals': whether the program can create an
+  -- indirection node at all.  Neither loop emitter inspects tags.
+  , programWritesIndirections
   -- Exported for tests: the count-availability gate and the
   -- "which constructors does this expression materialize" helper it rests on.
   , countGuaranteedTyCons
+  -- Exported for tests: the SoA buffer list, which must agree with the layout
+  -- 'InferLocations' chose and with the cursor array length in the types.
+  , ScalarBufferSpec(..)
+  , scalarBufferSpecs
   , writtenDataCons
   , unattributedPackedTyCons
+  -- The report's elaboration of a counts-gate rejection.  Exported so a test
+  -- can pin it to 'countGuaranteedTyCons' rather than let the two drift.
+  , CountsGateReason(..)
+  , countsGateReason
   -- The constructor-key encoder shared with 'LoopifiedTraversalFusion'.
   -- Exported so its injectivity -- a correctness obligation, see the Note on
   -- it -- is tested against the real function rather than a copy.
@@ -86,10 +102,32 @@ module Gibbon.Passes.LoopifyTraversals
   , primEffectClass
   , classifyScalarShape
   , scalarExprClass
+  -- The one answer to "would this be rewritten, and if not why not".  Shared
+  -- with the vectorizer's flag check and the loopification report so neither
+  -- re-derives it.
+  , SoaDecline(..)
+  , soaDeclineReason
+  , tyConHasRanNodes
+  , soaLoopifyLegality
+  , soaLoopifyOutcome
+  -- Shared with the AoS pass so both reports print the same way.
+  , loopificationReport
+  -- The names emitted loops give their per-buffer bindings, and the matchers
+  -- that read them back.  Exported so 'Gibbon.Passes.SelectiveBufferSharing'
+  -- names them the same way this module spells them; see Note [The loop buffer
+  -- name contract].
+  , LoopBufferSuffix(..)
+  , LoopBufferKey
+  , loopBufferIx
+  , loopBufferKey
+  , loopBufferSeed
+  , isLoopBufferName
+  , isOwnLoopBufferName
   ) where
 
-import Control.Monad (foldM)
-import Data.Char (isAlphaNum, ord)
+import Control.Monad (foldM, guard)
+import Data.Char (isAlphaNum, isDigit, ord)
+import Data.Either (isRight)
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -99,6 +137,9 @@ import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Language
 import Gibbon.L3.Syntax
+import Gibbon.L3.Abi ( abiCursorArrayAt, abiUniquePosition )
+import Gibbon.L3.Traverse (extExps)
+import Gibbon.Passes.InferLocations (filterRanDatacons)
 import Gibbon.Passes.ScalarCountPropagation (countPropagatedProducers)
 
 data LoopifyCandidate = LoopifyCandidate
@@ -171,13 +212,115 @@ loopName :: LoopNameSeed -> String -> Var
 loopName LoopNameSeed{loopNameSeedPrefix} s =
   loopNameSeedPrefix `varAppend` "_" `varAppend` toVar s
 
-loopBufferName :: LoopNameSeed -> Int -> String -> Var
-loopBufferName LoopNameSeed{loopNameSeedPrefix} ix s =
+-- | A loop binding whose name another pass matches on.
+--
+-- Note [The loop buffer name contract]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- 'Gibbon.Passes.SelectiveBufferSharing' finds the bindings it must rewrite,
+-- read or drop by matching the names this module gives them.  Spelling both
+-- sides as string literals leaves that contract unchecked: renaming a suffix
+-- here silently stops the matcher finding anything.  For the bindings sharing
+-- must DROP -- the per-chunk cursor and count updates of a buffer that is now
+-- an indirection -- finding nothing means leaving them behind.
+--
+-- So each name crossing that boundary is a constructor, and the renderer below
+-- is the only place it becomes a string.  Names no other pass matches on stay
+-- strings; 'loopBufferNameLocal' rejects one that collides with a constructor
+-- here, so a local name cannot quietly enter the contract either.
+data LoopBufferSuffix
+  = LbInputEnd
+  | LbInLoc
+  | LbOutLoc
+  | LbOutEndLoc
+  | LbCurrentOutEnd
+  | LbSetChunkCount
+  | LbGrowOut
+  | LbReadCur
+  | LbWriteCur
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+loopBufferSuffixName :: LoopBufferSuffix -> String
+loopBufferSuffixName s =
+  case s of
+    LbInputEnd -> "input_end"
+    LbInLoc -> "in_loc"
+    LbOutLoc -> "out_loc"
+    LbOutEndLoc -> "out_end_loc"
+    LbCurrentOutEnd -> "current_out_end"
+    LbSetChunkCount -> "set_chunk_count"
+    LbGrowOut -> "grow_out"
+    LbReadCur -> "read_cur"
+    LbWriteCur -> "write_cur"
+
+-- | The infix carrying a binding's buffer index.
+loopBufferIxInfix :: Int -> String
+loopBufferIxInfix ix = "_buf" ++ show ix ++ "_"
+
+-- | Name buffer @ix@'s binding for a suffix other passes match on.
+loopBufferName :: LoopNameSeed -> Int -> LoopBufferSuffix -> Var
+loopBufferName seed ix = loopBufferNameRaw seed ix . loopBufferSuffixName
+
+-- | Name a binding of buffer @ix@ that is private to the emitted loop.
+loopBufferNameLocal :: LoopNameSeed -> Int -> String -> Var
+loopBufferNameLocal seed ix s
+  | s `elem` map loopBufferSuffixName [minBound .. maxBound] =
+      error $
+        "loopBufferNameLocal: " ++ show s ++ " is matched on by another pass; "
+          ++ "see Note [The loop buffer name contract] and use loopBufferName."
+  | otherwise = loopBufferNameRaw seed ix s
+
+loopBufferNameRaw :: LoopNameSeed -> Int -> String -> Var
+loopBufferNameRaw LoopNameSeed{loopNameSeedPrefix} ix s =
   loopNameSeedPrefix
-    `varAppend` "_buf"
-    `varAppend` toVar (show ix)
-    `varAppend` "_"
+    `varAppend` toVar (loopBufferIxInfix ix)
     `varAppend` toVar s
+
+-- | Which loop, and which of its buffers, a binding belongs to.
+--
+-- The buffer index alone does not identify a buffer: two loops in one body
+-- both number their buffers from zero, so anything accumulating per-buffer
+-- state across a whole function body has to carry the loop as well.
+type LoopBufferKey = (String, Int)
+
+loopBufferKey :: Var -> Maybe LoopBufferKey
+loopBufferKey v = parseAfterBuf (fromVar v)
+  where
+    parseAfterBuf s =
+      case splitAtBuf "" s of
+        Just (seed, rest0) ->
+          case L.stripPrefix "_buf" rest0 of
+            Just rest ->
+              let (digits, afterDigits) = span isDigit rest
+               in case afterDigits of
+                    '_':_ | not (null digits) -> Just (reverse seed, read digits)
+                    _ -> Nothing
+            Nothing -> Nothing
+        Nothing -> Nothing
+
+    splitAtBuf _ [] = Nothing
+    splitAtBuf acc str@('_':'b':'u':'f':_) = Just (acc, str)
+    splitAtBuf acc (c:cs) = splitAtBuf (c : acc) cs
+
+-- | The buffer a loop binding belongs to, read back out of its name.
+loopBufferIx :: Var -> Maybe Int
+loopBufferIx = fmap snd . loopBufferKey
+
+-- | The loop a binding belongs to.
+loopBufferSeed :: Var -> Maybe String
+loopBufferSeed = fmap fst . loopBufferKey
+
+-- | Does @v@ name some buffer's @s@ binding?
+isLoopBufferName :: LoopBufferSuffix -> Var -> Bool
+isLoopBufferName s v = ('_' : loopBufferSuffixName s) `L.isSuffixOf` fromVar v
+
+-- | Does @v@ name buffer @ix@'s own @s@ binding?
+--
+-- Cross-buffer dependency cursors for the same buffer are named
+-- @<seed>_buf<ix>_dep<n>_<suffix>@ and are deliberately rejected: they walk a
+-- peer buffer's data, so a rewrite keyed on buffer @ix@ must not claim them.
+isOwnLoopBufferName :: Int -> LoopBufferSuffix -> Var -> Bool
+isOwnLoopBufferName ix s v =
+  (loopBufferIxInfix ix ++ loopBufferSuffixName s) `L.isSuffixOf` fromVar v
 
 -- | Encode a data-constructor name so it can be carried inside a generated
 -- loop variable's name and recovered later.
@@ -225,56 +368,94 @@ loopifyTraversals prog@Prog{ddefs, fundefs} = do
   let loopificationRequested = gopt Opt_EnableLoopification dflags
       storeScalarCountsOn = gopt Opt_StoreScalarFieldCounts dflags
       auto = gopt Opt_AutoLoopification dflags
+      report = gopt Opt_LoopificationReport dflags
+      say lns x = loopificationReport report "SoA" lns x
   if not loopificationRequested
-    then pure prog
+    then pure $ say ["--opt-loopification is off; the pass did nothing"] prog
+    -- The emitted per-buffer loops inspect no tags, so a single indirection
+    -- node landing mid-chunk would desynchronise every scalar buffer for the
+    -- rest of that chunk.  Refuse the whole program rather than emit a loop
+    -- that cannot survive one.  See 'programWritesIndirections'.
+    else if programWritesIndirections prog
+    then pure $ say ["the program writes indirections; no function is loopified"] prog
     else if storeScalarCountsOn
     then do
       let countedTyCons = countGuaranteedTyCons auto prog
-      fds' <- mapM (rewriteFun False auto countedTyCons ddefs) (M.elems fundefs)
-      pure $ prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
+      results <- mapM (rewriteFun False auto countedTyCons ddefs) (M.elems fundefs)
+      let fds' = map fst results
+          lns = [ soaReportLine auto prog fn outcome | (fn, outcome) <- results ]
+      pure $ say lns $
+        prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
     -- --opt-loopification was requested without --store-scalar-field-counts.
-    -- This is only a real misconfiguration if some function actually targets
-    -- SoA loopification (loopifyCandidateInfoWith only ever returns 'Just'
-    -- for a FullyFactored target) -- a pure-AoS program has nothing SoA to
-    -- loopify here at all (it goes through 'loopifyFlatTraversals', which
-    -- has no scalar-count-footer dependency), so that case stays a quiet
-    -- no-op exactly as before.
+    -- Only a real misconfiguration if a function would ACTUALLY be rewritten
+    -- once the flag is supplied.  Nomination is not enough: a function can
+    -- carry OPT:MayVectorize, be a FullyFactored target, and still be declined
+    -- by the legality scan, in which case supplying the flag changes nothing
+    -- and naming it in an error is a false alarm.  A pure-AoS program has
+    -- nothing SoA to loopify at all (it goes through 'loopifyFlatTraversals',
+    -- which has no scalar-count-footer dependency) and stays a quiet no-op.
+    --
+    -- The counts gate is consulted too, even though the flag is off:
+    -- 'countGuaranteedTyCons' reads `OPT:StoreScalarCounts` annotations and
+    -- the shape of the program, not the flag, so it gives the same answer
+    -- either way.  Asking the whole question is what makes the error's advice
+    -- true -- a function the gate would decline is not one that supplying the
+    -- flag would loopify.
     else
-      let soaCandidates =
+      let countedTyCons = countGuaranteedTyCons auto prog
+          soaCandidates =
             [ funName fn
             | fn <- M.elems fundefs
-            , Just _ <- [loopifyCandidateInfoWith auto ddefs fn]
+            , isRight (soaLoopifyOutcome auto countedTyCons ddefs fn)
             ]
-      in case soaCandidates of
+      in case L.sortOn fromVar soaCandidates of
         [] -> pure prog
         (f0 : _) -> error $
           "loopifyTraversals: --opt-loopification is enabled and " ++
           show f0 ++ " (an OPT:MayVectorize-annotated or auto-inferred SoA " ++
-          "map) is a loopification candidate, but --store-scalar-field-counts " ++
+          "map) would be loopified, but --store-scalar-field-counts " ++
           "was not passed.\nSoA loopification derives its loop trip counts " ++
           "from scalar-count footer metadata, which only exists when " ++
           "--store-scalar-field-counts is enabled.\nAdd --store-scalar-field-counts " ++
           "to the compile command."
 
-rewriteFun :: Bool -> Bool -> S.Set TyCon -> DDefs Ty3 -> FunDef3 -> PassM FunDef3
+-- | The rewritten (or unchanged) function, paired with what was decided about
+-- it, for @--loopification-report@.
+rewriteFun :: Bool -> Bool -> S.Set TyCon -> DDefs Ty3 -> FunDef3
+           -> PassM (FunDef3, Either SoaDecline ())
 rewriteFun fuseScalarLoops auto countedTyCons ddefs fn =
-  case loopifyCandidateInfoWith auto ddefs fn of
-    Nothing -> pure fn
-    Just cand ->
-      -- The generated loop takes its trip count from scalar-count footer
-      -- metadata with no way to tell "this chunk really holds zero elements"
-      -- from "nobody ever wrote a count here" -- both read back as 0, and the
-      -- latter silently produces an empty output value.  So only loopify over
-      -- a type whose every producer is known to establish those counts.
-      if lcTyCon cand `S.notMember` countedTyCons
-      then pure fn
-      else case extractTraversalPlan ddefs cand fn of
-        Nothing -> pure fn
-        Just plan -> do
-          mbody <- loopifyFastPath fuseScalarLoops plan fn
-          case mbody of
-            Nothing -> pure fn
-            Just body' -> pure $ stampLoopified (fn { funBody = body' })
+  case soaLoopifyOutcome auto countedTyCons ddefs fn of
+    Left d -> pure (fn, Left d)
+    Right (_cand, plan) -> do
+      mbody <- loopifyFastPath fuseScalarLoops plan fn
+      case mbody of
+        -- 'fastPathApplies' already agreed the shape is emittable, so this
+        -- arm is unreachable; keeping the function unchanged is the safe
+        -- reading if the two ever disagree.
+        Nothing -> pure (fn, Left SoaAbiMismatch)
+        Just body' -> pure (stampLoopified (fn { funBody = body' }), Right ())
+
+-- | One report line for one function.
+soaReportLine :: Bool -> Prog3 -> FunDef3 -> Either SoaDecline () -> String
+soaReportLine auto prog fn outcome =
+  fromVar (funName fn) ++ ": " ++
+  case outcome of
+    Right () -> "loopified"
+    Left (SoaCountsUnavailable tycon) ->
+      "declined: " ++ soaDeclineReason (SoaCountsUnavailable tycon) ++
+      case countsGateReason auto prog tycon of
+        Just r -> " -- " ++ countsGateReasonText tycon r
+        Nothing -> ""
+    Left d -> "declined: " ++ soaDeclineReason d
+
+-- | @--loopification-report@: one line per function, rewritten or declined.
+-- Reporting only; it turns no optimisation on, and a run that reports nothing
+-- rewritten proves nothing on its own.
+loopificationReport :: Bool -> String -> [String] -> a -> a
+loopificationReport False _ _ x = x
+loopificationReport True pass lns x =
+  dbgTraceIt (unlines (("loopification report (" ++ pass ++ " pass):")
+                       : map ("  " ++) lns)) x
 
 -- | Types for which scalar-count footer metadata is guaranteed to be present
 -- on every value a loopified traversal could be handed.
@@ -298,8 +479,17 @@ rewriteFun fuseScalarLoops auto countedTyCons ddefs fn =
 -- Compiler-generated packed helpers (`_copy_*`, `_print_*`, ...) are not
 -- treated as producers here; that matches the pre-existing behavior of the
 -- pass and is noted as a remaining limitation.
+--
+-- There is a third clause, for `gibbon_main`.  Main establishes no counts --
+-- 'Cursorize.cursorize' cursorizes the main expression with count-bump
+-- emission off, and there is no main-expression form of
+-- `OPT:StoreScalarCounts` -- so a value materialized there never has valid
+-- footers.  What the clause asks is therefore not whether main is a
+-- count-establishing producer, which it cannot be, but whether such a value
+-- can REACH a traversal that would be loopified over its type.  See
+-- 'mainProducedTyCons'.
 countGuaranteedTyCons :: Bool -> Prog3 -> S.Set TyCon
-countGuaranteedTyCons auto prog@Prog{ddefs, fundefs, mainExp} =
+countGuaranteedTyCons auto prog@Prog{ddefs, fundefs} =
   S.fromList
     [ tycon
     | tycon <- S.toList allProducedTyCons
@@ -315,7 +505,7 @@ countGuaranteedTyCons auto prog@Prog{ddefs, fundefs, mainExp} =
 
     producedBy FunDef{funBody} = tagWrittenTyCons funBody
 
-    mainProduced = maybe S.empty (tagWrittenTyCons . fst) mainExp
+    mainProduced = mainProducedTyCons auto prog
 
     allProducedTyCons = S.unions (map producedBy userFuns)
 
@@ -344,20 +534,364 @@ countGuaranteedTyCons auto prog@Prog{ddefs, fundefs, mainExp} =
          , not (isIndirectionTag dcon || isRedirectionTag dcon)
          ] ++ unattributedPackedTyCons ex)
 
+-- | Types whose values `gibbon_main` materializes AND can hand to a traversal
+-- that would be loopified over them.
+--
+-- Every such value has invalid scalar-count footers, because 'Cursorize'
+-- cursorizes the main expression with count-bump emission off.  A loopified
+-- consumer takes its trip count from those footers with no way to tell "this
+-- chunk holds zero elements" from "nobody ever wrote a count here", so it
+-- would silently produce an empty value.  Nothing else reads them: a recursive
+-- traversal walks tags.
+--
+-- So the question is reachability, and it is asked in three steps.
+--
+--   * The value is identified by the cursors a tag of the type is written to
+--     in main.  A materialization that cannot be attributed to a cursor -- a
+--     'readPackedFile', or a 'DataConE' that reached L3 -- names the type
+--     outright, because there is nothing to trace.
+--
+--   * From those cursors, everything the value could also be named by:
+--     backwards to the cursor arrays and regions they were derived from, then
+--     forwards to everything derived from THOSE.  Both closures
+--     over-approximate, which is the direction that disqualifies more types.
+--     'MemCpy' relates its two cursors in both directions.
+--
+--   * The type is named if any of those variables is an argument of a call in
+--     main that can reach a function 'soaLoopifyLegality' accepts over this
+--     type.  Reachability is over the whole call graph, so a value passed to a
+--     wrapper that eventually calls the traversal is caught too.
+--
+-- Asking 'soaLoopifyLegality' here is not circular for the same reason
+-- 'wouldLoopify' is not: it is the structural legality scan, which never
+-- consults the counts gate.
+mainProducedTyCons :: Bool -> Prog3 -> S.Set TyCon
+mainProducedTyCons auto Prog{ddefs, fundefs, mainExp} =
+  case mainExp of
+    Nothing -> S.empty
+    Just (m, _) ->
+      unattributed m `S.union`
+      S.fromList [ tycon | tycon <- S.toList (attributed m), reaches m tycon ]
+  where
+    -- Materializations with no cursor to trace from.
+    unattributed m =
+      S.fromList
+        (unattributedPackedTyCons m ++
+         [ getTyOfDataCon ddefs dcon
+         | dcon <- dataConEs m
+         , not (isIndirectionTag dcon || isRedirectionTag dcon)
+         ])
+
+    attributed m =
+      S.fromList
+        [ getTyOfDataCon ddefs dcon
+        | (dcon, _) <- tagWriteCursors m
+        , not (isIndirectionTag dcon || isRedirectionTag dcon)
+        ]
+
+    reaches m tycon =
+      let seeds = S.fromList [ cur | (dcon, cur) <- tagWriteCursors m
+                                   , getTyOfDataCon ddefs dcon == tycon ]
+          tainted = mainValueVars m seeds
+          risky = reachesLoopifiedOver auto ddefs fundefs tycon
+       in or [ not (S.null (S.intersection tainted argVars))
+             | (callee, argVars) <- callSitesWithArgVars m
+             , callee `S.member` risky
+             ]
+
+-- | Every variable that could name the same value as one of @seeds@.
+--
+-- Backwards first -- a tag is written through a cursor indexed out of the
+-- cursor array that IS the value -- and then forwards from those roots.  Doing
+-- it in that order is what keeps a value materialized later in main from
+-- tainting the inputs of a call made earlier.
+mainValueVars :: Exp3 -> S.Set Var -> S.Set Var
+mainValueVars m seeds = closure forward (closure backward seeds)
+  where
+    binds = bindDeps m
+    copies = memCpyPairs m
+
+    backward s =
+      S.unions $
+        s : [ deps | (v, deps) <- binds, v `S.member` s ]
+          ++ copyEdges s
+
+    forward s =
+      S.unions $
+        s : [ S.singleton v | (v, deps) <- binds, not (S.null (S.intersection deps s)) ]
+          ++ copyEdges s
+
+    copyEdges s =
+      [ S.fromList [a, b] | (a, b) <- copies, a `S.member` s || b `S.member` s ]
+
+    closure step = go
+      where
+        go acc =
+          let acc' = step acc
+           in if acc' == acc then acc else go acc'
+
+-- | Functions that would be loopified over @tycon@, and every function that
+-- can reach one.
+reachesLoopifiedOver :: Bool -> DDefs Ty3 -> FunDefs3 -> TyCon -> S.Set Var
+reachesLoopifiedOver auto ddefs fundefs tycon = go targets
+  where
+    targets =
+      S.fromList
+        [ funName fd
+        | fd <- M.elems fundefs
+        , Right (cand, _) <- [soaLoopifyLegality auto ddefs fd]
+        , lcTyCon cand == tycon
+        ]
+
+    callers =
+      [ (funName fd, S.fromList (map fst (callSitesWithArgVars (funBody fd))))
+      | fd <- M.elems fundefs
+      ]
+
+    go acc =
+      let acc' = acc `S.union`
+                 S.fromList [ f | (f, cs) <- callers
+                                , not (S.null (S.intersection cs acc)) ]
+       in if acc' == acc then acc else go acc'
+
+-- | The cursor each constructor tag is written to.
+--
+-- 'writtenDataCons' answers which constructors an expression writes;
+-- attributing the write to a cursor is what makes it possible to ask where the
+-- value goes.  Reaches extension forms through 'extExps', so a tag write under
+-- a form not named here still surfaces.
+tagWriteCursors :: Exp3 -> [(DataCon, Var)]
+tagWriteCursors = go
+  where
+    go ex =
+      case ex of
+        LetE (_, _, _, rhs) bod -> go rhs ++ go bod
+        Ext (WriteTag dcon cur) -> [(dcon, cur)]
+        Ext (ScalarCountBump dcon curs) -> [ (dcon, cur) | (cur, _) <- curs ]
+        Ext ext -> concatMap go (extExps ext)
+        _ -> concatMap go (subExps ex)
+
+-- | Constructor applications that reached L3 with no cursor to attribute them
+-- to.
+dataConEs :: Exp3 -> [DataCon]
+dataConEs = go
+  where
+    go ex =
+      case ex of
+        DataConE _ dcon args -> dcon : concatMap go args
+        Ext ext -> concatMap go (extExps ext)
+        _ -> concatMap go (subExps ex)
+
+-- | Every binding, paired with the variables its right-hand side mentions.
+bindDeps :: Exp3 -> [(Var, S.Set Var)]
+bindDeps = go
+  where
+    go ex =
+      case ex of
+        LetE (v, _, _, rhs) bod -> (v, collectVars rhs) : (go rhs ++ go bod)
+        Ext ext -> concatMap go (extExps ext)
+        _ -> concatMap go (subExps ex)
+
+-- | The cursor pairs a 'MemCpy' relates.  Direction is deliberately ignored:
+-- either end naming the value is enough to make the other name it too.
+memCpyPairs :: Exp3 -> [(Var, Var)]
+memCpyPairs = go
+  where
+    go ex =
+      case ex of
+        Ext (MemCpy a b _) -> [(a, b)]
+        Ext ext -> concatMap go (extExps ext)
+        LetE (_, _, _, rhs) bod -> go rhs ++ go bod
+        _ -> concatMap go (subExps ex)
+
+-- | Every call, with the variables its arguments mention.
+callSitesWithArgVars :: Exp3 -> [(Var, S.Set Var)]
+callSitesWithArgVars = go
+  where
+    go ex =
+      case ex of
+        AppE f _ _ args -> (f, S.unions (map collectVars args)) : concatMap go args
+        SpawnE f _ args -> (f, S.unions (map collectVars args)) : concatMap go args
+        Ext ext -> concatMap go (extExps ext)
+        LetE (_, _, _, rhs) bod -> go rhs ++ go bod
+        _ -> concatMap go (subExps ex)
+
+-- | The immediate expression children of every 'PreExp' form except 'Ext',
+-- which the callers above handle themselves through 'extExps'.  Total, so a
+-- new form is a compile error rather than a silently unvisited position.
+subExps :: Exp3 -> [Exp3]
+subExps ex =
+  case ex of
+    VarE{} -> []
+    LitE{} -> []
+    CharE{} -> []
+    FloatE{} -> []
+    LitSymE{} -> []
+    SyncE -> []
+    AppE _ _ _ args -> args
+    SpawnE _ _ args -> args
+    PrimAppE _ args -> args
+    LetE (_, _, _, rhs) bod -> [rhs, bod]
+    IfE a b c -> [a, b, c]
+    MkProdE ls -> ls
+    ProjE _ e -> [e]
+    CaseE scrt brs -> scrt : [ rhs | (_, _, rhs) <- brs ]
+    DataConE _ _ args -> args
+    TimeIt e _ _ -> [e]
+    WithArenaE _ e -> [e]
+    MapE (_, _, rhs) bod -> [rhs, bod]
+    FoldE (_, _, r1) (_, _, r2) bod -> [r1, r2, bod]
+    Ext _ -> []
+
+-- | Which of 'countGuaranteedTyCons' three conditions a type fails, or
+-- 'Nothing' if it passes.  Only the report asks -- the gate itself needs the
+-- set, and building the reason per function would recompute
+-- 'countPropagatedProducers' once per function.
+data CountsGateReason
+  = NoScratchProducer
+    -- ^ Nothing in the program establishes counts for the type from scratch.
+  | ProducerWithoutCounts Var
+    -- ^ A producer of the type that neither carries @OPT:StoreScalarCounts@,
+    -- nor is itself loopified, nor has counts propagated into it.
+  | ProducedInGibbonMain
+    -- ^ @gibbon_main@ materializes a constructor of the type directly.  One
+    -- such @DataConE@ disables loopification for the type program-wide.
+  deriving (Eq, Show)
+
+countsGateReasonText :: TyCon -> CountsGateReason -> String
+countsGateReasonText tycon r =
+  case r of
+    NoScratchProducer ->
+      "no producer of " ++ tycon ++ " carries OPT:StoreScalarCounts"
+    ProducerWithoutCounts fn ->
+      fromVar fn ++ " produces " ++ tycon ++
+      " without establishing counts, and is neither loopified nor count-propagated"
+    ProducedInGibbonMain ->
+      "gibbon_main constructs a " ++ tycon ++ " directly, so counts for it are " ++
+      "not guaranteed anywhere in the program"
+
+countsGateReason :: Bool -> Prog3 -> TyCon -> Maybe CountsGateReason
+countsGateReason auto prog@Prog{ddefs, fundefs} tycon
+  | not (any (\fd -> establishesFromScratch fd && produces fd) userFuns) =
+      Just NoScratchProducer
+  | (fd : _) <- [ fd | fd <- userFuns, produces fd, not (countEstablishing fd) ] =
+      Just (ProducerWithoutCounts (funName fd))
+  | tycon `S.member` mainProducedTyCons auto prog =
+      Just ProducedInGibbonMain
+  | otherwise = Nothing
+  where
+    userFuns =
+      [ fd | fd <- M.elems fundefs, not (isGeneratedPackedHelper (funName fd)) ]
+    propagated = countPropagatedProducers prog
+    produces fd = tycon `S.member` producedTyCons (funBody fd)
+    establishesFromScratch FunDef{funMeta} = StoreScalarCounts `elem` funOpt funMeta
+    countEstablishing fd =
+      establishesFromScratch fd
+        || funName fd `S.member` propagated
+        || wouldLoopify auto ddefs fd
+    producedTyCons ex =
+      S.fromList
+        ([ getTyOfDataCon ddefs dcon
+         | dcon <- writtenDataCons ex
+         , not (isIndirectionTag dcon || isRedirectionTag dcon)
+         ] ++ unattributedPackedTyCons ex)
+
+-- | Why the SoA loopifier did not rewrite a function.
+--
+-- One decision, asked once.  'rewriteFun' acts on it, the missing-flag error
+-- selects on it, and @--loopification-report@ prints it; deriving "would this
+-- be rewritten?" separately at each of those points is how the three answers
+-- drift apart.
+data SoaDecline
+  = SoaNotCandidate
+    -- ^ No @OPT:MayVectorize@ and not inferred, a generated packed helper, or
+    -- not a single-tycon traversal over a `FullyFactored` type.
+  | SoaRandomAccessNodes TyCon
+    -- ^ The type has random-access nodes.  See 'tyConHasRanNodes'.
+  | SoaCountsUnavailable TyCon
+    -- ^ Legal, but some producer of this type does not establish scalar-count
+    -- footers, so the loop's trip counts would not be trustworthy.
+  | SoaNoPlan
+    -- ^ The legality scan refused: unrecognised cursor ABI, a branch the plan
+    -- cannot reproduce, an argument the recursion varies, an indirection.
+  | SoaAbiMismatch
+    -- ^ A plan was extracted, but the cursor-array arity or the return type is
+    -- not one the emitted fast path handles.
+  deriving (Eq, Show)
+
+-- | Human-readable, one line, for @--loopification-report@.
+soaDeclineReason :: SoaDecline -> String
+soaDeclineReason d =
+  case d of
+    SoaNotCandidate -> "not a candidate (no OPT:MayVectorize, not inferred, or not a fully factored single-type map)"
+    SoaRandomAccessNodes tycon ->
+      tycon ++ " has random-access nodes, whose cursor array is written inline " ++
+      "in the tag buffer; the emitted loops advance by a fixed stride. " ++
+      "Compile with --no-ran to loopify this traversal."
+    SoaCountsUnavailable tycon -> "scalar-count footers are not guaranteed for " ++ tycon
+    SoaNoPlan -> "legality scan refused the traversal shape"
+    SoaAbiMismatch -> "cursor-array arity or return type is not a shape the loop emitter handles"
+
+-- | The counts-agnostic half of the decision: is this a candidate whose
+-- traversal shape the loop emitter can actually handle?
+--
+-- Kept separate from 'soaLoopifyOutcome' because 'countGuaranteedTyCons'
+-- consumes it, and a loopified map is itself a count-establishing producer --
+-- folding the counts gate in here would make that recursive.
+soaLoopifyLegality :: Bool -> DDefs Ty3 -> FunDef3 -> Either SoaDecline (LoopifyCandidate, TraversalPlan)
+soaLoopifyLegality auto ddefs fn =
+  case loopifyCandidateInfoWith auto ddefs fn of
+    Nothing -> Left SoaNotCandidate
+    Just cand
+      | tyConHasRanNodes ddefs (lcTyCon cand) ->
+          Left (SoaRandomAccessNodes (lcTyCon cand))
+      | otherwise ->
+          case extractTraversalPlan ddefs cand fn of
+            Nothing -> Left SoaNoPlan
+            Just plan
+              | fastPathApplies plan fn -> Right (cand, plan)
+              | otherwise -> Left SoaAbiMismatch
+
+-- | Does this type have random-access nodes?
+--
+-- @AddRAN@ replaces a constructor with a @^@ variant that writes the SoA
+-- cursor array of its skipped subtree INLINE in the tag buffer, immediately
+-- after the tag: @1 + 8 * arrLen@ bytes where every other constructor writes
+-- one.  The emitted per-buffer loops read no tags and advance each buffer by a
+-- fixed stride, so one such node desynchronises the tag buffer for the rest of
+-- the chunk -- the same hazard as an indirection, which
+-- 'programWritesIndirections' refuses for the same reason.
+tyConHasRanNodes :: DDefs Ty3 -> TyCon -> Bool
+tyConHasRanNodes ddefs tycon =
+  any (L.isSuffixOf "^" . fst) (dataCons (lookupDDef ddefs tycon))
+
+-- | The whole decision, counts gate included.  'rewriteFun' rewrites exactly
+-- when this returns a plan.
+soaLoopifyOutcome
+  :: Bool -> S.Set TyCon -> DDefs Ty3 -> FunDef3 -> Either SoaDecline (LoopifyCandidate, TraversalPlan)
+soaLoopifyOutcome auto countedTyCons ddefs fn = do
+  (cand, plan) <- soaLoopifyLegality auto ddefs fn
+  -- The generated loop takes its trip count from scalar-count footer metadata
+  -- with no way to tell "this chunk really holds zero elements" from "nobody
+  -- ever wrote a count here" -- both read back as 0, and the latter silently
+  -- produces an empty output value.
+  if lcTyCon cand `S.member` countedTyCons
+    then Right (cand, plan)
+    else Left (SoaCountsUnavailable (lcTyCon cand))
+
+-- | The shapes 'loopifyFastPath' emits a body for.  Asked here so the
+-- predicate and the emitter cannot disagree about what is emittable.
+fastPathApplies :: TraversalPlan -> FunDef3 -> Bool
+fastPathApplies TraversalPlan{tpABI, tpScalarPlans} FunDef{funTy = (_, out)} =
+  let arrLen = abiArrLen tpABI
+   in arrLen == 1 + length tpScalarPlans
+        && (out == loopifiedOutTy arrLen || out == ProdTy [])
+
 -- | Would this function be loopified, ignoring the count-availability gate?
 -- A loopified map writes output footer counts once per chunk, so it is itself
 -- a count-establishing producer.
 wouldLoopify :: Bool -> DDefs Ty3 -> FunDef3 -> Bool
-wouldLoopify auto ddefs fn@FunDef{funTy = (_, out)} =
-  case loopifyCandidateInfoWith auto ddefs fn of
-    Nothing -> False
-    Just cand ->
-      case extractTraversalPlan ddefs cand fn of
-        Nothing -> False
-        Just TraversalPlan{tpABI, tpScalarPlans} ->
-          let arrLen = abiArrLen tpABI
-           in arrLen == 1 + length tpScalarPlans
-                && (out == loopifiedOutTy arrLen || out == ProdTy [])
+wouldLoopify auto ddefs fn = isRight (soaLoopifyLegality auto ddefs fn)
 
 -- | Type constructors this expression materializes a packed value of WITHOUT
 -- writing any tag the compiler can attribute to a producer.
@@ -389,13 +923,10 @@ unattributedPackedTyCons ex =
     DataConE _ _ args -> concatMap unattributedPackedTyCons args
     TimeIt e _ _ -> unattributedPackedTyCons e
     WithArenaE _ e -> unattributedPackedTyCons e
-    Ext ext ->
-      case ext of
-        LetAvail _ bod -> unattributedPackedTyCons bod
-        ForE _ n bod -> unattributedPackedTyCons n ++ unattributedPackedTyCons bod
-        WhileCursor _ bod -> unattributedPackedTyCons bod
-        RetE ls -> concatMap unattributedPackedTyCons ls
-        _ -> []
+    -- Fails CLOSED via 'extExps': every extension form's expression children
+    -- are visited, so a packed value obtained through a form not named above
+    -- (a 'RetE', a 'Vec*' node, ...) still surfaces here instead of vanishing.
+    Ext ext -> concatMap unattributedPackedTyCons (extExps ext)
     _ -> []
 
 -- | Data constructors whose tag this expression writes.  Unlike
@@ -419,29 +950,15 @@ writtenDataCons ex =
     MapE (_, _, e1) e2 -> writtenDataCons e1 ++ writtenDataCons e2
     FoldE (_, _, e1) (_, _, e2) e3 ->
       concatMap writtenDataCons [e1, e2, e3]
+    -- Fails CLOSED via 'extExps' for everything but the two forms that
+    -- themselves write a tag: an unlisted form's expression children are
+    -- still visited, so a 'DataConE' reachable only through a form not named
+    -- above (a 'RetE', a 'Vec*' node, ...) still surfaces here.
     Ext ext ->
       case ext of
         WriteTag dcon _ -> [dcon]
         ScalarCountBump dcon _ -> [dcon]
-        ScalarCountBind{} -> []
-        ScalarCountFinalize{} -> []
-        WriteScalar _ _ rhs -> writtenDataCons rhs
-        WriteTagPacked _ rhs -> writtenDataCons rhs
-        WriteTaggedCursor _ rhs -> writtenDataCons rhs
-        WriteCursorMutable _ rhs -> writtenDataCons rhs
-        WriteCursorSelectiveIndirection _ _ _ mask -> writtenDataCons mask
-        WriteList _ rhs _ -> writtenDataCons rhs
-        WriteVector _ rhs _ -> writtenDataCons rhs
-        AddCursor _ rhs -> writtenDataCons rhs
-        BumpCursorMutable _ rhs -> writtenDataCons rhs
-        AddrOfCursor rhs -> writtenDataCons rhs
-        LetAvail _ bod -> writtenDataCons bod
-        Assert rhs -> writtenDataCons rhs
-        RetE ls -> concatMap writtenDataCons ls
-        ForE _ bound bod -> writtenDataCons bound ++ writtenDataCons bod
-        WhileCursor _ bod -> writtenDataCons bod
-        WhileCursorEnd _ _ bod -> writtenDataCons bod
-        _ -> []
+        _ -> concatMap writtenDataCons (extExps ext)
     _ -> []
 
 loopifyCandidateInfo :: DDefs Ty3 -> FunDef3 -> Maybe LoopifyCandidate
@@ -485,7 +1002,7 @@ stampLoopified fn@FunDef{funMeta} =
   fn { funMeta = funMeta { funOpt = Loopified : filter (/= Loopified) (funOpt funMeta) } }
 
 extractTraversalPlan :: DDefs Ty3 -> LoopifyCandidate -> FunDef3 -> Maybe TraversalPlan
-extractTraversalPlan ddefs LoopifyCandidate{lcFunName, lcTyCon} FunDef{funArgs, funBody, funTy = (ins, _)} = do
+extractTraversalPlan ddefs LoopifyCandidate{lcFunName, lcTyCon} fn@FunDef{funArgs, funBody} = do
   if hasParentChildDependency lcFunName funBody
     then Nothing
     else pure ()
@@ -495,8 +1012,9 @@ extractTraversalPlan ddefs LoopifyCandidate{lcFunName, lcTyCon} FunDef{funArgs, 
     _ -> pure ()
   (preBinds, _scrt, branches) <- splitTopCase funBody
   let expectedArrLen = 1 + length specs
-      candidates = loopifyABICandidates expectedArrLen (collectVars funBody) funArgs ins
-  listToMaybe $ mapMaybe (extractWithABI lcFunName specs preBinds branches) candidates
+      trulyInvariant = trulyInvariantArgs lcFunName funArgs funBody
+  abi <- loopifyABIFromRoles expectedArrLen (collectVars funBody) trulyInvariant fn
+  extractWithABI lcFunName specs preBinds branches abi
 
 extractWithABI
   :: Var
@@ -517,62 +1035,149 @@ extractWithABI selfName specs preBinds branches abi@LoopifyABI{abiOutCurs, abiIn
   let plans = map (\spec -> fromMaybe (identityPlan spec) (M.lookup (sbsBufIx spec) merged)) specs
   pure $ TraversalPlan { tpABI = abi, tpScalarPlans = L.sortOn sbpBufIx plans }
 
-loopifyABICandidates :: Int -> S.Set Var -> [Var] -> [Ty3] -> [LoopifyABI]
-loopifyABICandidates expectedArrLen usedVars args tys =
-  let typedArgs = zip args tys
-      cursorArrays =
-        [ (pos, v)
-        | (pos, (v, CursorArrayTy n)) <- zip [0 :: Int ..] typedArgs
-        , n == expectedArrLen
-        ]
-      invariants =
-        [ v
-        | (v, ty) <- typedArgs
-        , not (isCursorArrayTy ty)
-        ]
-      candidates =
-        [ (candidateScore poss, abi)
-        | inEnds@(posInEnds, _) <- cursorArrays
-        , outEnds@(posOutEnds, _) <- cursorArrays
-        , outCurs@(posOutCurs, _) <- cursorArrays
-        , inCurs@(posInCurs, _) <- cursorArrays
-        , snd outCurs `S.member` usedVars
-        , snd inCurs `S.member` usedVars
-        , let vars = map snd [inEnds, outEnds, outCurs, inCurs]
-              poss = [posInEnds, posOutEnds, posOutCurs, posInCurs]
-        , length (L.nub vars) == 4
-        , let abi =
-                LoopifyABI
-                  { abiArrLen = expectedArrLen
-                  , abiInEnds = snd inEnds
-                  , abiOutEnds = snd outEnds
-                  , abiOutCurs = snd outCurs
-                  , abiInCurs = snd inCurs
-                  , abiLoopInvariantArgs = S.fromList invariants
-                  }
-        ]
-   in map snd (L.sortOn fst candidates)
+-- | The loop's cursor-array ABI, read off the cursorized calling convention.
+--
+-- The four arrays are distinguished by the role cursorization recorded, not by
+-- argument order.  A function whose convention names more than one array in any
+-- role -- a two-packed-input traversal, say -- is declined: there is no single
+-- input to walk, and picking one would generate a loop over the wrong value.
+loopifyABIFromRoles :: Int -> S.Set Var -> S.Set Var -> FunDef3 -> Maybe LoopifyABI
+loopifyABIFromRoles expectedArrLen usedVars trulyInvariant
+                    FunDef{funArgs, funTy = (tys, _), funMeta} = do
+  roles <- funCursorAbi funMeta
+  inEnds <- arrayAt roles AbiInEnd
+  outEnds <- arrayAt roles AbiOutEnd
+  outCurs <- arrayAt roles AbiOutCur
+  inCurs <- arrayAt roles AbiInCur
+  -- The emitted loop walks the input through `inCurs` and writes through
+  -- `outCurs`; a body that mentions neither is not the traversal shape.
+  guard (outCurs `S.member` usedVars)
+  guard (inCurs `S.member` usedVars)
+  guard (length (L.nub [inEnds, outEnds, outCurs, inCurs]) == 4)
+  pure LoopifyABI
+    { abiArrLen = expectedArrLen
+    , abiInEnds = inEnds
+    , abiOutEnds = outEnds
+    , abiOutCurs = outCurs
+    , abiInCurs = inCurs
+    , abiLoopInvariantArgs = S.fromList invariants
+    }
   where
+    invariants =
+      [ v
+      | (v, ty) <- zip funArgs tys
+      , not (isCursorArrayTy ty)
+      , v `S.member` trulyInvariant
+      ]
+
     isCursorArrayTy ty =
       case ty of
         CursorArrayTy{} -> True
         _ -> False
 
-    candidateScore :: [Int] -> (Int, Int)
-    candidateScore ps =
-      ( roleOrderInversions ps
-      , sum ps
-      )
+    arrayAt roles role = do
+      ix <- abiUniquePosition role roles
+      n <- abiCursorArrayAt tys ix
+      guard (n == expectedArrLen)
+      case drop ix funArgs of
+        v : _ -> Just v
+        [] -> Nothing
 
-    roleOrderInversions :: [Int] -> Int
-    roleOrderInversions ps =
-      length
-        [ ()
-        | (i, p1) <- zip [0 :: Int ..] ps
-        , (j, p2) <- zip [0 :: Int ..] ps
-        , i < j
-        , p1 > p2
-        ]
+-- | Formals that every self-call passes straight through, as the bare
+-- parameter variable and at the same position.
+--
+-- A loopified traversal reads its non-cursor arguments once, at function
+-- entry, and the emitted loop reuses those entry values for every element.
+-- That is faithful to the recursion only for an argument the recursion never
+-- changes.  An accumulator or a depth counter -- anything a self-call rebinds
+-- -- is therefore not loop invariant, and treating it as one silently freezes
+-- it at its entry value.  Positions that are not passed as the bare formal
+-- drop out here; their uses then stay free, and each pass's own
+-- free-variable check refuses the candidate.
+--
+-- A body with no self-call vacuously satisfies this: nothing varies when
+-- nothing recurses.
+trulyInvariantArgs :: Var -> [Var] -> Exp3 -> S.Set Var
+trulyInvariantArgs selfName formals body =
+  S.fromList
+    [ v
+    | (pos, v) <- zip [0 :: Int ..] formals
+    , all (passesThrough pos v) (selfCallArgLists selfName body)
+    ]
+  where
+    passesThrough pos v args =
+      length args == length formals
+        && case drop pos args of
+             VarE v' : _ -> v' == v
+             _ -> False
+
+-- | The argument lists of every self-call, ordinary or spawned.
+selfCallArgLists :: Var -> Exp3 -> [[Exp3]]
+selfCallArgLists selfName body =
+  [ args | (fn, args) <- collectCallSites body, fn == selfName ]
+
+-- | Every call site in an expression.  Extension nodes go through the total
+-- 'extExps', so a call buried in one is still seen.
+collectCallSites :: Exp3 -> [(Var, [Exp3])]
+collectCallSites ex =
+  case ex of
+    AppE fn _ _ args -> (fn, args) : concatMap collectCallSites args
+    SpawnE fn _ args -> (fn, args) : concatMap collectCallSites args
+    PrimAppE _ args -> concatMap collectCallSites args
+    LetE (_, _, _, rhs) bod -> collectCallSites rhs ++ collectCallSites bod
+    IfE a b c -> concatMap collectCallSites [a, b, c]
+    MkProdE ls -> concatMap collectCallSites ls
+    ProjE _ e -> collectCallSites e
+    CaseE scrt brs ->
+      collectCallSites scrt ++ concatMap (\(_, _, rhs) -> collectCallSites rhs) brs
+    DataConE _ _ args -> concatMap collectCallSites args
+    TimeIt e _ _ -> collectCallSites e
+    WithArenaE _ e -> collectCallSites e
+    MapE (_, _, e1) e2 -> collectCallSites e1 ++ collectCallSites e2
+    FoldE (_, _, e1) (_, _, e2) e3 -> concatMap collectCallSites [e1, e2, e3]
+    Ext ext -> concatMap collectCallSites (extExps ext)
+    _ -> []
+
+-- | Can this program write an indirection node anywhere?
+--
+-- Every cursorized traversal over a packed type carries an INDIRECTION arm in
+-- its top-level case, whether or not the program can ever put such a node in
+-- the data, so the presence of the ARM says nothing.  What decides the hazard
+-- is whether a node can exist at all, and only Cursorize's
+-- 'WriteCursorIndirection' / 'IndirectionBarrier' -- or an explicit write of
+-- an indirection tag -- can create one.
+--
+-- Deliberately whole-program and not per-type: an indirection written into
+-- one type is evidence the configuration creates them at all, and the loop
+-- emitters inspect no tags, so the conservative answer is the safe one.
+programWritesIndirections :: Prog3 -> Bool
+programWritesIndirections Prog{fundefs, mainExp} =
+  any (writesIndirection . funBody) (M.elems fundefs)
+    || maybe False (writesIndirection . fst) mainExp
+
+writesIndirection :: Exp3 -> Bool
+writesIndirection ex =
+  case ex of
+    Ext WriteCursorIndirection{} -> True
+    Ext IndirectionBarrier{} -> True
+    Ext WriteCursorSelectiveIndirection{} -> True
+    Ext (WriteTag dcon _) | isIndirectionTag dcon -> True
+    DataConE _ dcon args -> isIndirectionTag dcon || any writesIndirection args
+    Ext ext -> any writesIndirection (extExps ext)
+    AppE _ _ _ args -> any writesIndirection args
+    SpawnE _ _ args -> any writesIndirection args
+    PrimAppE _ args -> any writesIndirection args
+    LetE (_, _, _, rhs) bod -> writesIndirection rhs || writesIndirection bod
+    IfE a b c -> any writesIndirection [a, b, c]
+    MkProdE ls -> any writesIndirection ls
+    ProjE _ e -> writesIndirection e
+    CaseE scrt brs ->
+      writesIndirection scrt || any (writesIndirection . thd3) brs
+    TimeIt e _ _ -> writesIndirection e
+    WithArenaE _ e -> writesIndirection e
+    MapE (_, _, e1) e2 -> writesIndirection e1 || writesIndirection e2
+    FoldE (_, _, e1) (_, _, e2) e3 -> any writesIndirection [e1, e2, e3]
+    _ -> False
 
 collectVars :: Exp3 -> S.Set Var
 collectVars ex =
@@ -703,15 +1308,35 @@ identityPlan ScalarBufferSpec{sbsBufIx, sbsDCon, sbsFieldIdx, sbsTy} =
     , sbpOp = ScalarCopy
     }
 
+-- | The scalar buffers of a fully factored value, in the order the SoA cursor
+-- array holds them, with buffer 0 (the tag buffer) left implicit.
+--
+-- Three things have to agree about that order, and this is where two of them
+-- meet:
+--
+--   * 'Gibbon.Passes.InferLocations.freshSoALoc2' decides the layout, over
+--     'filterRanDatacons' of the constructor list.  Random access replaces a
+--     constructor with a @^@ variant carrying extra cursor fields, and it is
+--     the variant, not the original, that the program's case branches are
+--     written over -- so the buffer keys must name the variant too.
+--   * 'getCursorTypeFromTy' decides the cursor array's LENGTH, which is what
+--     the ABI scan matches against.
+--
+-- The length is asserted against 'getCursorTypeFromTy' rather than recomputed,
+-- so a disagreement declines the traversal instead of producing a plan indexed
+-- off the end of the array.
 scalarBufferSpecs :: DDefs Ty3 -> TyCon -> Maybe [ScalarBufferSpec]
-scalarBufferSpecs ddefs tycon =
-  snd <$> foldM stepCtor (1, []) userDataCons
+scalarBufferSpecs ddefs tycon = do
+  specs <- snd <$> foldM stepCtor (1, []) userDataCons
+  case getCursorTypeFromTy tycon ddefs of
+    CursorArrayTy n | n == 1 + length specs -> pure specs
+    _ -> Nothing
   where
     ddef = lookupDDef ddefs tycon
     userDataCons =
       filter
         (\(dcon, _) -> not (isIndirectionTag dcon || isRedirectionTag dcon))
-        (dataCons ddef)
+        (filterRanDatacons (dataCons ddef))
 
     stepCtor :: (Int, [ScalarBufferSpec]) -> (DataCon, [(Bool, Ty3)]) -> Maybe (Int, [ScalarBufferSpec])
     stepCtor (nextIx, acc) (dcon, fields) =
@@ -719,7 +1344,14 @@ scalarBufferSpecs ddefs tycon =
 
     stepField :: DataCon -> (Int, [ScalarBufferSpec]) -> (Int, Ty3) -> Maybe (Int, [ScalarBufferSpec])
     stepField dcon (nextIx, acc) (fieldIx, ty)
-      | isPackedTy ty = pure (nextIx, acc)
+      -- A field of the type being traversed shares its parent's buffers.  A
+      -- cursor field -- a random-access node, an indirection or a redirection
+      -- target -- has no buffer of its own.  A packed field of a DIFFERENT
+      -- type does get buffers, which the emitted loop cannot walk, so the
+      -- whole traversal is refused rather than mis-indexed.
+      | PackedTy tyc _ <- ty = if tyc == tycon then pure (nextIx, acc) else Nothing
+      | CursorTy <- ty = pure (nextIx, acc)
+      | CursorArrayTy{} <- ty = pure (nextIx, acc)
       | isScalarTy ty =
           pure
             ( nextIx + 1
@@ -845,8 +1477,20 @@ extractBranchPlans selfName specs loopInvariantArgs baseInputArrays baseOutputAr
   -- every form in the branch is one the plan actually reproduces.  In
   -- particular a branch that writes a constructor tag other than its own is a
   -- tag rewrite, which the verbatim tag copy in `mkDConInnerLoop` would drop.
-  -- Indirection/redirection branches are exempt: they are not user
-  -- constructors and the chunk walk in the generated loop handles them.
+  --
+  -- A REDIRECTION branch is exempt: redirection appears at a chunk boundary,
+  -- and `mkContinueOneBufferLets` reads the boundary tag at each chunk
+  -- transition, so the generated chunk walk does handle it.
+  --
+  -- An INDIRECTION branch is exempt only because the whole pass refuses to
+  -- run on a program that can write one (see 'programWritesIndirections').
+  -- Indirection appears MID-chunk, and `mkDConInnerLoop` copies one tag byte
+  -- and bumps by one for `chunk_count` iterations with no tag inspection at
+  -- all: a single indirection node -- a tag plus an 8-byte tagged cursor --
+  -- would make the tag loop read pointer bytes as eight further tags and
+  -- leave every scalar buffer misaligned for the rest of the chunk.  That is
+  -- memory safety, not a wrong value.  Retargeting the walk is a future
+  -- enhancement; until then the hazard is closed at the pass entry.
   if isIndirectionTag branchDCon || isRedirectionTag branchDCon
     then pure ()
     else if branchScanCovered branchDCon (scanBranchBody selfName rhs)
@@ -1439,35 +2083,35 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
     outFinalArr seed = loopName seed "out_final_arr"
     packedPair seed = loopName seed "packed_pair"
 
-    inputEndVar seed ix = loopBufferName seed ix "input_end"
-    firstFooterVar seed ix = loopBufferName seed ix "first_footer"
-    countFooterCurVar seed ix = loopBufferName seed ix "count_footer_cur"
-    countFooterLocVar seed ix = loopBufferName seed ix "count_footer_loc"
-    nextFooterCurVar seed ix = loopBufferName seed ix "next_footer_cur"
-    nextFooterLocVar seed ix = loopBufferName seed ix "next_footer_loc"
-    inLocVar seed ix = loopBufferName seed ix "in_loc"
-    outLocVar seed ix = loopBufferName seed ix "out_loc"
-    outEndLocVar seed ix = loopBufferName seed ix "out_end_loc"
-    loopResVar seed ix = loopBufferName seed ix "loop"
+    inputEndVar seed ix = loopBufferName seed ix LbInputEnd
+    firstFooterVar seed ix = loopBufferNameLocal seed ix "first_footer"
+    countFooterCurVar seed ix = loopBufferNameLocal seed ix "count_footer_cur"
+    countFooterLocVar seed ix = loopBufferNameLocal seed ix "count_footer_loc"
+    nextFooterCurVar seed ix = loopBufferNameLocal seed ix "next_footer_cur"
+    nextFooterLocVar seed ix = loopBufferNameLocal seed ix "next_footer_loc"
+    inLocVar seed ix = loopBufferName seed ix LbInLoc
+    outLocVar seed ix = loopBufferName seed ix LbOutLoc
+    outEndLocVar seed ix = loopBufferName seed ix LbOutEndLoc
+    loopResVar seed ix = loopBufferNameLocal seed ix "loop"
     scalarLoopResVar seed ix dcon =
-      loopBufferName seed ix ("dcon_" ++ sanitizeLoopName dcon ++ "_loop")
-    finalInVar seed ix = loopBufferName seed ix "in_final"
-    finalOutVar seed ix = loopBufferName seed ix "out_final"
-    finalOutEndVar seed ix = loopBufferName seed ix "out_end_final"
+      loopBufferNameLocal seed ix ("dcon_" ++ sanitizeLoopName dcon ++ "_loop")
+    finalInVar seed ix = loopBufferNameLocal seed ix "in_final"
+    finalOutVar seed ix = loopBufferNameLocal seed ix "out_final"
+    finalOutEndVar seed ix = loopBufferNameLocal seed ix "out_end_final"
 
-    depStartVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_start")
-    depLocVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_loc")
+    depStartVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_start")
+    depLocVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_loc")
 
-    depReadCurVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_read_cur")
-    depReadPairVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_read_pair")
-    depReadValVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_read_val")
-    depBumpVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_bump")
-    depBoundaryCurVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_boundary_cur")
-    depBoundaryPairVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_boundary_pair")
-    depBoundaryAfterVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_boundary_after")
-    depRedirPairVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_redir_pair")
-    depNextStartVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_next_start")
-    depSetInVar seed ix depIx = loopBufferName seed ix ("dep" ++ show depIx ++ "_set_in")
+    depReadCurVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_read_cur")
+    depReadPairVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_read_pair")
+    depReadValVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_read_val")
+    depBumpVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_bump")
+    depBoundaryCurVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_boundary_cur")
+    depBoundaryPairVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_boundary_pair")
+    depBoundaryAfterVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_boundary_after")
+    depRedirPairVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_redir_pair")
+    depNextStartVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_next_start")
+    depSetInVar seed ix depIx = loopBufferNameLocal seed ix ("dep" ++ show depIx ++ "_set_in")
 
     prelude pfx =
       [ (nullFooter pfx, [], CursorTy, Ext NullCursor) ]
@@ -1590,14 +2234,14 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
     -- 'gibbon-compiler/tests/vw07_output_capacity.sh'.
     mkGroupChunkBody pfx group =
       let repIx = groupRepIx group
-          currentCountFooter = loopBufferName pfx repIx "current_count_footer"
-          chunkCount = loopBufferName pfx repIx "chunk_count"
-          currentNextFooter = loopBufferName pfx repIx "current_next_footer"
-          isNullNextFooter = loopBufferName pfx repIx "is_null_next_footer"
-          isEndNextFooter = loopBufferName pfx repIx "is_end_next_footer"
-          isLastChunk = loopBufferName pfx repIx "is_last_chunk"
-          innerLoopRes = loopBufferName pfx repIx "inner_loop_res"
-          chunkBranch = loopBufferName pfx repIx "chunk_branch"
+          currentCountFooter = loopBufferNameLocal pfx repIx "current_count_footer"
+          chunkCount = loopBufferNameLocal pfx repIx "chunk_count"
+          currentNextFooter = loopBufferNameLocal pfx repIx "current_next_footer"
+          isNullNextFooter = loopBufferNameLocal pfx repIx "is_null_next_footer"
+          isEndNextFooter = loopBufferNameLocal pfx repIx "is_end_next_footer"
+          isLastChunk = loopBufferNameLocal pfx repIx "is_last_chunk"
+          innerLoopRes = loopBufferNameLocal pfx repIx "inner_loop_res"
+          chunkBranch = loopBufferNameLocal pfx repIx "chunk_branch"
        in mkLets
             ( [ (currentCountFooter, [], CursorTy, Ext $ DerefMutCursor (countFooterLocVar pfx repIx))
               , (chunkCount, [], (IntTy W64), Ext $ ReadScalarCount currentCountFooter)
@@ -1607,15 +2251,15 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
               , (isLastChunk, [], BoolTy, PrimAppE OrP [VarE isNullNextFooter, VarE isEndNextFooter])
               ]
               ++ concatMap (mkSetChunkCountLets pfx chunkCount) (groupBufferIndices group)
-              ++ [ (innerLoopRes, [], ProdTy [], Ext $ ForE (loopBufferName pfx repIx "i") (VarE chunkCount) (mkGroupInnerLoopBody pfx group))
+              ++ [ (innerLoopRes, [], ProdTy [], Ext $ ForE (loopBufferNameLocal pfx repIx "i") (VarE chunkCount) (mkGroupInnerLoopBody pfx group))
                  , (chunkBranch, [], ProdTy [], IfE (VarE isLastChunk) (mkGroupLastChunkBody pfx group) (mkGroupContinueChunkBody pfx group currentNextFooter))
               ]
             )
             (MkProdE [])
 
     mkSetChunkCountLets pfx chunkCount ix =
-      let currentOutEnd = loopBufferName pfx ix "current_out_end"
-          setChunkCount = loopBufferName pfx ix "set_chunk_count"
+      let currentOutEnd = loopBufferName pfx ix LbCurrentOutEnd
+          setChunkCount = loopBufferName pfx ix LbSetChunkCount
        in [ (currentOutEnd, [], CursorTy, Ext $ DerefMutCursor (outEndLocVar pfx ix))
           , (setChunkCount, [], ProdTy [], Ext $ ScalarCountSet currentOutEnd chunkCount)
           ]
@@ -1639,7 +2283,7 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
                       , v <- scalarPlanLetBinders plan
                       ]
            in mkLets
-                [ ( loopBufferName pfx (sbpBufIx plan) "inner_body"
+                [ ( loopBufferNameLocal pfx (sbpBufIx plan) "inner_body"
                   , []
                   , ProdTy []
                   , mkScalarInnerLoop pfx (sbpBufIx plan) sharedBinders plan )
@@ -1651,13 +2295,13 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
     -- hardcoding constructor tags here: tree-like and multi-constructor ADTs
     -- may have arbitrary tag order in the packed input.
     mkDConInnerLoop pfx ix =
-      let readCur = loopBufferName pfx ix "read_cur"
-          readPair = loopBufferName pfx ix "read_pair"
-          readTag = loopBufferName pfx ix "read_tag"
-          writeCur = loopBufferName pfx ix "write_cur"
-          writeTag = loopBufferName pfx ix "write_tag"
-          bumpIn = loopBufferName pfx ix "bump_in"
-          bumpOut = loopBufferName pfx ix "bump_out"
+      let readCur = loopBufferName pfx ix LbReadCur
+          readPair = loopBufferNameLocal pfx ix "read_pair"
+          readTag = loopBufferNameLocal pfx ix "read_tag"
+          writeCur = loopBufferName pfx ix LbWriteCur
+          writeTag = loopBufferNameLocal pfx ix "write_tag"
+          bumpIn = loopBufferNameLocal pfx ix "bump_in"
+          bumpOut = loopBufferNameLocal pfx ix "bump_out"
        in mkLets
             [ (readCur, [], CursorTy, Ext $ DerefMutCursor (inLocVar pfx ix))
             , (readPair, [], ProdTy [(IntTy W64), CursorTy], Ext $ ReadTag readCur)
@@ -1676,19 +2320,19 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
     -- `mkBufferChunkBody`; shape-preserving maps do not need per-element
     -- metadata bumps.
     mkScalarInnerLoop pfx ix sharedBinders plan@ScalarBufferPlan{sbpTy, sbpScalar, sbpOp} =
-      let readCur = loopBufferName pfx ix "read_cur"
-          readPair = loopBufferName pfx ix "read_pair"
-          readVal = loopBufferName pfx ix "read_val"
-          fieldVal = loopBufferName pfx ix "field_val"
-          fieldThenVal = loopBufferName pfx ix "field_then_val"
-          fieldElseVal = loopBufferName pfx ix "field_else_val"
-          writeCur = loopBufferName pfx ix "write_cur"
-          writeVal = loopBufferName pfx ix "write_val"
-          writeThenVal = loopBufferName pfx ix "write_then_val"
-          writeElseVal = loopBufferName pfx ix "write_else_val"
-          conditionalWrite = loopBufferName pfx ix "conditional_write"
-          bumpIn = loopBufferName pfx ix "bump_in"
-          bumpOut = loopBufferName pfx ix "bump_out"
+      let readCur = loopBufferName pfx ix LbReadCur
+          readPair = loopBufferNameLocal pfx ix "read_pair"
+          readVal = loopBufferNameLocal pfx ix "read_val"
+          fieldVal = loopBufferNameLocal pfx ix "field_val"
+          fieldThenVal = loopBufferNameLocal pfx ix "field_then_val"
+          fieldElseVal = loopBufferNameLocal pfx ix "field_else_val"
+          writeCur = loopBufferName pfx ix LbWriteCur
+          writeVal = loopBufferNameLocal pfx ix "write_val"
+          writeThenVal = loopBufferNameLocal pfx ix "write_then_val"
+          writeElseVal = loopBufferNameLocal pfx ix "write_else_val"
+          conditionalWrite = loopBufferNameLocal pfx ix "conditional_write"
+          bumpIn = loopBufferNameLocal pfx ix "bump_in"
+          bumpOut = loopBufferNameLocal pfx ix "bump_out"
           scalarBytes = fromMaybe (error $ "loopify: expected scalar size for " ++ sdoc sbpTy) (sizeOfTyD dflags sbpTy)
           rawFieldExpr = instantiateScalarOp pfx ix sharedBinders readVal sbpOp
           (fieldExprLets, fieldExpr) = anfScalarExpr pfx ix rawFieldExpr
@@ -1794,7 +2438,7 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
             LetE (v, locs, ty, rhs) bod
               | v `S.member` sharedBinders ->
                   let (rhs', n1) = goRen sub n rhs
-                      v' = loopBufferName pfx ix ("res" ++ show n1)
+                      v' = loopBufferNameLocal pfx ix ("res" ++ show n1)
                       (bod', n2) = goRen (M.insert v v' sub) (n1 + 1) bod
                    in (LetE (v', locs, ty, rhs') bod', n2)
               | otherwise ->
@@ -1816,7 +2460,7 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
        in (binds, expr')
       where
         tmpVar :: Int -> Var
-        tmpVar n = loopBufferName pfx ix ("anf" ++ show n)
+        tmpVar n = loopBufferNameLocal pfx ix ("anf" ++ show n)
 
         go :: Int -> Exp3 -> ([(Var, [()], Ty3, Exp3)], Exp3, Int)
         go n ex =
@@ -1914,7 +2558,7 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
           ]
 
     mkGroupLastChunkBody pfx group =
-      let updateCountFooter ix = loopBufferName pfx ix "update_count_footer"
+      let updateCountFooter ix = loopBufferNameLocal pfx ix "update_count_footer"
        in mkLets
             [ (updateCountFooter ix, [], ProdTy [], Ext $ WriteCursorMutable (countFooterLocVar pfx ix) (VarE (nullFooter pfx)))
             | ix <- groupBufferIndices group
@@ -1931,7 +2575,7 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
       let currentNextFooter =
             if ix == repIx
             then repCurrentNextFooter
-            else loopBufferName pfx ix "current_next_footer"
+            else loopBufferNameLocal pfx ix "current_next_footer"
           readCurrentNextFooter =
             if ix == repIx
             then []
@@ -1939,16 +2583,16 @@ mkGenericFastPathBody dflags isMutable fuseScalarLoops arrLen inEnds outEnds out
        in readCurrentNextFooter ++ mkContinueOneBufferLets pfx ix currentNextFooter
 
     mkContinueOneBufferLets pfx ix currentNextFooter =
-      let boundaryCur = loopBufferName pfx ix "boundary_cur"
-          boundaryPair = loopBufferName pfx ix "boundary_pair"
-          boundaryAfter = loopBufferName pfx ix "boundary_after"
-          redirPair = loopBufferName pfx ix "redir_pair"
-          nextStart = loopBufferName pfx ix "next_start"
-          growOut = loopBufferName pfx ix "grow_out"
-          setIn = loopBufferName pfx ix "set_in"
-          nextNextFooter = loopBufferName pfx ix "next_next_footer"
-          updateCountFooter = loopBufferName pfx ix "update_count_footer"
-          updateNextFooter = loopBufferName pfx ix "update_next_footer"
+      let boundaryCur = loopBufferNameLocal pfx ix "boundary_cur"
+          boundaryPair = loopBufferNameLocal pfx ix "boundary_pair"
+          boundaryAfter = loopBufferNameLocal pfx ix "boundary_after"
+          redirPair = loopBufferNameLocal pfx ix "redir_pair"
+          nextStart = loopBufferNameLocal pfx ix "next_start"
+          growOut = loopBufferName pfx ix LbGrowOut
+          setIn = loopBufferNameLocal pfx ix "set_in"
+          nextNextFooter = loopBufferNameLocal pfx ix "next_next_footer"
+          updateCountFooter = loopBufferNameLocal pfx ix "update_count_footer"
+          updateNextFooter = loopBufferNameLocal pfx ix "update_next_footer"
        in [ (boundaryCur, [], CursorTy, Ext $ DerefMutCursor (inLocVar pfx ix))
           , (boundaryPair, [], ProdTy [(IntTy W64), CursorTy], Ext $ ReadTag boundaryCur)
           , (boundaryAfter, [], CursorTy, ProjE 1 (VarE boundaryPair))

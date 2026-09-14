@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module LoopifyTraversals
@@ -6,6 +7,8 @@ module LoopifyTraversals
 
 import qualified Data.List as L
 import qualified Data.Map as M
+import qualified Data.Set as S
+import Control.Exception (ErrorCall, evaluate, try)
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -22,6 +25,18 @@ import Gibbon.Passes.Lower (lower)
 import Gibbon.Passes.LoopifyTraversals
 import Gibbon.Passes.LoopifiedTraversalFusion
 import Gibbon.Passes.VectorizeTraversals (vectorizeTraversals)
+
+
+-- The cursorized calling convention these hand-built functions stand for.
+-- Cursorize records it; a function without it has no convention to read, so
+-- the passes under test decline rather than fall back to argument order.
+abiTraversal :: Maybe [AbiRole]
+abiTraversal = Just [AbiInEnd, AbiOutEnd, AbiOutCur, AbiInCur]
+
+-- One more cursor array past the convention's four: not a role the convention
+-- names, so it must not be mistaken for one.
+abiTraversalExtra :: Maybe [AbiRole]
+abiTraversalExtra = Just [AbiInEnd, AbiOutEnd, AbiOutCur, AbiInCur, AbiOther]
 
 runner :: Prog3 -> Prog3
 runner prg = fst $ defaultPackedRunPassM $ loopifyTraversals prg
@@ -176,7 +191,7 @@ deadSiblingProg deadRhs =
         ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
         (insertDead (cursorizedGuardedBodyFor "fastAdd1ListMut"
                        (PrimAppE addP64 [VarE "i", mkLitE64 1])))
-        (FunMeta TailRec NoInline False [MayVectorize])
+        (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
     -- Splice the dead binding in immediately after `i` is read, so it is in
     -- scope exactly where a source-level one would be.
     insertDead ex =
@@ -206,7 +221,7 @@ guardedProg scalarRhs =
         ["inEnds", "outEnds", "outCurs", "inCurs"]
         ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
         (cursorizedGuardedBodyFor "fastAdd1ListMut" scalarRhs)
-        (FunMeta TailRec NoInline False [MayVectorize])
+        (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 -- @if i == 0 then 7 else 100 / i@
 guardedDivRhs :: Exp3
@@ -434,7 +449,7 @@ listFun opts =
     ["xs"]
     ([CursorArrayTy 2], CursorArrayTy 2)
     listBody
-    (FunMeta Rec NoInline False opts)
+    (FunMeta Rec NoInline False opts Nothing)
 
 mixedFun :: [FunOpt] -> FunDef3
 mixedFun opts =
@@ -443,7 +458,7 @@ mixedFun opts =
     ["xs"]
     ([CursorArrayTy 2], CursorArrayTy 2)
     mixedBody
-    (FunMeta Rec NoInline False opts)
+    (FunMeta Rec NoInline False opts Nothing)
 
 loopProbeFun :: FunDef3
 loopProbeFun =
@@ -452,7 +467,7 @@ loopProbeFun =
     ["footer"]
     ([CursorTy], ProdTy [])
     loopProbeBody
-    (FunMeta Rec NoInline False [])
+    (FunMeta Rec NoInline False [] Nothing)
 
 countedBuilderFun :: TyCon -> FunDef3
 countedBuilderFun tycon =
@@ -461,7 +476,7 @@ countedBuilderFun tycon =
     ["footer"]
     ([CursorTy], ProdTy [])
     (Ext $ ScalarCountBump dcon [("footer", 0)])
-    (FunMeta Rec NoInline False [StoreScalarCounts])
+    (FunMeta Rec NoInline False [StoreScalarCounts] Nothing)
   where
     dcon = case tycon of
              "List" -> "Cons"
@@ -475,7 +490,7 @@ cursorizedLoopifyFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, ProdTy [CursorArrayTy 3, CursorArrayTy 3]])
     cursorizedLoopifyBody
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 cursorizedMutableLoopifyFun :: FunDef3
 cursorizedMutableLoopifyFun =
@@ -484,7 +499,7 @@ cursorizedMutableLoopifyFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
     cursorizedMutableLoopifyBody
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 cursorizedMutableLoopifyExtraCursorFun :: FunDef3
 cursorizedMutableLoopifyExtraCursorFun =
@@ -493,7 +508,7 @@ cursorizedMutableLoopifyExtraCursorFun =
     ["inEnds", "outEnds", "outCurs", "inCurs", "spareCursors"]
     ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 1], ProdTy [])
     (cursorizedMutableLoopifyBodyFor "fastAdd1ListMutExtra")
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversalExtra)
 
 cursorizedMutableParentChildDependentFun :: FunDef3
 cursorizedMutableParentChildDependentFun =
@@ -502,7 +517,7 @@ cursorizedMutableParentChildDependentFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
     cursorizedMutableParentChildDependentBody
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 cursorizedMutableTreeLoopifyFun :: FunDef3
 cursorizedMutableTreeLoopifyFun =
@@ -511,7 +526,7 @@ cursorizedMutableTreeLoopifyFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     ([CursorArrayTy 2, CursorArrayTy 2, CursorArrayTy 2, CursorArrayTy 2], ProdTy [])
     cursorizedMutableTreeLoopifyBody
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 cursorizedRealisticMutableLoopifyFun :: FunDef3
 cursorizedRealisticMutableLoopifyFun =
@@ -520,7 +535,7 @@ cursorizedRealisticMutableLoopifyFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
     cursorizedRealisticMutableLoopifyBody
-    (FunMeta TailRec NoInline False [MayVectorize])
+    (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 listBody :: Exp3
 listBody =
@@ -742,7 +757,7 @@ sharedPartialProg =
         ["inEnds", "outEnds", "outCurs", "inCurs"]
         ([CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3, CursorArrayTy 3], ProdTy [])
         (sharedPartialBodyFor "fastAdd1ListMut")
-        (FunMeta TailRec NoInline False [MayVectorize])
+        (FunMeta TailRec NoInline False [MayVectorize] abiTraversal)
 
 cursorizedMutableParentChildDependentBody :: Exp3
 cursorizedMutableParentChildDependentBody =
@@ -1503,11 +1518,14 @@ case_total_conditional_still_vectorizes =
         assertBool "a total conditional must still produce a packed comparison"
                    (vecNodeCount "VecCmp" body > 0)
 
--- 'ErrorP' passes the loopifier's scalar-expression whitelist (which admits any
--- `PrimAppE`), so the guarantee that it is never speculated has to come from
--- somewhere.  It comes from the vectorizer: `ErrorP` has no vector operation,
--- so the DAG match fails and the whole loop stays scalar.  Recorded as a test
--- rather than assumed.
+-- 'ErrorP' is a terminating effect, so it must never be speculated into a
+-- vector select.  The guarantee comes from the LOOPIFIER, not the vectorizer:
+-- 'primEffectClass' classifies `ErrorP` as 'EffUnsupported', so the traversal
+-- is never loopified and there is no loop for the vectorizer to be shown.
+--
+-- Asserting only "no packed operation appears" would hold for any function the
+-- loopifier declined, for any reason at all, so the absence of a loop is
+-- asserted too -- that is where the guarantee actually is.
 case_error_prim_keeps_the_loop_scalar :: Assertion
 case_error_prim_keeps_the_loop_scalar =
   let rhs = IfE (PrimAppE eqIntP64 [VarE "i", mkLitE64 0])
@@ -1515,6 +1533,9 @@ case_error_prim_keeps_the_loop_scalar =
                 (VarE "i")
       body = vectorizedGuardedBody rhs
    in do
+        EffUnsupported @=? primEffectClass (ErrorP "boom" (IntTy W64) :: Prim Ty3)
+        assertBool "an ErrorP body must not be loopified at all"
+                   (not (containsL3For body))
         assertEqual "ErrorP must never be speculated into a select"
                     0 (vecNodeCount "VecSelect" body)
         assertEqual "ErrorP must not become any packed operation"
@@ -1947,7 +1968,7 @@ fuseLoops binds =
     funBody (fds M.! "fuseProbe")
   where
     fn = FunDef "fuseProbe" [] ([], ProdTy []) (mkLets binds (MkProdE []))
-                (FunMeta TailRec NoInline False [Loopified])
+                (FunMeta TailRec NoInline False [Loopified] Nothing)
     prg = Prog M.empty (M.fromList [("fuseProbe", fn)]) Nothing
     Prog{fundefs = fds} =
       fst $ runPassM (defaultConfig {dynflags = gopt_set Opt_EnableLoopFusion loopifyDFlags})
@@ -2043,6 +2064,333 @@ case_vw09_b22_interposed_constructor_breaks_the_group =
                        ]
    in assertEqual "three loops of two constructors must remain three loops"
                   3 (countExt isWhileCursor' body)
+
+-- 'trulyInvariantArgs': both loopify passes read non-cursor arguments once,
+-- at function entry, so a formal the recursion rebinds must not be reported
+-- as loop invariant.  These pin the predicate directly; the pass-level
+-- consequence is that such a formal's uses stay free and the candidate is
+-- refused.
+
+selfCall :: [Exp3] -> Exp3
+selfCall args = AppE "self" NotTailRec [] args
+
+-- | The shape every corpus map has: the traversal cursor descends to a child,
+-- the scalar goes straight back in.  Only the scalar is invariant.
+case_truly_invariant_accepts_pass_through :: Assertion
+case_truly_invariant_accepts_pass_through =
+  assertEqual "the scalar passed back as itself at every self-call is invariant"
+              (S.fromList ["k"])
+              (trulyInvariantArgs "self" ["cur", "k"]
+                 (LetE ("r", [], ProdTy [], selfCall [VarE "child", VarE "k"])
+                       (MkProdE [])))
+
+-- | `depthMark t k = ... depthMark l (k+1) ...` after ANF: the self-call
+-- passes a fresh binding, not the formal.
+case_truly_invariant_rejects_rebound_arg :: Assertion
+case_truly_invariant_rejects_rebound_arg =
+  assertEqual "a formal the recursion rebinds is not invariant"
+              S.empty
+              (trulyInvariantArgs "self" ["cur", "k"]
+                 (LetE ("k2", [], IntTy W64, PrimAppE addP64 [VarE "k", mkLitE64 1])
+                       (LetE ("r", [], ProdTy [], selfCall [VarE "child", VarE "k2"])
+                             (MkProdE []))))
+
+-- | One faithful call does not excuse another that is not: `prefix acc xs`
+-- threads a running accumulator.
+case_truly_invariant_requires_every_self_call :: Assertion
+case_truly_invariant_requires_every_self_call =
+  assertEqual "one varying self-call is enough to disqualify"
+              S.empty
+              (trulyInvariantArgs "self" ["cur", "acc"]
+                 (IfE (PrimAppE eqIntP64 [VarE "n", mkLitE64 0])
+                      (selfCall [VarE "child", VarE "acc"])
+                      (LetE ("acc2", [], IntTy W64, PrimAppE addP64 [VarE "acc", VarE "x"])
+                            (selfCall [VarE "child", VarE "acc2"]))))
+
+-- | A non-variable argument -- a literal, an expression -- is not a
+-- pass-through either.
+case_truly_invariant_rejects_non_variable_arg :: Assertion
+case_truly_invariant_rejects_non_variable_arg =
+  assertEqual "a literal at the scalar position is not the formal"
+              S.empty
+              (trulyInvariantArgs "self" ["cur", "k"]
+                 (selfCall [VarE "child", mkLitE64 3]))
+
+-- | Positional, not by name: passing the right variable at the wrong index
+-- still changes what the callee sees.
+case_truly_invariant_is_positional :: Assertion
+case_truly_invariant_is_positional =
+  assertEqual "swapped arguments are not pass-through"
+              S.empty
+              (trulyInvariantArgs "self" ["a", "b"]
+                 (selfCall [VarE "b", VarE "a"]))
+
+-- | Self-calls are found wherever they are, including buried in another
+-- call's arguments and under an extension node -- the traversal gaps that
+-- previously hid them.
+case_truly_invariant_sees_nested_self_calls :: Assertion
+case_truly_invariant_sees_nested_self_calls =
+  assertEqual "a self-call nested in a call argument still disqualifies"
+              S.empty
+              (trulyInvariantArgs "self" ["k"]
+                 (Ext (Assert (AppE "other" NotTailRec [] [selfCall [mkLitE64 9]]))))
+
+-- | Nothing recurses, so nothing varies.
+case_truly_invariant_vacuous_without_self_calls :: Assertion
+case_truly_invariant_vacuous_without_self_calls =
+  assertEqual "no self-call means no argument can change"
+              (S.fromList ["cur", "k"])
+              (trulyInvariantArgs "self" ["cur", "k"] (MkProdE []))
+
+-- | A spawned self-call is still a self-call.
+case_truly_invariant_sees_spawned_self_calls :: Assertion
+case_truly_invariant_sees_spawned_self_calls =
+  assertEqual "a spawned self-call that rebinds an argument disqualifies it"
+              (S.fromList ["cur"])
+              (trulyInvariantArgs "self" ["cur", "k"]
+                 (SpawnE "self" [] [VarE "cur", mkLitE64 1]))
+
+-- 'programWritesIndirections': neither loop emitter inspects tags, so an
+-- indirection node landing mid-chunk desynchronises the walk.  The INDIRECTION
+-- case arm is present in every cursorized traversal and therefore proves
+-- nothing; only a writer does.  No program can reach the writer from source
+-- today, so these pin the predicate at the IR level.
+
+indirProg :: Exp3 -> Prog3
+indirProg body =
+  Prog { ddefs = M.empty
+       , fundefs = M.fromList [("f", walkFun body)]
+       , mainExp = Nothing
+       }
+  where
+    walkFun b =
+      FunDef { funName = "f"
+             , funArgs = ["cur"]
+             , funTy = ([CursorTy], ProdTy [])
+             , funBody = b
+             , funMeta = FunMeta NotRec NoInline False [] Nothing
+             }
+
+case_indirection_case_arm_alone_is_not_a_writer :: Assertion
+case_indirection_case_arm_alone_is_not_a_writer =
+  assertBool "an INDIRECTION case arm is not evidence a node can exist"
+             (not (programWritesIndirections
+                     (indirProg (CaseE (VarE "cur")
+                                   [ ("Leaf", [], MkProdE [])
+                                   , ("INDIRECTION_Tree", [], MkProdE [])
+                                   ]))))
+
+case_indirection_barrier_is_a_writer :: Assertion
+case_indirection_barrier_is_a_writer =
+  assertBool "an IndirectionBarrier creates an indirection node"
+             (programWritesIndirections
+                (indirProg (Ext (IndirectionBarrier "Tree" ("a", "b", "c", "d")))))
+
+case_write_cursor_indirection_is_a_writer :: Assertion
+case_write_cursor_indirection_is_a_writer =
+  assertBool "a WriteCursorIndirection creates an indirection node"
+             (programWritesIndirections
+                (indirProg (Ext (WriteCursorIndirection "cur" "to" "toEnd"))))
+
+case_indirection_writer_under_ext_is_found :: Assertion
+case_indirection_writer_under_ext_is_found =
+  assertBool "a writer nested under another extension node is still found"
+             (programWritesIndirections
+                (indirProg (Ext (WhileCursor "cur"
+                                   (Ext (IndirectionBarrier "Tree"
+                                           ("a", "b", "c", "d")))))))
+
+--------------------------------------------------------------------------------
+-- SoA buffer list: the same buffers, in the same order, with and without
+-- random access.
+--
+-- AddRAN appends a `^` variant carrying extra cursor fields and the program's
+-- case branches are rewritten over the variant, so the buffer keys must name
+-- the variant too -- that is what `filterRanDatacons` picks, and it is the
+-- filter `InferLocations.freshSoALoc2` uses to decide the layout.  A cursor
+-- field gets no buffer, so the ARITY is the same either way, which is what
+-- `getCursorTypeFromTy` independently reports and what the ABI scan matches.
+
+ranTreeDDef :: DDef3
+ranTreeDDef =
+  DDef
+    { tyName = "T"
+    , tyArgs = []
+    , dataCons =
+        [ ("Node", [(False, IntTy W64), (True, PackedTy "T" ()), (True, PackedTy "T" ())])
+        , ("Leaf", [(False, IntTy W64)])
+        , ("Node^", [(False, CursorTy), (False, IntTy W64), (True, PackedTy "T" ()), (True, PackedTy "T" ())])
+        , ("REDIRECTION_0", [(False, CursorTy)])
+        ]
+    , memLayout = FullyFactored
+    }
+
+noRanTreeDDef :: DDef3
+noRanTreeDDef =
+  ranTreeDDef { dataCons = filter ((`notElem` ["Node^"]) . fst) (dataCons ranTreeDDef) }
+
+bufKeys :: DDef3 -> Maybe [(Int, DataCon, Int)]
+bufKeys ddef =
+  map (\ScalarBufferSpec{sbsBufIx, sbsDCon, sbsFieldIdx} -> (sbsBufIx, sbsDCon, sbsFieldIdx))
+    <$> scalarBufferSpecs (M.fromList [("T", ddef)]) "T"
+
+case_ran_and_non_ran_agree_on_buffer_count :: Assertion
+case_ran_and_non_ran_agree_on_buffer_count = do
+  -- Without random access the buffers are keyed on the plain constructors.
+  Just [(1, "Node", 0), (2, "Leaf", 0)] @=? bufKeys noRanTreeDDef
+  -- With it, on the `^` variant -- the one the program's branches are over --
+  -- and the cursor field adds no buffer, so the count is unchanged.
+  Just [(1, "Leaf", 0), (2, "Node^", 1)] @=? bufKeys ranTreeDDef
+
+case_buffer_count_matches_the_cursor_array_length :: Assertion
+case_buffer_count_matches_the_cursor_array_length = do
+  let arrLen ddef = getCursorTypeFromTy "T" (M.fromList [("T", ddef)]) :: Ty3
+  CursorArrayTy 3 @=? arrLen noRanTreeDDef
+  CursorArrayTy 3 @=? arrLen ranTreeDDef
+
+-- A random-access node writes its skipped subtree's cursor array INLINE in the
+-- tag buffer, so that one element is 1 + 8*arrLen bytes where every other
+-- constructor is 1.  The emitted loops read no tags and advance by a fixed
+-- stride, so the traversal must be refused -- and named, not skipped silently.
+-- The cursor array's LENGTH and its LAYOUT are the same enumeration, and the
+-- random-access variant is where they could come apart: AddRAN keeps the
+-- variant in the layout while the length drops it, and the two agree only
+-- because the fields AddRAN adds are cursors.  That is checked, not assumed.
+
+-- A `^` variant carrying a SCALAR -- which AddRAN never emits, so no source
+-- program reaches this.
+ranTreeDDefScalarVariant :: DDef3
+ranTreeDDefScalarVariant =
+  ranTreeDDef
+    { dataCons =
+        [ if dcon == "Node^" then (dcon, (False, IntTy W64) : flds) else (dcon, flds)
+        | (dcon, flds) <- dataCons ranTreeDDef
+        ]
+    }
+
+case_soa_buffer_enumeration_is_one_list :: Assertion
+case_soa_buffer_enumeration_is_one_list = do
+  let ddefs d = M.fromList [("T", d)]
+      widthOf d = getCursorTypeFromTy "T" (ddefs d) :: Ty3
+      slotsOf d = [ (dcon, ix) | (dcon, ix, _, _) <- soaBufferedFields (ddefs d) "T" ]
+  -- Without random access, the layout is keyed on the plain constructors.
+  [("Node", 0), ("Leaf", 0)] @=? slotsOf noRanTreeDDef
+  -- With it, on the `^` variant -- and the width is the same either way.
+  [("Leaf", 0), ("Node^", 1)] @=? slotsOf ranTreeDDef
+  CursorArrayTy 3 @=? widthOf noRanTreeDDef
+  CursorArrayTy 3 @=? widthOf ranTreeDDef
+
+case_ran_variant_adding_a_buffer_is_refused :: Assertion
+case_ran_variant_adding_a_buffer_is_refused = do
+  r <- try (evaluate (length (show (soaBufferedFields
+                                      (M.fromList [("T", ranTreeDDefScalarVariant)])
+                                      "T"))))
+  case r of
+    Left (e :: ErrorCall) ->
+      assertBool ("the refusal must name the disagreement, got: " ++ show e)
+                 ("layout and its cursor array length disagree" `L.isInfixOf` show e)
+    Right _ ->
+      assertFailure "a `^` variant with a buffered field must be refused, not counted"
+
+case_random_access_nodes_are_refused :: Assertion
+case_random_access_nodes_are_refused = do
+  assertBool "a `^` constructor means random-access nodes"
+             (tyConHasRanNodes (M.fromList [("T", ranTreeDDef)]) "T")
+  assertBool "without one there are none"
+             (not (tyConHasRanNodes (M.fromList [("T", noRanTreeDDef)]) "T"))
+
+-- A packed field of a DIFFERENT type gets buffers of its own, which the
+-- emitted loop cannot walk.  Refused outright rather than indexed past the end
+-- of the array.
+case_foreign_packed_field_is_refused :: Assertion
+case_foreign_packed_field_is_refused =
+  let ddefs = M.fromList
+                [ ("Pair", DDef "Pair" []
+                             [("P", [(False, IntTy W64), (True, PackedTy "Leafy" ())])]
+                             FullyFactored)
+                , ("Leafy", DDef "Leafy" [] [("L", [(False, IntTy W64)])] FullyFactored)
+                ]
+   in Nothing @=? scalarBufferSpecs ddefs "Pair"
+
+-- Every decline the report can print must have its own text: a copied line
+-- would send a reader looking at the wrong condition.
+
+case_soa_decline_reasons_are_distinct :: Assertion
+case_soa_decline_reasons_are_distinct = do
+  let ds = [ SoaNotCandidate, SoaCountsUnavailable "Tree", SoaNoPlan, SoaAbiMismatch ]
+      rs = map soaDeclineReason ds
+  assertBool "no decline reason may be empty" (all (not . null) rs)
+  length ds @=? S.size (S.fromList rs)
+
+--------------------------------------------------------------------------------
+-- The counts gate's `gibbon_main` clause.
+--
+-- A value main materializes has no scalar-count footers -- Cursorize emits no
+-- count bumps for the main expression -- so the clause asks whether such a
+-- value can reach a traversal that would be loopified over its type.
+
+-- | @let sentinel = Cons ... in ...@, as it looks after cursorization: a tag
+-- written through a cursor indexed out of the value's own cursor array.
+mainSentinelBinds :: [(Var, [()], Ty3, Exp3)]
+mainSentinelBinds =
+  [ ("sentinel_regs", [], CursorArrayTy 3, Ext $ MakeCursorArray 3 ["r0", "r1", "r2"])
+  , ("sentinel_dcon", [], CursorTy, Ext $ IndexCursorArray "sentinel_regs" 0)
+  , ("sentinel_tag", [], CursorTy, Ext $ WriteTag "Cons" "sentinel_dcon")
+  ]
+
+-- | The program under test with a given main expression, and a traversal over
+-- @List@ that loopification accepts.
+gateMainProg :: Exp3 -> Prog3
+gateMainProg mainE =
+  (guardedProg totalCondRhs) { mainExp = Just (mainE, ProdTy []) }
+
+loopifiedInMain :: Exp3 -> Bool
+loopifiedInMain mainE =
+  let Prog{fundefs = fds} = runnerWithCounts (gateMainProg mainE)
+   in Loopified `elem` funOpt (funMeta (fds M.! "fastAdd1ListMut"))
+
+case_main_materialization_that_goes_nowhere_does_not_block_loopification :: Assertion
+case_main_materialization_that_goes_nowhere_does_not_block_loopification =
+  assertBool "a value main builds and never passes on cannot reach the traversal"
+    (loopifiedInMain (mkLets mainSentinelBinds (MkProdE [])))
+
+case_main_materialization_passed_to_the_traversal_blocks_loopification :: Assertion
+case_main_materialization_passed_to_the_traversal_blocks_loopification =
+  assertBool "a value main hands to the traversal must disqualify the type"
+    (not (loopifiedInMain
+            (mkLets
+               (mainSentinelBinds ++
+                [ ("consume", [], ProdTy []
+                  , AppE "fastAdd1ListMut" UnknownTailType []
+                      [ VarE "sentinel_regs", VarE "outEnds"
+                      , VarE "outCurs", VarE "sentinel_regs" ]) ])
+               (MkProdE []))))
+
+case_main_materialization_passed_elsewhere_does_not_block_loopification :: Assertion
+case_main_materialization_passed_elsewhere_does_not_block_loopification =
+  assertBool "a value main hands to a function that cannot reach the traversal is fine"
+    (loopifiedInMain
+       (mkLets
+          (mainSentinelBinds ++
+           [ ("consume", [], ProdTy []
+             , AppE "countedBuilder" UnknownTailType [] [VarE "sentinel_regs"]) ])
+          (MkProdE [])))
+
+-- | The tainted set follows the value, not just the cursor the tag went
+-- through: the call is handed the region array the write cursor was indexed
+-- out of, one alias further on.
+case_main_materialization_reaches_through_an_alias :: Assertion
+case_main_materialization_reaches_through_an_alias =
+  assertBool "an alias of the materialized value must disqualify the type too"
+    (not (loopifiedInMain
+            (mkLets
+               (mainSentinelBinds ++
+                [ ("sentinel_alias", [], CursorArrayTy 3, VarE "sentinel_regs")
+                , ("consume", [], ProdTy []
+                  , AppE "fastAdd1ListMut" UnknownTailType []
+                      [ VarE "sentinel_alias", VarE "outEnds"
+                      , VarE "outCurs", VarE "sentinel_alias" ]) ])
+               (MkProdE []))))
 
 loopifyTraversalsTests :: TestTree
 loopifyTraversalsTests = $(testGroupGenerator)
