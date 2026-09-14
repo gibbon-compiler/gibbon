@@ -2064,6 +2064,17 @@ void gib_scalar_count_diff_report(void)
 }
 #endif
 
+// The debug bracket exists to PRINT the footers a producer touched.  It must
+// not reset counting state: it is emitted as the first statement of every
+// `OPT:StoreScalarCounts` producer, which under `--defer-scalar-counts` is
+// after the caller's `gib_scalar_count_bind` and before any `pending[k]++`.
+// Clearing slots there destroyed the binding the bracket had just been given,
+// and clearing the region states discarded the per-region `first_counts` the
+// cyclic footer convention accumulates.  Only the list of touched footers --
+// the thing actually printed -- is scoped to one production.
+//
+// Invalidating region states when their chunks are freed is
+// `gib_scalar_count_forget_region_states`, called from the region-chunk log.
 void gib_scalar_count_footer_begin(void)
 {
     GibScalarCountDebugState *state = &gib_global_scalar_count_debug_state;
@@ -2072,8 +2083,6 @@ void gib_scalar_count_footer_begin(void)
 #ifdef _GIBBON_DEBUG
         state->length = 0;
 #endif
-        gib_global_scalar_count_region_states_length = 0;
-        gib_scalar_count_forget_slots();
     }
     state->depth++;
 }
@@ -2279,7 +2288,6 @@ void gib_scalar_count_footer_end(const char *build_fun_name)
 #else
     (void) build_fun_name;
 #endif
-    gib_global_scalar_count_region_states_length = 0;
 }
 
 void gib_scalar_count_footer_print(char *footer_ptr)

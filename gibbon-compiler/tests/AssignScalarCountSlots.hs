@@ -16,6 +16,10 @@ import Gibbon.Language
 import qualified Gibbon.L3.Syntax as L3
 import Gibbon.Passes.AssignScalarCountSlots
 
+-- A producer that builds from scratch takes only its own output arrays.
+abiBuilder :: Maybe [AbiRole]
+abiBuilder = Just [AbiOutEnd, AbiOutCur]
+
 -- The pass is opt-in; without the flag it must be the identity.
 runner :: Bool -> L3.Prog3 -> L3.Prog3
 runner enabled prg =
@@ -79,7 +83,59 @@ case_mutually_recursive_producers_keep_the_bump = do
   assertBool "expected every slot to be the no-deferred-slot sentinel"
     (all (== (-1)) (slotsOf "mkA" out ++ slotsOf "mkB" out))
 
+-- | A producer owns the slots @[base, base + osLen)@ and no others.
+--
+-- A bump position at or past the cursor-array length would rebase onto the
+-- next producer's range and add this function's elements to that producer's
+-- footers -- a count that is too large, which is the direction that makes a
+-- loopified consumer write past the end of a chunk.  The out-of-range footer
+-- must keep the per-element bump instead.
+--
+-- The in-range positions are asserted to still rebase, so this cannot pass by
+-- the producer having been refused a base altogether.
+case_out_of_range_bump_position_keeps_the_bump :: Assertion
+case_out_of_range_bump_position_keeps_the_bump = do
+  let out = runner True outOfRangeProg
+  slotsOf "mkList" out @?= [0, 0, 1, -1]
+
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-- | Coverage must impose the same ARGUMENT condition as emission.
+--
+-- 'bracketFor' needs the end-array argument to be literally a variable.  When
+-- it is not, 'spliceCalls' emits no bind and no finalize -- so if coverage
+-- still certifies the producer, 'rebaseBumps' rewrites its bumps onto an
+-- absolute slot that is never bound, the footers stay zero, and a loopified
+-- consumer reads a trip count of zero and silently produces empty output.
+-- Emission is (0, 0) either way; what this pins is that the SLOTS are the
+-- no-deferred-slot sentinel rather than a real, never-bound base.
+case_non_var_end_argument_is_not_covered :: Assertion
+case_non_var_end_argument_is_not_covered = do
+  let out = runner True nonVarEndArgProg
+  countBrackets out @?= (0, 0)
+  assertBool "a call bracketFor cannot bracket must not be certified covered"
+    (all (== (-1)) (slotsOf "mkList" out))
+
+-- The same program with a plain variable at the end-array position is still
+-- covered, so the refusal above is about the argument and nothing else.
+case_var_end_argument_is_still_covered :: Assertion
+case_var_end_argument_is_still_covered =
+  countBrackets (runner True oneProducerProg) @?= (1, 1)
+
+nonVarEndArgProg :: L3.Prog3
+nonVarEndArgProg =
+  L3.Prog (M.fromList [("List", listDDef)])
+          (M.fromList [("mkList", producerFun "mkList" ["mkList"])])
+          (Just (nonVarCallMain, L3.ProdTy []))
+
+nonVarCallMain :: L3.Exp3
+nonVarCallMain =
+  L3.mkLets
+    [ ("m_mkList", [], L3.ProdTy []
+      , L3.AppE "mkList" UnknownTailType []
+          [ L3.ProjE 0 (L3.MkProdE [L3.VarE "outEnds"])
+          , L3.VarE "outCurs" ]) ]
+    (L3.MkProdE [])
 
 listDDef :: L3.DDef3
 listDDef =
@@ -97,7 +153,7 @@ producerFun name callees =
   L3.FunDef name ["outEnds", "outCurs"]
     (replicate 2 (L3.CursorArrayTy 2), L3.ProdTy [])
     (producerBody name callees)
-    (FunMeta Rec NoInline False [])
+    (FunMeta Rec NoInline False [] abiBuilder)
 
 producerBody :: Var -> [Var] -> L3.Exp3
 producerBody _self callees =
@@ -127,6 +183,25 @@ producerBody _self callees =
               , L3.AppE c UnknownTailType [] (map L3.VarE ["outEnds", "outCurs"]))
             | c <- callees ])
         (L3.MkProdE [])
+
+-- A producer whose Cons branch bumps position 2 as well -- one past the end of
+-- its own two-buffer output array.
+outOfRangeProg :: L3.Prog3
+outOfRangeProg =
+  L3.Prog (M.fromList [("List", listDDef)])
+          (M.fromList [("mkList", withExtraBump (producerFun "mkList" ["mkList"]))])
+          (Just (callMain ["mkList"], L3.ProdTy []))
+  where
+    withExtraBump fd = fd { L3.funBody = addBump (L3.funBody fd) }
+    addBump ex =
+      case ex of
+        L3.LetE b bod -> L3.LetE b (addBump bod)
+        L3.IfE a b c -> L3.IfE a b (addBump c)
+        _ ->
+          L3.mkLets
+            [ ("extra_count", [], L3.ProdTy []
+              , L3.Ext $ L3.ScalarCountBump "Cons" [("outEnds", 2)]) ]
+            ex
 
 oneProducerProg :: L3.Prog3
 oneProducerProg =

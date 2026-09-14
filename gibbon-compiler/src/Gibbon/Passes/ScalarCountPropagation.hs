@@ -41,14 +41,9 @@ import qualified Data.Set as S
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Language
+import Gibbon.L3.Abi ( CursorPairShape(..), soaInputCursorShapes, soaOutputCursorShape )
 import qualified Gibbon.L3.Syntax as L3
-
-data CursorPairShape = CursorPairShape
-  { cpsLen :: Int
-  , cpsEndArgIx :: Int
-  , cpsCurArgIx :: Int
-  }
-  deriving (Eq, Ord, Show)
+import Gibbon.L3.Traverse (extExps, traverseExtExps)
 
 data ProducerShape = ProducerShape
   { psInput :: CursorPairShape
@@ -112,25 +107,7 @@ rewriteExp producerShapes = go
         L3.Ext ext -> L3.Ext <$> rewriteExt ext
         _ -> pure ex
 
-    rewriteExt ext =
-      case ext of
-        L3.ForE idx bound bod -> L3.ForE idx <$> go bound <*> go bod
-        L3.WhileCursor cur bod -> L3.WhileCursor cur <$> go bod
-        L3.WhileCursorEnd cur end bod -> L3.WhileCursorEnd cur end <$> go bod
-        L3.WriteScalar s cur rhs -> L3.WriteScalar s cur <$> go rhs
-        L3.WriteTagPacked cur rhs -> L3.WriteTagPacked cur <$> go rhs
-        L3.WriteTaggedCursor cur rhs -> L3.WriteTaggedCursor cur <$> go rhs
-        L3.WriteCursorMutable cur rhs -> L3.WriteCursorMutable cur <$> go rhs
-        L3.WriteList cur rhs ty -> (\rhs' -> L3.WriteList cur rhs' ty) <$> go rhs
-        L3.WriteVector cur rhs ty -> (\rhs' -> L3.WriteVector cur rhs' ty) <$> go rhs
-        L3.AddCursor cur rhs -> L3.AddCursor cur <$> go rhs
-        L3.BumpCursorMutable cur rhs -> L3.BumpCursorMutable cur <$> go rhs
-        L3.AddrOfCursor rhs -> L3.AddrOfCursor <$> go rhs
-        L3.LetAvail vars bod -> L3.LetAvail vars <$> go bod
-        L3.Assert rhs -> L3.Assert <$> go rhs
-        L3.WriteCursorSelectiveIndirection cur target end mask ->
-          L3.WriteCursorSelectiveIndirection cur target end <$> go mask
-        _ -> pure ext
+    rewriteExt = traverseExtExps go
 
 copyBindsForRhs
   :: M.Map Var ProducerShape
@@ -177,8 +154,7 @@ producerShape ddefs tagWriters fn
   | bodyWritesScalarCounts (funBody fn) = Nothing
   | not (isShapePreservingProducer ddefs tagWriters fn) = Nothing
   | otherwise =
-      case (soaInputCursorShapes (funArgs fn) (fst (funTy fn)),
-            soaOutputCursorShape (funArgs fn) (fst (funTy fn))) of
+      case (soaInputCursorShapes fn, soaOutputCursorShape fn) of
         ([inputShape], Just outputShape)
           | cpsLen inputShape == cpsLen outputShape ->
               Just $ ProducerShape inputShape outputShape
@@ -296,25 +272,7 @@ collectDirectCalls ex =
     _ -> []
 
 collectDirectCallsExt :: L3.E3Ext () L3.Ty3 -> [(Bool, (Var, [L3.Exp3]))]
-collectDirectCallsExt ext =
-  case ext of
-    L3.ForE _ bound bod -> collectDirectCalls bound ++ collectDirectCalls bod
-    L3.WhileCursor _ bod -> collectDirectCalls bod
-    L3.WhileCursorEnd _ _ bod -> collectDirectCalls bod
-    L3.WriteScalar _ _ rhs -> collectDirectCalls rhs
-    L3.WriteTagPacked _ rhs -> collectDirectCalls rhs
-    L3.WriteTaggedCursor _ rhs -> collectDirectCalls rhs
-    L3.WriteCursorMutable _ rhs -> collectDirectCalls rhs
-    L3.WriteList _ rhs _ -> collectDirectCalls rhs
-    L3.WriteVector _ rhs _ -> collectDirectCalls rhs
-    L3.AddCursor _ rhs -> collectDirectCalls rhs
-    L3.BumpCursorMutable _ rhs -> collectDirectCalls rhs
-    L3.AddrOfCursor rhs -> collectDirectCalls rhs
-    L3.LetAvail _ bod -> collectDirectCalls bod
-    L3.Assert rhs -> collectDirectCalls rhs
-    L3.RetE ls -> concatMap collectDirectCalls ls
-    L3.WriteCursorSelectiveIndirection _ _ _ mask -> collectDirectCalls mask
-    _ -> []
+collectDirectCallsExt ext = concatMap collectDirectCalls (extExps ext)
 
 -- | Every function that can (transitively) write a constructor tag.  Calling
 -- one of these from a producer body means the callee may contribute output
@@ -359,25 +317,7 @@ collectCalls ex =
     _ -> []
 
 collectCallsExt :: L3.E3Ext () L3.Ty3 -> [(Var, [L3.Exp3])]
-collectCallsExt ext =
-  case ext of
-    L3.ForE _ bound bod -> collectCalls bound ++ collectCalls bod
-    L3.WhileCursor _ bod -> collectCalls bod
-    L3.WhileCursorEnd _ _ bod -> collectCalls bod
-    L3.WriteScalar _ _ rhs -> collectCalls rhs
-    L3.WriteTagPacked _ rhs -> collectCalls rhs
-    L3.WriteTaggedCursor _ rhs -> collectCalls rhs
-    L3.WriteCursorMutable _ rhs -> collectCalls rhs
-    L3.WriteList _ rhs _ -> collectCalls rhs
-    L3.WriteVector _ rhs _ -> collectCalls rhs
-    L3.AddCursor _ rhs -> collectCalls rhs
-    L3.BumpCursorMutable _ rhs -> collectCalls rhs
-    L3.AddrOfCursor rhs -> collectCalls rhs
-    L3.LetAvail _ bod -> collectCalls bod
-    L3.Assert rhs -> collectCalls rhs
-    L3.RetE ls -> concatMap collectCalls ls
-    L3.WriteCursorSelectiveIndirection _ _ _ mask -> collectCalls mask
-    _ -> []
+collectCallsExt ext = concatMap collectCalls (extExps ext)
 
 -- | Abstract per-path summary used by the shape-preservation check: how many
 -- constructor tags the expression writes (as a min/max interval over control
@@ -555,30 +495,6 @@ splitTopCase = go []
         L3.CaseE scrt brs -> Just (acc, scrt, brs)
         _ -> Nothing
 
-soaInputCursorShapes :: [Var] -> [L3.Ty3] -> [CursorPairShape]
-soaInputCursorShapes args tys =
-  case cursorArrays of
-    [(endIx, _, n1), _, _, (curIx, _, n2)]
-      | n1 == n2 && n1 > 1 -> [CursorPairShape n1 endIx curIx]
-    _ -> []
-  where
-    cursorArrays =
-      [ (ix, v, n)
-      | (ix, (v, L3.CursorArrayTy n)) <- zip [0..] (zip args tys)
-      ]
-
-soaOutputCursorShape :: [Var] -> [L3.Ty3] -> Maybe CursorPairShape
-soaOutputCursorShape args tys =
-  case cursorArrays of
-    [_ , (outEndIx, _, n2), (outCurIx, _, n3), _]
-      | n2 == n3 && n2 > 1 -> Just (CursorPairShape n2 outEndIx outCurIx)
-    _ -> Nothing
-  where
-    cursorArrays =
-      [ (ix, v, n)
-      | (ix, (v, L3.CursorArrayTy n)) <- zip [0..] (zip args tys)
-      ]
-
 argVar :: Int -> [L3.Exp3] -> Maybe Var
 argVar ix args =
   case drop ix args of
@@ -606,25 +522,15 @@ bodyWritesScalarCounts ex =
     L3.Ext ext -> extWritesScalarCounts ext
     _ -> False
 
+-- | Fails CLOSED on any extension form this case does not name: rather than
+-- assume an unlisted form writes nothing, it recurses into its children via
+-- 'extExps', so a 'ScalarCountBump' reachable only through a form added later
+-- (a 'RetE', a 'Vec*' node, ...) still disqualifies the producer instead of
+-- silently vanishing.
 extWritesScalarCounts :: L3.E3Ext () L3.Ty3 -> Bool
 extWritesScalarCounts ext =
   case ext of
     L3.ScalarCountBump{} -> True
     L3.ScalarCountSet{} -> True
-    L3.ScalarCountCopyAll _ _ _ -> True
-    L3.ForE _ bound bod -> bodyWritesScalarCounts bound || bodyWritesScalarCounts bod
-    L3.WhileCursor _ bod -> bodyWritesScalarCounts bod
-    L3.WhileCursorEnd _ _ bod -> bodyWritesScalarCounts bod
-    L3.WriteScalar _ _ rhs -> bodyWritesScalarCounts rhs
-    L3.WriteTagPacked _ rhs -> bodyWritesScalarCounts rhs
-    L3.WriteTaggedCursor _ rhs -> bodyWritesScalarCounts rhs
-    L3.WriteCursorMutable _ rhs -> bodyWritesScalarCounts rhs
-    L3.WriteList _ rhs _ -> bodyWritesScalarCounts rhs
-    L3.WriteVector _ rhs _ -> bodyWritesScalarCounts rhs
-    L3.AddCursor _ rhs -> bodyWritesScalarCounts rhs
-    L3.BumpCursorMutable _ rhs -> bodyWritesScalarCounts rhs
-    L3.AddrOfCursor rhs -> bodyWritesScalarCounts rhs
-    L3.LetAvail _ bod -> bodyWritesScalarCounts bod
-    L3.Assert rhs -> bodyWritesScalarCounts rhs
-    L3.WriteCursorSelectiveIndirection _ _ _ mask -> bodyWritesScalarCounts mask
-    _ -> False
+    L3.ScalarCountCopyAll{} -> True
+    _ -> any bodyWritesScalarCounts (extExps ext)

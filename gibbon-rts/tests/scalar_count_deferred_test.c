@@ -232,6 +232,85 @@ int main(void)
             printf("  ok: two producers live at once keep separate slot bases\n");
     }
 
+    /* The debug bracket is emitted as the FIRST statement of a producer, so the
+     * caller's bind has already run when it opens, and the caller's finalize
+     * has not yet run when it closes.  The bracket exists to print footers; it
+     * must leave counting state alone.  Above, run_scenario opens the bracket
+     * BEFORE the bind, which is the one ordering the generated code never
+     * produces. */
+    {
+        char *w, *f;
+        GibChunk c = gib_alloc_region_on_heap(CHUNK);
+        w = c.start; f = c.end;
+
+        char *fs[1] = { f };
+        gib_scalar_count_bind(fs, 0, 1);
+
+        gib_scalar_count_footer_begin();
+        for (uint64_t i = 0; i < 3; i++) gib_scalar_count_pending[0]++;
+        { char *o = f; gib_grow_region(&w, &f); gib_scalar_count_on_grow(o, f); }
+        for (uint64_t i = 0; i < 4; i++) gib_scalar_count_pending[0]++;
+        gib_scalar_count_footer_end("bracket after bind");
+
+        char *ffs[1] = { f };
+        gib_scalar_count_finalize(ffs, 0, 1);
+
+        Chain ch; chain_read(&ch, f);
+        uint64_t sum = 0;
+        for (int i = 0; i < ch.n; i++) sum += ch.count[i];
+        CHECK(sum == 7, "bracket opened after bind: total should be 7, got %llu",
+              (unsigned long long) sum);
+        if (sum == 7) printf("  ok: a bracket opened after the bind keeps the binding\n");
+    }
+
+    /* A producer calling another producer nests the brackets, so the inner
+     * bracket opens and closes while the outer producer's slot is still live
+     * and its region has already grown once.  Closing the inner bracket must
+     * not discard the outer region's accumulated state. */
+    {
+        char *ow, *of, *iw, *if_;
+        GibChunk oc = gib_alloc_region_on_heap(CHUNK);
+        ow = oc.start; of = oc.end;
+
+        char *ofs[1] = { of };
+        gib_scalar_count_bind(ofs, 0, 1);
+        gib_scalar_count_footer_begin();
+
+        for (uint64_t i = 0; i < 3; i++) gib_scalar_count_pending[0]++;
+        { char *o = of; gib_grow_region(&ow, &of); gib_scalar_count_on_grow(o, of); }
+
+        GibChunk ic = gib_alloc_region_on_heap(CHUNK);
+        iw = ic.start; if_ = ic.end;
+        char *ifs[1] = { if_ };
+        gib_scalar_count_bind(ifs, 8, 1);
+        gib_scalar_count_footer_begin();
+        for (uint64_t i = 0; i < 9; i++) gib_scalar_count_pending[8]++;
+        { char *o = if_; gib_grow_region(&iw, &if_); gib_scalar_count_on_grow(o, if_); }
+        for (uint64_t i = 0; i < 2; i++) gib_scalar_count_pending[8]++;
+        gib_scalar_count_footer_end("inner producer");
+        char *iffs[1] = { if_ };
+        gib_scalar_count_finalize(iffs, 8, 1);
+
+        for (uint64_t i = 0; i < 4; i++) gib_scalar_count_pending[0]++;
+        { char *o = of; gib_grow_region(&ow, &of); gib_scalar_count_on_grow(o, of); }
+        gib_scalar_count_footer_end("outer producer");
+        char *offs[1] = { of };
+        gib_scalar_count_finalize(offs, 0, 1);
+
+        Chain och, ich;
+        chain_read(&och, of);
+        chain_read(&ich, if_);
+        uint64_t osum = 0, isum = 0;
+        for (int i = 0; i < och.n; i++) osum += och.count[i];
+        for (int i = 0; i < ich.n; i++) isum += ich.count[i];
+        CHECK(osum == 7, "nested bracket, outer total should be 7, got %llu",
+              (unsigned long long) osum);
+        CHECK(isum == 11, "nested bracket, inner total should be 11, got %llu",
+              (unsigned long long) isum);
+        if (osum == 7 && isum == 11)
+            printf("  ok: an inner producer's bracket leaves the outer one's counts alone\n");
+    }
+
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

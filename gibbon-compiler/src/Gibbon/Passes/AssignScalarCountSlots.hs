@@ -6,13 +6,15 @@ module Gibbon.Passes.AssignScalarCountSlots
   , scalarCountProducers
   ) where
 
-import Data.Functor.Identity (Identity(..))
+import Data.Maybe (isJust)
 import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Gibbon.Common
 import Gibbon.DynFlags
+import Gibbon.L3.Traverse (extExps, mapExtExps, traverseExtExps)
+import Gibbon.L3.Abi ( CursorPairShape(..), soaOutputCursorShape )
 import Gibbon.L3.Syntax as L3
 
 {-
@@ -61,6 +63,18 @@ to it is bracketed: 'countCalls' counts all calls (a total traversal -- no
 wildcard, so a new constructor breaks the build), 'countBracketableCalls' walks
 the shape 'spliceCalls' does, and unequal means demote to 'noCountSlot'.
 
+The two predicates must agree on BOTH halves of what 'bracketFor' requires:
+the syntactic position (an 'AppE' directly in a 'LetE' right-hand side) and
+the argument condition ('bracketArgOk' -- the end-array argument must be a
+plain variable).  'countBracketableCalls' once checked only the position, so a
+call whose end-array argument was not literally a 'VarE' was certified covered
+while 'spliceCalls' emitted no bind and no finalize: the slot was never bound,
+the footers stayed zero, and a loopified consumer read a trip count of zero
+and silently produced empty output, with no diagnostic -- 'flush_slot's
+@exit(1)@ needs a flush that never happens, and @--scalar-counts-diff@'s
+@atexit@ hook is registered inside the bind that is never called.  The
+argument condition is therefore factored into one function both call.
+
 Note [Deferred scalar counts is incompatible with the generational GC]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 A slot caches the @GibRegionInfo *@ of the region it counts for.  Under
@@ -97,20 +111,13 @@ scalarCountProducers = M.keysSet . M.filter (hasBump . funBody)
 assignScalarCountSlots :: Prog3 -> PassM Prog3
 assignScalarCountSlots prg@Prog{ddefs, fundefs, mainExp} = do
   dflags <- getDynFlags
-  let wanted = gopt Opt_DeferScalarCounts dflags || gopt Opt_ScalarCountDiff dflags
+  -- The @--gen-gc@ rejection this pass used to carry now lives in
+  -- 'Gibbon.Compiler.validateDynFlags'.  It has to run before any pipeline is
+  -- chosen: this pass is in the packed branch, so a @--pointer@ build reached
+  -- neither the rejection nor anything else that would notice.
   -- See Note [Deferred scalar counts is incompatible with the generational GC].
-  if wanted && gopt Opt_GenGc dflags
-    then error $
-      "assignScalarCountSlots: --defer-scalar-counts is not compatible with --gen-gc.\n" ++
-      "A deferred slot caches the GibRegionInfo * of the region it counts for, but under\n" ++
-      "the generational GC a region is nursery-allocated and the copying collector\n" ++
-      "relocates it and rewrites reg_info (gibbon-rts/rts-ng/src/gc.rs), with no hook\n" ++
-      "back into the C-side slot table.  The cached binding then goes stale and every\n" ++
-      "count after the collection is written to a footer nothing reads -- silently.\n" ++
-      "The per-element bump does not have this problem because it re-resolves the\n" ++
-      "footer on every element.\n" ++
-      "Drop --defer-scalar-counts (counts stay correct, just slower), or drop --gen-gc."
-    else if not wanted
+  let wanted = gopt Opt_DeferScalarCounts dflags || gopt Opt_ScalarCountDiff dflags
+  if not wanted
     then pure prg
     else do
       let producers = scalarCountProducers fundefs
@@ -135,7 +142,7 @@ assignScalarCountSlots prg@Prog{ddefs, fundefs, mainExp} = do
               | f <- S.toList producers
               , not (f `S.member` mutuallyRecursive)
               , Just fd <- [M.lookup f fundefs]
-              , Just sh <- [outShape (funArgs fd) (fst (funTy fd))]
+              , Just sh <- [outShape fd]
               ]
 
       -- See Note [Coverage must mirror emission].  A producer is deferred only
@@ -145,10 +152,14 @@ assignScalarCountSlots prg@Prog{ddefs, fundefs, mainExp} = do
       -- deliberately not bracketed.
       let bodies = [ (Just f, funBody fd) | (f, fd) <- M.toList fundefs ]
                      ++ maybe [] (\(e, _) -> [(Nothing, e)]) mainExp
-          coveredIn f =
-            and [ countCalls f e == countBracketableCalls f e
+          -- The shape comes from `abiShapes`, which is computed BEFORE
+          -- coverage, so asking `bracketArgOk` here is not circular.  A
+          -- producer with no recognized shape has nothing to bracket and is
+          -- not a candidate in the first place.
+          coveredIn f sh =
+            and [ countCalls f e == countBracketableCalls sh f e
                 | (owner, e) <- bodies, owner /= Just f ]
-          shapes = M.filterWithKey (\f _ -> coveredIn f) abiShapes
+          shapes = M.filterWithKey coveredIn abiShapes
 
       let bases = M.fromList (go 0 (L.sort (M.keys shapes)))
             where
@@ -173,7 +184,9 @@ assignScalarCountSlots prg@Prog{ddefs, fundefs, mainExp} = do
                   -- calls: the bind belongs at the OUTERMOST call, once per
                   -- production.
                   bod <- spliceCalls bases shapes (S.delete f bracketed)
-                           (rebaseBumps (M.lookup f bases) (funBody fd))
+                           (rebaseBumps
+                              ((,) <$> M.lookup f bases <*> M.lookup f shapes)
+                              (funBody fd))
                   pure fd { funBody = bod })
               fundefs
           mainExp' <-
@@ -186,7 +199,14 @@ assignScalarCountSlots prg@Prog{ddefs, fundefs, mainExp} = do
 
 -- | Rewrite a producer's bump slots from cursor-array positions to absolute
 -- slots.  Without a base the function keeps the bump ('noCountSlot').
-rebaseBumps :: Maybe Int -> Exp3 -> Exp3
+--
+-- A producer owns exactly the slots @[base, base + osLen)@, so a position at
+-- or past its cursor-array length would rebase onto the NEXT producer's range
+-- and add this function's elements to that one's footers.  Such a position is
+-- out of range by construction -- it indexes a buffer the function's own
+-- output array does not have -- but nothing upstream checks it, so it is
+-- checked here and demoted rather than trusted.
+rebaseBumps :: Maybe (Int, OutShape) -> Exp3 -> Exp3
 rebaseBumps mbase = go
   where
     go ex =
@@ -205,8 +225,7 @@ rebaseBumps mbase = go
         MapE (v, t, rhs) bod -> MapE (v, t, go rhs) (go bod)
         FoldE (v1,t1,r1) (v2,t2,r2) bod -> FoldE (v1,t1,go r1) (v2,t2,go r2) (go bod)
         Ext (ScalarCountBump dcon footers) ->
-          Ext $ ScalarCountBump dcon
-            [ (v, maybe noCountSlot (+ pos) mbase) | (v, pos) <- footers ]
+          Ext $ ScalarCountBump dcon [ (v, slotFor pos) | (v, pos) <- footers ]
         Ext ext -> Ext (mapExtExps go ext)
         VarE{} -> ex
         LitE{} -> ex
@@ -214,6 +233,11 @@ rebaseBumps mbase = go
         FloatE{} -> ex
         LitSymE{} -> ex
         SyncE -> ex
+
+    slotFor pos =
+      case mbase of
+        Just (base, sh) | pos >= 0, pos < osLen sh -> base + pos
+        _ -> noCountSlot
 
 -- | Wrap every call to a bracketed producer in bind/finalize.  The binders are
 -- gensym'd: fixed names are deleted by 'OptimizeL3.removeReDefsExp' when they
@@ -272,13 +296,25 @@ bracketFor bases shapes bracketed rhs =
       | fn `S.member` bracketed
       , Just base <- M.lookup fn bases
       , Just sh <- M.lookup fn shapes
+      , bracketArgOk sh args
       , Just ends <- argVarAt (osEndArgIx sh) args -> Just (base, osLen sh, ends)
     _ -> Nothing
-  where
-    argVarAt ix as =
-      case drop ix as of
-        VarE v : _ -> Just v
-        _ -> Nothing
+
+-- | The argument condition 'bracketFor' imposes, factored out so that
+-- 'countBracketableCalls' can impose the SAME one.
+--
+-- 'countBracketableCalls' cannot call 'bracketFor': that needs @bases@ and
+-- @shapes@, which are computed FROM coverage.  But the half it was missing
+-- needs only the callee's 'OutShape', which is already in @abiShapes@ before
+-- coverage runs.  See Note [Coverage must mirror emission].
+bracketArgOk :: OutShape -> [Exp3] -> Bool
+bracketArgOk sh args = isJust (argVarAt (osEndArgIx sh) args)
+
+argVarAt :: Int -> [Exp3] -> Maybe Var
+argVarAt ix as =
+  case drop ix as of
+    VarE v : _ -> Just v
+    _ -> Nothing
 
 -- | Every call to @f@, anywhere.  Pairs with 'countBracketableCalls'; see
 -- Note [Coverage must mirror emission].
@@ -309,11 +345,15 @@ countCalls f = go
         SyncE -> 0
 
 -- | Calls to @f@ that 'spliceCalls' will actually bracket: an 'AppE' sitting
--- directly in a 'LetE' right-hand side, reached along the same traversal.
-countBracketableCalls :: Var -> Exp3 -> Int
-countBracketableCalls f = go
+-- directly in a 'LetE' right-hand side, reached along the same traversal, AND
+-- satisfying 'bracketArgOk' -- the same argument condition 'bracketFor'
+-- imposes.  A call failing either half gets no bind/finalize, so counting it
+-- as covered is how a producer's slot ends up never bound and its footers
+-- silently zero.
+countBracketableCalls :: OutShape -> Var -> Exp3 -> Int
+countBracketableCalls sh f = go
   where
-    isCall (AppE g _ _ _) = g == f
+    isCall (AppE g _ _ args) = g == f && bracketArgOk sh args
     isCall _ = False
 
     go ex =
@@ -340,23 +380,13 @@ countBracketableCalls f = go
         LitSymE{} -> 0
         SyncE -> 0
 
--- | Recognize where a producer's output end-cursor array sits.  Two shapes
--- occur: a producer that builds from scratch takes just its own output arrays,
--- and one that also walks a packed input takes the input's as well.  Anything
--- else -- including a single-buffer (tag-only) layout, which is not SoA -- is
--- left on the bump rather than guessed at.
-outShape :: [Var] -> [Ty3] -> Maybe OutShape
-outShape args tys =
-  case cursorArrays of
-    -- [outEnd, outCur]
-    [(endIx, n1), (_, n2)]
-      | n1 == n2 && n1 > 1 -> Just (OutShape n1 endIx)
-    -- [inEnd, outEnd, outCur, inCur]
-    [_, (endIx, n2), (_, n3), _]
-      | n2 == n3 && n2 > 1 -> Just (OutShape n2 endIx)
-    _ -> Nothing
-  where
-    cursorArrays = [ (ix, n) | (ix, (_, CursorArrayTy n)) <- zip [0..] (zip args tys) ]
+-- | Where a producer's output end-cursor array sits, read off the cursorized
+-- calling convention.  A producer without a recorded convention, or whose
+-- output arrays are not a multi-buffer SoA pair, is left on the bump.
+outShape :: FunDef3 -> Maybe OutShape
+outShape fn = do
+  shape <- soaOutputCursorShape fn
+  pure (OutShape (cpsLen shape) (cpsEndArgIx shape))
 
 hasBump :: Exp3 -> Bool
 hasBump = go
@@ -411,170 +441,3 @@ callees = go
         LitSymE{} -> S.empty
         SyncE -> S.empty
 
--- | The expression children of an extension node.
---
--- Deliberately a TOTAL case with no wildcard: a traversal here that silently
--- skips a form is how a producer call escapes bracketing, and how a
--- 'ScalarCountBump' keeps an un-rebased slot and starts incrementing another
--- producer's counter.  A new constructor must break this build.
-extExps :: E3Ext () Ty3 -> [Exp3]
-extExps ext =
-  case ext of
-    WriteScalar _ _ e -> [e]
-    WriteTagPacked _ e -> [e]
-    WriteCursorSelectiveIndirection _ _ _ e -> [e]
-    WriteTaggedCursor _ e -> [e]
-    WriteCursorMutable _ e -> [e]
-    WriteList _ e _ -> [e]
-    WriteVector _ e _ -> [e]
-    AddCursor _ e -> [e]
-    BumpCursorMutable _ e -> [e]
-    AddrOfCursor e -> [e]
-    RetE es -> es
-    LetAvail _ e -> [e]
-    ForE _ e1 e2 -> [e1, e2]
-    WhileCursor _ e -> [e]
-    WhileCursorEnd _ _ e -> [e]
-    VecBroadcast _ _ e -> [e]
-    VecAdd _ _ a b -> [a, b]
-    VecSub _ _ a b -> [a, b]
-    VecMul _ _ a b -> [a, b]
-    VecDiv _ _ a b -> [a, b]
-    VecMod _ _ a b -> [a, b]
-    VecCmp _ _ _ a b -> [a, b]
-    VecSelect _ _ a b c -> [a, b, c]
-    VecStore _ _ _ e -> [e]
-    Assert e -> [e]
-    ReadScalar{} -> []
-    ReadTag{} -> []
-    WriteTag{} -> []
-    TagCursor{} -> []
-    WriteCursorIndirection{} -> []
-    UnwrapSelectiveIndirections{} -> []
-    MemCpy{} -> []
-    ReadTaggedCursor{} -> []
-    ReadCursor{} -> []
-    GrowRegion{} -> []
-    ReadList{} -> []
-    ReadVector{} -> []
-    MakeCursorArray{} -> []
-    IndexCursorArray{} -> []
-    DerefMutCursor{} -> []
-    CastPtr{} -> []
-    SubPtr{} -> []
-    NewBuffer{} -> []
-    ScopedBuffer{} -> []
-    NewParBuffer{} -> []
-    ScopedParBuffer{} -> []
-    EndOfBuffer{} -> []
-    MMapFileSize{} -> []
-    SizeOfPacked{} -> []
-    SizeOfScalar{} -> []
-    BoundsCheck{} -> []
-    BoundsCheckVector{} -> []
-    IndirectionBarrier{} -> []
-    BumpArenaRefCount{} -> []
-    NullCursor -> []
-    InitCursor{} -> []
-    GetCilkWorkerNum -> []
-    AllocateTagHere{} -> []
-    AllocateScalarsHere{} -> []
-    StartTagAllocation{} -> []
-    EndTagAllocation{} -> []
-    StartScalarsAllocation{} -> []
-    EndScalarsAllocation{} -> []
-    ScalarCountBump{} -> []
-    ScalarCountBind{} -> []
-    ScalarCountFinalize{} -> []
-    ScalarCountSet{} -> []
-    ScalarCountCopyAll{} -> []
-    ReadScalarCount{} -> []
-    ReadScalarCountFirstFooter{} -> []
-    ReadScalarCountNextFooter{} -> []
-    VecLoad{} -> []
-    SSPush{} -> []
-    SSPop{} -> []
-
--- | Rebuild an extension node with its expression children mapped.  Kept
--- beside 'extExps' so the two cannot drift.
-mapExtExps :: (Exp3 -> Exp3) -> E3Ext () Ty3 -> E3Ext () Ty3
-mapExtExps f ext = runIdentity (traverseExtExps (Identity . f) ext)
-
-traverseExtExps
-  :: Applicative m => (Exp3 -> m Exp3) -> E3Ext () Ty3 -> m (E3Ext () Ty3)
-traverseExtExps f ext =
-  case ext of
-    WriteScalar s v e -> WriteScalar s v <$> f e
-    WriteTagPacked v e -> WriteTagPacked v <$> f e
-    WriteCursorSelectiveIndirection a b c e -> WriteCursorSelectiveIndirection a b c <$> f e
-    WriteTaggedCursor v e -> WriteTaggedCursor v <$> f e
-    WriteCursorMutable v e -> WriteCursorMutable v <$> f e
-    WriteList v e t -> (\e' -> WriteList v e' t) <$> f e
-    WriteVector v e t -> (\e' -> WriteVector v e' t) <$> f e
-    AddCursor v e -> AddCursor v <$> f e
-    BumpCursorMutable v e -> BumpCursorMutable v <$> f e
-    AddrOfCursor e -> AddrOfCursor <$> f e
-    RetE es -> RetE <$> traverse f es
-    LetAvail vs e -> LetAvail vs <$> f e
-    ForE v e1 e2 -> ForE v <$> f e1 <*> f e2
-    WhileCursor v e -> WhileCursor v <$> f e
-    WhileCursorEnd v w e -> WhileCursorEnd v w <$> f e
-    VecBroadcast s n e -> VecBroadcast s n <$> f e
-    VecAdd s n a b -> VecAdd s n <$> f a <*> f b
-    VecSub s n a b -> VecSub s n <$> f a <*> f b
-    VecMul s n a b -> VecMul s n <$> f a <*> f b
-    VecDiv s n a b -> VecDiv s n <$> f a <*> f b
-    VecMod s n a b -> VecMod s n <$> f a <*> f b
-    VecCmp s n o a b -> VecCmp s n o <$> f a <*> f b
-    VecSelect s n a b c -> VecSelect s n <$> f a <*> f b <*> f c
-    VecStore s n v e -> VecStore s n v <$> f e
-    Assert e -> Assert <$> f e
-    ReadScalar{} -> pure ext
-    ReadTag{} -> pure ext
-    WriteTag{} -> pure ext
-    TagCursor{} -> pure ext
-    WriteCursorIndirection{} -> pure ext
-    UnwrapSelectiveIndirections{} -> pure ext
-    MemCpy{} -> pure ext
-    ReadTaggedCursor{} -> pure ext
-    ReadCursor{} -> pure ext
-    GrowRegion{} -> pure ext
-    ReadList{} -> pure ext
-    ReadVector{} -> pure ext
-    MakeCursorArray{} -> pure ext
-    IndexCursorArray{} -> pure ext
-    DerefMutCursor{} -> pure ext
-    CastPtr{} -> pure ext
-    SubPtr{} -> pure ext
-    NewBuffer{} -> pure ext
-    ScopedBuffer{} -> pure ext
-    NewParBuffer{} -> pure ext
-    ScopedParBuffer{} -> pure ext
-    EndOfBuffer{} -> pure ext
-    MMapFileSize{} -> pure ext
-    SizeOfPacked{} -> pure ext
-    SizeOfScalar{} -> pure ext
-    BoundsCheck{} -> pure ext
-    BoundsCheckVector{} -> pure ext
-    IndirectionBarrier{} -> pure ext
-    BumpArenaRefCount{} -> pure ext
-    NullCursor -> pure ext
-    InitCursor{} -> pure ext
-    GetCilkWorkerNum -> pure ext
-    AllocateTagHere{} -> pure ext
-    AllocateScalarsHere{} -> pure ext
-    StartTagAllocation{} -> pure ext
-    EndTagAllocation{} -> pure ext
-    StartScalarsAllocation{} -> pure ext
-    EndScalarsAllocation{} -> pure ext
-    ScalarCountBump{} -> pure ext
-    ScalarCountBind{} -> pure ext
-    ScalarCountFinalize{} -> pure ext
-    ScalarCountSet{} -> pure ext
-    ScalarCountCopyAll{} -> pure ext
-    ReadScalarCount{} -> pure ext
-    ReadScalarCountFirstFooter{} -> pure ext
-    ReadScalarCountNextFooter{} -> pure ext
-    VecLoad{} -> pure ext
-    SSPush{} -> pure ext
-    SSPop{} -> pure ext

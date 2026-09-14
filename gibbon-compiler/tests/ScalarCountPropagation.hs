@@ -15,8 +15,21 @@ import Gibbon.DynFlags
 import Gibbon.Language
 import qualified Gibbon.L3.Syntax as L3
 import Gibbon.Passes.ScalarCountPropagation
-import Gibbon.Passes.LoopifyTraversals (countGuaranteedTyCons, writtenDataCons, unattributedPackedTyCons)
+import Gibbon.Passes.LoopifyTraversals
+  ( CountsGateReason(..), countGuaranteedTyCons, countsGateReason
+  , unattributedPackedTyCons, writtenDataCons )
 import qualified Data.Set as S
+
+
+-- The cursorized calling convention these hand-built functions stand for.
+-- Cursorize records it; a function without it has no convention to read, so
+-- the passes under test decline rather than fall back to argument order.
+abiTraversal :: Maybe [AbiRole]
+abiTraversal = Just [AbiInEnd, AbiOutEnd, AbiOutCur, AbiInCur]
+
+-- A producer that builds from scratch takes only its own output arrays.
+abiBuilder :: Maybe [AbiRole]
+abiBuilder = Just [AbiOutEnd, AbiOutCur]
 
 runnerEnabled :: L3.Prog3 -> L3.Prog3
 runnerEnabled prg =
@@ -76,7 +89,7 @@ producerFun =
     , L3.ProdTy []
     )
     producerBody
-    (FunMeta Rec NoInline False [])
+    (FunMeta Rec NoInline False [] abiTraversal)
 
 producerBody :: L3.Exp3
 producerBody =
@@ -184,7 +197,7 @@ countCopiesExt ext =
 -- producer the gate does not know exists.
 
 countedProducer :: L3.FunDef3
-countedProducer = producerFun { funMeta = FunMeta Rec NoInline False [StoreScalarCounts] }
+countedProducer = producerFun { funMeta = FunMeta Rec NoInline False [StoreScalarCounts] Nothing }
 
 gateProg :: [(Var, L3.FunDef3)] -> L3.Exp3 -> L3.Prog3
 gateProg extra mainE =
@@ -208,7 +221,7 @@ case_vw09_counted_producer_alone_is_accepted =
 case_vw09_unannotated_extra_producer_disqualifies_the_type :: Assertion
 case_vw09_unannotated_extra_producer_disqualifies_the_type =
   let other = producerFun { funName = "otherProducer"
-                          , funMeta = FunMeta NotRec NoInline False [] }
+                          , funMeta = FunMeta NotRec NoInline False [] Nothing }
    in assertBool "a user producer that establishes no counts must disqualify the type"
         (S.notMember "List"
            (countGuaranteedTyCons False (gateProg [("otherProducer", other)] (L3.MkProdE []))))
@@ -232,10 +245,80 @@ case_vw09_readPackedFile_producer_disqualifies_the_type =
 case_vw09_generated_copy_helper_is_excluded_from_the_gate :: Assertion
 case_vw09_generated_copy_helper_is_excluded_from_the_gate =
   let copyFn = producerFun { funName = "_copy_List"
-                           , funMeta = FunMeta Rec NoInline False [] }
+                           , funMeta = FunMeta Rec NoInline False [] Nothing }
    in assertBool "RECORDED BLIND SPOT (VW-09): a generated _copy_ helper is not a producer here"
         (S.member "List"
            (countGuaranteedTyCons False (gateProg [("_copy_List", copyFn)] (L3.MkProdE []))))
+
+--------------------------------------------------------------------------------
+-- Both gate helpers must see through an extension form they do not name.
+--
+-- Their `Ext` arms route through `L3.Traverse.extExps`, which is total, so a
+-- producer reachable only underneath an unlisted form still surfaces.  The
+-- alternative -- listing forms and falling through to `[]` -- makes a new
+-- `E3Ext` constructor hide producers silently, which is the direction that
+-- loses counts.
+
+-- `WriteScalar` is named by neither helper and carries an expression child, so
+-- reaching that child is exactly the routing under test.
+extWrapping :: L3.Exp3 -> L3.Exp3
+extWrapping inner = L3.Ext (L3.WriteScalar (L3.IntS W64) "cur" inner)
+
+case_gate_helpers_see_through_unnamed_ext_forms :: Assertion
+case_gate_helpers_see_through_unnamed_ext_forms = do
+  let readE = L3.PrimAppE (ReadPackedFile Nothing "List" Nothing (L3.PackedTy "List" ())) []
+      dconE = L3.DataConE () "Nil" []
+  -- Directly, both helpers see these.
+  ["List"] @=? unattributedPackedTyCons readE
+  ["Nil"]  @=? writtenDataCons dconE
+  -- Underneath an extension form neither helper names, they still do.
+  ["List"] @=? unattributedPackedTyCons (extWrapping readE)
+  ["Nil"]  @=? writtenDataCons (extWrapping dconE)
+
+--------------------------------------------------------------------------------
+-- `--loopification-report` elaborates a counts-gate rejection with the reason.
+-- It is a second reading of the same three conditions, so it is pinned to the
+-- gate itself: a type is guaranteed exactly when there is no reason.
+
+gateAgrees :: String -> L3.Prog3 -> Assertion
+gateAgrees label prg =
+  assertBool (label ++ ": the report's reason must agree with the gate")
+    (S.member "List" (countGuaranteedTyCons False prg)
+       == (countsGateReason False prg "List" == Nothing))
+
+case_report_reason_agrees_with_the_gate :: Assertion
+case_report_reason_agrees_with_the_gate = do
+  let other = producerFun { funName = "otherProducer"
+                          , funMeta = FunMeta NotRec NoInline False [] Nothing }
+      copyFn = producerFun { funName = "_copy_List"
+                           , funMeta = FunMeta Rec NoInline False [] Nothing }
+      noScratch = L3.Prog (M.fromList [("List", listDDef)])
+                          (M.fromList [("producer", producerFun)])
+                          (Just (L3.MkProdE [], L3.ProdTy []))
+  gateAgrees "no from-scratch producer" noScratch
+  gateAgrees "counted producer alone" (gateProg [] (L3.MkProdE []))
+  gateAgrees "extra uncounted producer" (gateProg [("otherProducer", other)] (L3.MkProdE []))
+  gateAgrees "generated copy helper" (gateProg [("_copy_List", copyFn)] (L3.MkProdE []))
+  gateAgrees "gibbon_main produces the type" (gateProg [] mainProducesList)
+
+case_report_names_the_specific_counts_gate_reason :: Assertion
+case_report_names_the_specific_counts_gate_reason = do
+  let other = producerFun { funName = "otherProducer"
+                          , funMeta = FunMeta NotRec NoInline False [] Nothing }
+      noScratch = L3.Prog (M.fromList [("List", listDDef)])
+                          (M.fromList [("producer", producerFun)])
+                          (Just (L3.MkProdE [], L3.ProdTy []))
+  Just NoScratchProducer @=? countsGateReason False noScratch "List"
+  Just (ProducerWithoutCounts "otherProducer")
+    @=? countsGateReason False (gateProg [("otherProducer", other)] (L3.MkProdE [])) "List"
+  -- One DataConE in gibbon_main disables the type program-wide.
+  Just ProducedInGibbonMain
+    @=? countsGateReason False (gateProg [] mainProducesList) "List"
+  Nothing @=? countsGateReason False (gateProg [] (L3.MkProdE [])) "List"
+
+mainProducesList :: L3.Exp3
+mainProducesList =
+  L3.mkLets [("l", [], L3.CursorTy, L3.DataConE () "Nil" [])] (L3.MkProdE [])
 
 --------------------------------------------------------------------------------
 -- VW-09: coverage/emission reconciliation.
@@ -326,7 +409,7 @@ mkAdversarialProducer name consBinds =
           ]
         )
     )
-    (FunMeta Rec NoInline False [])
+    (FunMeta Rec NoInline False [] abiTraversal)
 
 recurBind :: (Var, [()], L3.Ty3, L3.Exp3)
 recurBind =
@@ -404,7 +487,7 @@ callSelfFromRecursiveEnclosingFun =
     ["inEnds", "outEnds", "outCurs", "inCurs"]
     (replicate 4 (L3.CursorArrayTy 3), L3.ProdTy [])
     callSelfLetBound
-    (FunMeta Rec NoInline False [])
+    (FunMeta Rec NoInline False [] abiTraversal)
 
 case_vw09_step82_call_in_recursive_enclosing_fun_never_covered :: Assertion
 case_vw09_step82_call_in_recursive_enclosing_fun_never_covered =
