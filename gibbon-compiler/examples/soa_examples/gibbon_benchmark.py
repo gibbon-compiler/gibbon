@@ -5044,8 +5044,21 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
         "$A^{\\min}$/$S^{\\min}$ divides that row's fastest AoS configuration "
         "by its fastest SoA one, so each layout is represented by whichever "
         "configuration actually served this pass best; ${>}1{\\times}$ means "
-        "SoA is faster. "
-        "A cell with no time names its failure: "
+        "SoA is faster. The minimum is taken over the columns THIS table "
+        "shows and no others, so the ratio can be checked against the row "
+        "above it. "
+        + ("Those columns are the recursive configurations only: the "
+           "loopified pair Table~\\ref{tab:summary} contrasts is absent "
+           "here, because nothing in a fold is loopifiable. The two tables "
+           "therefore compare different binaries of the same source, and "
+           "where a program's two layouts sit within a few percent of each "
+           "other that is enough to reverse which one leads. "
+           if pass_type == "fold" else
+           "Those columns include the pair Table~\\ref{tab:summary} "
+           "contrasts, but that table reports a pass-SUM per program while "
+           "each row here is one pass, so a program with several map passes "
+           "can lead here and trail there. ")
+        + "A cell with no time names its failure: "
         "`" + PLDI_SYM_COMPILE_FAIL + "' did not compile, "
         "`" + PLDI_SYM_RUN_FAIL + "' compiled but the executable failed to run, "
         "`" + PLDI_SYM_WRONG_OUTPUT + "' ran but its output did not match the "
@@ -6130,9 +6143,23 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                         PLDI_ROW_LABELS.get(aos_config, aos_config),
                         PLDI_COL_SYMBOLS.get(soa_config, soa_config),
                         PLDI_ROW_LABELS.get(soa_config, soa_config))
-           + (" Nothing in a fold is loopifiable, so the fold group's AoS "
-              "column is in effect the recursive mutable-cursor result."
+           + (" Nothing in a fold is loopifiable, so neither layout's fold "
+              "column gains anything from loopification; measured against "
+              "the per-program fold tables, both sides of the fold group "
+              "land within a few percent of that layout's recursive "
+              "mutable-cursor column."
               if "loop" in aos_config else "")
+           + (" These two configurations are NOT among the columns of the "
+              "per-program FOLD tables, which show only the recursive "
+              "variants, so that table's $A^{\\min}$/$S^{\\min}$ is a "
+              "comparison between different binaries from this one and may "
+              "differ from the fold ratio here -- in magnitude, and where "
+              "the two layouts are within a few percent of each other, in "
+              "direction. The per-program MAP tables do contain both "
+              "columns. Either way a group here is a pass-SUM, so a program "
+              "whose passes disagree is reported by whichever dominates the "
+              "sum."
+              if include_loopified else "")
            + " The OctTree row sums its merged programs, and is reported "
              "only when every one of them verified in both configurations.")
         + "}\n"

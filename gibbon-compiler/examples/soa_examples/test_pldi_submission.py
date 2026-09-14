@@ -980,6 +980,22 @@ class TestSummaryLoopifiedColumns(unittest.TestCase):
             "fold"), 0.375)
 
 
+    def test_caption_names_where_the_per_program_tables_can_disagree(self):
+        """Table 1's fold group is measured on binaries the per-program
+        fold tables never show, so the two can differ in magnitude and --
+        where the layouts are close -- in direction. The caption has to
+        name that, and has to say a group here is a pass-sum."""
+        out = self._summary([self._pair()], self._pldi("P.hs", 2.0, 2.0, 1.0, 1.0))
+        cap = out.split("\\label{")[0]
+        self.assertIn("NOT among the columns", cap)
+        self.assertIn("per-program FOLD tables", cap)
+        self.assertIn("in direction", cap)
+        self.assertIn("pass-SUM", cap)
+        # The old claim covered only the AoS side; folds gain nothing from
+        # loopification on either.
+        self.assertIn("neither layout's fold", cap)
+
+
 class TestFailureSymbols(unittest.TestCase):
     """A no-number cell says WHICH failure it was. "Did not compile" and
     "compiled, ran, and computed the wrong answer" are very different
@@ -1120,6 +1136,54 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
     def test_a_row_of_all_failures_yields_a_dash_not_a_crash(self):
         cells = [("*", None)] * 5
         self.assertEqual(gb._pldi_best_of_layout_speedup(cells, self.GROUPS), "--")
+
+    def test_minimum_is_taken_only_over_the_displayed_columns(self):
+        """A^min/S^min must be checkable against the row printed above it.
+
+        The loopified configurations DO time every fold pass -- the fold
+        table simply does not display their columns -- so minimising over
+        them would produce a ratio a reader could not derive from the
+        table, and would silently import the summary table's comparison
+        into a table that is not making it."""
+        passes = {"g": {"median_time": 0.02, "pass_type": "fold"}}
+        fast = {"g": {"median_time": 0.001, "pass_type": "fold"}}
+        results = {"aos_mut": _make_result("P.hs", "aos_mut", passes),
+                   "soa_mut": _make_result("P.hs", "soa_mut", passes),
+                   # Not a fold-table column; must not reach the ratio.
+                   gb.SUMMARY_LOOPIFIED_SOA: _make_result(
+                       "P.hs", gb.SUMMARY_LOOPIFIED_SOA, fast)}
+        buf = io.StringIO()
+        gb._table_pldi_fold(buf, "P.hs", results)
+        row = [l for l in buf.getvalue().splitlines() if l.startswith("g &")][0]
+        self.assertIn("1.00$\\times$", row)
+        self.assertNotIn("20.00$\\times$", row)
+
+    def test_fold_caption_says_the_summarys_pair_is_not_a_column_here(self):
+        """The two tables can disagree about which layout leads, because
+        they are reading different binaries. A reader has no way to see
+        that from the columns, so the caption has to say it."""
+        results = {"aos_mut": _make_result("P.hs", "aos_mut", {
+            "g": {"median_time": 0.02, "pass_type": "fold"}})}
+        buf = io.StringIO()
+        gb._table_pldi_fold(buf, "P.hs", results)
+        cap = buf.getvalue()
+        self.assertIn("columns THIS table", cap)
+        self.assertIn("recursive configurations only", cap)
+        self.assertIn("tab:summary", cap)
+        self.assertIn("reverse which one leads", cap)
+
+    def test_map_caption_says_the_summary_is_a_pass_sum(self):
+        """The map table DOES show the summary's pair, so the remaining way
+        the two can disagree is aggregation: one row here against a sum
+        over every map pass there."""
+        results = {"aos_mut": _make_result("P.hs", "aos_mut", {
+            "m": {"median_time": 0.02, "pass_type": "map"}})}
+        buf = io.StringIO()
+        gb._table_pldi_map(buf, "P.hs", results)
+        cap = buf.getvalue()
+        self.assertIn("columns THIS table", cap)
+        self.assertIn("pass-SUM", cap)
+        self.assertIn("lead here and trail there", cap)
 
 
 class TestSplitFamilyMerging(unittest.TestCase):
