@@ -1631,3 +1631,55 @@ class TestVanillaSummaryTable(unittest.TestCase):
             gb.write_latex_tables([(self._mk("aos", 9, 9), self._mk("soa", 9, 9))],
                                   out, None)
             self.assertNotIn("tab:summary-vs-vanilla", out.read_text())
+
+
+class TestPldiMatrixSerialisation(unittest.TestCase):
+    """A configuration that compiled and then failed must leave enough behind
+    to diagnose it after the run is over."""
+
+    @staticmethod
+    def _res(program, cfg, compiled, ran, rc=None, out=None):
+        r = gb.BenchmarkResult(program, cfg)
+        r.compile_success, r.run_success = compiled, ran
+        r.run_returncode, r.output = rc, out
+        return r
+
+    def _matrix(self):
+        return {"List.hs": {
+            "aos_mut": self._res("List.hs", "aos_mut", True, False, rc=1, out="tag error\n"),
+            "aos_imm": self._res("List.hs", "aos_imm", True, False, rc=-11, out=""),
+            "soa_mut": self._res("List.hs", "soa_mut", True, True, rc=0, out="fine"),
+        }}
+
+    def _write(self):
+        import json, tempfile, pathlib
+        d = tempfile.mkdtemp()
+        out = pathlib.Path(d) / "m.json"
+        gb.write_pldi_matrix_json(self._matrix(), out, {"repo": {"head": "abc"}})
+        return json.loads(out.read_text())
+
+    def test_a_failed_run_records_its_return_code(self):
+        r = self._write()["results"]["List.hs"]
+        self.assertEqual(r["aos_mut"]["run_returncode"], 1)
+
+    def test_a_signal_is_distinguishable_from_a_nonzero_exit(self):
+        r = self._write()["results"]["List.hs"]
+        self.assertEqual(r["aos_imm"]["run_returncode"], -11)
+        self.assertNotEqual(r["aos_mut"]["run_returncode"],
+                            r["aos_imm"]["run_returncode"])
+
+    def test_a_failed_run_keeps_what_it_printed(self):
+        r = self._write()["results"]["List.hs"]
+        self.assertIn("tag error", r["aos_mut"]["failure_output_tail"])
+
+    def test_a_successful_run_carries_no_output_tail(self):
+        r = self._write()["results"]["List.hs"]
+        self.assertNotIn("failure_output_tail", r["soa_mut"])
+
+    def test_failures_are_listed_by_program_and_configuration(self):
+        self.assertEqual(self._write()["run_failures"],
+                         ["List.hs:aos_imm", "List.hs:aos_mut"])
+
+    def test_every_configuration_is_serialised_not_just_failures(self):
+        self.assertEqual(sorted(self._write()["results"]["List.hs"]), 
+                         ["aos_imm", "aos_mut", "soa_mut"])

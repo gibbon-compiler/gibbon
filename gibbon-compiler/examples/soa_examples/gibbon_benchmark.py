@@ -7834,6 +7834,13 @@ def _ser_result(r: Optional[BenchmarkResult]) -> Optional[Dict]:
         "compile_success":  r.compile_success,
         "run_success":      r.run_success,
         "error":            r.error_message,
+        # A failed run used to record only `run_success: false`, which cannot
+        # distinguish a signal from a non-zero exit or say what was printed
+        # before it. Both are kept; the tail is bounded so a chatty failure
+        # cannot dominate the report.
+        "run_returncode":   getattr(r, "run_returncode", None),
+        **({"failure_output_tail": (r.output or "")[-2000:]}
+           if (r.compile_success and not r.run_success and r.output) else {}),
         "verified":         verified,
         "arith_mode":       getattr(r, "arith_mode", None),
         "use_no_ran":       getattr(r, "use_no_ran", None),
@@ -7926,6 +7933,43 @@ def campaign_provenance(args) -> Dict[str, object]:
                     "vectorization": getattr(args, "enable_vectorization", None)},
         "driver_argv": sys.argv,
     }
+
+
+def write_pldi_matrix_json(pldi_variant_results, out_file: Path,
+                           campaign_extra: Optional[Dict] = None):
+    """Serialize the per-program PLDI configuration matrix.
+
+    The main report carries six variants per program; the fold/map tables are
+    built from up to thirteen, and those were never written anywhere. A
+    configuration that failed left a bare `-` in the table with no return code,
+    no output and no record of which configuration it was, so a failure could
+    not be diagnosed once the run was over -- which is what happened to
+    `List`'s mutable-cursor AoS column.
+
+    Written as soon as the matrix is collected rather than with the main
+    report, because the report is produced by a later phase and a crash
+    between the two would lose the matrix entirely."""
+    if not pldi_variant_results:
+        return
+    data = {}
+    for program, cfgs in sorted(pldi_variant_results.items()):
+        data[program] = {cfg: _ser_result(res) for cfg, res in sorted(cfgs.items())}
+    failures = sorted(
+        f"{program}:{cfg}"
+        for program, cfgs in pldi_variant_results.items()
+        for cfg, res in cfgs.items()
+        if res is not None and res.compile_success and not res.run_success)
+    report = {
+        "report_schema": prov.REPORT_SCHEMA,
+        "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+        "campaign": dict(campaign_extra or {}),
+        "run_failures": failures,
+        "results": data,
+    }
+    prov.atomic_write_text(out_file, json.dumps(report, indent=2))
+    print(f"  ✓ PLDI matrix JSON → {out_file}"
+          + (f"  ({len(failures)} configuration(s) compiled but did not run)"
+             if failures else ""))
 
 
 def write_json_results(all_results: List[Tuple], out_file: Path,
@@ -9322,6 +9366,9 @@ def main():
                 c_arith_mode=args.c_arithmetic, simd_isa=args.simd_isa,
                 pin_cpu=args.pin_cpu, programs=pldi_programs)
             report_pldi_qualification_warnings(pldi_variant_results)
+            write_pldi_matrix_json(pldi_variant_results,
+                                   args.json.with_name(args.json.stem + "_pldi.json"),
+                                   campaign_provenance(args))
         # Get extended results if they were collected
         progress().finish_phase()
         progress().start_phase("report")
