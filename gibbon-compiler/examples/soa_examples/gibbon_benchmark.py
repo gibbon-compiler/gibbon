@@ -2292,6 +2292,7 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
                          enable_selective_buffer_sharing: bool = False,
                          enable_vectorization: bool = False,
                          use_sse41: bool = False,
+                         simd_w64_multiply: bool = False,
                          use_no_gcc_vec: bool = False,
                          use_no_ran: bool = True,
                          c_arith_mode: str = DEFAULT_C_ARITH_MODE,
@@ -2353,6 +2354,8 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
         cmd.append("--no-ran")
     if use_sse41:
         cmd.append("--sse4.1")
+    if simd_w64_multiply:
+        cmd.append("--simd-w64-multiply")
     cmd.append(f"--simd-isa={simd_isa}")
     if use_no_gcc_vec:
         cmd.append("--no-gcc-vectorize")
@@ -2411,6 +2414,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
                 enable_selective_buffer_sharing: bool = False,
                 enable_vectorization: bool = False,
                 use_sse41: bool = False,
+                simd_w64_multiply: bool = False,
                 use_no_gcc_vec: bool = False,
                 use_no_ran: bool = True,
                 c_arith_mode: str = DEFAULT_C_ARITH_MODE,
@@ -2484,6 +2488,7 @@ def compile_one(source: Path, variant: str, out_dir: Path,
             enable_selective_buffer_sharing=enable_selective_buffer_sharing,
             enable_vectorization=enable_vectorization,
             use_sse41=use_sse41,
+            simd_w64_multiply=simd_w64_multiply,
             use_no_gcc_vec=use_no_gcc_vec,
             use_no_gcc_tail_calls=use_no_gcc_tail_calls,
             auto_loopification=auto_loopification,
@@ -2545,6 +2550,8 @@ def compile_one(source: Path, variant: str, out_dir: Path,
         flags_str += ",vectorization"
     if use_sse41:
         flags_str += ",sse4.1"
+    if simd_w64_multiply:
+        flags_str += ",simd-w64-multiply"
     if use_no_gcc_vec:
         flags_str += ",no-gcc-vec"
     if use_no_gcc_tail_calls:
@@ -4054,6 +4061,17 @@ ARITHINTENSITY_WIDTH_CONFIGS: Dict[int, Dict[str, Dict]] = {
                                        enable_loopification=True,
                                        enable_selective_buffer_sharing=True,
                                        use_no_gcc_vec=True),
+            # W64's packed multiply is emulated -- three packed 32x32->64
+            # multiplies in registers -- and the compiler refuses it by default
+            # because it loses to one imul per lane.  The flag permits it, so
+            # this column measures what the emulation costs instead of leaving
+            # the reader to wonder.
+            "soa_simd": dict(use_mutable_cursors=True, store_scalar_field_counts=True,
+                             enable_loopification=True,
+                             enable_selective_buffer_sharing=True,
+                             enable_vectorization=True,
+                             simd_w64_multiply=True,
+                             use_no_gcc_vec=True),
         } if width == 64 else
         {
             "aos_mut": dict(use_mutable_cursors=True, use_no_gcc_vec=True),
@@ -4077,10 +4095,14 @@ ARITHINTENSITY_WIDTH_CONFIGS: Dict[int, Dict[str, Dict]] = {
     for width in (8, 16, 32, 64)
 }
 
-W64_SIMD_NA_REASON = ("unsupported packed multiply: gib_vec_mul_int64x2 is a "
-                      "legacy scalar-spill helper (Codegen.hs), not real SIMD -- "
-                      "excluded from this benchmark's Gibbon-SIMD configuration "
-                      "per owner policy; see BUGS.md")
+W64_SIMD_EMULATED_NOTE = ("emulated multiply: x86 has no packed 64-bit multiply "
+                          "below AVX-512DQ, so gib_vec_mul_int64x2 synthesizes one "
+                          "from three packed 32x32->64 multiplies plus two shifts "
+                          "and two adds, all in registers. It is correct SIMD and "
+                          "it is a measured LOSS -- seven instructions for two lanes "
+                          "against one imul per lane -- so the compiler refuses it "
+                          "by default and this column compiles with "
+                          "--simd-w64-multiply to measure it.")
 
 
 def _arithintensity_width_of(program: str) -> Optional[int]:
@@ -5207,11 +5229,15 @@ def report_pldi_qualification_warnings(
 def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkResult]]):
     """Integer-width high-arithmetic-intensity vectorization table: one row
     per width. Every numeric cell is gated through prov.verified_result/
-    eligible_pair/safe_speedup EXCEPT width 64's SIMD-raw and SIMD-speedup
-    cells, which are hardcoded to W64_SIMD_NA_REASON unconditionally --
-    checked FIRST, before any lookup into results_by_width[64] -- so no
-    BenchmarkResult for width 64's "soa_simd" (real or synthetic) can ever
-    populate those two cells with a number."""
+    eligible_pair/safe_speedup, width 64 included.
+
+    Width 64 used to be hardcoded to N/A on the grounds that its packed
+    multiply was not real SIMD. It is: no packed 64-bit multiply exists below
+    AVX-512DQ, so the helper synthesizes one from three packed 32x32->64
+    multiplies in registers. The compiler refuses it by default because it
+    loses to one imul per lane, so that column is compiled with
+    --simd-w64-multiply and its Status says the multiply is emulated. A
+    measured loss is a result; an N/A is not."""
     f.write("% Integer-width high-arithmetic-intensity vectorization\n")
     f.write("\\begin{table}[h]\n\\centering\n")
     f.write("\\caption{Integer-width high-arithmetic-intensity vectorization. "
@@ -5224,13 +5250,15 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
               "SIMD one -- the two differ by the vectorizer alone, so it reports what "
               "vectorization buys and nothing else; \\textbf{AoS-vs-SIMD} keeps AoS "
               "as its baseline and therefore includes every SoA-side optimization. "
-            + "Int64 does not vectorize its multiplies: a packed 64-bit multiply "
-              "costs seven instructions for two lanes (four under AVX2) against "
-              "one \\texttt{imul} per lane scalar, so it is a measured LOSS -- "
-              "1.370 instructions per source operation vectorized against 0.750 "
-              "scalar. It is therefore excluded from the SIMD capability matrix, "
-              "and Int64's SIMD column reports the same time as its scalar one "
-              "rather than a slowdown.}\n")
+            + "Int64's packed multiply is EMULATED, and its SIMD column is "
+              "compiled with \\texttt{--simd-w64-multiply} to measure it. x86 has "
+              "no packed 64-bit multiply below AVX-512DQ, so the helper "
+              "synthesizes one from three packed $32{\\times}32{\\to}64$ multiplies "
+              "plus two shifts and two adds, all in registers -- correct SIMD, but "
+              "seven instructions for two lanes against one \\texttt{imul} per lane "
+              "scalar. The compiler therefore refuses it by default; the number "
+              "here is what enabling it costs, and a speedup below $1{\\times}$ in "
+              "that row is the expected result rather than a defect.}\n")
     f.write("\\label{tab:arith_intensity}\n\\small\n")
     f.write("\\resizebox{\\textwidth}{!}{%\n")
     f.write("\\begin{tabular}{lccccccccccccc}\n\\toprule\n")
@@ -5253,26 +5281,18 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
         loop = cfgs.get("soa_loopify")
         shared = cfgs.get("soa_loopify_shared")
 
-        if width == 64:
-            # Hardcoded FIRST: no lookup into cfgs.get("soa_simd") at all --
-            # there structurally is no such entry (ARITHINTENSITY_WIDTH_CONFIGS
-            # never defines one for width 64), but even a caller who hand-built
-            # results_by_width with a rogue "soa_simd" entry cannot make this
-            # cell numeric, because this branch never reads it.
-            simd_cell = "N/A"
-            simd_spd_cell = "N/A"
-            aos_vs_simd_cell = "N/A"
-            status = "N/A (%s)" % W64_SIMD_NA_REASON.split(":", 1)[0]
-        else:
-            simd = cfgs.get("soa_simd")
-            # Against the shared rung, not the unshared one: the two differ by
-            # the vectorizer alone, so this is what vectorization buys.
-            simd_spd, simd_reason = prov.safe_speedup(shared, simd, total_pass_time)
-            aos_vs_simd, aos_vs_simd_reason = prov.safe_speedup(aos, simd, total_pass_time)
-            simd_cell = cell(simd)
-            simd_spd_cell = spd_or_na(simd_spd, simd_reason)
-            aos_vs_simd_cell = spd_or_na(aos_vs_simd, aos_vs_simd_reason)
-            status = "SIMD"
+        simd = cfgs.get("soa_simd")
+        # Against the shared rung, not the unshared one: the two differ by
+        # the vectorizer alone, so this is what vectorization buys.
+        simd_spd, simd_reason = prov.safe_speedup(shared, simd, total_pass_time)
+        aos_vs_simd, aos_vs_simd_reason = prov.safe_speedup(aos, simd, total_pass_time)
+        simd_cell = cell(simd)
+        simd_spd_cell = spd_or_na(simd_spd, simd_reason)
+        aos_vs_simd_cell = spd_or_na(aos_vs_simd, aos_vs_simd_reason)
+        # W64's multiply is synthesized rather than native, and the column is
+        # marked so a reader does not read it as the same kind of measurement
+        # as the other three.
+        status = "SIMD (%s)" % W64_SIMD_EMULATED_NOTE.split(":", 1)[0] if width == 64 else "SIMD"
 
         row = (f"Int{width}"
                f" & {m['ops_per_element']:.0f}"

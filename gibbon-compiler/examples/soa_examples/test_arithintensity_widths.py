@@ -287,12 +287,28 @@ class TestArithIntensitySourceWidths(unittest.TestCase):
             self.assertIn(entry.get("provenance"), prov.ORACLE_PROVENANCES)
             self.assertEqual(entry["expected"], str(model.expected(width)))
 
-    def test_w64_has_no_soa_simd_config(self):
-        """Structural proof the collector never even attempts a W64 Gibbon-
-        SIMD build -- not a runtime-detected skip."""
-        self.assertNotIn("soa_simd", gb.ARITHINTENSITY_WIDTH_CONFIGS[64])
-        for width in (8, 16, 32):
+    def test_every_width_has_a_soa_simd_config(self):
+        for width in (8, 16, 32, 64):
             self.assertIn("soa_simd", gb.ARITHINTENSITY_WIDTH_CONFIGS[width])
+
+    def test_w64_simd_enables_the_emulated_multiply(self):
+        """The replacement for BW-02's guard.
+
+        W64's SIMD column is only a measurement if the compiler was actually
+        permitted to emit the emulated multiply. Without the flag the
+        vectorizer declines every W64 multiply, the loop stays scalar, and the
+        column would silently duplicate soa_loopify while claiming to be SIMD --
+        which is the fabricated-number failure BW-02 existed to prevent."""
+        self.assertTrue(
+            gb.ARITHINTENSITY_WIDTH_CONFIGS[64]["soa_simd"].get("simd_w64_multiply"))
+
+    def test_only_w64_enables_the_emulated_multiply(self):
+        """8/16/32 have native packed multiplies; asking for the emulation
+        there would measure something no default build ever emits."""
+        for width in (8, 16, 32):
+            self.assertFalse(
+                gb.ARITHINTENSITY_WIDTH_CONFIGS[width]["soa_simd"].get(
+                    "simd_w64_multiply", False))
 
     def test_c_autovectorizer_off_in_every_column_of_both_width_tables(self):
         """Every column of both integer-width tables must disable the C
@@ -439,31 +455,19 @@ class TestArithIntensityWidthTable(unittest.TestCase):
         self.assertIn("0.500000", out)
         self.assertIn(r"$\times$", out)
 
-    def test_w64_simd_column_is_always_na_even_if_a_verified_result_is_supplied(self):
-        """THE critical BW-02 test: even if a caller hand-builds a
-        results_by_width[64]["soa_simd"] entry marked VERIFIED with a real
-        (fabricated) median_time, the rendered SIMD/speedup cells for width
-        64 must still be N/A with the unsupported-packed-multiply reason --
-        the table must never trust an incoming W64 soa_simd result, because
-        per policy that config should never even exist."""
+    def test_w64_simd_column_reports_its_measurement(self):
+        """W64's SIMD cell used to be hardcoded N/A. It is now a measurement
+        like any other, and the row says the multiply is emulated so a reader
+        does not mistake it for a native one."""
         results = {64: {
             "aos_mut": _make_result("ArithmeticIntensityInt64.hs", "aos_mut", True, median_time=4.0),
-            "soa_mut": _make_result("ArithmeticIntensityInt64.hs", "soa_mut", True, median_time=2.0),
-            "soa_loopify": _make_result("ArithmeticIntensityInt64.hs", "soa_loopify", True, median_time=2.0),
-            # Deliberately rogue: a VERIFIED soa_simd entry with a fast time,
-            # simulating a caller who (incorrectly) ran Gibbon SIMD at W64.
-            "soa_simd": _make_result("ArithmeticIntensityInt64.hs", "soa_simd", True, median_time=0.1),
+            "soa_loopify_shared": _make_result("ArithmeticIntensityInt64.hs",
+                                               "soa_loopify_shared", True, median_time=2.0),
+            "soa_simd": _make_result("ArithmeticIntensityInt64.hs", "soa_simd", True, median_time=8.0),
         }}
         out = self._render(results)
-        row = [l for l in out.splitlines() if l.startswith("Int64")][0]
-        self.assertIn("unsupported packed multiply", row)
-        self.assertNotIn("0.100000", row)  # the rogue fast time must never leak through
-        # None of the three W64-SIMD-derived cells may be a bare number.
-        cells = [c.strip() for c in row.split("&")]
-        # columns: Width, Ops/elem, Bld, Bst, Ops/byte, AoS, SoA, loopify, SIMD, spd, AoS-vs-SIMD, Status
-        simd_cell, spd_cell, aos_vs_simd_cell = cells[8], cells[9], cells[10]
-        for c in (simd_cell, spd_cell, aos_vs_simd_cell):
-            self.assertTrue(c.startswith("N/A"), "expected N/A, got %r" % c)
+        self.assertIn("8.000000", out)
+        self.assertIn("emulated multiply", out)
 
     def test_w64_row_renders_even_with_no_config_present_at_all(self):
         results = {64: {
@@ -554,19 +558,16 @@ class TestArithIntensityMutations(unittest.TestCase):
             0, model.wrap(32))
         self.assertNotEqual(corrupted, model.expected(32, depth, model.SEED0))
 
-    def test_w64_legacy_multiply_reported_as_packed_is_rejected_by_table(self):
-        """A verified, fast W64 soa_simd result (simulating the legacy
-        spill helper being mistakenly reported as acceleration) must still
-        render N/A -- covered end-to-end in TestArithIntensityWidthTable;
-        this is the mutation-test framing of that same guarantee."""
+    def test_a_w64_simd_row_is_marked_emulated_however_fast_it_claims_to_be(self):
+        """The mutation framing of the same guarantee: a fast W64 SIMD number
+        is reported, but never as an ordinary native-SIMD result."""
         results = {64: {"soa_simd": _make_result(
             "ArithmeticIntensityInt64.hs", "soa_simd", True, median_time=0.01)}}
         import io
         buf = io.StringIO()
         gb._table_arith_intensity(buf, results)
         out = buf.getvalue()
-        self.assertNotIn("0.010000", out)
-        self.assertIn("unsupported packed multiply", out)
+        self.assertIn("emulated multiply", out)
 
 
 if __name__ == "__main__":
