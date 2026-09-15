@@ -3544,13 +3544,16 @@ vecHelperNameM op scalar lanes = do
   dflags <- getDynFlags
   case vecRegisterWidthError dflags op scalar lanes of
     Just msg -> error msg
-    Nothing -> pure $! vecHelperName op scalar lanes
+    Nothing -> pure $! vecHelperNameWith (gopt Opt_SimdW64Multiply dflags) op scalar lanes
 
 -- | The emitted helper's name.  Derived from the typed 'L3.VecOp' and the
 -- scalar, never accepted as a caller-supplied string.
 vecHelperName :: L3.VecOp -> Scalar -> Int -> Var
-vecHelperName op scalar lanes
-  | vecOpSupported op scalar lanes =
+vecHelperName = vecHelperNameWith False
+
+vecHelperNameWith :: Bool -> L3.VecOp -> Scalar -> Int -> Var
+vecHelperNameWith w64Mul op scalar lanes
+  | vecOpSupportedWith w64Mul op scalar lanes =
       toVar $ "gib_vec_" ++ L3.vecOpName op ++ "_" ++ scalarSuffix scalar lanes
   | otherwise = error $
       "Codegen: unsupported SIMD operation/scalar/lane combination: "
@@ -3562,8 +3565,14 @@ vecHelperName op scalar lanes
 -- the whole (op x scalar) space: a vectorizer "yes" with a backend "no" is a
 -- crash, and a backend "yes" with a vectorizer "no" is dead code.
 vecOpSupported :: L3.VecOp -> Scalar -> Int -> Bool
-vecOpSupported op scalar lanes =
-  L3.simdCapable op scalar && L3.simdLanesValidAny scalar lanes
+vecOpSupported = vecOpSupportedWith False
+
+-- | As 'vecOpSupported', with the W64 multiply permission the vectorizer was
+-- given.  Lowering must ask with the same permission, or a node the vectorizer
+-- legitimately emitted is rejected here as unsupported.
+vecOpSupportedWith :: Bool -> L3.VecOp -> Scalar -> Int -> Bool
+vecOpSupportedWith w64Mul op scalar lanes =
+  L3.simdCapableWith w64Mul op scalar && L3.simdLanesValidAny scalar lanes
 
 scalarSuffixSupported :: Scalar -> Int -> Bool
 scalarSuffixSupported scalar lanes =

@@ -14,7 +14,7 @@ module Gibbon.L3.Syntax
   , isIntScalar, intScalarWidth, intScalarWidthMaybe, intS64
   , VecOp(..), vecOpName, simdScalarBytes, simdLanes
   , simdRegisterBytes, simdRegisterBytesAvx2
-  , simdScalarEnabled, simdCapable, simdLanesValid, simdLanesValidAny
+  , simdScalarEnabled, simdCapable, simdCapableWith, simdLanesValid, simdLanesValidAny
   , simdLogicalStride, simdGroups, simdStrideValid, orderedCmps
   , VecCmpOp(..), vecCmpOp, vecCmpName
 
@@ -702,6 +702,10 @@ simdLanes regBytes s = regBytes `div` simdScalarBytes s
 
 -- | Does this (scalar, lanes) pair exactly fill the register?  Anything else is
 -- malformed IR and must fail loudly rather than emit a short or overlong access.
+-- | The matrix as the compiler applies it by default: W64 multiply refused.
+simdCapable :: VecOp -> Scalar -> Bool
+simdCapable = simdCapableWith False
+
 simdLanesValid :: Int -> Scalar -> Int -> Bool
 simdLanesValid regBytes scalar lanes =
   lanes == simdLanes regBytes scalar
@@ -805,8 +809,15 @@ simdScalarEnabled s =
 -- W64 keeps its original lane-spilling mul\/div\/mod helpers.  Those are honestly documented at their
 -- definitions as NOT being an acceleration; they are retained only because
 -- removing them would change accepted W64 output.
-simdCapable :: VecOp -> Scalar -> Bool
-simdCapable op scalar
+-- | The capability matrix with the W64 multiply decision left open.
+--
+-- The W64 packed multiply is emulated rather than absent: three packed
+-- 32x32->64 multiplies plus two shifts and two adds, all in registers.  It is
+-- correct and it is real SIMD; it is refused by default only because seven
+-- instructions for two lanes lose to one @imul@ per lane.  Passing 'True'
+-- permits it, which is what measuring that loss requires.
+simdCapableWith :: Bool -> VecOp -> Scalar -> Bool
+simdCapableWith w64Mul op scalar
   | not (simdScalarEnabled scalar) = False
   | otherwise =
       case scalar of
@@ -836,7 +847,7 @@ simdCapable op scalar
         -- all, so dropping it would leave the guarded-division machinery
         -- ('dagSpeculatesPartialOp' and the tests that pin it) exercising
         -- nothing.
-        IntS W64 -> op /= VecOpMul && op `notElem` orderedCmps
+        IntS W64 -> (w64Mul || op /= VecOpMul) && op `notElem` orderedCmps
         -- W32 has a packed multiply at every ISA: _mm_mullo_epi32 from SSE4.1
         -- up, and at baseline SSE2 two _mm_mul_epu32 plus shuffles, which
         -- compute the low 32 bits of all four products in registers and

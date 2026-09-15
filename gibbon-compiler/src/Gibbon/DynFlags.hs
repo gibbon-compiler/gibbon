@@ -86,6 +86,9 @@ data GeneralFlag
   | Opt_EnableVectorization -- ^ Enable SIMD vectorization for supported loopified SoA scalar-buffer
                             --   loops. Requires Opt_EnableLoopification or Opt_AutoLoopification
                             --   (hard compile error otherwise), same reason as above.
+  | Opt_SimdW64Multiply -- ^ @--simd-w64-multiply@: let the vectorizer use the emulated
+                        --   64-bit packed multiply, which is refused by default because it
+                        --   is slower than the scalar multiply it would replace.
   | Opt_Sse41 -- ^ Compile the generated C with -msse4.1 (opt-in; default targets baseline SSE2).
   -- The SIMD instruction set BOTH sides of the compilation target: Gibbon's
   -- own vectorizer (which picks its register width from it) and the C
@@ -242,6 +245,13 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                                          "loopification produced. Requires --opt-loopification or " ++
                                                          "--auto-loopification (compile error otherwise): there are no loops " ++
                                                          "to vectorize without it.")) <|>
+                   flag' Opt_SimdW64Multiply (long "simd-w64-multiply" <>
+                                    help ("Let the vectorizer use the emulated 64-bit packed " ++
+                                          "multiply. It is correct SIMD -- three packed 32x32->64 " ++
+                                          "multiplies plus two shifts and two adds, all in registers " ++
+                                          "-- but seven instructions for two lanes lose to one imul " ++
+                                          "per lane, so it is refused by default. Enable it to measure " ++
+                                          "that loss; it makes W64 multiply-heavy loops slower.")) <|>
                    flag' Opt_Sse41 (long "sse4.1" <>
                                     long "gibbon-sse41" <>
                                     help "Compile generated C with -msse4.1 (default: off, baseline SSE2).") <|>

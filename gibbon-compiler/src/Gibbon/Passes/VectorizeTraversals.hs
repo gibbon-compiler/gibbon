@@ -97,6 +97,9 @@ data SimdCfg = SimdCfg
   { scIntBytes :: Int   -- ^ Width of a machine @GibInt@, in bytes.
   , scRegBytes :: Int   -- ^ Width of one SIMD register, in bytes: 16 for
                         --   baseline SSE2, 32 for AVX2.
+  , scW64Mul :: Bool    -- ^ Whether the emulated 64-bit packed multiply may be
+                        --   used.  Off by default: it is correct SIMD but
+                        --   slower than the scalar multiply it replaces.
   }
 
 vectorizeTraversals :: L3.Prog3 -> PassM L3.Prog3
@@ -129,7 +132,8 @@ vectorizeTraversals prog@Prog{fundefs} = do
       -- instruction sets.  Every lane count, cursor bump and trip count
       -- downstream derives from this.
       let cfg = SimdCfg { scIntBytes = 8
-                        , scRegBytes = simdIsaRegisterBytes (simdIsaOf dflags) }
+                        , scRegBytes = simdIsaRegisterBytes (simdIsaOf dflags)
+                        , scW64Mul = gopt Opt_SimdW64Multiply dflags }
       fds' <- mapM (vectorizeFun cfg) (M.elems fundefs)
       pure $ prog { fundefs = M.fromList [ (funName f, f) | f <- fds' ] }
 
@@ -528,7 +532,7 @@ matchSimdLoop cfg idx body = do
   binds <- flattenUnitLoopBody body
   let writes = writeScalarBinds binds
   guard (not (null writes))
-  ops <- mapM (matchWrite binds idx) writes
+  ops <- mapM (matchWrite (scW64Mul cfg) binds idx) writes
   guard (all (scalarSupported . soScalar) ops)
   -- ONE logical stride for the whole fused loop, derived from every scalar it
   -- writes (see 'L3.simdLogicalStride').  A fused loopified traversal can put
@@ -563,16 +567,16 @@ writeScalarBinds binds = filter (isWriteScalar . snd) (zip [0..] binds)
     isWriteScalar (_, _, _, Ext (L3.WriteScalar{})) = True
     isWriteScalar _ = False
 
-matchWrite :: [Bind3] -> Var -> (Int, Bind3) -> Maybe SimdOp
-matchWrite binds idx (writeIx, (_writeVal, _, _writeTy, Ext (L3.WriteScalar scalar writeCur rhs))) = do
+matchWrite :: Bool -> [Bind3] -> Var -> (Int, Bind3) -> Maybe SimdOp
+matchWrite w64Mul binds idx (writeIx, (_writeVal, _, _writeTy, Ext (L3.WriteScalar scalar writeCur rhs))) = do
   outRef <- derefSource writeCur binds
   let op = case rhs of
              VarE opVar -> resolveVarRhs binds S.empty opVar
              _ -> rhs
-  dag <- matchScalarDag scalar idx binds op
+  dag <- matchScalarDag w64Mul scalar idx binds op
   inRefs <- inputRefsForDag binds writeIx scalar outRef dag
   pure $ SimdOp scalar inRefs outRef dag
-matchWrite _ _ _ = Nothing
+matchWrite _ _ _ _ = Nothing
 
 -- | The input cursors one write's DAG advances.
 --
@@ -831,15 +835,15 @@ type DagM = StateT DagPool Maybe
 -- are deliberately NOT shared: a 'DagLet' sits at the root, and hoisting an
 -- arm-local computation there would move it out of the guard that dominates
 -- it.
-matchScalarDag :: L3.Scalar -> Var -> [Bind3] -> L3.Exp3 -> Maybe ScalarDag
-matchScalarDag scalar idx binds0 expr0 = do
-  (root, pool) <- runStateT (matchScalarDagM scalar idx outer binds0 expr0) emptyDagPool
+matchScalarDag :: Bool -> L3.Scalar -> Var -> [Bind3] -> L3.Exp3 -> Maybe ScalarDag
+matchScalarDag w64Mul scalar idx binds0 expr0 = do
+  (root, pool) <- runStateT (matchScalarDagM w64Mul scalar idx outer binds0 expr0) emptyDagPool
   pure $ L.foldr (\(v, d) acc -> DagLet v d acc) root (reverse (dpOrder pool))
   where
     outer = S.fromList [ v | (v, _, _, _) <- binds0 ]
 
-matchScalarDagM :: L3.Scalar -> Var -> S.Set Var -> [Bind3] -> L3.Exp3 -> DagM ScalarDag
-matchScalarDagM scalar idx outer binds expr0 =
+matchScalarDagM :: Bool -> L3.Scalar -> Var -> S.Set Var -> [Bind3] -> L3.Exp3 -> DagM ScalarDag
+matchScalarDagM w64Mul scalar idx outer binds expr0 =
   case expr0 of
     VarE v ->
       case resolveVarRhs binds S.empty v of
@@ -849,7 +853,7 @@ matchScalarDagM scalar idx outer binds expr0 =
           | otherwise -> recur rhs
     _ -> matchNonVar expr0
   where
-    recur = matchScalarDagM scalar idx outer binds
+    recur = matchScalarDagM w64Mul scalar idx outer binds
 
     -- Record @v@'s DAG once and hand back a reference to it.
     --
@@ -892,10 +896,10 @@ matchScalarDagM scalar idx outer binds expr0 =
             PrimAppE prim [a]
               | identityIntConvert prim -> recur a
             PrimAppE prim [a, b]
-              | simdPrimSupported scalar prim ->
+              | simdPrimSupported w64Mul scalar prim ->
                   DagBin prim <$> recur a <*> recur b
             IfE tst thenExp elseExp ->
-              DagIf <$> matchCondDagM scalar idx outer binds tst
+              DagIf <$> matchCondDagM w64Mul scalar idx outer binds tst
                     <*> recur thenExp
                     <*> recur elseExp
             -- Look THROUGH an administrative let, never around it.
@@ -914,19 +918,19 @@ matchScalarDagM scalar idx outer binds expr0 =
             -- it and still refuses the loop.
             LetE bnd bod
               | administrativeBind bnd bod ->
-                  matchScalarDagM scalar idx outer (binds ++ [bnd]) bod
+                  matchScalarDagM w64Mul scalar idx outer (binds ++ [bnd]) bod
             _ -> lift Nothing
 
-matchCondDagM :: L3.Scalar -> Var -> S.Set Var -> [Bind3] -> L3.Exp3 -> DagM CondDag
-matchCondDagM resultScalar idx outer binds expr0 =
+matchCondDagM :: Bool -> L3.Scalar -> Var -> S.Set Var -> [Bind3] -> L3.Exp3 -> DagM CondDag
+matchCondDagM w64Mul resultScalar idx outer binds expr0 =
   case expr0 of
     VarE v ->
       case resolveVarRhs binds S.empty v of
         VarE v' | v == v' -> matchNonVar expr0
-        rhs -> matchCondDagM resultScalar idx outer binds rhs
+        rhs -> matchCondDagM w64Mul resultScalar idx outer binds rhs
     _ -> matchNonVar expr0
   where
-    scalarArg = matchScalarDagM resultScalar idx outer binds
+    scalarArg = matchScalarDagM w64Mul resultScalar idx outer binds
 
     matchNonVar expr =
       case expr of
@@ -944,13 +948,13 @@ matchCondDagM resultScalar idx outer binds expr0 =
           | resultScalar == L3.FloatS
           , L3.simdCapable L3.VecOpEq L3.FloatS ->
           CondCmp L3.FloatS L3.VecCmpEq
-            <$> matchScalarDagM L3.FloatS idx outer binds a
-            <*> matchScalarDagM L3.FloatS idx outer binds b
+            <$> matchScalarDagM w64Mul L3.FloatS idx outer binds a
+            <*> matchScalarDagM w64Mul L3.FloatS idx outer binds b
         -- Same administrative-let transparency as 'matchScalarDagM'; a
         -- condition can be ANF'd into a let too.
         LetE bnd bod
           | administrativeBind bnd bod ->
-              matchCondDagM resultScalar idx outer (binds ++ [bnd]) bod
+              matchCondDagM w64Mul resultScalar idx outer (binds ++ [bnd]) bod
         _ -> lift Nothing
 
 -- | May this binding be looked through when matching a scalar DAG, given the
@@ -1315,11 +1319,11 @@ primVecOp prim =
 -- particular @MulP@\/@DivP@\/@ModP@ at W32 answer False here, which leaves the
 -- whole candidate loop scalar rather than emitting vector IR whose helper
 -- would spill lanes to a scalar array.
-simdPrimSupported :: L3.Scalar -> Prim L3.Ty3 -> Bool
-simdPrimSupported scalar prim =
+simdPrimSupported :: Bool -> L3.Scalar -> Prim L3.Ty3 -> Bool
+simdPrimSupported w64Mul scalar prim =
   case primVecOp prim of
     Nothing -> False
-    Just op -> L3.simdCapable op scalar
+    Just op -> L3.simdCapableWith w64Mul op scalar
 
 resolveVarRhs :: [Bind3] -> S.Set Var -> Var -> L3.Exp3
 resolveVarRhs binds seen v
