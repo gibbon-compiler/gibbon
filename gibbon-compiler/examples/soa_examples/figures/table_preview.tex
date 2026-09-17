@@ -1,7 +1,13 @@
 \documentclass{article}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\usepackage{xcolor}
 \usepackage[margin=0.5in,a3paper]{geometry}
+\makeatletter
+\renewenvironment{table}[1][]%
+  {\par\medskip\noindent\begin{minipage}{\linewidth}\def\@captype{table}}%
+  {\end{minipage}\par\medskip}
+\makeatother
 \begin{document}\pagestyle{empty}
 \input{performance_table.tex}
 \end{document}
