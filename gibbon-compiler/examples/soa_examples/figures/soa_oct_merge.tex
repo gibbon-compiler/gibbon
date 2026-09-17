@@ -1,0 +1,75 @@
+% Gibbon Benchmark Suite v3.1 – auto-generated
+% Requires: \usepackage{booktabs} in preamble
+
+% -- Table 1: Summary by pass type --
+\begin{table}[t]
+\centering
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means SoA is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\label{tab:summary}
+\small
+\begin{tabular}{l c c r r r r r r r r r r}
+\toprule
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{4}{c}{\textbf{End-to-end}} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+ & fields & bufs & AoS (s) & AoS-imm (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
+\midrule
+OctTree & 16 & 9 & 0.0698 & -- & 0.0598 & \textbf{1.17$\times$} & 0.0698 & 0.0598 & \textbf{1.17$\times$} & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+% ============================================================================
+% Table 2: Mutable vs Immutable Cursor Comparison
+% ============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline Gibbon comparison (times only). Shown variants: AoS-mut, AoS-imm, SoA-mut. Times are full executable end-to-end wall time per run (s), not pass-sum time. \textbf{Bold} marks the fastest time across shown variants.}
+\label{tab:cursor_comparison_times}
+\small
+\begin{tabular}{p{3.2cm} r r r}
+\toprule
+\textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} \\
+\midrule
+OctTree & \textbf{0.9310} & 0.9688 & 1.905 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline Gibbon comparison (speedups). Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut. Speedups are computed from full executable end-to-end wall time per run. ${>}1{\times}$ means the denominator is faster.}
+\label{tab:cursor_comparison_speedups}
+\small
+\begin{tabular}{p{3.2cm} r r r}
+\toprule
+\textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+OctTree & 0.49$\times$ & 1.04$\times$ & 0.51$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -- Table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{OctTree}, OctTree SoA uses 9 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:OctTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+sumEnergy & F & 12/16 & 25\% & 0.0364 & 0.0526 & \textbf{0.0329} & \textbf{1.11$\times$} & \textbf{1.44$\times$} & \textbf{1.60$\times$} \\
+sumMass & F & 10/16 & 38\% & 0.0334 & 0.0425 & \textbf{0.0269} & \textbf{1.24$\times$} & \textbf{1.27$\times$} & \textbf{1.58$\times$} \\
+\midrule
+\textbf{Total} & & & & 0.0698 & 0.0951 & \textbf{0.0598} & \textbf{1.17$\times$} & \textbf{1.36$\times$} & \textbf{1.59$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.17$\times$} & \textbf{1.36$\times$} & \textbf{1.59$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+

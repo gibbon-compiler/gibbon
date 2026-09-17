@@ -1,0 +1,75 @@
+% Gibbon Benchmark Suite v3.1 – auto-generated
+% Requires: \usepackage{booktabs} in preamble
+
+% -- Table 1: Summary by pass type --
+\begin{table}[t]
+\centering
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = total fields in the selected benchmark ADT (prefer parsed ADT definition; fall back to {\tt @BENCH adt\_fields}). SoA bufs = 1 tag buffer plus one buffer for each scalar field, plus one buffer for each non-self packed field annotated Linear, plus recursively counted buffers for each non-self packed field annotated Factored; self-recursive fields add no new buffers. Speedup ${>}1{\times}$ means the denominator is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\label{tab:summary}
+\small
+\begin{tabular}{l c c r r r r r r r r r}
+\toprule
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{3}{c}{\textbf{End-to-end}} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
+ & fields & bufs & Am (s) & Sm (s) & Am/Sm & Am (s) & Sm (s) & Am/Sm & Am (s) & Sm (s) & Am/Sm \\
+\midrule
+List & 2 & 2 & 0.2866 & 0.5717 & 0.50$\times$ & 0.1138 & 0.3065 & 0.37$\times$ & 0.1728 & 0.2651 & 0.65$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: List --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{List}, ADT has 2 fields, SoA uses 2 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:List}
+\small
+\begin{tabular}{l c c r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\midrule
+length List & F & 1/2 & 50\% & 0.0395 & \textbf{0.0287} & \textbf{1.38$\times$} \\
+sumList & F & 2/2 & 0\% & \textbf{0.0373} & 0.1409 & 0.26$\times$ \\
+sumList tail recursive & F & 2/2 & 0\% & \textbf{0.0370} & 0.1369 & 0.27$\times$ \\
+add1 List & M & 2/2 & 0\% & \textbf{0.1728} & 0.2651 & 0.65$\times$ \\
+\midrule
+\textbf{Total} & & & & 0.2866 & 0.5717 & 0.50$\times$ \\
+\textbf{Geomean} & & & & & & 0.50$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% Integer-width add1Tree vectorization
+\begin{table}[h]
+\centering
+\caption{Integer-width add1Tree vectorization}
+\begin{tabular}{lccccccc}
+\toprule
+Width & AoS raw & SoA raw & AoS/SoA & SoA loopify & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Qual. \\
+\midrule
+Int8 & 0.000141 & 0.000146 & 0.97$\times$ & 0.000047 & 0.000088 & 0.53$\times$ & \textbf{1.60$\times$} & aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED \\
+Int16 & 0.000089 & 0.000155 & 0.57$\times$ & 0.000051 & 0.000081 & 0.63$\times$ & 1.10$\times$ & aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED \\
+Int32 & 0.000155 & 0.000164 & 0.95$\times$ & 0.000097 & 0.000092 & 1.05$\times$ & \textbf{1.68$\times$} & aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED \\
+Int64 & 0.000135 & 0.000189 & 0.71$\times$ & 0.000119 & 0.000117 & 1.02$\times$ & \textbf{1.15$\times$} & aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Integer-width high-arithmetic-intensity vectorization
+\begin{table}[h]
+\centering
+\caption{Integer-width high-arithmetic-intensity vectorization}
+\begin{tabular}{lccccccccccc}
+\toprule
+Width & Ops/elem & Bytes ld/elem & Bytes st/elem & Ops/byte & AoS raw & SoA raw & SoA loopify & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Status \\
+\midrule
+Int8 & 8 & 1 & 1 & 4.00 & 0.000154 & 0.000115 & 0.000062 & 0.000086 & 0.72$\times$ & \textbf{1.79$\times$} & genuine packed SIMD (aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED) \\
+Int16 & 8 & 2 & 2 & 2.00 & 0.000161 & 0.000171 & 0.000105 & 0.000083 & \textbf{1.27$\times$} & \textbf{1.94$\times$} & genuine packed SIMD (aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED) \\
+Int32 & 8 & 4 & 4 & 1.00 & 0.000102 & 0.000187 & 0.000115 & 0.000112 & 1.03$\times$ & 0.91$\times$ & genuine packed SIMD (aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED; soa\_simd=VERIFIED) \\
+Int64 & 8 & 8 & 8 & 0.50 & 0.000182 & 0.000207 & 0.000148 & N/A -- unsupported packed multiply: gib_vec_mul_int64x2 is a legacy scalar-spill helper (Codegen.hs), not real SIMD -- excluded from this benchmark's Gibbon-SIMD configuration per owner policy; see BUGS.md & N/A -- unsupported packed multiply: gib_vec_mul_int64x2 is a legacy scalar-spill helper (Codegen.hs), not real SIMD -- excluded from this benchmark's Gibbon-SIMD configuration per owner policy; see BUGS.md & N/A -- unsupported packed multiply: gib_vec_mul_int64x2 is a legacy scalar-spill helper (Codegen.hs), not real SIMD -- excluded from this benchmark's Gibbon-SIMD configuration per owner policy; see BUGS.md & unsupported (legacy scalar-spill multiply only) (aos\_mut=VERIFIED; soa\_mut=VERIFIED; soa\_loopify=VERIFIED) \\
+\bottomrule
+\end{tabular}
+\end{table}
+

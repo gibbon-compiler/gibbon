@@ -1,0 +1,51 @@
+% Gibbon Benchmark Suite v3.1 – auto-generated
+% Requires: \usepackage{booktabs} in preamble
+
+% -- Table 1: Summary by pass type --
+\begin{table}[t]
+\centering
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means SoA is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\label{tab:summary}
+\small
+\begin{tabular}{l c c r r r r r r r r r}
+\toprule
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{3}{c}{\textbf{End-to-end}} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
+ & fields & bufs & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup & AoS (s) & SoA (s) & Speedup \\
+\midrule
+DecisionTree & 7 & 6 & 3.655 & 2.951 & \textbf{1.24$\times$} & 3.655 & 2.951 & \textbf{1.24$\times$} & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% -- Table: DecisionTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DecisionTree}, ADT has 7 fields, SoA uses 6 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DecisionTree}
+\small
+\begin{tabular}{l c c r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\midrule
+classify Batch & F & 5/7 & 29\% & 3.135 & \textbf{2.600} & \textbf{1.21$\times$} \\
+classify Depth & F & 4/7 & 43\% & 0.0450 & \textbf{0.0399} & \textbf{1.13$\times$} \\
+classify tree & F & 5/7 & 29\% & 0.0449 & \textbf{0.0395} & \textbf{1.14$\times$} \\
+countFeatureUses & F & 3/7 & 57\% & 0.0482 & \textbf{0.0320} & \textbf{1.51$\times$} \\
+countLeaves & F & 2/7 & 71\% & 0.0454 & \textbf{0.0250} & \textbf{1.82$\times$} \\
+countNodes & F & 2/7 & 71\% & 0.0457 & \textbf{0.0269} & \textbf{1.70$\times$} \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0489 & \textbf{0.0325} & \textbf{1.51$\times$} \\
+inferenceCost & F & 2/7 & 71\% & 0.0486 & \textbf{0.0290} & \textbf{1.67$\times$} \\
+sumImpurity & F & 3/7 & 57\% & 0.0481 & \textbf{0.0322} & \textbf{1.50$\times$} \\
+sumPathLengths & F & 3/7 & 57\% & 0.0500 & \textbf{0.0336} & \textbf{1.49$\times$} \\
+sumSamples & F & 3/7 & 57\% & 0.0464 & \textbf{0.0319} & \textbf{1.45$\times$} \\
+treeDepth & F & 2/7 & 71\% & 0.0492 & \textbf{0.0282} & \textbf{1.75$\times$} \\
+\midrule
+\textbf{Total} & & & & 3.655 & 2.951 & \textbf{1.24$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.47$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+

@@ -1,0 +1,85 @@
+% Gibbon Benchmark Suite v3.1 – auto-generated
+% Requires: \usepackage{booktabs} in preamble
+
+% -- Table 1: Summary by pass type --
+\begin{table}[t]
+\centering
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = non-recursive fields annotated with {\tt @BENCH adt\_fields}; SoA bufs = $1 + $ non-recursive field slots across all constructors (recursive children are stored in the tag buffer). Speedup ${>}1{\times}$ means the denominator is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\label{tab:summary}
+\small
+\begin{tabular}{l c c r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{5}{c}{\textbf{End-to-end}} & \multicolumn{5}{c}{\textbf{Fold passes}} & \multicolumn{5}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-8}\cmidrule(lr){9-13}\cmidrule(lr){14-18}
+ & fields & bufs & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm \\
+\midrule
+DecisionTree & 7 & 6 & 3.698 & 5.788 & 2.976 & \textbf{1.24$\times$} & \textbf{1.94$\times$} & 3.698 & 5.788 & 2.976 & \textbf{1.24$\times$} & \textbf{1.94$\times$} & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+% ============================================================================
+% Table 2: Mutable vs Immutable Cursor Comparison
+% ============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline Gibbon comparison (times only). Shown variants: AoS-mut, AoS-imm, SoA-mut. Times are full executable end-to-end wall time per run (s), not pass-sum time. \textbf{Bold} marks the fastest time across shown variants.}
+\label{tab:cursor_comparison_times}
+\small
+\begin{tabular}{p{3.2cm} r r r}
+\toprule
+\textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} \\
+\midrule
+DecisionTree & 4.141 & 6.241 & \textbf{3.440} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline Gibbon comparison (speedups). Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut. Speedups are computed from full executable end-to-end wall time per run. ${>}1{\times}$ means the denominator is faster.}
+\label{tab:cursor_comparison_speedups}
+\small
+\begin{tabular}{p{3.2cm} r r r}
+\toprule
+\textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+DecisionTree & \textbf{1.20$\times$} & \textbf{1.51$\times$} & \textbf{1.81$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -- Table: DecisionTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass performance for \texttt{DecisionTree}, ADT has 7 fields, SoA uses 6 buffers (mutable + immutable cursors). Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
+\label{tab:DecisionTree}
+\small
+\begin{tabular}{l c c r r r r r r r r}
+\toprule
+\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} \\
+\midrule
+classify Batch & F & 5/7 & 29\% & 3.167 & 4.416 & \textbf{2.620} & \textbf{1.21$\times$} & \textbf{1.39$\times$} & \textbf{1.69$\times$} \\
+classify Depth & F & 4/7 & 43\% & 0.0456 & 0.0596 & \textbf{0.0398} & \textbf{1.15$\times$} & \textbf{1.31$\times$} & \textbf{1.50$\times$} \\
+classify tree & F & 5/7 & 29\% & 0.0456 & 0.0602 & \textbf{0.0409} & \textbf{1.12$\times$} & \textbf{1.32$\times$} & \textbf{1.47$\times$} \\
+countFeatureUses & F & 3/7 & 57\% & 0.0486 & 0.1435 & \textbf{0.0321} & \textbf{1.51$\times$} & \textbf{2.95$\times$} & \textbf{4.47$\times$} \\
+countLeaves & F & 2/7 & 71\% & 0.0463 & 0.1398 & \textbf{0.0253} & \textbf{1.83$\times$} & \textbf{3.02$\times$} & \textbf{5.52$\times$} \\
+countNodes & F & 2/7 & 71\% & 0.0468 & 0.1394 & \textbf{0.0273} & \textbf{1.71$\times$} & \textbf{2.98$\times$} & \textbf{5.10$\times$} \\
+countSmallLeaves & F & 3/7 & 57\% & 0.0508 & 0.1373 & \textbf{0.0329} & \textbf{1.54$\times$} & \textbf{2.70$\times$} & \textbf{4.17$\times$} \\
+inferenceCost & F & 2/7 & 71\% & 0.0494 & 0.1396 & \textbf{0.0296} & \textbf{1.67$\times$} & \textbf{2.83$\times$} & \textbf{4.72$\times$} \\
+sumImpurity & F & 3/7 & 57\% & 0.0498 & 0.1396 & \textbf{0.0325} & \textbf{1.53$\times$} & \textbf{2.80$\times$} & \textbf{4.29$\times$} \\
+sumPathLengths & F & 3/7 & 57\% & 0.0515 & 0.1385 & \textbf{0.0339} & \textbf{1.52$\times$} & \textbf{2.69$\times$} & \textbf{4.09$\times$} \\
+sumSamples & F & 3/7 & 57\% & 0.0471 & 0.1361 & \textbf{0.0326} & \textbf{1.45$\times$} & \textbf{2.89$\times$} & \textbf{4.18$\times$} \\
+treeDepth & F & 2/7 & 71\% & 0.0502 & 0.1390 & \textbf{0.0285} & \textbf{1.76$\times$} & \textbf{2.77$\times$} & \textbf{4.87$\times$} \\
+\midrule
+\textbf{Total} & & & & 3.698 & 5.788 & \textbf{2.976} & \textbf{1.24$\times$} & \textbf{1.57$\times$} & \textbf{1.94$\times$} \\
+\textbf{Geomean} & & & & & & \textbf{1.48$\times$} & \textbf{2.36$\times$} & \textbf{3.49$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
