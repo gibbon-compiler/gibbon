@@ -437,9 +437,8 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                             _ -> False
   let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
   let hasPackedOutput = hasPacked (unTy2 (arrOut funTy))
-  -- Vidush: This is true if we mush optimize the function for tail recursion.
-  -- && isFunTailRec
-  let useMutableCursors = userRequestedMutableCursors && isFunRec && (hasPackedInput || hasPackedOutput)
+  let useMutableCursors =
+        useMutableCursorsForFun userRequestedMutableCursors funMeta funTy
   let inLocs = inLocVars funTy
       inLocA = inLocArgs funTy
       outLocs = outLocVars funTy
@@ -4371,18 +4370,13 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
           numRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs = (L.take numRegs locs) ++ (L.drop numRegs $ L.drop (length inLocs) $ locs)
-          isFunctionRec = case funRec fmeta of
-                                        TailRec -> True
-                                        Rec -> True
-                                        _ -> False
+          -- The convention the callee was defined with, from the same
+          -- predicate its definition used.
+          isFunctionRec = useMutableCursorsForFun True fmeta fnTy
           calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
           calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
           calleeHasPackedLocations = numRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null locs)
-          calleeHasMutableLocations =
-            not (null (L2.outRegVarsMutable fnTy))
-            || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
-            || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
-          useMutForCall = isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
+          useMutForCall = useMutableCursorsForCall useMutableCursorsCall fmeta fnTy
           cursorizeCallInTy ty =
             case ty of
               -- Exact width, as in 'cursorizeInTy'.
@@ -5289,14 +5283,10 @@ packedMutableLetReturnsUnit fundefs mutLocs startLoc rhs =
     AppE f _ _ _ ->
       case M.lookup f fundefs of
         Just FunDef{funTy, funMeta} ->
-          isRecursiveFun (funRec funMeta) && hasPacked (unTy2 (arrOut funTy))
+          useMutableCursorsForFun True funMeta funTy && hasPacked (unTy2 (arrOut funTy))
         Nothing -> False
     VarE _ -> False
     _ -> False
-  where
-    isRecursiveFun TailRec = True
-    isRecursiveFun Rec = True
-    isRecursiveFun _ = False
 
 cursorizeLet ::
   MutableLocPtsToEnv -> 
@@ -5325,14 +5315,13 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                               Just ty -> case (unTy2 ty) of 
                                                                   MutCursorTy -> True 
                                                                   CursorTy -> False
+      -- A call is cursorized with the convention the callee was defined with.
       let useMutableCursors = case rhs of 
                                     AppE f _ _ _ -> let (fnTy, fmeta) = case M.lookup f fundefs of
                                                                                   Just g -> (funTy g, funMeta g)
                                                                                   _ -> error "Expected function definition!!"
-                                                     in case funRec fmeta of 
-                                                              TailRec -> useMutableCursorsCall
-                                                              Rec -> useMutableCursorsCall
-                                                              _ -> False
+                                                     in useMutableCursorsCall
+                                                        && useMutableCursorsForFun True fmeta fnTy
                                     _ -> useMutableCursorsCall
       (_rhs, freeVarToVarEnv', m1', m2') <- dbgTrace (minChatLvl) "Print envs in CursorizeLet: " dbgTrace (minChatLvl) (sdoc (m1, m2)) dbgTrace (minChatLvl) "End printing envs in CursorizeLet.\n" cursorizePackedExp m1 m2 useMutableCursors emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv rhs
       rhsfromdi <- fromDi <$> return _rhs
@@ -6008,20 +5997,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
               AppE fn _ rhsLocs _ ->
                 case M.lookup fn fundefs of
                   Just g ->
-                    let fnTy = funTy g
-                        isFunctionRec = case funRec (funMeta g) of
-                                          TailRec -> True
-                                          Rec -> True
-                                          _ -> False
-                        calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
-                        calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
-                        numCallRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
-                        calleeHasPackedLocations = numCallRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null rhsLocs)
-                        calleeHasMutableLocations =
-                          not (null (L2.outRegVarsMutable fnTy))
-                          || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
-                          || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
-                     in isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
+                    useMutableCursorsForCall useMutableCursorsCall (funMeta g) (funTy g)
                   Nothing -> False
               _ -> False
           ty' = case locs of
@@ -6138,19 +6114,9 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                   Just g ->
                     let fnTy = funTy g
                         fmeta = funMeta g
-                        isFunctionRec = case funRec fmeta of
-                                          TailRec -> True
-                                          Rec -> True
-                                          _ -> False
-                        calleeHasPackedInput = any (hasPacked . unTy2) (arrIns fnTy)
                         calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
                         numRegs = length (outRegVars fnTy) + length (L2.outRegVarsMutable fnTy) + length (inRegVars fnTy)
-                        calleeHasPackedLocations = numRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null rhsLocs)
-                        calleeHasMutableLocations =
-                          not (null (L2.outRegVarsMutable fnTy))
-                          || any (isMutModality . lrmMode) (L2.inRegVars' fnTy ++ locVars fnTy)
-                          || any (\(EndOf lrm) -> isMutModality (lrmMode lrm)) (locRets fnTy)
-                        useMutForCall = isFunctionRec && (useMutableCursorsCall || calleeHasMutableLocations)
+                        useMutForCall = useMutableCursorsForCall useMutableCursorsCall fmeta fnTy
                         numOutCursors = numRegs + length (locRets fnTy)
                      in (useMutForCall, numOutCursors, calleeHasPackedOutput)
               _ -> (useMutableCursorsCall, 0, False)

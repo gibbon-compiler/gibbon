@@ -12,6 +12,7 @@ module Gibbon.NewL2.Syntax
     -- * Extended language L2 with location types.
       Old.E2Ext(..)
     , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, Ty2(..)
+    , useMutableCursorsForFun, useMutableCursorsForCall, calleeHasMutableLocations
     , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, RegExp, Old.PreLocExp(..), Old.PreRegExp(..)
 
     -- * Regions and locations
@@ -79,6 +80,40 @@ newtype Ty2 = MkTy2 { unTy2 :: (UrTy LocVar) }
 
 instance Out Ty2
 instance NFData Ty2
+
+-- | Whether a function uses the mutable-cursor calling convention.
+--
+-- The one place this is decided. Cursorize needs it for a function's own
+-- signature and body, and again at each call site, which must agree with the
+-- definition about what is passed and returned; InferCallType needs it too.
+-- `userRequested` is @Opt_UseMutableCursors@.
+useMutableCursorsForFun :: Bool -> FunMeta -> Old.ArrowTy2 Ty2 -> Bool
+useMutableCursorsForFun userRequested meta ty =
+  userRequested && isRec && hasPackedArg
+  where
+    isRec = case funRec meta of
+              Rec -> True
+              TailRec -> True
+              _ -> False
+    hasPackedArg =
+      any (hasPacked . unTy2) (Old.arrIns ty) || hasPacked (unTy2 (Old.arrOut ty))
+
+-- | Whether a function's input locations were made mutable by InferCallType.
+calleeHasMutableLocations :: Old.ArrowTy2 Ty2 -> Bool
+calleeHasMutableLocations ty =
+  not (null (Old.outRegVarsMutable ty))
+  || any (isMut . Old.lrmMode) (Old.inRegVars' ty ++ Old.locVars ty)
+  || any (\(Old.EndOf lrm) -> isMut (Old.lrmMode lrm)) (Old.locRets ty)
+  where
+    isMut m = m == Old.InputMutable || m == Old.OutputMutable
+
+-- | Whether a call uses the mutable-cursor calling convention: the callee was
+-- defined with it, and the calling context either uses it too or the callee's
+-- locations are already mutable.
+useMutableCursorsForCall :: Bool -> FunMeta -> Old.ArrowTy2 Ty2 -> Bool
+useMutableCursorsForCall mutableContext meta ty =
+  useMutableCursorsForFun True meta ty
+  && (mutableContext || calleeHasMutableLocations ty)
 
 --------------------------------------------------------------------------------
 
