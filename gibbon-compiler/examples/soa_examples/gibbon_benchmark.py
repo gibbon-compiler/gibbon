@@ -149,6 +149,415 @@ def normalize_program_name(name: str) -> str:
     return stem if stem.endswith(".hs") else stem + ".hs"
 
 
+# ---------------------------------------------------------------------------
+# --use-width: the same benchmarks with a narrower payload field.
+#
+# A factored (SoA) layout's advantage is bandwidth, and the payload width
+# decides how many elements fit in a cache line or a vector lane. The
+# narrowed sources are separate files rather than a compiler switch, so the
+# width is visible in the benchmark itself and each one type-checks as
+# written.
+#
+# Only the STORED FIELDS narrow. Accumulators stay 64-bit and read fields
+# through toInt64, because a narrowed accumulator changes the answer rather
+# than the layout: Compiler sums latencies to 14,285,715, which nine of its
+# ten result values overflow at 16 bits.
+#
+# A program whose fields cannot HOLD their values at a width simply has no
+# variant at that width -- Compiler stores instruction indices of 5 to 10
+# million, which fit at 32 bits and nowhere narrower. --use-width then runs
+# the programs that can represent their data and says which it skipped,
+# rather than silently reporting wrapped arithmetic.
+DEFAULT_PAYLOAD_WIDTH = 64
+PAYLOAD_WIDTHS = (64, 32, 16, 8)
+
+# Deliberately fixed-width: these exist to report what a width costs, so a
+# width sweep leaves them alone rather than erasing what they measure.
+NARROW_EXEMPT = ("Add1TreeInt64.hs", "ArithmeticIntensityInt64.hs")
+
+
+def width_suffix(width: int) -> str:
+    """64 is the unsuffixed source; the rest carry _iN."""
+    return "" if width == DEFAULT_PAYLOAD_WIDTH else "_i%d" % width
+
+
+def width_program_name(program: str, width: int) -> str:
+    """Compiler.hs at 32 -> Compiler_i32.hs; at 64 -> Compiler.hs"""
+    suffix = width_suffix(width)
+    if not suffix:
+        return program
+    return (program[:-3] + suffix + ".hs") if program.endswith(".hs") \
+        else program + suffix
+
+
+def apply_width_selection(programs: List[str], programs_dir: Path,
+                          width: int) -> Tuple[List[str], List[str]]:
+    """Swap each program for its payload-width variant.
+
+    Returns (selected, skipped). A program is SKIPPED when it carries
+    64-bit payload fields but has no variant at this width -- its fields
+    cannot represent their values that narrow. Falling back to the wider
+    source instead would put two widths in one report with nothing saying
+    which produced which number. Programs in NARROW_EXEMPT, and programs
+    with no wide payload at all, keep their own source."""
+    if width == DEFAULT_PAYLOAD_WIDTH:
+        return list(programs), []
+    selected, skipped = [], []
+    for program in programs:
+        if program in NARROW_EXEMPT:
+            selected.append(program)
+            continue
+        narrow = width_program_name(program, width)
+        if (programs_dir / "SOA" / narrow).exists():
+            selected.append(narrow)
+        elif program_has_wide_payload(programs_dir, program):
+            skipped.append(program)
+        else:
+            selected.append(program)
+    return selected, skipped
+
+
+_WIDE_FIELD_RE = re.compile(r"(?ms)^data\s+\w+.*?(?=\n\S|\Z)")
+
+
+def program_has_wide_payload(programs_dir: Path, program: str) -> bool:
+    """Whether the program's own data declarations carry a 64-bit field.
+
+    Only the declarations: a 64-bit loop counter costs no buffer width. A
+    program whose type comes from an imported base module declares nothing
+    itself, and its base is narrowed with it."""
+    src = programs_dir / "SOA" / program
+    if not src.exists():
+        return False
+    text = src.read_text()
+    return any(re.search(r"\b(Int64|Int)\b", block)
+               for block in _WIDE_FIELD_RE.findall(text))
+
+
+# ---------------------------------------------------------------------------
+# --av-variants: opt in to the C auto-vectorizer ablations.
+#
+# The vectorizer is on everywhere by default, so nothing in a default run
+# can conflate it with the optimization being measured. `fold' adds a `-av'
+# twin of the mutable recursive configuration; `loopified' adds one per
+# loopified configuration; `all' does both.
+#
+# A twin brings its own contrast column ($\Delta_{av|...}$). When BOTH are
+# enabled the recursive and loopified `-av' configurations exist together,
+# so loopification itself can be measured in each world -- and it must be,
+# because the two interact: on ArithmeticIntensityInt16 loopification is
+# worth 1.13x with the vectorizer off and 3.41x with it on, since most of
+# what it buys is the loop the backend can then vectorize. In that case the
+# single $\Delta_{\ell}$ column is replaced by the pair.
+def av_variant_name(config: str) -> str:
+    """aos_mut -> aos_mut_navec"""
+    return config + AV_VARIANT_SUFFIX
+
+
+def resolve_av_variants(choice: Optional[str]) -> Tuple[str, ...]:
+    if not choice or choice == "none":
+        return ()
+    if choice == "all":
+        return ("fold", "loopified")
+    return (choice,)
+
+
+def default_av_variants(choice: Optional[str], pldi_submission: bool) -> Optional[str]:
+    """--av-variants as given, or `all' for a --pldi-submission run that did
+    not say: the compact stage heatmaps measure every optimization after
+    Vanilla with the auto-vectorizer off, so they need every twin."""
+    if choice is None and pldi_submission:
+        return "all"
+    return choice
+
+
+def apply_av_variants(variants: Tuple[str, ...]) -> None:
+    """Add the requested `-av' twins, their symbols, labels and columns.
+
+    Applied once at startup, before anything reads the registries."""
+    global PLDI_FOLD_CONFIGS, PLDI_MAP_CONFIGS
+    global PLDI_DELTA_COLUMNS_FOLD, PLDI_DELTA_COLUMNS_MAP
+    if not variants:
+        return
+
+    fold_bases = AV_VARIANT_BASES["fold"] if "fold" in variants else ()
+    # A fold twin is a recursive configuration, which the map table shows
+    # too, so it is built and reported there as well.
+    map_bases = tuple(dict.fromkeys(
+        fold_bases + (AV_VARIANT_BASES["loopified"]
+                      if "loopified" in variants else ())))
+
+    def twinned(cfgs: Dict[str, Dict], bases) -> Dict[str, Dict]:
+        """Rebuild the registry with each twin immediately BEFORE its base.
+
+        Order matters: the tables render columns in registry order, and a
+        twin appended at the end would sit pages away from the column it
+        exists to be read against."""
+        out: Dict[str, Dict] = {}
+        for name, kwargs in cfgs.items():
+            if name in bases:
+                out[av_variant_name(name)] = dict(kwargs, use_no_gcc_vec=True)
+            out[name] = kwargs
+        return out
+
+    PLDI_FOLD_CONFIGS = {lay: twinned(cfgs, fold_bases)
+                         for lay, cfgs in PLDI_FOLD_CONFIGS.items()}
+    PLDI_MAP_CONFIGS = {lay: twinned(cfgs, map_bases)
+                        for lay, cfgs in PLDI_MAP_CONFIGS.items()}
+
+    # Once a pair is on the page both halves say which they are: leaving the
+    # enabled one unmarked would make the reader infer it from the absence
+    # of a marker on a neighbouring column.
+    for base in dict.fromkeys(fold_bases + map_bases):
+        twin = av_variant_name(base)
+        PLDI_COL_SYMBOLS[twin] = _with_av_marker(PLDI_COL_SYMBOLS[base], "-av")
+        PLDI_ROW_LABELS[twin] = (PLDI_ROW_LABELS[base]
+                                 + ", C auto-vectorization disabled")
+        PLDI_COL_SYMBOLS[base] = _with_av_marker(PLDI_COL_SYMBOLS[base], "+av")
+        PLDI_ROW_LABELS[base] = (PLDI_ROW_LABELS[base]
+                                 + ", C auto-vectorization enabled")
+
+    def av_column(base: str) -> Tuple[str, str, str, str, str]:
+        layout = "AoS" if base.startswith("aos") else "SoA"
+        sub = PLDI_COL_SYMBOLS[base].split("_{", 1)[1].split("}", 1)[0]
+        return (layout, "$\\Delta^{%s}_{av|%s}$" % (layout[0], sub),
+                av_variant_name(base), base,
+                "What the C auto-vectorizer added to %s"
+                % PLDI_ROW_LABELS[av_variant_name(base)].rsplit(",", 1)[0])
+
+    if fold_bases:
+        PLDI_DELTA_COLUMNS_FOLD = _ordered_by_layout(
+            PLDI_DELTA_COLUMNS_FOLD + [av_column(b) for b in fold_bases])
+    if map_bases:
+        PLDI_DELTA_COLUMNS_MAP = _ordered_by_layout(
+            PLDI_DELTA_COLUMNS_MAP + [av_column(b) for b in map_bases])
+    if "loopified" in variants:
+        # Every Gibbon-side column moves to the vectorizer-OFF pair, which
+        # isolates it from the backend. Each keeps its name: it still
+        # measures the one thing it always did, and qualifying it with the
+        # world it was measured in would abuse the `|' that every other
+        # column uses to mean "on top of". The legend derives each column's
+        # formula from its configuration pair, so which pair it used is
+        # always visible there.
+        PLDI_DELTA_COLUMNS_MAP = _ordered_by_layout(
+            [_isolated_from_vectorizer(c) for c in PLDI_DELTA_COLUMNS_MAP])
+
+
+def _with_av_marker(symbol: str, mark: str) -> str:
+    """Set a symbol's auto-vectorizer marker, keeping any -t already there
+    and replacing any av marker already applied."""
+    if "^{\\scriptscriptstyle " in symbol:
+        head, rest = symbol.split("^{\\scriptscriptstyle ", 1)
+        marks, tail = rest.split("}", 1)
+        kept = [m for m in marks.split(",") if not m.endswith("av")]
+        return "%s^{\\scriptscriptstyle %s}%s" % (
+            head, ",".join(kept + [mark]), tail)
+    return symbol[:-1] + "^{\\scriptscriptstyle %s}$" % mark
+
+
+def _ordered_by_layout(columns):
+    r"""AoS columns first, then SoA, each group following the column order of
+    the configuration registry.
+
+    Two reasons. The renderer builds its \cmidrule spans by scanning for
+    layout changes, so a group split in two would silently produce three
+    spanning headers instead of two. And within a group the columns should
+    walk the same progression the table's own columns do -- an opt-in
+    column appended at the end would sit far from the step it measures.
+    Each column is placed by where its FEATURE configuration sits, with the
+    baseline breaking ties, so the auto-vectorizer contrast lands beside the
+    step it belongs to."""
+    position = {}
+    for layout in PLDI_MAP_CONFIGS.values():
+        for index, name in enumerate(layout):
+            position.setdefault(name, index)
+
+    def key(column):
+        _layout, _sym, base, feature, _desc = column
+        return (position.get(feature, len(position)),
+                position.get(base, len(position)))
+
+    return (sorted([c for c in columns if c[0] == "AoS"], key=key)
+            + sorted([c for c in columns if c[0] == "SoA"], key=key))
+
+
+# The Gibbon-side optimizations, measured with the C auto-vectorizer held
+# OFF on both sides when those configurations exist.
+#
+# Not a stylistic choice. gcc's auto-vectorizer already vectorizes the
+# loopified code, so measuring Gibbon's vectorizer on top of it reports what
+# is left over after the backend has done the job -- geomean 0.993x, helping
+# 0 of 10 passes, where the same optimization measured without the backend
+# is 1.823x and reaches 8.05x on ArithmeticIntensityInt16. The +av number is
+# not Gibbon's vectorizer being worthless; it is the question being asked in
+# a world where the work is already done.
+#
+# The whole chain moves together, not just vectorization: a chain measured
+# half in one world and half in the other would not telescope, and its
+# columns could not be composed.
+_ISOLATED_FROM_VECTORIZER = (
+    "$\\Delta^{A}_{\\ell}$", "$\\Delta^{S}_{\\ell}$",
+    "$\\Delta^{S}_{b}$", "$\\Delta^{S}_{v}$",
+)
+
+_ISOLATED_DESCRIPTIONS = {
+    "$\\Delta^{A}_{\\ell}$":
+        "What loopification gained over recursion in AoS mutable, with the C "
+        "auto-vectorizer off on BOTH sides so that it measures loopification "
+        "and nothing else",
+    "$\\Delta^{S}_{\\ell}$":
+        "What loopification gained over recursion in SoA mutable, with the C "
+        "auto-vectorizer off on BOTH sides; neither side has selective "
+        "buffer sharing, so this is loopification alone",
+    "$\\Delta^{S}_{b}$":
+        "What selective buffer sharing added over SoA loopified, with the C "
+        "auto-vectorizer off on both sides",
+    "$\\Delta^{S}_{v}$":
+        "What Gibbon's SIMD vectorization added over SoA loopified $+$ "
+        "selective buffer sharing, with the C auto-vectorizer off on BOTH "
+        "sides. Measured with it ON, this column reports only what is left "
+        "after the backend has already vectorized the loop, which is "
+        "nothing --- the $\\Delta^{S}_{av|\\ell b}$ column is where the "
+        "backend's own contribution is reported",
+}
+
+
+def _isolated_from_vectorizer(column):
+    """Re-point a Gibbon-side column at the vectorizer-off configurations.
+
+    Same symbol and same single thing measured; only the world it is
+    measured in changes, and only when that world exists."""
+    layout, symbol, base, feature, desc = column
+    if symbol not in _ISOLATED_FROM_VECTORIZER:
+        return column
+    return (layout, symbol, av_variant_name(base), av_variant_name(feature),
+            _ISOLATED_DESCRIPTIONS.get(symbol, desc))
+
+
+def _width_tagged(path: Path, width: int) -> Path:
+    """report.txt at 32 bits -> report_i32.txt; unchanged at 64."""
+    suffix = width_suffix(width)
+    if not suffix:
+        return path
+    return path.with_name(path.stem + suffix + path.suffix)
+
+
+def run_width_sweep(args, argv: List[str]) -> int:
+    """--use-widths=all: the campaign once per payload width.
+
+    Each width runs as its OWN process rather than looping inside this one.
+    A campaign mutates a great deal of module state -- the report's simd/arith
+    provenance, the progress display, cached compile signatures -- and a
+    second pass through it in the same interpreter would inherit all of it.
+    A fresh process per width also means one width failing cannot take the
+    others' results with it.
+
+    Every output path is tagged with the width, so the four runs cannot
+    overwrite each other's tables."""
+    passthrough = []
+    skip_next = False
+    for i, token in enumerate(argv):
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--use-widths":
+            skip_next = True
+            continue
+        if token.startswith("--use-widths=") or token.startswith("--use-width="):
+            continue
+        if token == "--use-width":
+            skip_next = True
+            continue
+        passthrough.append(token)
+
+    failed = []
+    for width in PAYLOAD_WIDTHS:
+        cmd = [sys.executable, str(Path(__file__).resolve())] + passthrough + [
+            "--use-width", str(width),
+            "--latex-table", str(_width_tagged(args.latex_table, width)),
+            "--json", str(_width_tagged(args.json, width)),
+            "--report", str(_width_tagged(args.report, width)),
+            "--figures-dir", str(args.figures_dir if width == DEFAULT_PAYLOAD_WIDTH
+                                 else args.figures_dir.parent
+                                 / (args.figures_dir.name + width_suffix(width))),
+        ]
+        print("\n" + "=" * 70)
+        print("  Payload width %d: %s" % (width, " ".join(cmd[1:])))
+        print("=" * 70)
+        rc = subprocess.call(cmd)
+        if rc != 0:
+            failed.append((width, rc))
+    if failed:
+        print("\n  Width sweep: %s failed" %
+              ", ".join("%d-bit (exit %d)" % (w, rc) for w, rc in failed),
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def report_width_skips(skipped: List[str], width: int) -> None:
+    """Name every program left out of a narrowed run.
+
+    Silence here would be the worst outcome: the report would simply have
+    fewer rows than the reader expects, with nothing saying why."""
+    if not skipped:
+        return
+    print("  Note: %d program(s) have no %d-bit variant and are NOT in this "
+          "run -- their payload fields cannot represent their values at that "
+          "width: %s" % (len(skipped), width, ", ".join(sorted(skipped))),
+          file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# --quick-run: a small, representative subset for incremental work.
+#
+# A full campaign is hours, which makes it a poor tool for checking that a
+# table or a figure LOOKS right. These ten programs cover every shape the
+# report has to render -- a fold-heavy traversal, a map-heavy one, and both
+# width families across all four integer widths -- so a layout problem that
+# would show up in the full run shows up here too.
+#
+# It narrows the whole run, not just the variant matrix: the campaign phase
+# is most of the wall clock, so leaving it at full size would keep a quick
+# run slow, and the report would pair a complete Table 1 with a partial
+# matrix. Iterations are NOT reduced -- a table that looks like a result
+# should be one -- so a quick run's numbers are as trustworthy as any other,
+# there are simply fewer of them.
+QUICK_RUN_PROGRAMS = [
+    "KDTree.hs",
+    "Compiler.hs",
+    "Add1TreeInt8.hs", "Add1TreeInt16.hs", "Add1TreeInt32.hs", "Add1TreeInt64.hs",
+    "ArithmeticIntensityInt8.hs", "ArithmeticIntensityInt16.hs",
+    "ArithmeticIntensityInt32.hs", "ArithmeticIntensityInt64.hs",
+]
+
+# Phases that compile their own configuration sets on top of the matrix, and
+# so would undo the point of a quick run. Each is (attribute, flag spelling).
+# The width sweeps are NOT here: the subset was chosen around exactly the
+# programs they cover -- all four Add1Tree and all four ArithmeticIntensity
+# widths -- so their tables come out complete rather than partial, and a
+# presentational change to the SIMD width table is one of the things a quick
+# run most needs to show.
+QUICK_RUN_DISABLED = (
+    ("roofline", "--roofline"),
+    ("roofline_overlay", "--roofline-overlay"),
+    ("benchmark_ghc", "--benchmark-ghc"),
+    ("benchmark_mlton", "--benchmark-mlton"),
+    ("enable_papi", "--papi"),
+    ("enable_papi_native", "--papi-native"),
+)
+
+
+def apply_quick_run(args) -> List[str]:
+    """Switch off the extra phases. Returns the flags actually overridden."""
+    overridden = []
+    for attr, flag in QUICK_RUN_DISABLED:
+        if getattr(args, attr, False):
+            setattr(args, attr, False)
+            overridden.append(flag)
+    return overridden
+
+
 def resolve_program_selection(selected: Optional[List[str]],
                               excluded: Optional[List[str]],
                               default_programs: Optional[List[str]] = None,
@@ -590,8 +999,9 @@ def no_gcc_vec_caption_note() -> str:
     Both tables compile EVERY column with the C compiler's auto-vectorizer
     off, so the only vectorization they can show is Gibbon's own.  Saying so
     matters because the alternative reading -- that these are ordinary builds
-    -- would make the absolute times look unaccountably slow next to the
-    per-program tables, which do leave the C vectorizer on."""
+    -- would make the absolute times look unaccountably slow against a
+    default build.  The per-program tables hold it off the same way,
+    enabling it only in their $+av$ columns."""
     return ("Every column is compiled with the C compiler's auto-vectorizer "
             "disabled (\\texttt{--no-gcc-vectorize}, which suppresses "
             "basic-block/SLP vectorization as well as loop vectorization), so "
@@ -654,6 +1064,13 @@ class BenchmarkResult:
         self.compile_time             = 0.0
         self.exec_wall_time           = 0.0   # full executable runtime for this run (seconds)
         self.exec_time_per_iter       = 0.0   # full executable runtime normalized by --iterations
+        # The program's construction phase, timed on its own (see
+        # measure_build_time). Kept OUTSIDE `passes` so no table that sums
+        # passes picks it up: it is one of the two terms of the synthesized
+        # end-to-end time, not a pass of the program.
+        self.build_passes: Dict       = {}
+        self.build_time: Optional[float] = None
+        self.build_error: Optional[str]  = None
         self.compile_success          = False
         self.run_success              = False
         # Exit status of the run, kept so a stack-exhaustion crash can be
@@ -679,6 +1096,13 @@ class BenchmarkResult:
         # (see `check_arithmetic_mode_consistency`).
         self.arith_mode: Optional[str] = None
         self.use_no_ran: Optional[bool] = None
+        # Scalar-count footers as compiled: None (off), "per-element" or
+        # "deferred"; and, where counts were requested, the SoA functions
+        # loopification rewrote (None if that could not be determined).
+        self.scalar_counts: Optional[str] = None
+        self.soa_loopified: Optional[List[str]] = None
+        # Whether --opt-selective-buffer-sharing was actually passed.
+        self.selective_buffer_sharing: bool = False
 
 # ---------------------------------------------------------------------------
 # Source-file annotation scanner
@@ -1294,7 +1718,8 @@ def parse_passes(raw: str) -> Dict:
             hint     = (m.group(2) or "").strip().lower()
             attrs    = parse_pass_attrs(m.group(3))
             cur_type = ("fold" if "fold" in hint
-                        else ("map" if "map" in hint else "unknown"))
+                        else ("map" if "map" in hint
+                              else ("build" if "build" in hint else "unknown")))
             cur_uses = attrs.get("uses")
             cur_ilp  = attrs.get("ilp")
             cur_shared = attrs.get("shared")
@@ -3447,7 +3872,7 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
             + "Times are total median per iteration (s). "
             "\\textbf{Bold} marks the fastest time for each program.}\n")
     f.write("\\label{tab:comparison_ghc_mlton}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
     header = ("\\textbf{Program}"
               " & \\textbf{Gibbon-AoS} & \\textbf{Gibbon-SoA}"
               " & \\textbf{GHC}")
@@ -3517,7 +3942,7 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
         gm_row += f" & {gm_cells['mlton'][0]}"
     f.write(gm_row + " \\\\\n")
 
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 def _table_speedup_vs_ghc(f, all_variants_results):
     f.write("\n\n")
@@ -3572,7 +3997,7 @@ def _table_speedup_vs_ghc(f, all_variants_results):
             "Each entry is total median runtime speedup over all passes for one iteration. "
             "$\\text{GHC}/\\text{AoS}$ and $\\text{GHC}/\\text{SoA}$ are reported.}\n")
     f.write("\\label{tab:speedup_vs_ghc}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r}\n\\toprule\n")
     f.write("\\textbf{Program} & $\\mathbf{\\text{GHC}/\\text{AoS}}$ & $\\mathbf{\\text{GHC}/\\text{SoA}}$ \\\\\n")
     f.write("\\midrule\n")
 
@@ -3588,7 +4013,7 @@ def _table_speedup_vs_ghc(f, all_variants_results):
     gm_s = statistics.geometric_mean(ghc_over_soa_vals) if ghc_over_soa_vals else None
     f.write("\\midrule\n")
     f.write(f"\\textbf{{Geomean}} & {fmt_spd(gm_a)} & {fmt_spd(gm_s)} \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 def _table_cursor_comparison(f, all_variants_results):
     """
@@ -3741,7 +4166,7 @@ def _table_cursor_comparison(f, all_variants_results):
                 "Times are full executable end-to-end wall time per run (s), not pass-sum time. "
                 "\\textbf{Bold} marks the fastest time across shown variants.}\n")
     f.write("\\label{tab:cursor_comparison_times}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
     header = ("\\textbf{Program}"
               " & \\textbf{Am} & \\textbf{Ai}"
               " & \\textbf{Sm}")
@@ -3756,7 +4181,7 @@ def _table_cursor_comparison(f, all_variants_results):
         if has_soa_imm:
             row += f" & {r['soa_imm']}"
         f.write(row + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
     # 2B: speedups
     f.write("\\begin{table}[htbp]\n\\centering\n")
@@ -3771,7 +4196,7 @@ def _table_cursor_comparison(f, all_variants_results):
                 "Speedups are computed from full executable end-to-end wall time per run. "
                 "${>}1{\\times}$ means the denominator is faster.}\n")
     f.write("\\label{tab:cursor_comparison_speedups}\n\\small\n")
-    f.write("\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_soa_imm else "") + "}\n\\toprule\n")
     header = ("\\textbf{Program}"
               " & \\textbf{Am/Sm}"
               " & \\textbf{Ai/Am}"
@@ -3788,7 +4213,7 @@ def _table_cursor_comparison(f, all_variants_results):
         if has_soa_imm:
             row += f" & {r['spd_imm_layout']}"
         f.write(row + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 
 # ---------------------------------------------------------------------------
@@ -3929,7 +4354,7 @@ def _table_add1tree_widths(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
     f.write("\\caption{Integer-width add1Tree vectorization. "
             + simd_isa_caption_note() + no_gcc_vec_caption_note() + "}\n")
     f.write("\\label{tab:add1tree_widths}\n\\small\n")
-    f.write("\\resizebox{\\textwidth}{!}{%\n")
+    f.write("\\gibbonfit{%\n")
     f.write("\\begin{tabular}{lcccccccc}\n\\toprule\n")
     f.write("Width & AoS raw & SoA raw & AoS/SoA & SoA loopify & SoA SIMD & "
             "SIMD spd. & AoS-vs-SIMD & Qual. \\\\\n\\midrule\n")
@@ -4179,100 +4604,102 @@ def collect_arithintensity_width_results(programs_dir: Path, out_dir: Path, cc: 
                     manifest=manifest)
             results[width][cfg_name] = res
     return results
-
-
-# ---------------------------------------------------------------------------
-# --pldi-submission: per-program fold/map tables across an expanded AoS/SoA
-# variant matrix.
+# The C auto-vectorizer is ON in every configuration below and is not
+# mentioned in any symbol: that is what an ordinary build does, so it is the
+# unmarked default. The ablations are opt-in through --av-variants, which
+# adds a `-av' twin of a configuration and the delta column that contrasts
+# the two. Because the default is uniformly +av, no delta can conflate the
+# vectorizer with the optimization it is measuring -- which is exactly what
+# went wrong when recursive configurations were left +av while loopified
+# ones were compiled -av: on ArithmeticIntensityInt16 that reported
+# loopification at 0.40x, a 2.5x slowdown, where holding the vectorizer
+# equal puts it at 1.07x.
 #
-# Every loopified config below passes --opt-loopification WITHOUT
-# --auto-loopification: every curated map function this driver times already
-# carries an explicit OPT:MayVectorize annotation (verified against every
-# .hs file in programs/AOS and programs/SOA before this policy was adopted),
-# so structural inference is unnecessary. The one known exception,
-# DomTree.hs's `computeWidths`, has a genuine parent-child dependency (the
-# parent's width is computed from its recursively-produced children) and is
-# correctly left unloopified either way -- its loopified-row cells report
-# unchanged, non-loopified timing, which is the correct result to show, not
-# a bug to work around.
+# Column order follows the delta chain, so a reader moving left to right
+# crosses the same steps the delta table measures: immutable without tail
+# calls, immutable, mutable without tail calls, mutable.
 PLDI_FOLD_CONFIGS: Dict[str, Dict[str, Dict]] = {
     "aos": {
         "aos_imm_notco": dict(use_mutable_cursors=False, use_no_gcc_tail_calls=True),
         "aos_imm":       dict(use_mutable_cursors=False),
-        "aos_mut":       dict(use_mutable_cursors=True),
         "aos_mut_notco": dict(use_mutable_cursors=True, use_no_gcc_tail_calls=True),
+        "aos_mut":       dict(use_mutable_cursors=True),
     },
     "soa": {
         "soa_imm_notco": dict(use_mutable_cursors=False, use_no_gcc_tail_calls=True),
         "soa_imm":       dict(use_mutable_cursors=False),
-        "soa_mut":       dict(use_mutable_cursors=True),
         "soa_mut_notco": dict(use_mutable_cursors=True, use_no_gcc_tail_calls=True),
+        "soa_mut":       dict(use_mutable_cursors=True),
     },
 }
 
-# Each map-table layout's first 3 rows are exactly the fold-table's rows for
+# Each map-table layout's first rows are exactly the fold-table's rows for
 # that layout (the same compiled binary's fold-pass timing feeds the fold
 # table; its map-pass timing feeds the map table) -- a program is compiled
 # once per config name, not once per table.
+#
+# Every loopified config passes --opt-loopification WITHOUT
+# --auto-loopification: every curated map function this driver times already
+# carries an explicit OPT:MayVectorize annotation, so structural inference is
+# unnecessary. The one known exception, DomTree.hs's `computeWidths`, has a
+# genuine parent-child dependency and is correctly left unloopified either
+# way -- its loopified-row cells report unchanged, non-loopified timing,
+# which is the correct result to show, not a bug to work around.
+#
+# SoA loopification needs scalar-count footers; they are kept with
+# --defer-scalar-counts, since the per-element footer bump makes a SoA build
+# 1.5-2.3x slower and deferral recovers almost all of it. Programs where
+# nothing is loopified compile without counts or selective buffer sharing
+# (see pldi_unloopified_kwargs).
 PLDI_MAP_CONFIGS: Dict[str, Dict[str, Dict]] = {
     "aos": {
         **PLDI_FOLD_CONFIGS["aos"],
-        "aos_loop_gccvec_off": dict(use_mutable_cursors=True, enable_loopification=True,
-                                    auto_loopification=False, use_no_gcc_vec=True),
-        "aos_loop_gccvec_on":  dict(use_mutable_cursors=True, enable_loopification=True,
-                                    auto_loopification=False),
+        "aos_loop": dict(use_mutable_cursors=True, enable_loopification=True,
+                         auto_loopification=False),
     },
     "soa": {
         **PLDI_FOLD_CONFIGS["soa"],
-        "soa_loop_gccvec_off_sbs_off": dict(
+        "soa_loop": dict(
             use_mutable_cursors=True, store_scalar_field_counts=True,
-            enable_loopification=True, auto_loopification=False, use_no_gcc_vec=True),
-        "soa_loop_gccvec_off_sbs_on": dict(
+            defer_scalar_counts=True,
+            enable_loopification=True, auto_loopification=False),
+        "soa_loop_sbs": dict(
             use_mutable_cursors=True, store_scalar_field_counts=True,
-            enable_loopification=True, auto_loopification=False,
-            enable_selective_buffer_sharing=True, use_no_gcc_vec=True),
-        "soa_loop_gccvec_on_sbs_on": dict(
-            use_mutable_cursors=True, store_scalar_field_counts=True,
+            defer_scalar_counts=True,
             enable_loopification=True, auto_loopification=False,
             enable_selective_buffer_sharing=True),
-        "soa_loop_gccvec_off_sbs_on_gibvec_on": dict(
+        "soa_loop_sbs_gibvec": dict(
             use_mutable_cursors=True, store_scalar_field_counts=True,
-            enable_loopification=True, auto_loopification=False,
-            enable_selective_buffer_sharing=True, enable_vectorization=True,
-            use_no_gcc_vec=True),
-        "soa_loop_gccvec_on_sbs_on_gibvec_on": dict(
-            use_mutable_cursors=True, store_scalar_field_counts=True,
+            defer_scalar_counts=True,
             enable_loopification=True, auto_loopification=False,
             enable_selective_buffer_sharing=True, enable_vectorization=True),
     },
 }
 
-# Programs the --pldi-submission matrix reports IN ADDITION to the curated
-# campaign list. The integer-width add1Tree series is a width sweep, not a
-# workload in the main AoS/SoA comparison, so it is not in DEFAULT_PROGRAMS
-# -- but its fold/map split is exactly what the PLDI tables report, and the
-# per-width contrast is a result in its own right.
-#
-# All four widths, so the sweep is complete. Int64 was briefly left out on
-# the expectation that it duplicates MonoTree.hs; it does not. The two are
-# comparable only in the MAP pass -- both map `Leaf x -> Leaf (x+1)` over
-# an Int64 tree of similar size (MonoTree 2^23 = 8,388,608 leaves,
-# Add1TreeInt64 9,227,465) -- and even there the tree SHAPES differ
-# (MonoTree perfectly balanced, Add1TreeInt64 Fibonacci-shaped). Their
-# folds are not comparable at all, and in any case Add1Tree's fold is
-# `checksumTree`, a verification pass excluded from every table
-# (VERIFICATION_PASSES), so what these four rows actually report is the
-# add1Tree map at four integer widths -- a sweep MonoTree is not part of.
-# Benchmark families that SHIP as one executable per timed pass (a shared
-# base module plus <Family>_<pass>.hs files) but must still be REPORTED as
-# one program -- same table, same rows -- exactly as when each was a single
-# executable. Keyed by the program name the tables show; the value is the
-# filename prefix its members share.
-#
-# OctTree predates this and keeps its own bespoke merge
-# (_merge_octree_results), because that one also folds in ColorOctree,
-# which is a separate program rather than a member of the family.
+# --av-variants: which configurations gain a `-av' twin, compiled with
+# --no-gcc-vectorize and reported beside the default.
+AV_VARIANT_CHOICES = ("fold", "loopified", "all", "none")
+AV_VARIANT_SUFFIX = "_navec"
+
+# Which configurations gain a twin. The choices name a TABLE, not a kind of
+# code: `fold' gives the fold table its -av columns, and `loopified' gives
+# the map table its own -- which includes the recursive baseline the map
+# table also shows, since without it loopification cannot be measured in the
+# vectorizer's absence.
+AV_VARIANT_BASES = {
+    "fold": ("aos_mut", "soa_mut"),
+    "loopified": ("aos_mut", "soa_mut", "aos_loop", "soa_loop",
+                  "soa_loop_sbs", "soa_loop_sbs_gibvec"),
+}
+
+
+# Families that ship one executable per timed pass, and the single program
+# each was split from. Every table and figure folds the members back into
+# that one program: the split is how the passes are MEASURED, not what the
+# suite benchmarks, and leaving it visible reports one program as eight --
+# each of which, end to end, pays in full for the build they share.
 PROGRAM_MERGE_GROUPS: Dict[str, str] = {
+    "OctTree.hs": "OctTree_",
     "PiecewiseFunctions.hs": "PiecewiseFunctions_",
 }
 
@@ -4342,6 +4769,13 @@ def merge_pldi_program_groups(
                 res = pldi_variant_results[member].get(cfg)
                 if res is not None:
                     contributors.append(res)
+                    # One build for the family, not one per member: every
+                    # member measured the same construction (see
+                    # build_timing_program), so the merged program pays it
+                    # once, as the single program it was split from did.
+                    if merged.build_time is None and res.build_time:
+                        merged.build_time = res.build_time
+                        merged.build_passes = dict(res.build_passes or {})
                     if merged.adt_fields is None and res.adt_fields is not None:
                         merged.adt_fields = res.adt_fields
                         merged.adt_info = res.adt_info
@@ -4367,159 +4801,126 @@ def merge_pldi_program_groups(
 # of being silently left out of the tables (which is exactly how the
 # arithmetic-intensity family came to be missing).
 PLDI_EXTRA_PROGRAMS = list(ADD1TREE_WIDTH_PROGRAMS) + list(ARITHINTENSITY_WIDTH_PROGRAMS)
-
+# The long prose spelling of each configuration: this is the legend a
+# reader decodes the compact column symbols from, so it is the one place
+# that must not itself introduce an undefined abbreviation. The C
+# auto-vectorizer is mentioned only when it is OFF, because on is the
+# default and a label for a default is noise.
 PLDI_ROW_LABELS: Dict[str, str] = {
-    # Spelled out in full: this is the legend a reader decodes the compact
-    # column symbols from, so it is the one place that must not itself
-    # introduce an undefined abbreviation (no SBS, no TCO, no gcc-vec).
-    # AoS/SoA are expanded in the legend caption.
     "aos_imm_notco": "AoS, recursive traversal, immutable cursors, "
                      "C tail-call optimization disabled",
     "aos_imm": "AoS, recursive traversal, immutable cursors",
-    "aos_mut": "AoS, recursive traversal, mutable cursors",
     "aos_mut_notco": "AoS, recursive traversal, mutable cursors, "
                      "C tail-call optimization disabled",
-    "aos_loop_gccvec_off": "AoS, loopified, C auto-vectorization disabled",
-    "aos_loop_gccvec_on": "AoS, loopified, C auto-vectorization enabled",
+    "aos_mut": "AoS, recursive traversal, mutable cursors",
+    "aos_loop": "AoS, loopified",
     "soa_imm_notco": "SoA, recursive traversal, immutable cursors, "
                      "C tail-call optimization disabled",
     "soa_imm": "SoA, recursive traversal, immutable cursors",
-    "soa_mut": "SoA, recursive traversal, mutable cursors",
     "soa_mut_notco": "SoA, recursive traversal, mutable cursors, "
                      "C tail-call optimization disabled",
-    "soa_loop_gccvec_off_sbs_off":
-        "SoA, loopified, C auto-vectorization disabled, "
-        "no selective buffer sharing",
-    "soa_loop_gccvec_off_sbs_on":
-        "SoA, loopified, C auto-vectorization disabled, "
-        "selective buffer sharing",
-    "soa_loop_gccvec_on_sbs_on":
-        "SoA, loopified, C auto-vectorization enabled, "
-        "selective buffer sharing",
-    "soa_loop_gccvec_off_sbs_on_gibvec_on":
-        "SoA, loopified, C auto-vectorization disabled, "
-        "selective buffer sharing, Gibbon SIMD vectorization",
-    "soa_loop_gccvec_on_sbs_on_gibvec_on":
-        "SoA, loopified, C auto-vectorization enabled, "
-        "selective buffer sharing, Gibbon SIMD vectorization",
+    "soa_mut": "SoA, recursive traversal, mutable cursors",
+    "soa_loop": "SoA, loopified, no selective buffer sharing",
+    "soa_loop_sbs": "SoA, loopified, selective buffer sharing",
+    "soa_loop_sbs_gibvec": "SoA, loopified, selective buffer sharing, "
+                           "Gibbon SIMD vectorization",
 }
 
-
-# Compact column symbols for the PLDI per-program fold/map tables.  The
-# scheme is systematic so a reader can decode an unfamiliar column:
+# Compact column symbols.  The scheme is systematic so a reader can decode
+# an unfamiliar column:
 #   base letter -- A = array-of-structs (AoS), S = struct-of-arrays (SoA)
 #   subscript   -- Gibbon-side codegen: r recursive traversal, i immutable
 #                  cursors, m mutable cursors, \ell loopified, b selective
 #                  buffer sharing, v Gibbon SIMD vectorization
-#   superscript -- the C-compiler knob that differs from the column's
-#                  default: +av leaves C auto-vectorization ON (loopified
-#                  columns disable it), \neg t disables C tail-call opt.
-# Superscripts are wrapped in \scriptscriptstyle: at plain superscript
-# size the binary + is set as large as the subscript letters and reads as
-# part of the name rather than as a modifier.
-# PLDI_ROW_LABELS keeps the long prose spelling of each configuration;
-# _table_pldi_legend pairs the two so the symbols stay decodable from
-# inside the paper itself.
+#   superscript -- a C-compiler knob that DIFFERS from the default, always
+#                  spelled with a leading minus: -t disables C tail-call
+#                  optimization, -av disables the C auto-vectorizer. One
+#                  marker, one meaning; never a mix of - and \neg.
+# Superscripts are wrapped in \scriptscriptstyle: at plain superscript size
+# the marker is set as large as the subscript letters and reads as part of
+# the name rather than as a modifier.
 PLDI_COL_SYMBOLS: Dict[str, str] = {
-    "aos_imm_notco": "$A_{ri}^{\\scriptscriptstyle \\neg t}$",
+    "aos_imm_notco": "$A_{ri}^{\\scriptscriptstyle -t}$",
     "aos_imm":       "$A_{ri}$",
+    "aos_mut_notco": "$A_{rm}^{\\scriptscriptstyle -t}$",
     "aos_mut":       "$A_{rm}$",
-    "aos_mut_notco": "$A_{rm}^{\\scriptscriptstyle \\neg t}$",
-    "aos_loop_gccvec_off": "$A_{\\ell}$",
-    "aos_loop_gccvec_on":  "$A_{\\ell}^{\\scriptscriptstyle +av}$",
-    "soa_imm_notco": "$S_{ri}^{\\scriptscriptstyle \\neg t}$",
+    "aos_loop":      "$A_{\\ell}$",
+    "soa_imm_notco": "$S_{ri}^{\\scriptscriptstyle -t}$",
     "soa_imm":       "$S_{ri}$",
+    "soa_mut_notco": "$S_{rm}^{\\scriptscriptstyle -t}$",
     "soa_mut":       "$S_{rm}$",
-    "soa_mut_notco": "$S_{rm}^{\\scriptscriptstyle \\neg t}$",
-    "soa_loop_gccvec_off_sbs_off":          "$S_{\\ell}$",
-    "soa_loop_gccvec_off_sbs_on":           "$S_{\\ell b}$",
-    "soa_loop_gccvec_on_sbs_on":            "$S_{\\ell b}^{\\scriptscriptstyle +av}$",
-    "soa_loop_gccvec_off_sbs_on_gibvec_on": "$S_{\\ell bv}$",
-    "soa_loop_gccvec_on_sbs_on_gibvec_on":  "$S_{\\ell bv}^{\\scriptscriptstyle +av}$",
+    "soa_loop":              "$S_{\\ell}$",
+    "soa_loop_sbs":          "$S_{\\ell b}$",
+    "soa_loop_sbs_gibvec":   "$S_{\\ell bv}$",
 }
 
 
 # ---------------------------------------------------------------------------
-# Per-pass DELTA tables: what each optimization actually bought, in seconds.
+# Per-pass DELTA tables: what each optimization actually bought.
 #
 # Every entry is (layout, symbol, baseline config, feature config, legend
-# text). Each symbol's subscript names the feature using the SAME letters
-# the configuration symbols use (PLDI_COL_SYMBOLS): m mutable cursors,
-# \ell loopified, b selective buffer sharing, v Gibbon SIMD vectorization,
-# av the C auto-vectorizer (spelled `+av` as a superscript there), t the C
-# tail-call optimization (`\neg t` there). A reader who has learned the
-# configuration legend can therefore read a delta column without relearning
-# anything. The value rendered is (BASELINE - FEATURE) / FEATURE as a
+# text). The value rendered is (BASELINE - FEATURE) / FEATURE as a
 # percentage -- identically (speedup - 1) x 100 -- so a POSITIVE number
 # always means "enabling this made the pass faster", in every column of
 # every table. The denominator is the FEATURE, not the baseline: against
 # the baseline the scale saturates (a 5x win reads 80%, an 8x win 87.5%),
 # which compresses exactly the large improvements these tables exist to
-# size. See `_signed_percent` for the full argument. Either way the numbers
-# are scale-free and so comparable across passes whose absolute times
-# differ by orders of magnitude.
+# size.
 #
-# That uniform orientation is a deliberate normalization of the request,
-# which spelled three of the twelve columns feature-first (mutable cursors,
-# selective buffer sharing, and Gibbon-vec-on-top-of-auto-vec) and asked for
-# absolute values |x - y|. Magnitudes are exactly as requested; what changes
-# is that the sign survives -- and it has to, because two of the columns ask
-# whether one vectorizer HINDERS or HELPS the other, which an absolute value
-# cannot express.
+# Each column is named once here and the fold and map lists are composed
+# from those names; they used to share entries by INDEX, so inserting a
+# fold column silently redefined map columns.
+#
+# An `av' subscript always says what the vectorizer was added ON TOP OF,
+# because there is more than one such column and the same vectorizer is
+# worth very different amounts on a recursive traversal and on a loopified
+# one.
+_DELTA_A_M = (
+    "AoS", "$\\Delta^{A}_{m}$", "aos_imm_notco", "aos_mut_notco",
+    "What mutable cursors alone bought vanilla Gibbon. BOTH sides have the "
+    "C tail-call optimization disabled, so this isolates mutability: "
+    "measured against $A_{ri}$ (tail calls ENABLED) it would report "
+    "mutability plus whatever tail calls contributed, and mutability is "
+    "precisely what puts the traversal in tail position for them to work on")
+_DELTA_A_T = (
+    "AoS", "$\\Delta^{A}_{t}$", "aos_mut_notco", "aos_mut",
+    "What the C tail-call optimization bought AoS mutable. Mutable cursors "
+    "are what leave the traversal in tail position, so this optimization "
+    "has something to work on only once they are in use")
+_DELTA_A_L = (
+    "AoS", "$\\Delta^{A}_{\\ell}$", "aos_mut", "aos_loop",
+    "What loopification gained over recursion in AoS mutable")
+_DELTA_S_M = (
+    "SoA", "$\\Delta^{S}_{m}$", "soa_imm_notco", "soa_mut_notco",
+    "What mutable cursors alone bought SoA; as in AoS, both sides have the "
+    "C tail-call optimization disabled so the two effects are not conflated")
+_DELTA_S_T = (
+    "SoA", "$\\Delta^{S}_{t}$", "soa_mut_notco", "soa_mut",
+    "What the C tail-call optimization bought SoA mutable; as in AoS, it is "
+    "mutability that leaves the traversal in tail position")
+_DELTA_S_L = (
+    "SoA", "$\\Delta^{S}_{\\ell}$", "soa_mut", "soa_loop",
+    "What loopification gained over recursion in SoA mutable; neither side "
+    "has selective buffer sharing, so this is loopification alone")
+_DELTA_S_B = (
+    "SoA", "$\\Delta^{S}_{b}$", "soa_loop", "soa_loop_sbs",
+    "What selective buffer sharing added over SoA loopified")
+_DELTA_S_V = (
+    "SoA", "$\\Delta^{S}_{v}$", "soa_loop_sbs", "soa_loop_sbs_gibvec",
+    "What Gibbon SIMD vectorization added over SoA loopified $+$ selective "
+    "buffer sharing. Both sides have the C auto-vectorizer on, so this is "
+    "what Gibbon's vectorizer adds to a build that already has the "
+    "backend's")
+
 PLDI_DELTA_COLUMNS_FOLD: List[Tuple[str, str, str, str, str]] = [
-    ("AoS", "$\\Delta^{A}_{m}$", "aos_imm_notco", "aos_mut_notco",
-     "What mutable cursors alone bought vanilla Gibbon. BOTH sides have the "
-     "C tail-call optimization disabled, so this isolates mutability: "
-     "measured against $A_{ri}$ (tail calls ENABLED) it would report "
-     "mutability plus whatever tail calls contributed, and mutability is "
-     "precisely what puts the traversal in tail position for them to work "
-     "on"),
-    ("AoS", "$\\Delta^{A}_{t}$", "aos_mut_notco", "aos_mut",
-     "What the C tail-call optimization bought AoS mutable. Mutable cursors "
-     "are what leave the traversal in tail position, so this optimization "
-     "has something to work on only once they are in use"),
-    ("SoA", "$\\Delta^{S}_{m}$", "soa_imm_notco", "soa_mut_notco",
-     "What mutable cursors alone bought SoA; as in AoS, both sides have the "
-     "C tail-call optimization disabled so the two effects are not "
-     "conflated"),
-    ("SoA", "$\\Delta^{S}_{t}$", "soa_mut_notco", "soa_mut",
-     "What the C tail-call optimization bought SoA mutable; as in AoS, it is "
-     "mutability that leaves the traversal in tail position"),
+    _DELTA_A_M, _DELTA_A_T, _DELTA_S_M, _DELTA_S_T,
 ]
 
 PLDI_DELTA_COLUMNS_MAP: List[Tuple[str, str, str, str, str]] = [
-    # Both layouts' cursor/TCO columns carry forward from the fold table.
-    PLDI_DELTA_COLUMNS_FOLD[0],
-    PLDI_DELTA_COLUMNS_FOLD[1],
-    ("AoS", "$\\Delta^{A}_{\\ell}$", "aos_mut", "aos_loop_gccvec_off",
-     "What loopification gained over recursion in AoS mutable"),
-    ("AoS", "$\\Delta^{A}_{av}$", "aos_loop_gccvec_off", "aos_loop_gccvec_on",
-     "What the C auto-vectorizer added to loopified AoS mutable"),
-    PLDI_DELTA_COLUMNS_FOLD[2],
-    PLDI_DELTA_COLUMNS_FOLD[3],
-    ("SoA", "$\\Delta^{S}_{\\ell}$", "soa_mut", "soa_loop_gccvec_off_sbs_off",
-     "What loopification gained over recursion in SoA mutable"),
-    ("SoA", "$\\Delta^{S}_{b}$", "soa_loop_gccvec_off_sbs_off",
-     "soa_loop_gccvec_off_sbs_on",
-     "What selective buffer sharing added over SoA loopified"),
-    ("SoA", "$\\Delta^{S}_{av}$", "soa_loop_gccvec_off_sbs_on",
-     "soa_loop_gccvec_on_sbs_on",
-     "What the C auto-vectorizer added over SoA loopified $+$ selective "
-     "buffer sharing"),
-    ("SoA", "$\\Delta^{S}_{v}$", "soa_loop_gccvec_off_sbs_on",
-     "soa_loop_gccvec_off_sbs_on_gibvec_on",
-     "What Gibbon SIMD vectorization added over SoA loopified $+$ selective "
-     "buffer sharing"),
-    ("SoA", "$\\Delta^{S}_{av|v}$", "soa_loop_gccvec_off_sbs_on_gibvec_on",
-     "soa_loop_gccvec_on_sbs_on_gibvec_on",
-     "Whether the C auto-vectorizer HELPS ($>0$) or HINDERS ($<0$) Gibbon "
-     "vectorization --- both are already on, and this turns the C one on top"),
-    ("SoA", "$\\Delta^{S}_{v|av}$", "soa_loop_gccvec_on_sbs_on",
-     "soa_loop_gccvec_on_sbs_on_gibvec_on",
-     "Whether Gibbon vectorization HELPS ($>0$) or HINDERS ($<0$) the C "
-     "auto-vectorizer --- the mirror of the column above, adding Gibbon's "
-     "vectorizer on top of the C one"),
+    _DELTA_A_M, _DELTA_A_T, _DELTA_A_L,
+    _DELTA_S_M, _DELTA_S_T, _DELTA_S_L, _DELTA_S_B, _DELTA_S_V,
 ]
+
 
 
 def _signed_sig4(value: Optional[float]) -> str:
@@ -4570,6 +4971,22 @@ def _pldi_delta_cell(results_for_program: Dict[str, BenchmarkResult],
     return _signed_percent(base, feat)
 
 
+def _table_size_directive(columns: int) -> str:
+    """Font size and column padding for a table of this many columns.
+
+    Stepping the font down keeps the table's type in the same family as the
+    surrounding text; \\gibbonfit only has to scale what is still too wide
+    after this, and a scaled table no longer matches the paper's type. Both
+    are local to the table environment."""
+    if columns <= 8:
+        return "\\small\\gibbonnumfont\n"
+    if columns <= 13:
+        return "\\footnotesize\\gibbonnumfont\n\\setlength{\\tabcolsep}{4pt}\n"
+    if columns <= 18:
+        return "\\scriptsize\\gibbonnumfont\n\\setlength{\\tabcolsep}{3pt}\n"
+    return "\\tiny\\gibbonnumfont\n\\setlength{\\tabcolsep}{2pt}\n"
+
+
 def _render_pldi_delta_table(f, program: str,
                              results_for_program: Dict[str, BenchmarkResult],
                              columns: List[Tuple[str, str, str, str, str]],
@@ -4601,12 +5018,8 @@ def _render_pldi_delta_table(f, program: str,
         "definition. `--' marks a pass where either side of the difference "
         "was not measured; the timing table above says which.}\n")
     f.write(f"\\label{{tab:pldi-{kind}-delta-{prog_stem}}}\n")
-    if len(columns) > 8:
-        f.write("\\footnotesize\\gibbonnumfont\n"
-                "\\setlength{\\tabcolsep}{4pt}\n")
-    else:
-        f.write("\\small\\gibbonnumfont\n")
-    f.write("\\begin{tabular}{l" + " r" * len(columns) + "}\n\\toprule\n")
+    f.write(_table_size_directive(len(columns)))
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l" + " r" * len(columns) + "}\n\\toprule\n")
     f.write("\\textbf{Pass}"
             + "".join(" & \\multicolumn{%d}{c}{\\textbf{%s}}" % (len(g), lbl)
                       for lbl, g in groups)
@@ -4624,7 +5037,7 @@ def _render_pldi_delta_table(f, program: str,
                  for _l, _sym, base, feat, _d in columns]
         f.write(_tex_escape(pname) + "".join(" & %s" % c for c in cells)
                 + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 
 def _table_pldi_fold_deltas(f, program: str,
@@ -4658,10 +5071,19 @@ def _table_pldi_delta_legend(f) -> None:
         "($A$ = array-of-structs, $S$ = struct-of-arrays); subscript names "
         "the feature. The two $|$-subscripted columns ask whether one "
         "vectorizer helps or hinders the other, which is why these are signed "
-        "differences rather than magnitudes. Table~\\ref{tab:pldi-legend} "
+        "differences rather than magnitudes. A subscript after a $|$ names "
+        "what the feature was added ON TOP OF, so $\\Delta_{av|\\ell}$ is the "
+        "C auto-vectorizer applied to loopified code. "
+        "$\\Delta^{S}_{\\ell}$ additionally turns on deferred scalar-count "
+        "footers, which SoA loopification cannot run without; a program in "
+        "which nothing is loopified is compiled without them. "
+        "Each column's formula below "
+        "names the exact pair it subtracts, which is also where to read off "
+        "whether the C auto-vectorizer was on or off for it. "
+        "Table~\\ref{tab:pldi-legend} "
         "defines the configuration symbols themselves.}\n")
     f.write("\\label{tab:pldi-delta-legend}\n\\small\\gibbonnumfont\n")
-    f.write("\\begin{tabular}{c p{0.82\\linewidth}}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{c p{0.82\\linewidth}}\n\\toprule\n")
     f.write("\\textbf{Column} & \\textbf{Meaning: (baseline $-$ feature) / feature} "
             "\\\\\n\\midrule\n")
     seen = set()
@@ -4687,7 +5109,491 @@ def _table_pldi_delta_legend(f) -> None:
         previous_layout = layout
         seen.add(sym)
         f.write("%s & %s: %s \\\\\n" % (sym, desc, _formula(_base, _feat)))
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
+
+
+# ---------------------------------------------------------------------------
+# Interleaved repetition.
+#
+# Measuring each configuration ONCE, always in the same order, cannot
+# separate a configuration's cost from the machine's state while it ran.
+# The delta columns all subtract a later-run configuration from an
+# earlier-run one, so any drift over a campaign -- frequency, thermal,
+# whatever else is on the machine -- biases every delta the same way. It is
+# not a small effect: a Compiler run measured `-av' 6.3% faster than a fresh
+# run of the SAME binary, which alone produced an apparent 3% regression in
+# every one of its fold passes.
+#
+# The per-pass confidence interval cannot see this. It is computed from
+# iterations WITHIN one process, while the comparison spans two processes.
+#
+# So each configuration is run several times, rotated so none is
+# systematically early or late, and the reported time is the median across
+# rounds. `between_round_ci95_pct` is then the spread that actually matters
+# for comparing two configurations.
+# ---------------------------------------------------------------------------
+# Build-time measurement
+# ---------------------------------------------------------------------------
+# A program's end-to-end time is its construction phase plus the sum of its
+# timed passes. Whole-executable wall time is not used for it: it is one
+# sample per run, and for the families that ship one executable per timed
+# pass it charges every member the full build, so eight members report eight
+# builds of a structure the original single program built once.
+#
+# The build is timed the way every pass is -- `iterate` around it, read back
+# from the ITER TIMES line -- which requires the build to be the only
+# iterated expression in the program. A build-timed COPY of each source is
+# therefore generated, with `iterate` moved onto the construction and off
+# the passes; the passes still run once, so the program's output and its
+# oracle check are unchanged. Generating the copy rather than keeping one by
+# hand is what makes the timed build provably the same build the measured
+# program runs: the hand-written copies under programs/{AOS,SOA}_BUILD do
+# not all build the same size as the program they stand for, which is a
+# thing a generated copy cannot do.
+
+BUILD_PASS_TYPE = "build"
+BUILD_PASS_PREFIX = "build_"
+
+# A binding in `gibbon_main` whose right-hand side starts with one of these
+# is a construction. Every curated program has exactly one such binding;
+# DomTree has two (a full tree and a smaller one for its map passes) and
+# pays for both.
+_BUILD_RHS_HEAD = re.compile(r"^\(?\s*(?:build|mk)[A-Za-z0-9_']*\b")
+# One `let`-bound line of main, in either style the suite uses: a single
+# `let` block of bindings, or a chain of `let ... in`.
+_MAIN_BINDING = re.compile(
+    r"^(?P<indent>\s*)(?P<let>let\s+)?(?P<var>[A-Za-z_][A-Za-z0-9_']*)\s*=\s*"
+    r"(?P<rhs>.*?)(?P<in>\s+in\s*)?$")
+_ITERATE_CALL = re.compile(r"^iterate\s*\((?P<inner>.*)\)$")
+
+# Families that ship one executable per timed pass share ONE build: the
+# single program they were split from built the structure once and ran every
+# pass on it, so charging each member its own build would multiply the one
+# cost the split was supposed to leave untouched.
+BUILD_FAMILY_PREFIXES = ("OctTree_", "PiecewiseFunctions_")
+
+# Programs whose build is iterated fewer times than --measure-rounds asks.
+# The iterate loop rewinds the region allocator between iterations, so a
+# build does not accumulate across them; this exists for builds whose single
+# instance is already large enough that repeating it dominates the campaign.
+BUILD_ITERATION_OVERRIDES: Dict[str, int] = {
+    "List.hs": 3,
+    "LinearListReduction.hs": 3,
+    "Compiler.hs": 3,
+}
+
+
+def build_iterations_for(program: str, default: int) -> int:
+    """How many times this program's build is timed. Never more than the
+    requested count: an override lowers the cost of an expensive build, it
+    does not raise one nobody asked for."""
+    override = BUILD_ITERATION_OVERRIDES.get(program)
+    if override is None:
+        return max(1, default)
+    return max(1, min(default, override))
+
+
+def build_timing_program(program: str,
+                         candidates: Optional[List[str]] = None) -> str:
+    """The program whose build stands for `program`'s.
+
+    Itself, except for a split family's members, which all resolve to the
+    family's first member in DEFAULT_PROGRAMS order so the family's build is
+    compiled and timed once."""
+    for prefix in BUILD_FAMILY_PREFIXES:
+        if not program.startswith(prefix):
+            continue
+        pool = list(candidates) if candidates is not None else list(DEFAULT_PROGRAMS)
+        members = merge_group_members(prefix.rstrip("_") + ".hs", prefix, pool)
+        if members:
+            return members[0]
+    return program
+
+
+def build_family_disagreements(programs_dir: Path,
+                              programs: Optional[List[str]] = None) -> List[str]:
+    """Family members whose construction line differs from the member whose
+    build is timed for the whole family.
+
+    The shared build is only the family's build while every member builds
+    the same thing; OctTree's two map members build a fixed depth where its
+    six folds build `sizeParam + 8`, which agree only at --size-param 0."""
+    pool = list(programs) if programs is not None else list(DEFAULT_PROGRAMS)
+    out: List[str] = []
+    for prefix in BUILD_FAMILY_PREFIXES:
+        members = merge_group_members(prefix.rstrip("_") + ".hs", prefix, pool)
+        if len(members) < 2:
+            continue
+        lines: Dict[str, Optional[str]] = {}
+        for member in members:
+            src = programs_dir / "SOA" / member
+            lines[member] = (_construction_lines(src.read_text())
+                             if src.exists() else None)
+        reference = lines.get(members[0])
+        for member in members[1:]:
+            if lines.get(member) != reference:
+                out.append("%s builds %r where %s builds %r"
+                           % (member, lines.get(member), members[0], reference))
+    return out
+
+
+def _main_block_bounds(lines: List[str]) -> Tuple[int, int]:
+    """The half-open line range of `gibbon_main`'s definition.
+
+    It ends at the next line that starts in column 0, so a file with
+    declarations after main (MonoTree's `main :: IO ()`) is not rewritten
+    past the entry point."""
+    start = next(i for i, line in enumerate(lines)
+                 if line.startswith("gibbon_main"))
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip() and not lines[i][0].isspace():
+            return start, i
+    return start, len(lines)
+
+
+def _marker_style(lines: List[str], start: int, end: int) -> Tuple[str, bool, bool]:
+    """(indent, needs `let`, needs trailing `in`) for a marker line inserted
+    into this main, copied from a marker the program already has so the
+    inserted lines parse in the same binding style."""
+    for i in range(start, end):
+        if 'printsym (quote "Running pass' in lines[i]:
+            m = _MAIN_BINDING.match(lines[i])
+            if m:
+                return m.group("indent"), bool(m.group("let")), bool(m.group("in"))
+    for i in range(start + 1, end):
+        m = _MAIN_BINDING.match(lines[i])
+        if m and "printsym" in lines[i]:
+            return m.group("indent"), bool(m.group("let")), bool(m.group("in"))
+    return "      ", False, False
+
+
+def _construction_lines(text: str) -> Optional[str]:
+    """The program's construction bindings, normalized, or None when it has
+    none.
+
+    Reads the same off a program and off its build-timed copy -- the
+    `iterate` the copy wraps the construction in is looked through -- so the
+    two can be compared, as can a family's members against each other."""
+    lines = text.splitlines()
+    try:
+        start, end = _main_block_bounds(lines)
+    except StopIteration:
+        return None
+    found = []
+    for i in range(start, end):
+        m = _MAIN_BINDING.match(lines[i])
+        if not m or m.group("var") == "_" or "printsym" in lines[i]:
+            continue
+        rhs = m.group("rhs").strip()
+        unwrapped = _ITERATE_CALL.match(rhs)
+        if unwrapped:
+            rhs = unwrapped.group("inner").strip()
+        if _BUILD_RHS_HEAD.match(rhs):
+            found.append("%s = %s" % (m.group("var"), " ".join(rhs.split())))
+    return "; ".join(found) if found else None
+
+
+def build_timed_source(text: str) -> Tuple[str, List[str]]:
+    """A copy of one program with its construction timed instead of its
+    passes: `iterate` around every construction binding, and off every other
+    binding, so ITER TIMES reports the build alone.
+
+    Returns (source, build pass names). Each construction gets its own
+    marked pass -- one ITER TIMES line per marked block is all the parser
+    keeps, so two constructions cannot share a block. The pass blocks are
+    left in place: with nothing iterated inside them they emit no timings
+    and the parser drops them, while the passes still run once and the
+    program prints the same result as the measured build of the same source."""
+    lines = text.splitlines()
+    start, end = _main_block_bounds(lines)
+    indent, needs_let, needs_in = _marker_style(lines, start, end)
+
+    def marker(message: str) -> str:
+        return "%s%s_ = printsym (quote \"%s\")%s" % (
+            indent, "let " if needs_let else "", message,
+            " in" if needs_in else "")
+
+    out: List[str] = []
+    builds: List[str] = []
+    for i, line in enumerate(lines):
+        if not (start <= i < end):
+            out.append(line)
+            continue
+        m = _MAIN_BINDING.match(line)
+        if not m or m.group("var") == "_" or "printsym" in line:
+            out.append(line)
+            continue
+        rhs = m.group("rhs").strip()
+        head = "%s%s%s = " % (m.group("indent"),
+                              "let " if m.group("let") else "",
+                              m.group("var"))
+        tail = " in" if m.group("in") else ""
+        if _BUILD_RHS_HEAD.match(rhs):
+            name = BUILD_PASS_PREFIX + m.group("var")
+            builds.append(name)
+            out.append(marker("Running pass %s (build): " % name))
+            out.append(marker("NEWLINE"))
+            out.append("%siterate (%s)%s" % (head, rhs, tail))
+            out.append(marker("End"))
+            out.append(marker("NEWLINE"))
+            continue
+        iterated = _ITERATE_CALL.match(rhs)
+        if iterated:
+            out.append("%s%s%s" % (head, iterated.group("inner").strip(), tail))
+            continue
+        out.append(line)
+    return "\n".join(out) + "\n", builds
+
+
+def materialize_build_timed_source(
+        program: str, layout: str, programs_dir: Path, gen_dir: Path,
+        ) -> Tuple[Optional[Path], List[str], Optional[str]]:
+    """Write `program`'s build-timed copy, with the local modules it imports,
+    and return (path, build pass names, error)."""
+    src_dir = "AOS" if layout == "aos" else "SOA"
+    source = programs_dir / src_dir / program
+    if not source.exists():
+        return None, [], "source not found: %s" % source
+    try:
+        text, builds = build_timed_source(source.read_text())
+    except StopIteration:
+        return None, [], "no gibbon_main in %s" % source
+    if not builds:
+        return None, [], "no construction binding in %s" % source
+    dest_dir = gen_dir / src_dir
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / program
+    dest.write_text(text)
+    # Imported local modules are copied unchanged: the build being timed is
+    # defined in them (OctTreeBase, PiecewiseFunctionsBase), annotations
+    # included, so a copy is what keeps the timed build identical to the
+    # measured program's.
+    pending = [source]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if current in seen or not current.exists():
+            continue
+        seen.add(current)
+        for module in re.findall(
+                r'^\s*import\s+(?:qualified\s+)?([A-Z][A-Za-z0-9_.]*)',
+                current.read_text(), re.MULTILINE):
+            if module.split(".")[0] in ("Gibbon", "Prelude"):
+                continue
+            rel = Path(*module.split(".")).with_suffix(".hs")
+            origin = programs_dir / src_dir / rel
+            if not origin.exists():
+                continue
+            target = dest_dir / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(origin, target)
+            pending.append(origin)
+    return dest, builds, None
+
+
+def measure_build_time(
+        program: str, layout: str, cfg_name: str, cfg_kwargs: Dict,
+        programs_dir: Path, out_dir: Path, force: bool, iterations: int,
+        c_arith_mode: str = DEFAULT_C_ARITH_MODE,
+        simd_isa: str = DEFAULT_SIMD_ISA,
+        pin_cpu: Optional[int] = None,
+        cache: Optional[Dict] = None,
+        ) -> Tuple[Dict[str, Dict], Optional[float], Optional[str]]:
+    """Time one configuration's construction phase.
+
+    Returns ({build pass name: stats}, total median seconds, error). The
+    result is cached on (build-timing program, layout, configuration), so a
+    split family compiles and times its shared build once however many
+    members it has."""
+    owner = build_timing_program(program)
+    key = (owner, layout, cfg_name)
+    if cache is not None and key in cache:
+        return cache[key]
+
+    def finish(result):
+        if cache is not None:
+            cache[key] = result
+        return result
+
+    gen_dir = out_dir / "build_timed_src"
+    source, builds, err = materialize_build_timed_source(
+        owner, layout, programs_dir, gen_dir)
+    if source is None:
+        return finish(({}, None, err))
+    build_out = out_dir / "build_timed"
+    ok, _compile_time, compile_err = compile_one(
+        source, cfg_name, build_out, force,
+        use_no_ran=program_uses_no_ran(owner),
+        c_arith_mode=c_arith_mode, simd_isa=simd_isa, **cfg_kwargs)
+    if not ok:
+        return finish(({}, None, compile_err or "build-timed compile failed"))
+    exe = build_out / f"{source.stem}.{cfg_name}.exe"
+    rounds = build_iterations_for(owner, iterations)
+    run_ok, _elapsed, stdout, stderr, rc = run_exe(
+        exe, rounds, use_iterate_flag=True, pin_cpu=pin_cpu)
+    if not run_ok:
+        return finish(({}, None,
+                       stderr or "build-timed run failed (exit %s)" % rc))
+    timed = {name: data for name, data in parse_passes(stdout or "").items()
+             if data.get("pass_type") == BUILD_PASS_TYPE}
+    missing = [name for name in builds if name not in timed]
+    if missing:
+        return finish(({}, None,
+                       "build not timed: %s" % ", ".join(missing)))
+    total = sum(data["median_time"] for data in timed.values())
+    return finish((timed, total, None))
+
+
+
+def run_rounds(jobs: List[Tuple[str, Path]], iterations: int, rounds: int,
+               pin_cpu: Optional[int] = None,
+               on_run=None) -> Dict[str, List[Dict]]:
+    """Run every job once per round, rotating the order each round.
+
+    `jobs` is [(key, exe)]. Returns {key: [per-round (ok, elapsed, out, err,
+    rc)]}. Rotation is by one position per round, so with n jobs and n
+    rounds each job occupies each slot exactly once. With fewer rounds than
+    jobs the shift is strided rather than by one, so three rounds over
+    eighteen configurations place each at positions 0, 6 and 12 rather than
+    0, 17 and 16 -- a rotation by one would leave every job in effectively
+    the same part of the order it started in, which is what the rotation
+    exists to avoid."""
+    collected: Dict[str, List[Tuple]] = {key: [] for key, _exe in jobs}
+    rounds = max(1, rounds)
+    stride = max(1, len(jobs) // rounds) if jobs else 1
+    for rnd in range(rounds):
+        shift = (rnd * stride) % len(jobs) if jobs else 0
+        for key, exe in jobs[shift:] + jobs[:shift]:
+            outcome = run_exe(exe, iterations, use_iterate_flag=True,
+                              pin_cpu=pin_cpu)
+            collected[key].append(outcome)
+            if on_run is not None:
+                on_run(key, rnd, outcome)
+    return collected
+
+
+def _median_index(values: List[float]) -> int:
+    """Index of the value at the lower median, so a caller can keep the
+    round that PRODUCED the reported time rather than mixing fields from
+    different rounds into one row that never happened."""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    return order[(len(order) - 1) // 2]
+
+
+def aggregate_rounds(per_round: List[Dict]) -> Dict:
+    """Combine one pass's per-round measurements into the reported row.
+
+    The row is the median round's own fields -- every number in it came
+    from a single run and remains mutually consistent -- plus the
+    across-round summary that a configuration-vs-configuration comparison
+    actually needs."""
+    usable = [p for p in per_round if p and p.get("median_time") is not None]
+    if not usable:
+        # A round may have reported the pass without a time; keep that row so
+        # it still renders as "not measured" rather than vanishing. If no
+        # round reported it at all there is nothing to describe.
+        for one in per_round:
+            if one:
+                return dict(one)
+        return {}
+    times = [p["median_time"] for p in usable]
+    rep = dict(usable[_median_index(times)])
+    rep["rounds"] = len(usable)
+    rep["round_medians"] = times
+    rep["median_time"] = statistics.median(times)
+    if len(times) >= 2:
+        spread = (max(times) - min(times)) / statistics.median(times) * 100.0
+        rep["between_round_spread_pct"] = spread
+    if len(times) >= 3:
+        sd = statistics.stdev(times)
+        rep["between_round_ci95_abs"] = 1.96 * sd / math.sqrt(len(times))
+        rep["between_round_ci95_pct"] = (
+            rep["between_round_ci95_abs"] / statistics.median(times) * 100.0)
+    return rep
+
+
+def parse_soa_loopified(report: str) -> List[str]:
+    """Functions the `(SoA pass)` section of a --loopification-report
+    rewrote."""
+    out: List[str] = []
+    in_soa = False
+    for line in report.splitlines():
+        if line.startswith("loopification report"):
+            in_soa = "(SoA pass)" in line
+            continue
+        m = re.match(r"\s+(\S+): loopified\s*$", line)
+        if in_soa and m:
+            out.append(m.group(1))
+    return out
+
+
+def soa_loopified_functions(source: Path, cfg_kwargs: Dict, scratch: Path,
+                            use_no_ran: bool = True,
+                            c_arith_mode: str = DEFAULT_C_ARITH_MODE,
+                            simd_isa: str = DEFAULT_SIMD_ISA,
+                            ) -> Optional[List[str]]:
+    """The functions SoA loopification rewrites in `source` under
+    `cfg_kwargs`, from the compiler's own --loopification-report (generated
+    C only, scalar counts on). None when the report cannot be produced."""
+    res = resolve_gibbon()
+    if res.path is None:
+        return None
+    scratch.mkdir(parents=True, exist_ok=True)
+    kwargs = dict(cfg_kwargs, store_scalar_field_counts=True)
+    cmd = build_gibbon_command(
+        source.resolve(), "soa", scratch / f"{source.stem}.loopify_report.c",
+        scratch / f"{source.stem}.loopify_report.exe", resolve_cc(),
+        gibbon_exe=str(res.path), use_no_ran=use_no_ran,
+        c_arith_mode=c_arith_mode, simd_isa=simd_isa, **kwargs)
+    cmd[cmd.index("--to-exe")] = "--toC"
+    at = cmd.index("--exefile")
+    del cmd[at:at + 2]
+    cmd.insert(1, "--loopification-report")
+    env = os.environ.copy()
+    env.setdefault("GIBBONDIR", str(REPO_ROOT))
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              cwd=str(REPO_ROOT), env=env, timeout=900)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    return parse_soa_loopified((proc.stdout or "") + (proc.stderr or ""))
+
+
+def build_family(program: str) -> List[str]:
+    """Every program sharing `program`'s timed build: its split family's
+    members, or the program alone."""
+    for prefix in BUILD_FAMILY_PREFIXES:
+        if program.startswith(prefix):
+            members = merge_group_members(prefix.rstrip("_") + ".hs", prefix,
+                                          list(DEFAULT_PROGRAMS))
+            return members or [program]
+    return [program]
+
+
+def pldi_unloopified_kwargs(cfg_kwargs: Dict,
+                            loopified: Optional[List[str]]) -> Dict:
+    """`cfg_kwargs` without scalar counts and selective buffer sharing when
+    SoA loopification rewrites nothing. The footers exist only to give
+    loopified traversals their trip counts, and buffer sharing only rewrites
+    loopified functions, though with nothing to share it still reshapes
+    every call site. Unknown (`None`) keeps both, since the compiler rejects
+    a loopified SoA traversal without counts."""
+    if loopified != []:
+        return cfg_kwargs
+    if not (cfg_kwargs.get("store_scalar_field_counts")
+            or cfg_kwargs.get("enable_selective_buffer_sharing")):
+        return cfg_kwargs
+    return dict(cfg_kwargs, store_scalar_field_counts=False,
+                defer_scalar_counts=False,
+                enable_selective_buffer_sharing=False)
+
+
+def scalar_count_mode(cfg_kwargs: Dict) -> Optional[str]:
+    if not cfg_kwargs.get("store_scalar_field_counts"):
+        return None
+    return "deferred" if cfg_kwargs.get("defer_scalar_counts") else "per-element"
 
 
 def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
@@ -4697,6 +5603,8 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                                    simd_isa: str = DEFAULT_SIMD_ISA,
                                    pin_cpu: Optional[int] = None,
                                  programs: Optional[List[str]] = None,
+                                 build_iterations: int = 9,
+                                 pass_rounds: int = 1,
                                  ) -> Dict[str, Dict[str, BenchmarkResult]]:
     """Compiles and runs every PLDI_MAP_CONFIGS variant for every curated
     program, using the same compile_one/run_exe/qualify_variant path as
@@ -4705,6 +5613,17 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
     to be the driver's real --iterations value (passed explicitly by the
     caller), not left at the 1-iteration default: this table's numbers are
     intended for the paper, not just a structural/correctness check.
+
+    A program's configurations are all COMPILED first and then run in
+    interleaved rounds (see run_rounds), rather than each being compiled and
+    run in turn. Every delta column subtracts one configuration of a program
+    from another, so what matters is that no configuration is systematically
+    measured before or after its partner. Interleaving is per program
+    because that is the only scope a delta spans.
+
+    Each configuration's construction phase is timed separately, iterated
+    `build_iterations` times (see measure_build_time); with the per-pass
+    medians it is what the synthesized end-to-end time is made of.
 
     Returns {program: {config_name: BenchmarkResult}}."""
     _validate_c_arith_mode(c_arith_mode)
@@ -4717,8 +5636,46 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
     source_cls_all = build_source_classification(programs_dir)
     program_list = programs if programs is not None else DEFAULT_PROGRAMS
     results: Dict[str, Dict[str, BenchmarkResult]] = {}
+    # Shared across programs so a split family's members reuse the one
+    # compile and the one measurement of the build they have in common.
+    build_cache: Dict[Tuple, Tuple] = {}
+    for warning in build_family_disagreements(programs_dir, program_list):
+        print("  Build-time warning: %s" % warning)
+    # {(family owner, auto_loopification): SoA-loopified functions}. Decided
+    # per build family, so a split family's members and its one shared build
+    # all compile with the same scalar-count flags.
+    loopified_cache: Dict[Tuple[str, bool], Optional[List[str]]] = {}
+
+    def family_loopified(program: str, cfg_kwargs: Dict) -> Optional[List[str]]:
+        auto = cfg_kwargs.get("auto_loopification", True)
+        key = (build_timing_program(program), auto)
+        if key not in loopified_cache:
+            found: Optional[List[str]] = []
+            for member in build_family(program):
+                src = programs_dir / "SOA" / member
+                if not src.exists():
+                    continue
+                one = soa_loopified_functions(
+                    src, cfg_kwargs, out_dir / "loopify_report",
+                    use_no_ran=program_uses_no_ran(member),
+                    c_arith_mode=c_arith_mode, simd_isa=simd_isa)
+                if one is None:
+                    found = None
+                    break
+                found.extend("%s:%s" % (Path(member).stem, f) for f in one)
+            loopified_cache[key] = found
+            print("  SoA loopification in %s: %s" % (
+                Path(key[0]).stem,
+                "unknown (report failed); scalar counts and buffer sharing kept"
+                if found is None
+                else ", ".join(found) if found
+                else "none; scalar counts and buffer sharing off"))
+        return loopified_cache[key]
+
     for program in program_list:
         results[program] = {}
+        jobs: List[Tuple[str, Path]] = []
+        pending: Dict[str, Dict] = {}
         for layout, configs in PLDI_MAP_CONFIGS.items():
             src_dir = "AOS" if layout == "aos" else "SOA"
             source = programs_dir / src_dir / program
@@ -4726,6 +5683,14 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                 res = BenchmarkResult(program, cfg_name)
                 res.arith_mode = c_arith_mode
                 res.use_no_ran = program_uses_no_ran(program)
+                if (layout == "soa" and source.exists()
+                        and cfg_kwargs.get("store_scalar_field_counts")):
+                    res.soa_loopified = family_loopified(program, cfg_kwargs)
+                    cfg_kwargs = pldi_unloopified_kwargs(cfg_kwargs,
+                                                          res.soa_loopified)
+                res.scalar_counts = scalar_count_mode(cfg_kwargs)
+                res.selective_buffer_sharing = bool(
+                    cfg_kwargs.get("enable_selective_buffer_sharing"))
                 if not source.exists():
                     res.compile_success = False
                     res.error_message = "source not found: %s" % source
@@ -4743,28 +5708,90 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                 res.compile_time = compile_time
                 exe = out_dir / f"{source.stem}.{cfg_name}.exe"
                 c_file = out_dir / f"{source.stem}.{cfg_name}.c"
-                if ok:
-                    run_ok, elapsed, out, err2, rc = run_exe(exe, iterations, use_iterate_flag=True, pin_cpu=pin_cpu)
-                    res.run_success = run_ok
-                    res.run_returncode = rc
-                    res.output = out
-                    res.exec_wall_time = elapsed
-                    if run_ok and out:
-                        res.passes = parse_passes(out)
-                    apply_source_classification(
-                        res, source_cls_all.get(program,
-                                                {"adt_fields": None, "adt_info": None,
-                                                 "pass_types": {}, "pass_uses": {}}))
-                    progress().advance()
-                    res.qualification = qualify_variant(
-                        program, cfg_name, source, ok, err, run_ok, err2, out,
-                        manifest=manifest, c_file=c_file if c_file.exists() else None,
-                        expect_vectorization=cfg_kwargs.get("enable_vectorization", False))
-                else:
+                if not ok:
+                    # Keep the compiler's own message on the result, not just
+                    # in the qualification: the JSON's `error' field is where
+                    # a reader looks to find out WHY a cell is blank, and a
+                    # failed compile that records nothing is undiagnosable
+                    # after the run.
+                    res.error_message = err
                     res.qualification = qualify_variant(
                         program, cfg_name, source, False, err, False, None, None,
                         manifest=manifest)
-                results[program][cfg_name] = res
+                    results[program][cfg_name] = res
+                    continue
+                pending[cfg_name] = dict(res=res, source=source, c_file=c_file,
+                                         err=err, kwargs=cfg_kwargs,
+                                         layout=layout)
+                jobs.append((cfg_name, exe))
+
+        collected = run_rounds(jobs, iterations, pass_rounds, pin_cpu=pin_cpu)
+
+        for cfg_name, _exe in jobs:
+            info = pending[cfg_name]
+            res = info["res"]
+            runs = collected[cfg_name]
+            # Correctness and the recorded output come from the first
+            # successful round -- every round runs the same binary on the
+            # same input, so the oracle check does not need repeating, and
+            # keeping one run's stdout keeps the recorded output a real one.
+            successful = [r for r in runs if r[0]]
+            run_ok, elapsed, out, err2, rc = successful[0] if successful else runs[0]
+            res.run_success = run_ok
+            res.run_returncode = rc
+            res.output = out
+            exec_times = [e for (ok2, e, _o, _e2, _rc) in runs if ok2 and e]
+            if exec_times:
+                # Both, and normalized the same way the main campaign
+                # normalizes them: the whole-program figures read
+                # exec_time_per_iter, and left at its 0.0 default it
+                # reads as "not measured" and the program is dropped.
+                res.exec_wall_time = statistics.median(exec_times)
+                res.exec_time_per_iter = (
+                    (res.exec_wall_time / iterations) if iterations > 0
+                    else res.exec_wall_time)
+            parsed = [parse_passes(o) for (ok2, _e, o, _e2, _rc) in runs if ok2 and o]
+            if parsed:
+                ordered: List[str] = []
+                for one in parsed:
+                    for name in one:
+                        if name not in ordered:
+                            ordered.append(name)
+                res.passes = {name: aggregate_rounds([one.get(name) for one in parsed])
+                              for name in ordered}
+            apply_source_classification(
+                res, source_cls_all.get(program,
+                                        {"adt_fields": None, "adt_info": None,
+                                         "pass_types": {}, "pass_uses": {}}))
+            progress().advance()
+            res.qualification = qualify_variant(
+                program, cfg_name, info["source"], True, info["err"], run_ok, err2, out,
+                manifest=manifest,
+                c_file=info["c_file"] if info["c_file"].exists() else None,
+                expect_vectorization=info["kwargs"].get("enable_vectorization", False))
+            results[program][cfg_name] = res
+
+        # The build is timed only once every pass measurement for this
+        # program is finished. Timing it in the loop above would put a
+        # compile alongside a timed run, which is the contamination the
+        # compile-everything-first discipline exists to avoid.
+        for cfg_name, _exe in jobs:
+            info = pending[cfg_name]
+            res = info["res"]
+            progress().item("%s.%s" % (Path(program).stem, cfg_name),
+                            "timing build")
+            timed, total, build_err = measure_build_time(
+                program, info["layout"], cfg_name, info["kwargs"],
+                programs_dir, out_dir, force, build_iterations,
+                c_arith_mode=c_arith_mode, simd_isa=simd_isa,
+                pin_cpu=pin_cpu, cache=build_cache)
+            res.build_passes = timed
+            res.build_time = total
+            res.build_error = build_err
+            progress().advance()
+            if build_err:
+                print("  Build-time warning: %s/%s: %s"
+                      % (program, cfg_name, build_err))
     return results
 
 
@@ -4915,16 +5942,22 @@ def _table_pldi_legend(f) -> None:
         "($r$ recursive traversal, $i$ immutable cursors, $m$ mutable cursors, "
         "$\\ell$ loopified, $b$ selective buffer sharing, "
         "$v$ Gibbon SIMD vectorization). "
-        "Superscripts name the C-compiler knob that differs from that column's "
-        "default: $+av$ leaves C auto-vectorization enabled (loopified columns "
-        "disable it), $\\neg t$ disables C tail-call optimization. "
-        "The first three configurations of each layout carry the fold passes; "
+        "Superscripts name a C-compiler knob that DIFFERS from the "
+        "default, always with a leading minus: $-t$ compiles with C "
+        "tail-call optimization disabled and $-av$ with the C "
+        "auto-vectorizer disabled. The auto-vectorizer is ON in every "
+        "column that does not say otherwise, because that is what an "
+        "ordinary build does, so no comparison between two columns can "
+        "confuse it with the optimization being measured. Columns marked "
+        "$-av$ appear only when the auto-vectorizer ablations were "
+        "requested, and are there to be read against their unmarked "
+        "counterpart. "        "The recursive configurations of each layout carry the fold passes; "
         "map tables additionally report the loopified configurations.}\n")
     f.write("\\label{tab:pldi-legend}\n\\small\\gibbonnumfont\n")
     # p{} rather than l on the description: spelling every configuration
     # out in full (no SBS/TCO shorthand) makes the longest entries wider
     # than the text block, so that column has to wrap.
-    f.write("\\begin{tabular}{c p{0.72\\linewidth}}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{c p{0.72\\linewidth}}\n\\toprule\n")
     f.write("\\textbf{Symbol} & \\textbf{Configuration} \\\\\n\\midrule\n")
     for i, layout in enumerate(("aos", "soa")):
         if i:
@@ -4932,7 +5965,7 @@ def _table_pldi_legend(f) -> None:
         for key in PLDI_MAP_CONFIGS[layout]:
             f.write("%s & %s \\\\\n" % (PLDI_COL_SYMBOLS.get(key, _tex_escape(key)),
                                         _tex_escape(PLDI_ROW_LABELS.get(key, key))))
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 
 def _pldi_best_of_layout_speedup(
@@ -5126,15 +6159,11 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
     # they still fit the text width without a \resizebox rescaling the font
     # out of step with the rest of the paper.
     f.write(f"\\label{{tab:pldi-{kind}-{prog_stem}}}\n")
-    if len(keys) > 8:
-        f.write("\\footnotesize\\gibbonnumfont\n"
-                "\\setlength{\\tabcolsep}{4pt}\n")
-    else:
-        f.write("\\small\\gibbonnumfont\n")
+    f.write(_table_size_directive(len(keys) + 4))
     # One extra column beyond the configuration groups: the best-of-layout
     # speedup (see _pldi_best_of_layout_speedup). It belongs to neither
     # group, so it gets no \cmidrule and its label sits on the symbol row.
-    f.write("\\begin{tabular}{l c c" + " r" * len(keys) + " r}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l c c" + " r" * len(keys) + " r}\n\\toprule\n")
     f.write("\\textbf{Pass} & &"
             + "".join(" & \\multicolumn{%d}{c}{\\textbf{%s}}" % (len(g), lbl)
                       for lbl, g in col_groups)
@@ -5168,7 +6197,7 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
         f.write(_tex_escape(pname) + " & " + uses_s + " & " + dead_s
                 + "".join(" & %s" % c for c in cells)
                 + " & " + spd + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 
 def _table_pldi_fold(f, program: str, results_for_program: Dict[str, BenchmarkResult]) -> None:
@@ -5260,7 +6289,7 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
               "here is what enabling it costs, and a speedup below $1{\\times}$ in "
               "that row is the expected result rather than a defect.}\n")
     f.write("\\label{tab:arith_intensity}\n\\small\n")
-    f.write("\\resizebox{\\textwidth}{!}{%\n")
+    f.write("\\gibbonfit{%\n")
     f.write("\\begin{tabular}{lccccccccccccc}\n\\toprule\n")
     f.write("Width & Ops/elem & Bytes ld/elem & Bytes st/elem & Ops/byte & "
             "AoS raw & SoA raw & SoA loopify & SoA loopify shared & SoA SIMD & "
@@ -5953,8 +6982,11 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                          if r is not None and r.use_no_ran is not None}, key=str)
     with open(out_file, "w") as f:
         f.write("% Gibbon Benchmark Suite v3.1 – auto-generated\n")
-        f.write("% Requires: \\usepackage{booktabs}, \\usepackage{graphicx} and "
-                "\\usepackage{xcolor} in preamble\n")
+        # amsmath is needed for \\text inside the delta-table captions; it was
+        # missing from this list, so a document that did not already load it
+        # failed on an undefined control sequence.
+        f.write("% Requires: \\usepackage{booktabs}, \\usepackage{graphicx}, "
+                "\\usepackage{amsmath} and \\usepackage{xcolor} in preamble\n")
         # Defined here rather than assumed from a palette option, so the
         # generated file \input{}s into any document that loads xcolor.
         f.write("\\providecommand{\\gibbondefinecolors}{}\n")
@@ -5967,6 +6999,27 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
         # \small stays \small-ish, \footnotesize stays \footnotesize-ish,
         # each just half a point larger, and the tables keep their relative
         # sizing rather than all collapsing to one size.
+        # Tables are \input into a document whose text width this generator
+        # cannot know, and the widest of them carry 20+ columns. Rather than
+        # guess, each tabular is measured by LaTeX at the point of use and
+        # scaled down only if it would not otherwise fit -- so a table can
+        # never run into the margin, and one that already fits is left at
+        # the font size the surrounding text uses. The \typeout records any
+        # table that had to be scaled, so a table squeezed to the point of
+        # illegibility is visible in the log rather than only on the page.
+        f.write("\\makeatletter\n"
+                "\\@ifundefined{gibbon@fitbox}{\\newsavebox{\\gibbon@fitbox}}{}\n"
+                "\\providecommand{\\gibbonfit}[1]{#1}\n"
+                "\\renewcommand{\\gibbonfit}[1]{%%\n"
+                "  \\sbox{\\gibbon@fitbox}{#1}%%\n"
+                "  \\ifdim\\wd\\gibbon@fitbox>\\linewidth\n"
+                "    \\typeout{GIBBON-TABLE-SCALED: \\the\\wd\\gibbon@fitbox"
+                "\\space into \\the\\linewidth}%%\n"
+                "    \\resizebox{\\linewidth}{!}{\\usebox{\\gibbon@fitbox}}%%\n"
+                "  \\else\n"
+                "    \\usebox{\\gibbon@fitbox}%%\n"
+                "  \\fi}\n"
+                "\\makeatother\n\n")
         f.write("\\makeatletter\n"
                 "\\providecommand{\\gibbonnumfont}{}\n"
                 "\\renewcommand{\\gibbonnumfont}{%%\n"
@@ -5984,9 +7037,9 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                        include_build_pass=include_build_pass,
                        pldi_variant_results=pldi_variant_results)
         if pldi_variant_results:
-            # The same table against STOCK Gibbon on the AoS side: what the
-            # SoA layout plus its optimizations buy over the compiler as it
-            # ships, rather than over AoS's own best configuration.
+            # The same table against VANILLA Gibbon on the AoS side: what
+            # the SoA layout plus its optimizations buy over the unoptimized
+            # compiler, rather than over AoS's own best configuration.
             _table_summary(f, all_results, all_variants_results,
                            include_build_pass=include_build_pass,
                            pldi_variant_results=pldi_variant_results,
@@ -5994,12 +7047,19 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                            label="tab:summary-vs-vanilla",
                            lead_in=" This table repeats "
                                    "Table~\\ref{tab:summary} with vanilla "
-                                   "Gibbon on the AoS side -- the compiler as "
-                                   "it ships, with no optimization enabled -- "
+                                   "Gibbon on the AoS side -- no optimization "
+                                   "enabled, and, as in every column not "
+                                   "marked $+av$, the C auto-vectorizer off -- "
                                    "so the speedups are what the SoA layout "
-                                   "and its optimizations buy over the stock "
-                                   "baseline rather than over AoS's own best "
-                                   "configuration.")
+                                   "and its optimizations buy over the "
+                                   "unoptimized baseline rather than over "
+                                   "AoS's own best configuration. The C "
+                                   "auto-vectorizer is held off on both sides "
+                                   "of every comparison except the $+av$ "
+                                   "columns, which is what keeps it from "
+                                   "being credited to whichever Gibbon "
+                                   "optimization happens to be measured "
+                                   "beside it.")
         _table_papi_summary(f, all_results)
         if all_variants_results and show_cursor_table:
             _table_cursor_comparison(f, all_variants_results)
@@ -6141,13 +7201,16 @@ def _merge_octree_results(all_results: List[Tuple]) -> Tuple[Optional[Tuple[Benc
 # a fold is loopifiable, so the AoS fold column is in effect the recursive
 # mutable result -- which is why the per-program fold tables do not bother
 # showing these columns, even though the runs time every pass.
-SUMMARY_LOOPIFIED_AOS = "aos_loop_gccvec_on"
-# Stock Gibbon: AoS with immutable cursors and no optimization at all. The
-# second summary table contrasts SoA's best against THIS rather than
+SUMMARY_LOOPIFIED_AOS = "aos_loop"
+# Vanilla Gibbon: AoS with immutable cursors and no optimization at all.
+# The second summary table contrasts SoA's best against THIS rather than
 # against AoS's best, which is the "what does the layout buy over the
-# compiler as it ships" comparison.
+# unoptimized compiler" comparison. Like every column that does not carry
+# +av it compiles with the C auto-vectorizer off, so that the vectorizer is
+# a variable exactly one column moves; the +av columns are where its
+# contribution is reported.
 SUMMARY_VANILLA_AOS = "aos_imm"
-SUMMARY_LOOPIFIED_SOA = "soa_loop_gccvec_on_sbs_on_gibvec_on"
+SUMMARY_LOOPIFIED_SOA = "soa_loop_sbs_gibvec"
 
 
 def _summary_loopified_total(
@@ -6278,7 +7341,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         _A = PLDI_COL_SYMBOLS.get(aos_config, _tex_escape(aos_config))
         _S = PLDI_COL_SYMBOLS.get(soa_config, _tex_escape(soa_config))
         group_sub = f" & {_A} (s) & {_S} (s) & {_A}/{_S}"
-        f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
+        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
             " & \\multicolumn{3}{c}{\\textbf{End-to-end}}"
@@ -6288,7 +7351,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         f.write("\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-12}\n")
         f.write(" & fields & bufs" + group_sub * 3 + " \\\\\n")
     elif include_aos_imm:
-        f.write("\\begin{tabular}{l c c r r r r r r r r r r r r r r r}\n\\toprule\n")
+        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
             " & \\multicolumn{5}{c}{\\textbf{End-to-end}}"
@@ -6303,7 +7366,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
             " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm \\\\\n"
         )
     else:
-        f.write("\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
+        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
             " & \\multicolumn{3}{c}{\\textbf{End-to-end}}"
@@ -6417,7 +7480,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 f" & {mspd_s} \\\\\n"
             )
 
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
 
 
 def _collect_papi_counter_names(all_results: List[Tuple]) -> List[str]:
@@ -6483,7 +7546,7 @@ def _table_papi_summary(f, all_results):
         "${>}1{\\times}$ means SoA reports fewer events.}}\n"
     )
     f.write("\\label{tab:papi_summary_speedup}\n\\small\n")
-    f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
     hdr = "\\textbf{Program}"
     for c in short:
         hdr += f" & \\textbf{{{_tex_escape(c)}}}"
@@ -6512,7 +7575,7 @@ def _table_papi_summary(f, all_results):
         gm_row += f" & {(_spd_cell(statistics.geometric_mean(vals)) if vals else '--')}"
     f.write("\\midrule\n")
     f.write(gm_row + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
 
     # ------------------------------------------------------------------
     # Table B: raw counter totals (AoS/SoA in one cell)
@@ -6524,7 +7587,7 @@ def _table_papi_summary(f, all_results):
         "Each entry is (Am/Sm), where Am and Sm are sums of per-pass median counter values.}}\n"
     )
     f.write("\\label{tab:papi_summary_values}\n\\small\n")
-    f.write("\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l" + (" r" * len(counters)) + "}\n\\toprule\n")
     hdr = "\\textbf{Program}"
     for c in short:
         hdr += f" & \\textbf{{{_tex_escape(c)}}}"
@@ -6552,7 +7615,7 @@ def _table_papi_summary(f, all_results):
                 row += f" & {a_s}/{s_s}"
         f.write(row + " \\\\\n")
 
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
 
 
 def _table_per_program(f, all_results, all_variants_results=None):
@@ -6784,14 +7847,14 @@ def _table_per_program(f, all_results, all_variants_results=None):
             if has_uses:
                 if include_soa_imm:
                     if show_ghc:
-                        f.write("\\begin{tabular}{l c c r r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                     else:
-                        f.write("\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
                     if show_ghc:
-                        f.write("\\begin{tabular}{l c c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                     else:
-                        f.write("\\begin{tabular}{l c c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
@@ -6809,14 +7872,14 @@ def _table_per_program(f, all_results, all_variants_results=None):
             else:
                 if include_soa_imm:
                     if show_ghc:
-                        f.write("\\begin{tabular}{l c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                     else:
-                        f.write("\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
                     if show_ghc:
-                        f.write("\\begin{tabular}{l c r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                     else:
-                        f.write("\\begin{tabular}{l c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                        f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Am} & \\textbf{Ai}"
@@ -6834,9 +7897,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
             # Original 2-variant table
             if has_uses:
                 if show_ghc:
-                    f.write("\\begin{tabular}{l c c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
-                    f.write("\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
+                    f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{Uses} & \\textbf{Dead\\%}"
@@ -6846,9 +7909,9 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 )
             else:
                 if show_ghc:
-                    f.write("\\begin{tabular}{l c r r r r r r" + papi_colspec + "}\n\\toprule\n")
+                    f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r r r r" + papi_colspec + "}\n\\toprule\n")
                 else:
-                    f.write("\\begin{tabular}{l c r r r" + papi_colspec + "}\n\\toprule\n")
+                    f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r" + papi_colspec + "}\n\\toprule\n")
                 f.write(
                     "\\textbf{Pass} & \\textbf{T}"
                     " & \\textbf{AoS med$\\pm$err} & \\textbf{SoA med$\\pm$err} & \\textbf{Speedup}"
@@ -7372,7 +8435,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         f"{ghc_gm_suffix}"
                         f"{papi_empty_suffix} \\\\\n")
 
-        f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+        f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
         _table_per_program_papi_one_pair(
             f, prog, pdisplay, passes,
             aos, soa, papi_counter_names_all,
@@ -7409,7 +8472,7 @@ def _table_per_program_papi_one_pair(
     )
     f.write(f"\\label{{tab:{prog}_papi_{label_suffix}}}\n\\small\n")
     f.write("\\setlength{\\tabcolsep}{4pt}\n")
-    f.write("\\begin{tabular}{l c" + (" r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l c" + (" r" * len(counters)) + "}\n\\toprule\n")
     hdr = "\\textbf{Pass} & \\textbf{T}"
     for c in counters:
         hdr += f" & \\textbf{{{_tex_escape(_short_counter_label(c))} ({_tex_escape(pair_label)})}}"
@@ -7472,7 +8535,7 @@ def _table_per_program_papi_one_pair(
         st = _papi_total_for_result(right, c)
         total_row += f" & {_fmt_counter(at)}/{_fmt_counter(st)}"
     f.write(total_row + " \\\\\n")
-    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
 
 
 def _table_per_program_ghc(f, all_results, all_variants_results):
@@ -7573,7 +8636,7 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
             "$\\text{GHC}/\\text{Am}$ and $\\text{GHC}/\\text{Sm}$ are speedups.}}\n"
         )
         f.write(f"\\label{{tab:{prog}_ghc}}\n\\small\n")
-        f.write("\\begin{tabular}{l c r r r}\n\\toprule\n")
+        f.write("\\gibbonfit{%\n\\begin{tabular}{l c r r r}\n\\toprule\n")
         f.write("\\textbf{Pass} & \\textbf{T} & \\textbf{GHC} & \\textbf{GHC/Am} & \\textbf{GHC/Sm} \\\\\n")
         f.write("\\midrule\n")
 
@@ -7641,7 +8704,7 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
             f" & {(_spd_cell(gm_g_over_a) if gm_g_over_a else '--')}"
             f" & {(_spd_cell(gm_g_over_s) if gm_g_over_s else '--')} \\\\\n"
         )
-        f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+        f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
 
 
 def compile_latex_preview(tex_file: Path, out_dir: Path):
@@ -7703,6 +8766,20 @@ def compile_latex_preview(tex_file: Path, out_dir: Path):
             if undefined:
                 print("  ⚠ still-undefined LaTeX references (will render as '??'): "
                       + ", ".join(undefined))
+            # A table too wide for the page is scaled to fit rather than
+            # allowed to run into the margin, but a heavily scaled table is
+            # set in type the rest of the paper does not use, so it is worth
+            # knowing about at generation time rather than at proof time.
+            # The preview page is deliberately wide, so anything reported
+            # here is very wide indeed.
+            scaled = re.findall(r"GIBBON-TABLE-SCALED: ([\d.]+)pt into ([\d.]+)pt",
+                                log.read_text(errors="replace"))
+            if scaled:
+                worst = min(float(have) / float(want) for want, have in scaled)
+                print("  ⚠ %d table(s) were scaled down to fit the page "
+                      "(worst %.0f%% of natural size). They will fit wherever "
+                      "they are \\input, but consider fewer columns if that "
+                      "is too small to read." % (len(scaled), worst * 100))
     except FileNotFoundError:
         print("  Note: pdflatex not found – skipping PDF preview")
     except Exception as e:
@@ -7864,6 +8941,9 @@ def _ser_result(r: Optional[BenchmarkResult]) -> Optional[Dict]:
         "verified":         verified,
         "arith_mode":       getattr(r, "arith_mode", None),
         "use_no_ran":       getattr(r, "use_no_ran", None),
+        "scalar_counts":    getattr(r, "scalar_counts", None),
+        "soa_loopified":    getattr(r, "soa_loopified", None),
+        "selective_buffer_sharing": getattr(r, "selective_buffer_sharing", False),
         "qualification":    r.qualification.as_dict() if r.qualification else None,
         "adt_fields":       getattr(r, "adt_fields", None),
         "adt_type":         adt_info["type_name"] if adt_info else None,
@@ -7879,9 +8959,31 @@ def _ser_result(r: Optional[BenchmarkResult]) -> Optional[Dict]:
         rec["passes"] = {k: {kk: vv for kk, vv in v.items() if kk != "iter_times"}
                          for k, v in r.passes.items()}
         rec["passes_omitted_reason"] = None
+        # Whole-executable time, kept alongside the per-pass timings because
+        # it is not derivable from them: the pass sum omits everything the
+        # driver does not time, so an end-to-end figure rebuilt from this
+        # report would otherwise have to approximate it.
+        rec["exec_wall_time"] = getattr(r, "exec_wall_time", None)
+        rec["exec_time_per_iter"] = getattr(r, "exec_time_per_iter", None)
+        # The construction phase, and with it the end-to-end time the
+        # figures report: build plus the sum of the per-pass medians.
+        rec["build_passes"] = {
+            k: {kk: vv for kk, vv in v.items() if kk != "iter_times"}
+            for k, v in (getattr(r, "build_passes", None) or {}).items()}
+        rec["build_time"] = getattr(r, "build_time", None)
+        rec["build_error"] = getattr(r, "build_error", None)
+        rec["end_to_end_time"] = (
+            (rec["build_time"] + (total_pass_time(r) or 0.0))
+            if rec["build_time"] else None)
     else:
         rec["passes"] = None
         rec["passes_omitted_reason"] = prov.rejection_reason(r)
+        rec["exec_wall_time"] = None
+        rec["exec_time_per_iter"] = None
+        rec["build_passes"] = None
+        rec["build_time"] = None
+        rec["build_error"] = getattr(r, "build_error", None)
+        rec["end_to_end_time"] = None
     return rec
 
 
@@ -8079,6 +9181,401 @@ def _save(fig, stem: Path):
     fig.savefig(stem.with_suffix(".pdf"))
     fig.savefig(stem.with_suffix(".png"))
     plt.close(fig)
+# ---------------------------------------------------------------------------
+# Per-optimization figures: what each stage of the pipeline contributed, for
+# every program.
+#
+# Each program is a row and each optimization a column, with the cell the
+# speedup over Vanilla Gibbon once that optimization and every one to its
+# left are on. A heatmap rather than a stacked
+# bar because the question these numbers answer is "which optimization helps
+# which program", which means reading one optimization DOWN a column across
+# the whole suite -- something a stacked bar makes you do by hunting for the
+# same colour in bar after bar. A regression is then the one off-colour cell
+# on the page rather than a shape the chart has to invent a way to draw.
+#
+# The stages telescope: each starts where the previous ended, so a cell
+# divided by the one to its left is what that optimization alone bought, and
+# the last stage equals the total. That is why the chain switches to the
+# vectorizer-off configurations wherever they exist -- measuring Gibbon's
+# SIMD vectorization on top of gcc's reports what is left after the backend
+# has already vectorized the loop, which is nothing (geomean 0.993x against
+# 1.823x for the same optimization measured without it).
+PLDI_STAGE_REF = "aos_imm"
+
+# The compact chain: one column per optimization the paper is about. Vanilla
+# Gibbon is an ordinary build; every later column has the C compiler's
+# auto-vectorizer off, so each Gibbon optimization is measured in isolation
+# from it, and the first column also carries the switch. The tail-call and
+# auto-vectorizer steps appear on their own only in the extended chain.
+PLDI_COMPACT_FOLD_STAGES = [("Mutable cursors", "aos_imm", "aos_mut"),
+                            ("SoA layout", "aos_mut", "soa_mut")]
+PLDI_COMPACT_MAP_STAGES = PLDI_COMPACT_FOLD_STAGES + [
+    ("Loopification", "soa_mut", "soa_loop"),
+    ("Buffer sharing", "soa_loop", "soa_loop_sbs"),
+    ("Gibbon SIMD", "soa_loop_sbs", "soa_loop_sbs_gibvec")]
+
+
+def _pldi_compact_isolated(kind: str, available: set) -> bool:
+    """Whether every configuration of the compact chain after Vanilla has
+    its -av twin."""
+    stages = PLDI_COMPACT_FOLD_STAGES if kind == "fold" else PLDI_COMPACT_MAP_STAGES
+    return all(av_variant_name(target) in available
+               for _label, _source, target in stages)
+
+
+# (label, from, to). Built at render time because the chain depends on which
+# --av-variants configurations exist.
+def _pldi_stage_chain(kind: str,
+                      available: Optional[set] = None,
+                      extended: bool = False) -> List[Tuple[str, str, str]]:
+    """The chain for one figure: the compact chain, or with `extended` the
+    one that also separates C tail calls and the C auto-vectorizer.
+
+    The compact chain uses the -av configurations when all of them are
+    present, and the default ones otherwise.
+
+    Every step changes exactly ONE thing, and each starts where the previous
+    ended, so a row's cells multiply to its total and each cell is
+    attributable to a single knob. Keyed off the configurations PRESENT IN
+    THE RESULTS, not off the registry: a report is rendered from
+    measurements, and those may come from a run configured differently from
+    the process drawing them."""
+    if available is None:
+        available = {cfg for layout in PLDI_MAP_CONFIGS.values() for cfg in layout}
+
+    if not extended:
+        stages = PLDI_COMPACT_FOLD_STAGES if kind == "fold" else PLDI_COMPACT_MAP_STAGES
+        if not _pldi_compact_isolated(kind, available):
+            return list(stages)
+        return [(label,
+                 source if source == PLDI_STAGE_REF else av_variant_name(source),
+                 av_variant_name(target))
+                for label, source, target in stages]
+
+    # The opening is the same in every figure: tail calls come off first so
+    # that mutable cursors and the layout are each measured on their own.
+    # Going straight to A_rm would change cursors and tail calls together --
+    # and mutable cursors are precisely what put the traversal in tail
+    # position, so that column would collect everything the tail-call
+    # optimization then does: on Compiler's map passes it reads 2.618x for a
+    # step that is 1.136x of cursors and 2.271x of tail calls.
+    opening = [("C tail calls off", PLDI_STAGE_REF, "aos_imm_notco"),
+               ("Mutable cursors", "aos_imm_notco", "aos_mut_notco"),
+               ("SoA layout", "aos_mut_notco", "soa_mut_notco"),
+               ("C tail calls on", "soa_mut_notco", "soa_mut")]
+
+    # A fold stops there: nothing in a fold is loopifiable, so the fold
+    # chain is exactly the prefix the map chain continues from.
+    if kind == "fold":
+        return opening
+
+    # Maps and whole-program. The walk is monotone apart from the one step
+    # that deliberately switches the backend off: AoS loopification is not
+    # on the path, because reaching AoS's best and then dropping back to SoA
+    # recursive would put a large slowdown in the middle of the chain. What
+    # AoS loopification achieves is reported by the delta tables' own
+    # $\Delta^{A}_{\ell}$ column.
+    stages = list(opening)
+    if av_variant_name("soa_loop") not in available:
+        return stages + [
+            ("Loopification", "soa_mut", "soa_loop"),
+            ("Buffer sharing", "soa_loop", "soa_loop_sbs"),
+            ("Gibbon SIMD", "soa_loop_sbs", "soa_loop_sbs_gibvec")]
+    # Turning the backend off is its own step rather than being folded into
+    # loopification. It is not small enough to hide: on
+    # ArithmeticIntensityInt16 the auto-vectorizer is worth 2.7x on the
+    # recursive form, so a loopification cell that absorbed it would read
+    # 0.40x where loopification alone is 1.07x.
+    twin = av_variant_name
+    return stages + [
+        ("C auto-vec. off", "soa_mut", twin("soa_mut")),
+        ("Loopification", twin("soa_mut"), twin("soa_loop")),
+        ("Buffer sharing", twin("soa_loop"), twin("soa_loop_sbs")),
+        ("Gibbon SIMD", twin("soa_loop_sbs"), twin("soa_loop_sbs_gibvec")),
+        ("C auto-vec. on", twin("soa_loop_sbs_gibvec"), "soa_loop_sbs_gibvec"),
+    ]
+
+
+
+# Diverging about 1.0, two hues with a neutral midpoint: a slowdown is the
+# only warm cell on the page. RdBu separates its two arms by dE 12.2 under
+# protanopia and 19.8 under normal vision, so "faster" and "slower" stay
+# distinguishable without relying on the numbers.
+PLDI_STAGE_CMAP = "RdBu"
+
+# Shading is log2 of the cell, clipped separately on each arm: the blue arm
+# saturates at 32x (the cumulative speedups reach about 20x), the red arm at
+# 0.5x. Each arm's position is then raised to PLDI_STAGE_COLOR_GAMMA, which
+# spends more of the ramp near 1x: a 0.976x dip reads pink rather than
+# white, 1.3x and 3.4x stay apart, and 10x and 20x remain distinguishable.
+# Cells beyond an arm's clip are outlined, since their shade has stopped
+# tracking the value; every cell carries its own number.
+PLDI_STAGE_BLUE_CLIP = 5.0    # log2 -> 32x
+PLDI_STAGE_RED_CLIP = 1.0     # log2 -> 0.5x
+PLDI_STAGE_COLOR_GAMMA = 0.5
+# A cell whose displayed value is below its left neighbour's: that step
+# made the program slower, even where the cell is still above Vanilla.
+PLDI_STAGE_DIP_MARK = "\u25bc"
+# The auto-vectorizer-on corner of a split cell, in cell units.
+PLDI_STAGE_CORNER_W = 0.30
+PLDI_STAGE_CORNER_H = 0.55
+PLDI_STAGE_TOTAL_LABEL = "Total"
+
+
+def pldi_stage_shade(value: float) -> Tuple[float, bool]:
+    """(position on the diverging ramp in [-1, 1], whether it is clipped)."""
+    v = math.log2(value)
+    limit = PLDI_STAGE_BLUE_CLIP if v >= 0 else PLDI_STAGE_RED_CLIP
+    frac = abs(v) / limit
+    return (math.copysign(min(frac, 1.0) ** PLDI_STAGE_COLOR_GAMMA, v),
+            frac > 1.0)
+
+
+def pldi_stage_dips(stages: List[float]) -> List[bool]:
+    """Which stages read lower than the one to their left, compared as
+    displayed (three significant digits)."""
+    shown = [float("%.3g" % v) for v in stages]
+    return [False] + [b < a for a, b in zip(shown, shown[1:])]
+
+def _pldi_sum_passes(results_for_program: Dict[str, BenchmarkResult],
+                     cfg: str, pass_type: str) -> Optional[float]:
+    """Total time of one configuration's passes of the given type.
+
+    Read through `_pldi_cell`, so a merged family's per-pass origin and the
+    verification check are applied exactly as the tables apply them. Returns
+    None when ANY pass of that type is missing from this configuration --
+    a partial sum would silently compare different amounts of work."""
+    names = _pldi_pass_names(results_for_program, pass_type)
+    if not names:
+        return None
+    total = 0.0
+    for pname in names:
+        _text, value = _pldi_cell(results_for_program.get(cfg), pname)
+        if value is None:
+            return None
+        total += value
+    return total
+
+
+def _pldi_end_to_end_time(results_for_program: Dict[str, BenchmarkResult],
+                          cfg: str) -> Optional[float]:
+    """One configuration's end-to-end time: its construction phase plus every
+    timed pass it ran.
+
+    Build time is part of it -- a layout that builds a structure faster has
+    earned that, and a sum of passes alone would hide it. It is NOT the
+    executable's wall time, which is a single sample per run and, for a
+    family split into one executable per pass, charges every member the
+    build the family shares. Returns None unless both terms are present, so
+    a row is dropped rather than reporting a partial total."""
+    res = results_for_program.get(cfg)
+    if res is None or not prov.verified_result(res):
+        return None
+    build = getattr(res, "build_time", None)
+    if not build:
+        return None
+    passes = total_pass_time(res)
+    if not passes:
+        return None
+    return build + passes
+
+
+def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]],
+                     kind: str, extended: bool = False,
+                     ) -> Tuple[List[Dict], List[str], List[str]]:
+    """One row per program: each stage's cumulative speedup over Vanilla
+    Gibbon, and the total (equal to the last stage).
+
+    Returns (rows, stage labels, dropped). A program is dropped when any
+    link of the chain has no verified measurement -- a row with a hole in
+    it would have a total its own cells do not account for."""
+    available = {cfg for by_cfg in pldi_variant_results.values() for cfg in by_cfg}
+    stages = _pldi_stage_chain(kind, available, extended)
+    pass_type = "fold" if kind == "fold" else "map"
+
+    def timing(program: str, cfg: str) -> Optional[float]:
+        by_cfg = pldi_variant_results[program]
+        if kind == "endtoend":
+            return _pldi_end_to_end_time(by_cfg, cfg)
+        return _pldi_sum_passes(by_cfg, cfg, pass_type)
+
+    # The baseline is a column of its own rather than an unnamed starting
+    # point: the figure is a progression, and a reader should be able to see
+    # where it starts without inferring it from the first step's label.
+    anchor = stages[0][1]
+    stages = [("Vanilla Gibbon", anchor, anchor)] + stages
+
+    rows: List[Dict] = []
+    dropped: List[str] = []
+    for program in sorted(pldi_variant_results):
+        times = {}
+        for _label, source, target in stages:
+            for cfg in (source, target):
+                if cfg not in times:
+                    times[cfg] = timing(program, cfg)
+        if any(t is None or t <= 0 for t in times.values()):
+            dropped.append(program)
+            continue
+        reference = times[anchor]
+        factors = [reference / times[target]
+                   for _label, _source, target in stages]
+
+        # The same configuration with the C auto-vectorizer on, where a
+        # compact-chain stage is an -av twin; None where there is no twin or
+        # no timing. The extended chain has its own auto-vectorizer columns.
+        def av_on(cfg: str) -> Optional[float]:
+            if (extended or cfg == anchor
+                    or not cfg.endswith(AV_VARIANT_SUFFIX)):
+                return None
+            t = timing(program, cfg[:-len(AV_VARIANT_SUFFIX)])
+            return reference / t if t and t > 0 else None
+        av_on_factors = [av_on(target) for _label, _source, target in stages]
+        rows.append({"program": program.replace(".hs", ""),
+                     "factors": factors,
+                     "av_on": av_on_factors,
+                     "total_av_on": av_on_factors[-1],
+                     "total": times[stages[0][1]] / times[stages[-1][2]]})
+    rows.sort(key=lambda r: r["total"], reverse=True)
+    return rows, [label for label, _s, _t in stages], dropped
+
+
+def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
+                     title: str, extended: bool = False) -> Optional[List[str]]:
+    """One heatmap. Returns the dropped programs, or None when there was
+    nothing to draw."""
+    rows, labels, dropped = _pldi_stage_rows(pldi_variant_results, kind,
+                                             extended)
+    if not rows:
+        return None
+    import numpy as np
+    from matplotlib import patheffects
+
+    columns = labels + [PLDI_STAGE_TOTAL_LABEL]
+    values = np.array([r["factors"] + [r["total"]] for r in rows])
+    shade = [[pldi_stage_shade(v) for v in row] for row in values]
+    shaded = np.array([[pos for pos, _c in row] for row in shade])
+    saturated = np.array([[clipped for _p, clipped in row] for row in shade])
+    dips = [pldi_stage_dips(list(r["factors"])) + [False] for r in rows]
+    av_on = [list(r.get("av_on") or [None] * len(labels))
+             + [r.get("total_av_on")] for r in rows]
+    corners = any(v is not None for row in av_on for v in row)
+    # With a corner the main number sits a little above centre, leaving the
+    # lower right to the corner and its label.
+    text_dy = -0.13 if corners else 0.0
+    cmap = plt.get_cmap(PLDI_STAGE_CMAP)
+
+    fig, ax = plt.subplots(figsize=(1.15 * len(columns) + 3.2,
+                                    (0.42 if corners else 0.34) * len(rows)
+                                    + 2.0))
+    ax.imshow(shaded, cmap=PLDI_STAGE_CMAP, aspect="auto", vmin=-1.0, vmax=1.0)
+    ax.set_xticks(range(len(columns)))
+    ax.set_xticklabels(columns, rotation=30, ha="right", fontsize=8)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([r["program"] for r in rows], fontsize=7.5)
+    # The total is the row's headline (the last stage's value), ruled off so
+    # it does not read as one more stage.
+    ax.axvline(len(labels) - 0.5, color="black", linewidth=1.4)
+    for y in range(len(rows)):
+        for x in range(len(columns)):
+            value = values[y, x]
+            if saturated[y, x]:
+                # The colour has stopped tracking the value here; say so,
+                # rather than letting two very different cells read alike.
+                ax.add_patch(mpatches.Rectangle(
+                    (x - 0.5, y - 0.5), 1, 1, fill=False,
+                    edgecolor="black", linewidth=1.1, zorder=3))
+            ink = "white" if abs(shaded[y, x]) > 0.65 else "black"
+            ax.text(x, y + text_dy, ("%.3g" % value) + "×", ha="center",
+                    va="center", fontsize=7.0,
+                    fontweight="bold" if x == len(labels) else "normal",
+                    color=ink)
+            if av_on[y][x] is not None:
+                # The same configuration with the C auto-vectorizer on: a
+                # corner shaded on the cell's own scale, and its number.
+                pos, _clipped = pldi_stage_shade(av_on[y][x])
+                w, h = PLDI_STAGE_CORNER_W, PLDI_STAGE_CORNER_H
+                ax.add_patch(mpatches.Polygon(
+                    [(x + 0.5, y + 0.5), (x + 0.5, y + 0.5 - h),
+                     (x + 0.5 - w, y + 0.5)], closed=True,
+                    facecolor=cmap((pos + 1.0) / 2.0), edgecolor="white",
+                    linewidth=0.6, zorder=2))
+                ax.text(x + 0.5 - w - 0.02, y + 0.30,
+                        "av " + ("%.3g" % av_on[y][x]) + "×", ha="right",
+                        va="center", fontsize=5.6, color=ink, alpha=0.85,
+                        zorder=4)
+            if dips[y][x]:
+                ax.text(x - 0.40, y + text_dy, PLDI_STAGE_DIP_MARK, ha="left",
+                        va="center", fontsize=7.0, color="#d7191c", zorder=4,
+                        path_effects=[patheffects.withStroke(
+                            linewidth=1.6, foreground="white")])
+    ax.set_xticks(np.arange(-0.5, len(columns), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(rows), 1), minor=True)
+    ax.grid(which="minor", color="white", linewidth=0.8)
+    ax.tick_params(which="minor", length=0)
+    available = {cfg for by_cfg in pldi_variant_results.values() for cfg in by_cfg}
+    if extended:
+        backend = ""
+    elif _pldi_compact_isolated(kind, available):
+        backend = ("\nThe C compiler's auto-vectorizer is off in every column "
+                   "after Vanilla Gibbon, so each optimization is measured in "
+                   "isolation from it; the first column includes that switch.")
+    else:
+        backend = "\nThe C compiler's auto-vectorizer is on in every column."
+    if corners:
+        backend += ("\nThe lower-right corner is the same configuration with "
+                    "the auto-vectorizer on: shaded on the same scale, with its "
+                    "speedup over Vanilla Gibbon beside it (av).")
+    ax.set_title(
+        title + "\nVanilla Gibbon is AoS, recursive traversal, immutable "
+        "cursors. Each cell is the speedup over Vanilla Gibbon with that "
+        "optimization and every one to its left enabled." + backend +
+        "\nColour is log-scaled, saturating at %g× (blue) and %g× (red); an "
+        "outlined cell is beyond that. %s marks a cell below the one to its "
+        "left: that optimization slowed the program down."
+        % (2 ** PLDI_STAGE_BLUE_CLIP, 2 ** -PLDI_STAGE_RED_CLIP,
+           PLDI_STAGE_DIP_MARK),
+        fontsize=9, pad=12)
+    _save(fig, out)
+    return dropped
+
+
+def generate_pldi_stage_figures(
+        pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]],
+        out_dir: Path, extended: bool = False) -> None:
+    """Fold passes, map passes, end to end (build plus every timed pass);
+    the compact chain, or with `extended` the full one."""
+    # Merged here rather than by the caller, so the figures show a split
+    # family as the one program the tables show it as. The merge is
+    # idempotent, so passing data that is already merged is harmless.
+    pldi_variant_results = merge_pldi_program_groups(pldi_variant_results)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _pub_rc()
+    for kind, stem, title in (
+            ("fold", "pldi_stages_fold",
+             "Fold passes: speedup over Vanilla Gibbon, per program"),
+            ("map", "pldi_stages_map",
+             "Map passes: speedup over Vanilla Gibbon, per program"),
+            ("endtoend", "pldi_stages_endtoend",
+             "End to end (build + every timed pass): "
+             "speedup over Vanilla Gibbon, per program")):
+        dropped = _fig_pldi_stages(pldi_variant_results, out_dir / stem,
+                                   kind, title, extended)
+        if dropped is None:
+            print("  Skipping %s: no program has a complete chain." % stem)
+            continue
+        note = ("" if not dropped else
+                "  (%d without a complete chain: %s)"
+                % (len(dropped),
+                   ", ".join(p.replace(".hs", "") for p in dropped)))
+        print("  ✓ %s.*%s" % (stem, note))
+        available = {cfg for by_cfg in pldi_variant_results.values()
+                     for cfg in by_cfg}
+        if not extended and not _pldi_compact_isolated(kind, available):
+            print("    (C auto-vectorizer ON: its -av twins were not measured; "
+                  "run with --av-variants all to isolate the optimizations "
+                  "from it)")
+
 
 
 # ── Figure A: overall speedup — fold vs map ──────────────────────────────────
@@ -8720,6 +10217,88 @@ def build_parser() -> argparse.ArgumentParser:
                Every run prints the exact exe path and its mtime for verification.
         """),
     )
+    ap.add_argument("--quick-run", action="store_true",
+                    help="Run a small representative subset (%d programs: "
+                         "KDTree, Compiler, and the Add1Tree and "
+                         "ArithmeticIntensity families at 8, 16, 32 and 64 "
+                         "bits) instead of the full campaign, so a "
+                         "presentational change can be checked in minutes "
+                         "rather than hours. Narrows the campaign, the "
+                         "variant matrix and the figures alike, so the whole "
+                         "report is consistent. Iterations are unchanged, so "
+                         "the numbers are as trustworthy as any run's -- "
+                         "there are just fewer of them. The phases that "
+                         "compile their own configuration sets (%s) are "
+                         "switched off. --programs still overrides the "
+                         "subset, and --exclude-programs still applies to "
+                         "it."
+                         % (len(QUICK_RUN_PROGRAMS),
+                            ", ".join(f for _a, f in QUICK_RUN_DISABLED)))
+    ap.add_argument("--extended-stages", action="store_true",
+                    help="Draw the PLDI stage heatmaps with every step: C "
+                         "tail calls and the C auto-vectorizer get columns "
+                         "of their own. By default the heatmaps show one "
+                         "column per Gibbon optimization, with the "
+                         "auto-vectorizer off throughout when its -av "
+                         "twins were measured.")
+    ap.add_argument("--av-variants", choices=list(AV_VARIANT_CHOICES),
+                    default=None,
+                    help="Add the C auto-vectorizer ablations. The "
+                         "vectorizer is ON in every configuration by "
+                         "default and is not mentioned in any symbol, "
+                         "because that is what an ordinary build does; this "
+                         "flag adds `-av' twins compiled with it disabled, "
+                         "and the delta columns contrasting the two. "
+                         "`fold' twins the mutable recursive "
+                         "configuration; `loopified' twins each loopified "
+                         "configuration; `all' does both, which is also the "
+                         "only way to get the loopification delta in each "
+                         "vectorizer world (the two interact, so one column "
+                         "cannot describe it). Each choice costs extra "
+                         "compiles and runs per program. Defaults to `all' "
+                         "with --pldi-submission and to none otherwise; "
+                         "`none' turns it off explicitly.")
+    ap.add_argument("--use-width", type=int, default=DEFAULT_PAYLOAD_WIDTH,
+                    choices=list(PAYLOAD_WIDTHS), metavar="BITS",
+                    help="Payload width of the benchmarks' stored fields: "
+                         "64 (default, today's behaviour), 32, 16 or 8. A "
+                         "factored layout's advantage is bandwidth, and the "
+                         "field width decides how many elements fit in a "
+                         "cache line or a vector lane. Accumulators stay "
+                         "64-bit either way, so every width computes the "
+                         "same answer. A program whose fields cannot hold "
+                         "their values at the requested width is SKIPPED and "
+                         "named, rather than silently reporting wrapped "
+                         "arithmetic. Add1TreeInt64.hs and "
+                         "ArithmeticIntensityInt64.hs are unaffected: their "
+                         "width is what they measure.")
+    ap.add_argument("--use-widths", choices=["all"], default=None,
+                    help="Run the whole campaign once per payload width "
+                         "(%s), emitting a full set of tables per width. "
+                         "Overrides --use-width. Campaign time scales with "
+                         "the number of widths."
+                         % ", ".join(str(w) for w in PAYLOAD_WIDTHS))
+    ap.add_argument("--measure-rounds", type=int, default=9, metavar="N",
+                    help="Time each --pldi-submission configuration's "
+                         "construction phase N times and report the median. "
+                         "The build is one of the two terms of the "
+                         "end-to-end time (the other is the sum of the "
+                         "per-pass medians), and it is measured the way a "
+                         "pass is: `iterate` around the construction in a "
+                         "generated build-timed copy of the program, read "
+                         "back from ITER TIMES. Default 9. A few programs "
+                         "whose single build is already large cap this "
+                         "lower (see BUILD_ITERATION_OVERRIDES).\n")
+    ap.add_argument("--pass-rounds", type=int, default=1, metavar="N",
+                    help="Run each --pldi-submission configuration's whole "
+                         "executable N times, rotating the order so none is "
+                         "systematically measured before or after the "
+                         "configurations it is compared against, and report "
+                         "the median per-pass time across rounds. Default 1: "
+                         "a pass timing is already the median of "
+                         "--iterations within a run, and the whole-program "
+                         "wall time no longer feeds the end-to-end figure. "
+                         "Campaign run time scales with N.\n")
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
     ap.add_argument("--iterations",     type=int,  default=20,
@@ -8796,9 +10375,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "high-arithmetic-intensity family (ARITHINTENSITY_WIDTH_PROGRAMS) "
                          "and emit the 'Integer-width high-arithmetic-intensity "
                          "vectorization' table. Narrow opt-in, same pattern as "
-                         "--add1tree-widths. Width 64's Gibbon-SIMD column is always N/A "
-                         "(unsupported packed multiply -- see BUGS.md); this flag never "
-                         "enables Gibbon vectorization for the W64 variant.")
+                         "--add1tree-widths. Width 64's Gibbon-SIMD column compiles with "
+                         "--simd-w64-multiply, because x86 has no packed 64-bit multiply "
+                         "below AVX-512DQ and the compiler refuses the emulated one by "
+                         "default; that column measures what the emulation costs, and a "
+                         "speedup below 1x there is the expected result.")
     ap.add_argument("--roofline", action="store_true",
                     help="Measure this machine's PRACTICAL roofline and plot it: "
                          "single-threaded DRAM bandwidth (STREAM triad past LLC) "
@@ -9016,6 +10597,18 @@ def main():
     # "off" even when the flag was given.
     set_reclaim_iterate_regions(args.reclaim_iterate_regions)
 
+    # Before any output directory is touched: the sweep re-runs this script
+    # once per width and owns every path those runs write to.
+    if args.use_widths == "all":
+        return run_width_sweep(args, sys.argv[1:])
+
+    args.av_variants = default_av_variants(args.av_variants,
+                                           args.pldi_submission)
+    apply_av_variants(resolve_av_variants(args.av_variants))
+
+    if args.quick_run:
+        apply_quick_run(args)
+
     if getattr(args, "correctness_only", None):
         return run_correctness_qualification(args)
 
@@ -9042,8 +10635,14 @@ def main():
         ap.error("Choose only one mode: --benchmark-imm OR --bencmark-baseline-gibbon")
 
     try:
-        programs_to_run = resolve_program_selection(args.programs, args.exclude_programs,
-                                                    programs_dir=args.programs_dir)
+        programs_to_run = resolve_program_selection(
+            args.programs, args.exclude_programs,
+            default_programs=QUICK_RUN_PROGRAMS if args.quick_run else None,
+            programs_dir=args.programs_dir)
+        if args.use_width != DEFAULT_PAYLOAD_WIDTH:
+            programs_to_run, _skipped = apply_width_selection(
+                programs_to_run, args.programs_dir, args.use_width)
+            report_width_skips(_skipped, args.use_width)
     except ProgramSelectionError as e:
         ap.error(str(e))
 
@@ -9066,13 +10665,16 @@ def main():
         try:
             _pldi_n = len(resolve_program_selection(
                 args.programs, args.exclude_programs,
-                default_programs=DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS,
+                default_programs=(QUICK_RUN_PROGRAMS if args.quick_run
+                                  else DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS),
                 programs_dir=args.programs_dir))
         except ProgramSelectionError:
             _pldi_n = len(programs_to_run)
+        # Two units per configuration: the pass measurement and the build
+        # measurement, each advanced once (see collect_pldi_variant_results).
         _display.add_phase(
             "pldi", "variant matrix",
-            _pldi_n * sum(len(v) for v in PLDI_MAP_CONFIGS.values()))
+            2 * _pldi_n * sum(len(v) for v in PLDI_MAP_CONFIGS.values()))
     # Writing tables and running pdflatex takes seconds, nothing like a
     # benchmark unit, so it is shown as a phase but excluded from the estimate.
     _display.add_phase("report", "tables", 1, estimate=False)
@@ -9142,6 +10744,14 @@ def main():
         imm_s = "YES  (baseline: aos, aos_imm, soa)"
     else:
         imm_s = "no  (2 variants: aos, soa)"
+    if args.quick_run:
+        # Said plainly and up front: a quick run's tables are real
+        # measurements over a deliberately small program set, and the
+        # difference matters to anyone reading them later.
+        print("  Quick run    : YES  (--quick-run; %d programs, full "
+              "iterations; the extra phases (%s) are off)"
+              % (len(QUICK_RUN_PROGRAMS),
+                 ", ".join(f for _a, f in QUICK_RUN_DISABLED)))
     print(f"  Immutable    : {imm_s}")
     print(f"  GHC          : {'YES' if args.benchmark_ghc else 'no'}")
     print(f"  MLton        : {'YES' if args.benchmark_mlton else 'no'}")
@@ -9372,19 +10982,30 @@ def main():
             try:
                 pldi_programs = resolve_program_selection(
                     args.programs, args.exclude_programs,
-                    default_programs=DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS,
+                    default_programs=(QUICK_RUN_PROGRAMS if args.quick_run
+                                      else DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS),
                     programs_dir=args.programs_dir)
+                if args.use_width != DEFAULT_PAYLOAD_WIDTH:
+                    pldi_programs, _skipped = apply_width_selection(
+                        pldi_programs, args.programs_dir, args.use_width)
+                    report_width_skips(_skipped, args.use_width)
             except ProgramSelectionError as e:
                 ap.error(str(e))
             progress().finish_phase()
             progress().start_phase("pldi")
+            _cfgc = sum(len(v) for v in PLDI_MAP_CONFIGS.values())
             print("  Collecting PLDI submission fold/map variant matrix "
-                  f"({len(pldi_programs)} programs x up to 13 configs each) ...")
+                  f"({len(pldi_programs)} programs x up to {_cfgc} configs each"
+                  + (f", {args.pass_rounds} interleaved rounds"
+                     if args.pass_rounds > 1 else "")
+                  + f", build x{args.measure_rounds}) ...")
             pldi_variant_results = collect_pldi_variant_results(
                 args.programs_dir, args.output_dir, resolve_cc(args.cc),
                 args.force_recompile, gibbon_exe=None, iterations=args.iterations,
                 c_arith_mode=args.c_arithmetic, simd_isa=args.simd_isa,
-                pin_cpu=args.pin_cpu, programs=pldi_programs)
+                pin_cpu=args.pin_cpu, programs=pldi_programs,
+                build_iterations=args.measure_rounds,
+                pass_rounds=args.pass_rounds)
             report_pldi_qualification_warnings(pldi_variant_results)
             write_pldi_matrix_json(pldi_variant_results,
                                    args.json.with_name(args.json.stem + "_pldi.json"),
@@ -9412,6 +11033,10 @@ def main():
         progress().close()
         if HAS_PLOT_LIBS:
             generate_all_figures(all_results, args.figures_dir)
+            if pldi_variant_results:
+                generate_pldi_stage_figures(pldi_variant_results,
+                                            args.figures_dir,
+                                            extended=args.extended_stages)
         else:
             print("  Skipping figures: matplotlib/numpy not installed.")
         print(f"\n  LaTeX  : {args.latex_table}")
