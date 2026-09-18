@@ -9,7 +9,7 @@
 {-# HLINT ignore "Move brackets to avoid $" #-}
 {-# HLINT ignore "Redundant <$>" #-}
 module Gibbon.Passes.Cursorize
-  (cursorize) where
+  (cursorize, dropInRegEndsFromRetE, markSpawnTargets) where
 
 import Control.Monad (forM, when, zipWithM)
 import Data.Foldable (foldlM, foldrM)
@@ -285,9 +285,15 @@ type OldTy2 = UrTy LocVar
 data WindowIntoCursor = AoSWin Var | SoAWin Var [((DataCon, Int), Var)]
 
 cursorize :: Prog2 -> PassM Prog3
-cursorize Prog {ddefs, fundefs, mainExp} = do
+cursorize Prog {ddefs, fundefs = fundefs0, mainExp} = do
   dflags <- getDynFlags
   let userRequestedMutableCursors = gopt Opt_UseMutableCursors dflags
+  when (gopt Opt_MutableCursorsNonRec dflags && not userRequestedMutableCursors) $
+    error "--opt-mutable-cursors-nonrec requires --use-mutable-cursors."
+  let fundefs =
+        if gopt Opt_MutableCursorsNonRec dflags
+          then markSpawnTargets fundefs0 mainExp
+          else fundefs0
   fns' <- mapM (cursorizeFunDef ddefs fundefs . snd) (M.toList fundefs)
   let fundefs' = M.fromList $ L.map (\f -> (funName f, f)) fns'
       ddefs' = M.map eraseLocMarkers ddefs
@@ -439,6 +445,9 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
   let hasPackedOutput = hasPacked (unTy2 (arrOut funTy))
   let useMutableCursors =
         useMutableCursorsForFun userRequestedMutableCursors funMeta funTy
+      elideInRegEnds =
+        elidesInRegEnds (gopt Opt_MutableCursorsNonRec dflags)
+          userRequestedMutableCursors funMeta funTy
   let inLocs = inLocVars funTy
       inLocA = inLocArgs funTy
       outLocs = outLocVars funTy
@@ -450,7 +459,7 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
       inLocsMutable = L2.inLocVarsMutable funTy 
       outLocsMutable = L2.outLocVarsMutable funTy
 
-      funTy' = cursorizeArrowTy useMutableCursors funTy
+      funTy' = cursorizeArrowTy useMutableCursors elideInRegEnds funTy
 
       -- [2019.03.04] CSK: the order of these new cursor/region arguments isn't
       -- intuitive and can be improved.
@@ -623,14 +632,18 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
 
   let noDeadFieldElim = L.isPrefixOf "_traverse_" (fromVar funName)
   let denv0 = if noDeadFieldElim then markNoDeadFieldElim M.empty else M.empty
+      funBodyRet =
+        if elideInRegEnds
+          then dropInRegEndsFromRetE funName funBody
+          else funBody
   bod <-
     if hasPacked (unTy2 out_ty)
       then
         do 
-          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+          (funBody', _, _, _) <-  cursorizePackedExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBodyRet
           return $ fromDi funBody'
       else do 
-        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBody
+        (funBody', _, _, _) <- cursorizeExp m1 m2 useMutableCursors storeScalarCounts False freeVarToVarEnv'' initTyEnvl ddefs fundefs denv0 initTyEnv M.empty funBodyRet
         return funBody'
 
   -- See Note [The cursorized calling convention] in Gibbon.Language.Syntax.
@@ -726,8 +739,8 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
                 (zip (map MkTy2 tys) [0 ..])
             _ -> acc
 
-    cursorizeArrowTy :: Bool -> ArrowTy2 Ty2 -> ([Ty3], Ty3)
-    cursorizeArrowTy useMutableCursorsRec ty@ArrowTy2 {arrIns, arrOut, locVars, locRets} =
+    cursorizeArrowTy :: Bool -> Bool -> ArrowTy2 Ty2 -> ([Ty3], Ty3)
+    cursorizeArrowTy useMutableCursorsRec elideInRegEndsTy ty@ArrowTy2 {arrIns, arrOut, locVars, locRets} =
       let -- Regions corresponding to ouput cursors. (See [Threading regions])
           numOutRegs = length $ (outRegVars ty) ++ (L2.outRegVarsMutable ty)
           -- outRegs = L.map (\_ -> CursorTy) [1..numOutRegs]
@@ -760,7 +773,9 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
               )
               locRets
 
-          out_curs = inRegs ++ outRegs ++ ret_curs
+          -- See 'elidesInRegEnds' for when the end-of-input-region cursors
+          -- are left out.
+          out_curs = (if elideInRegEndsTy then [] else inRegs) ++ outRegs ++ ret_curs
           
           -- The output type contains start and end cursors for output regions. 
           -- In case of a tail recursive optimization, we should try to fully 
@@ -814,6 +829,85 @@ cursorizeFunDef ddefs fundefs FunDef {funName, funTy, funArgs, funBody, funMeta}
               --then map (cursorizeInTy) in_tys
               --else map (constPacked CursorTy) in_tys
        in dbgTrace (minChatLvl) "Print in_tys" dbgTrace (minChatLvl) (sdoc (out_ty, in_tys)) dbgTrace (minChatLvl) "End in_tys\n" (map stripTyLocs newIns, stripTyLocs newOut')
+
+-- | Stamp 'SpawnTarget' on every function named by a 'SpawnE' in the program.
+markSpawnTargets :: FunDefs2 -> Maybe (Exp2, Ty2) -> FunDefs2
+markSpawnTargets fundefs mainExp =
+  M.mapWithKey
+    ( \f fd ->
+        if f `S.member` targets
+          then fd {funMeta = (funMeta fd) {funOpt = SpawnTarget : funOpt (funMeta fd)}}
+          else fd
+    )
+    fundefs
+  where
+    targets =
+      S.unions $
+        map (spawnTargets . funBody) (M.elems fundefs)
+          ++ maybe [] (\(e, _) -> [spawnTargets e]) mainExp
+
+-- | The functions a 'SpawnE' names anywhere in an expression.
+spawnTargets :: Exp2 -> S.Set Var
+spawnTargets ex =
+  case ex of
+    SpawnE f _ args -> S.insert f (S.unions (map spawnTargets args))
+    AppE _ _ _ args -> S.unions (map spawnTargets args)
+    PrimAppE _ args -> S.unions (map spawnTargets args)
+    LetE (_, _, _, rhs) bod -> spawnTargets rhs `S.union` spawnTargets bod
+    IfE a b c -> S.unions (map spawnTargets [a, b, c])
+    MkProdE args -> S.unions (map spawnTargets args)
+    ProjE _ e -> spawnTargets e
+    CaseE scrt brs -> S.unions (spawnTargets scrt : [spawnTargets e | (_, _, e) <- brs])
+    DataConE _ _ args -> S.unions (map spawnTargets args)
+    TimeIt e _ _ -> spawnTargets e
+    WithArenaE _ e -> spawnTargets e
+    MapE (_, _, e1) e2 -> spawnTargets e1 `S.union` spawnTargets e2
+    FoldE (_, _, e1) (_, _, e2) e3 -> S.unions (map spawnTargets [e1, e2, e3])
+    Ext ext ->
+      case ext of
+        LetRegionE _ _ _ _ bod -> spawnTargets bod
+        LetParRegionE _ _ _ bod -> spawnTargets bod
+        LetLocE _ _ bod -> spawnTargets bod
+        LetRegE _ _ bod -> spawnTargets bod
+        LetAvail _ bod -> spawnTargets bod
+        SelectiveBufferShareE _ _ bod -> spawnTargets bod
+        _ -> S.empty
+    _ -> S.empty
+
+-- | Drop the end-of-input-region cursors from every return of a function
+-- that 'elidesInRegEnds'. Those are its only extra return values, so each
+-- 'RetE' is left returning just the value.
+dropInRegEndsFromRetE :: Var -> Exp2 -> Exp2
+dropInRegEndsFromRetE funName = go
+  where
+    go ex =
+      case ex of
+        LetE (v, locs, ty, rhs) bod -> LetE (v, locs, ty, rhs) (go bod)
+        IfE a b c -> IfE a (go b) (go c)
+        CaseE scrt brs -> CaseE scrt (map (\(dcon, vlocs, c) -> (dcon, vlocs, go c)) brs)
+        WithArenaE v e -> WithArenaE v (go e)
+        Ext ext ->
+          case ext of
+            LetRegionE r sz endmut ty bod -> Ext $ LetRegionE r sz endmut ty (go bod)
+            LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty (go bod)
+            LetLocE loc locexp bod -> Ext $ LetLocE loc locexp (go bod)
+            LetRegE reg regexp bod -> Ext $ LetRegE reg regexp (go bod)
+            LetAvail vs bod -> Ext $ LetAvail vs (go bod)
+            SelectiveBufferShareE src tgts bod -> Ext $ SelectiveBufferShareE src tgts (go bod)
+            RetE locs v ->
+              case filter (not . isInRegEnd) locs of
+                [] -> Ext $ RetE [] v
+                rest ->
+                  error $ "dropInRegEndsFromRetE: " ++ fromVar funName
+                    ++ " returns more than its end-of-input-region cursors: "
+                    ++ sdoc rest
+            _ -> ex
+        _ -> ex
+
+    isInRegEnd loc =
+      case loc of
+        EndOfReg _ Input _ -> True
+        _ -> False
 
 -- | Cursorize expressions NOT producing `Packed` values
 -- Note [Combining cursor environments must seed with the incoming envs]
@@ -4362,6 +4456,7 @@ cursorizeAppE :: MutableLocPtsToEnv -> MutableLocOldValueEnv -> Bool -> Bool -> 
 cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeVarToVarEnv lenv ddfs fundefs denv tenv senv ex =
   case ex of
     AppE f _cty locs args -> do
+      dflagsAppE <- getDynFlags
       let (fnTy, fmeta) = case M.lookup f fundefs of
             Just g -> (funTy g, funMeta g)
             Nothing -> error $ "Unknown function: " ++ sdoc f
@@ -4377,6 +4472,9 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
           calleeHasPackedOutput = hasPacked (unTy2 (arrOut fnTy))
           calleeHasPackedLocations = numRegs > 0 || not (null (locVars fnTy)) || not (null (locRets fnTy)) || not (null locs)
           useMutForCall = useMutableCursorsForCall useMutableCursorsCall fmeta fnTy
+          calleeElidesInRegEnds =
+            elidesInRegEnds (gopt Opt_MutableCursorsNonRec dflagsAppE)
+              (gopt Opt_UseMutableCursors dflagsAppE) fmeta fnTy
           cursorizeCallInTy ty =
             case ty of
               -- Exact width, as in 'cursorizeInTy'.
@@ -4867,6 +4965,28 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                            mkLets (concat callArgBnds) $
                            LetE callBind $
                            mkLets (concat endRegDerefBnds ++ concat inputDerefBnds ++ concat packedBnds) callResult
+                else if calleeElidesInRegEnds
+                then do
+                  -- The callee does not return its end-of-input-region
+                  -- cursors; rebuild the tuple it used to return from the ones
+                  -- this call passes in, which lead the argument list.
+                  let numInRegEnds = length (L2.inRegVars' fnTy)
+                      callArgs = appe_args' ++ starts'
+                      (callArgBnds, callArgs') = unzip (map hoistCallArgLets callArgs)
+                      isInRegEndArg loc = case loc of
+                        EndOfReg _ Input _ -> True
+                        EndOfReg _ InputMutable _ -> True
+                        EndOfReg_Tagged {} -> True
+                        _ -> False
+                  when (length (filter isInRegEndArg (take numInRegEnds outs)) /= numInRegEnds) $
+                    error $ "cursorizeAppE: " ++ fromVar f ++ " expects " ++ show numInRegEnds
+                      ++ " end-of-input-region cursors to lead its arguments, got " ++ sdoc outs
+                  callTmp <- gensym "call"
+                  let callBind = (callTmp, [], stripTyLocs (unTy2 (arrOut fnTy)), AppE f _cty [] callArgs')
+                  return $ mkLets additional_bnds $
+                           mkLets (concat callArgBnds) $
+                           LetE callBind $
+                           MkProdE (take numInRegEnds callArgs' ++ [VarE callTmp])
                 else return $ mkLets additional_bnds (mkCallApp (appe_args' ++ starts'))
       asserts <-
         foldrM

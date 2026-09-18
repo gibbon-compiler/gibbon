@@ -17,10 +17,12 @@
 ##   * 32-bit packed execution,
 ##   * loopification,
 ##   * selective buffer sharing,
-##   * SSE vectorization, and
-##   * 32-bit SSE vectorization.
+##   * SSE vectorization,
+##   * 32-bit SSE vectorization, and
+##   * --opt-mutable-cursors-nonrec (the `nonrec` mode). A test runs in
+##     `nonrec` only when its own run-modes list it.
 
-run-modes: [gibbon2, loopify, selective, vectorize]
+run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
 ## Specifiying an individual test:
 ##
@@ -895,7 +897,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: Compiler.hs
     dir: examples/soa_examples/programs/SOA
@@ -1013,7 +1015,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: KDTree.hs
     dir: examples/soa_examples/programs/SOA
@@ -1187,7 +1189,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTreeBase.hs
     dir: examples/soa_examples/programs/SOA
@@ -1245,7 +1247,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_clearFlags.hs
     dir: examples/soa_examples/programs/SOA
@@ -1274,7 +1276,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_countActive.hs
     dir: examples/soa_examples/programs/SOA
@@ -1303,7 +1305,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_countParticles.hs
     dir: examples/soa_examples/programs/SOA
@@ -1332,7 +1334,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_fmmPotential.hs
     dir: examples/soa_examples/programs/SOA
@@ -1361,7 +1363,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_scaleEnergy.hs
     dir: examples/soa_examples/programs/SOA
@@ -1390,7 +1392,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_sumEnergy.hs
     dir: examples/soa_examples/programs/SOA
@@ -1419,7 +1421,7 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: OctTree_sumMass.hs
     dir: examples/soa_examples/programs/SOA
@@ -1448,7 +1450,35 @@ tests:
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
-    run-modes: [gibbon2, loopify, selective, vectorize]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+
+  # Two-input SoA readers whose returns --opt-mutable-cursors-nonrec changes;
+  # the baseline is the same program without the flag.
+  - name: SelectiveSharingTwoInputConsumerBug.hs
+    dir: examples/soa_examples/programs/SOA
+    compare-with-baseline: true
+    run-modes: [nonrec]
+
+  - name: VerifyS2MixedArityConsumer.hs
+    dir: examples/soa_examples/programs/SOA
+    compare-with-baseline: true
+    run-modes: [nonrec]
+
+  # A pure SoA reader that follows redirections; nonrec_redirection.sh also
+  # checks that the redirection branch runs. The answer is the closed form
+  # (d+1) * 2^d. Under plain --packed (immutable cursors) this program fails
+  # with "Unknown tag", so it has no gibbon2 baseline.
+  - name: ReadAcrossChunks.hs
+    dir: tests/nonrec_redirection
+    answer-file: tests/nonrec_redirection/ReadAcrossChunks.ans
+    run-modes: [nonrec]
+
+  # A pure SoA reader that reaches a child through a RAN pointer; checked by
+  # nonrec_redirection.sh as well.
+  - name: RanReader.hs
+    dir: tests/nonrec_redirection
+    answer-file: tests/nonrec_redirection/RanReader.ans
+    run-modes: [nonrec]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA

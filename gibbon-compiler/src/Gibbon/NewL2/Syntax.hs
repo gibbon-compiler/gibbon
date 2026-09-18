@@ -12,7 +12,7 @@ module Gibbon.NewL2.Syntax
     -- * Extended language L2 with location types.
       Old.E2Ext(..)
     , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, Ty2(..)
-    , useMutableCursorsForFun, useMutableCursorsForCall, calleeHasMutableLocations
+    , useMutableCursorsForFun, useMutableCursorsForCall, calleeHasMutableLocations, elidesInRegEnds
     , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, RegExp, Old.PreLocExp(..), Old.PreRegExp(..)
 
     -- * Regions and locations
@@ -114,6 +114,34 @@ useMutableCursorsForCall :: Bool -> FunMeta -> Old.ArrowTy2 Ty2 -> Bool
 useMutableCursorsForCall mutableContext meta ty =
   useMutableCursorsForFun True meta ty
   && (mutableContext || calleeHasMutableLocations ty)
+
+-- | Whether a function omits its end-of-input-region cursors from its return
+-- value (@Opt_MutableCursorsNonRec@). Each call site then reuses the
+-- end-of-region cursor it passed in, in the position the returned one had.
+--
+-- Only for a pure SoA reader under the immutable convention: every location
+-- is an input, nothing packed is returned, and no end-of-input witness is
+-- returned. Such a function allocates nothing, so the region its caller
+-- writes into is unchanged by the call, and the caller receives no cursor
+-- into any other region the read may have followed a redirection into. The
+-- returned end differs from the one passed in only on that redirection
+-- path, where it names the redirection target's start rather than any
+-- region's end. An SoA end-of-region cursor is a @CursorArrayTy@, which is
+-- returned through memory; a Single one rides back in a register and is
+-- left alone. Call sites index the returned tuple by the number of input
+-- regions, so that must equal the number of end-of-input-region cursors. A
+-- spawned call is not rebuilt this way, so a 'SpawnTarget' is excluded.
+elidesInRegEnds :: Bool -> Bool -> FunMeta -> Old.ArrowTy2 Ty2 -> Bool
+elidesInRegEnds enabled userRequested meta ty =
+  enabled
+  && not (useMutableCursorsForFun userRequested meta ty)
+  && Old.hasSoALocs ty
+  && not (null (Old.inRegVars' ty))
+  && length (Old.inRegVars' ty) == length (Old.inRegVars ty)
+  && all (\(Old.LRM _ _ m) -> m == Old.Input) (Old.locVars ty)
+  && null (Old.locRets ty)
+  && not (hasPacked (unTy2 (Old.arrOut ty)))
+  && SpawnTarget `notElem` funOpt meta
 
 --------------------------------------------------------------------------------
 

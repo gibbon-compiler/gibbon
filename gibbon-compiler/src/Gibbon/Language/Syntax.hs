@@ -111,10 +111,14 @@ type IsBoxed = Bool
 -- function can carry 'MayVectorize' without loopification having actually
 -- succeeded (the pass's own legality checks rejected it), and those
 -- downstream passes must not touch such a function.
+--
+-- 'SpawnTarget' is also internal: Cursorize stamps it on every function some
+-- 'SpawnE' names, so that 'elidesInRegEnds' leaves it alone.
 data FunOpt = MayVectorize
             | StoreScalarCounts
             | SelectiveBufferSharing
             | Loopified
+            | SpawnTarget
         deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 data MemoryLayout = 
