@@ -980,6 +980,24 @@ def set_reclaim_iterate_regions(enabled: bool) -> None:
     RECLAIM_ITERATE_REGIONS = bool(enabled)
 
 
+# Whether every mutable-cursor compile in THIS run passes
+# --opt-mutable-cursors-nonrec, which stops a non-recursive SoA reader from
+# returning its input-region ends: a CursorArrayTy returned by value through
+# memory, to a caller that already holds it. On by default; turning it off is
+# for measuring what it buys. Run-scoped and applied in `build_gibbon_command`
+# for the same reason as RECLAIM_ITERATE_REGIONS -- a campaign where some
+# columns have it and others do not is not comparable. The compiler rejects
+# the flag without --use-mutable-cursors, so immutable-cursor compiles never
+# carry it.
+MUTABLE_CURSORS_NONREC = True
+
+
+def set_mutable_cursors_nonrec(enabled: bool) -> None:
+    """Turn --opt-mutable-cursors-nonrec on or off for every compile in this run."""
+    global MUTABLE_CURSORS_NONREC
+    MUTABLE_CURSORS_NONREC = bool(enabled)
+
+
 def reclaim_caption_note() -> str:
     """One clause for table captions when reclamation is on.
 
@@ -2726,7 +2744,8 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
                          use_no_gcc_tail_calls: bool = False,
                          auto_loopification: bool = True,
                          simd_isa: str = DEFAULT_SIMD_ISA,
-                         reclaim_iterate_regions: Optional[bool] = None) -> List[str]:
+                         reclaim_iterate_regions: Optional[bool] = None,
+                         mutable_cursors_nonrec: Optional[bool] = None) -> List[str]:
     """Build the Gibbon compile command.
 
     Pure: no filesystem access, no subprocess, no compiler lookup.  `cc` is
@@ -2773,6 +2792,11 @@ def build_gibbon_command(source: Path, variant: str, c_file: Path, exe: Path,
            f"--c-arithmetic={c_arith_mode}"]
     if use_mutable_cursors:
         cmd.append("--use-mutable-cursors")
+        # None means "whatever this run selected", resolved at call time as
+        # for reclaim_iterate_regions below.
+        if (MUTABLE_CURSORS_NONREC if mutable_cursors_nonrec is None
+                else mutable_cursors_nonrec):
+            cmd.append("--opt-mutable-cursors-nonrec")
     if enable_papi_native:
         cmd.append("--enable-papi-native")
     if enable_papi:
@@ -10622,6 +10646,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "as smaller -- the un-fixed loop makes the kernel supply "
                          "fresh zeroed pages for memory it has leaked, and that cost "
                          "is an artifact of the leak, not of the workload.")
+    ap.add_argument("--no-mutable-cursors-nonrec", dest="no_mutable_cursors_nonrec",
+                    action="store_true",
+                    help="Compile WITHOUT Gibbon's --opt-mutable-cursors-nonrec, which "
+                         "every mutable-cursor configuration otherwise gets. The flag "
+                         "stops a non-recursive SoA reader returning its input-region "
+                         "ends by value through memory; turning it off measures what "
+                         "that buys. Applied uniformly to every configuration in the "
+                         "run.")
     ap.add_argument("--use-ran", "--enable-ran", dest="use_ran", action="store_true",
                     help="Compile Gibbon variants with random-access nodes enabled by omitting --no-ran. Does not add GHC/MLton variants.")
     return ap
@@ -10649,6 +10681,7 @@ def main():
     # This lived further down and the banner, printed above it, always reported
     # "off" even when the flag was given.
     set_reclaim_iterate_regions(args.reclaim_iterate_regions)
+    set_mutable_cursors_nonrec(not args.no_mutable_cursors_nonrec)
 
     # Before any output directory is touched: the sweep re-runs this script
     # once per width and owns every path those runs write to.
@@ -10778,6 +10811,10 @@ def main():
              if RECLAIM_ITERATE_REGIONS else
              "off (default; memory grows one output value per --iterate "
              "iteration -- pass --reclaim-iterate-regions)"))
+    print(f"  Non-rec SoA readers: "
+          + ("region ends elided (--opt-mutable-cursors-nonrec, with mutable cursors)"
+             if MUTABLE_CURSORS_NONREC else
+             "return region ends (--no-mutable-cursors-nonrec)"))
     args.pin_cpu = resolve_pin_cpu_arg(args.pin_cpu)
     _reserved = reserve_pin_cpu(args.pin_cpu)
     print(f"  Pinned CPU   : "
