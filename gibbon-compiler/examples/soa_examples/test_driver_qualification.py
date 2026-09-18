@@ -334,10 +334,6 @@ class TestNoWeakPathRemains(unittest.TestCase):
             self.assertNotIn(flag, cmd)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestBannerProtocolConformance(unittest.TestCase):
     """Program banners and end-of-pass markers must be spelled the way the
     protocol filter recognises them, and no oracle value may carry protocol
@@ -392,3 +388,7 @@ class TestBannerProtocolConformance(unittest.TestCase):
         self.assertEqual(offenders, [], "oracle value(s) carrying protocol "
                          "text rather than program data alone:\n  "
                          + "\n  ".join(offenders))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

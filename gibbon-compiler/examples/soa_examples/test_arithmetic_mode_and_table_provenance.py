@@ -188,12 +188,17 @@ class TestArithmeticModeInterface(unittest.TestCase):
         self.assertEqual(len(gb.ADD1TREE_WIDTH_PROGRAMS), 4)
         self.assertEqual(len(gb.ARITHINTENSITY_WIDTH_PROGRAMS), 4)
 
-    def test_21_bw02_w64_simd_still_na_regardless_of_arithmetic_mode(self):
-        # Structural exclusion (no "soa_simd" config key for width 64) is
-        # unrelated to arithmetic mode and must remain true.
-        self.assertNotIn("soa_simd", gb.ARITHINTENSITY_WIDTH_CONFIGS[64])
-        for w in (8, 16, 32):
+    def test_21_bw02_every_width_is_measured_regardless_of_arithmetic_mode(self):
+        # Width 64 is measured like every other width, and only width 64
+        # enables the emulated packed multiply. Neither depends on the
+        # arithmetic mode.
+        for w in (8, 16, 32, 64):
             self.assertIn("soa_simd", gb.ARITHINTENSITY_WIDTH_CONFIGS[w])
+        self.assertTrue(
+            gb.ARITHINTENSITY_WIDTH_CONFIGS[64]["soa_simd"]["simd_w64_multiply"])
+        for w in (8, 16, 32):
+            self.assertNotIn("simd_w64_multiply",
+                             gb.ARITHINTENSITY_WIDTH_CONFIGS[w]["soa_simd"])
 
 
 # ---------------------------------------------------------------------------
