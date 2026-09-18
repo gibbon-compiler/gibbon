@@ -50,6 +50,8 @@ module Gibbon.L2.Syntax
 -- * Operations on types
   , allLocVars
   , inLocVars
+  , hasSoALocs
+  , locRetLocVars
   , inLocVarsMutable
   , outLocVars
   , outLocVarsMutable
@@ -791,6 +793,18 @@ allLocVars ty = L.map (\(LRM l _ _) -> l) (locVars ty)
 inLocVars :: ArrowTy2 ty2 -> [LocVar]
 inLocVars ty = L.map (\(LRM l _ _) -> l) $
                L.filter (\(LRM _ _ m) -> m == Input || m == InputMutable) (locVars ty)
+
+-- | Whether any cursor this function takes or returns is a struct-of-arrays
+-- location, and so becomes a @CursorArrayTy@ rather than a single word.
+--
+-- A returned SoA cursor is an array, which is passed through memory rather
+-- than in a register.
+hasSoALocs :: ArrowTy2 ty2 -> Bool
+hasSoALocs ty = any isSoALoc (allLocVars ty ++ locRetLocVars ty)
+
+-- | The locations named by a function type's end-of-input witnesses.
+locRetLocVars :: ArrowTy2 ty2 -> [LocVar]
+locRetLocVars ty = L.map (\lret -> case lret of EndOf (LRM l _ _) -> l) (locRets ty)
 
 inLocVarsMutable :: ArrowTy2 ty2 -> [LocVar]
 inLocVarsMutable ty = L.map (\(LRM l _ _) -> l) $ 

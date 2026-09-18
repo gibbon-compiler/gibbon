@@ -36,16 +36,9 @@ inferCallTypeFn :: NewL2.DDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
 inferCallTypeFn _ddefs _f@FunDef{funName, funArgs, funTy, funMeta, funBody} = do
     dflags <- getDynFlags
     let meta@FunMeta{funRec} = funMeta
-    let isInputFunRec = case funRec of 
-                             Rec -> True
-                             TailRec -> True
-                             _ -> False
     let returnsPacked = hasPacked (unTy2 (arrOut funTy))
-    let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
-    -- Vidush: 
-    -- We only want to use mutable cursors for recursive functions for now.
-    -- I don't think it worth it to make cursors mutable for non recursive functions at the moment.
-    let useMutableCursors = (gopt Opt_UseMutableCursors dflags) && isInputFunRec && (returnsPacked || hasPackedInput)
+    let useMutableCursors =
+          useMutableCursorsForFun (gopt Opt_UseMutableCursors dflags) meta funTy
     let _optimize_tail_calls = gopt Opt_TailCallOptimize dflags
     let (funBody', _env, _tailTy) = if useMutableCursors 
                                     then inferCallTypeExp useMutableCursors funName M.empty funBody
@@ -157,11 +150,9 @@ inferCallTypeMainExp mutLocs fundefs exp2 = do
                                 case fundef of 
                                         Nothing -> error "Expected function definition for function!"
                                         Just _f@FunDef{funTy, funMeta} -> do
-                                             let fnrecTy = funRec funMeta
-                                             let hasPackedInput = any (hasPacked . unTy2) (arrIns funTy)
-                                             let hasPackedOutput = hasPacked (unTy2 (arrOut funTy))
-                                            -- We only want to do this for Recursive functions.
-                                             if (fnrecTy == TailRec || fnrecTy == Rec) && (hasPackedInput || hasPackedOutput)
+                                             -- The predicate the callee's definition used. This site
+                                             -- does not test Opt_UseMutableCursors.
+                                             if useMutableCursorsForFun True funMeta funTy
                                              -- we need to find change locs to be output mutable
                                              then 
                                                 do

@@ -58,6 +58,10 @@ data GeneralFlag
   | Opt_SimpleWriteBarrier -- ^ Disables eliminate-indirection-chains optimization.
   | Opt_No_RAN             -- ^ Don't use shortcut pointers instead use extra traversals to reach get endwitness
   | Opt_UseMutableCursors  -- ^ Use Mutable Cursors instead of Immutable Cursors, this allows inplace updates to the Packed Cursor values.
+  | Opt_MutableCursorsNonRec -- ^ A non-recursive SoA function that only reads packed
+                             --   values omits its end-of-input-region cursors from its
+                             --   return value; each caller reuses the ones it passed in.
+                             --   Requires Opt_UseMutableCursors.
   | Opt_PapiInstrumentation -- ^ Enable PAPI instrumentation while compiling the gibbon binary.
   | Opt_PapiNativeInstrumentation -- ^ Enable native PAPI event instrumentation while compiling the gibbon binary.
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
@@ -206,6 +210,9 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_No_RAN (long "no-ran" <>
                                          help "Don't use RAN pointers, instead, use extra traversals.") <|>
                    flag' Opt_UseMutableCursors (long "use-mutable-cursors" <> help "Use Mutable Cursors Instead of Immutable Cursors.") <|>
+                   flag' Opt_MutableCursorsNonRec (long "opt-mutable-cursors-nonrec" <>
+                                                  help ("Non-recursive SoA functions that only read packed values do not " ++
+                                                        "return their end-of-input-region cursors. Requires --use-mutable-cursors.")) <|>
                    flag' Opt_TailCallOptimize (long "tail-call-optimize" <> help "Run the oprimization pass to optimize functions that are tail recursive.") <|>
                    flag' Opt_StoreScalarFieldCounts (long "store-scalar-field-counts" <>
                                                   help "Store scalar-count footer metadata for SoA functions annotated with OPT:StoreScalarCounts.") <|>

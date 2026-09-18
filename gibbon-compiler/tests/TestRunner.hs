@@ -178,7 +178,7 @@ defaultTest :: Test
 defaultTest = Test
     { name = ""
     , dir = "examples"
-    , expectedResults = M.fromList (zip allModes (repeat Pass))
+    , expectedResults = M.fromList (zip (GibbonNonRec : allModes) (repeat Pass))
     , skip = False
     , runModes = []
     , isBenchmark = False
@@ -246,6 +246,7 @@ data Mode = Gibbon3
           | GibbonLoopify
           | GibbonSelective
           | GibbonVectorize
+          | GibbonNonRec
           | MPL
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
@@ -254,7 +255,8 @@ instance FromJSON Mode where
     parseJSON oth = error $ "Cannot parse Mode: " ++ show oth
 
 allModes :: [Mode]
-allModes = filter (/= MPL) [minBound ..]  -- all modes does not include MPL
+-- | Excludes MPL and GibbonNonRec: a test runs in those only when it lists them.
+allModes = filter (`notElem` [MPL, GibbonNonRec]) [minBound ..]
 
 readMode :: T.Text -> Mode
 readMode s =
@@ -272,6 +274,8 @@ readMode s =
         "gibbon-selective" -> GibbonSelective
         "vectorize" -> GibbonVectorize
         "gibbon-vectorize" -> GibbonVectorize
+        "nonrec" -> GibbonNonRec
+        "gibbon-nonrec" -> GibbonNonRec
         "mpl" -> MPL
         "int32" -> error "readMode: \"int32\" has been removed; use the Int32 source type explicitly, and run the gibbon2/loopify/selective/vectorize modes."
         "gibbon-int32" -> error "readMode: \"gibbon-int32\" has been removed; use the Int32 source type explicitly, and run the gibbon2/loopify/selective/vectorize modes."
@@ -291,6 +295,7 @@ modeRunFlags Gibbon1 = ["--run", "--packed", "--gibbon1"]
 modeRunFlags GibbonLoopify = ["--run", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification"]
 modeRunFlags GibbonSelective = ["--run", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification", "--opt-selective-buffer-sharing"]
 modeRunFlags GibbonVectorize = ["--run", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification", "--opt-selective-buffer-sharing", "--opt-vectorization"]
+modeRunFlags GibbonNonRec = ["--run", "--packed", "--use-mutable-cursors", "--opt-mutable-cursors-nonrec"]
 modeRunFlags MPL = ["--mpl-run"]
 
 -- Must match the flag expected by Gibbon.
@@ -314,6 +319,7 @@ modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
 modeExeFlags GibbonLoopify = ["--to-exe", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification"]
 modeExeFlags GibbonSelective = ["--to-exe", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification", "--opt-selective-buffer-sharing"]
 modeExeFlags GibbonVectorize = ["--to-exe", "--packed", "--use-mutable-cursors", "--store-scalar-field-counts", "--opt-loopification", "--auto-loopification", "--opt-selective-buffer-sharing", "--opt-vectorization"]
+modeExeFlags GibbonNonRec = ["--to-exe", "--packed", "--use-mutable-cursors", "--opt-mutable-cursors-nonrec"]
 modeExeFlags MPL = ["--mpl-exe"]
 
 ccFlags :: TestConfig -> [String]
@@ -330,6 +336,7 @@ modeFileSuffix Gibbon1 = "_gibbon1"
 modeFileSuffix GibbonLoopify = "_gibbonLoopify"
 modeFileSuffix GibbonSelective = "_gibbonSelective"
 modeFileSuffix GibbonVectorize = "_gibbonVectorize"
+modeFileSuffix GibbonNonRec = "_gibbonNonRec"
 modeFileSuffix MPL = "_mpl"
 
 -- Couldn't figure out how to write a parser which accepts multiple arguments.
