@@ -2534,15 +2534,15 @@ class TestStageFigures(unittest.TestCase):
 
 
 class TestCompactStageChain(unittest.TestCase):
-    """The default heatmaps: one column per Gibbon optimization. Vanilla is
-    an ordinary build; every later column has the C auto-vectorizer off when
-    its twins were measured."""
+    """The default heatmaps: one column per Gibbon optimization, with the C
+    auto-vectorizer off in every column, Vanilla included, when its twins
+    were measured."""
 
     PLAIN = ["aos_imm", "aos_mut", "aos_imm_notco", "aos_mut_notco",
              "soa_mut", "soa_mut_notco", "soa_loop", "soa_loop_sbs",
              "soa_loop_sbs_gibvec"]
     FULL = PLAIN + [gb.av_variant_name(c) for c in (
-        "aos_mut", "soa_mut", "soa_loop", "soa_loop_sbs",
+        "aos_imm", "aos_mut", "soa_mut", "soa_loop", "soa_loop_sbs",
         "soa_loop_sbs_gibvec")]
 
     def test_the_columns(self):
@@ -2552,11 +2552,14 @@ class TestCompactStageChain(unittest.TestCase):
                                          "Loopification", "Buffer sharing",
                                          "Gibbon SIMD"])
 
-    def test_vanilla_is_ordinary_and_the_rest_av_off(self):
+    def test_every_configuration_is_av_off_when_measured(self):
+        """Left on in Vanilla alone, the auto-vectorizer would credit it
+        with vectorized kernels no later column is measured with."""
         for kind in ("fold", "map", "endtoend"):
             stages = gb._pldi_stage_chain(kind, set(self.FULL))
-            self.assertEqual(stages[0][1], "aos_imm")
-            for _label, _source, target in stages:
+            self.assertEqual(stages[0][1], gb.av_variant_name("aos_imm"))
+            for _label, source, target in stages:
+                self.assertTrue(source.endswith(gb.AV_VARIANT_SUFFIX), source)
                 self.assertTrue(target.endswith(gb.AV_VARIANT_SUFFIX), target)
 
     def test_without_every_twin_it_stays_av_on(self):
@@ -2575,31 +2578,56 @@ class TestCompactStageChain(unittest.TestCase):
             for earlier, later in zip(stages, stages[1:]):
                 self.assertEqual(earlier[2], later[1])
 
-    def test_rows_are_relative_to_the_ordinary_vanilla(self):
+    def _one(self, program, times):
+        return {program: {cfg: _make_result(
+            program, cfg, {"m": {"median_time": v, "pass_type": "map"}})
+            for cfg, v in times.items()}}
+
+    def test_vanilla_is_ordinary_for_most_programs(self):
         times = {c: 1.0 for c in self.FULL}
         times["aos_imm"] = 8.0
+        times[gb.av_variant_name("aos_imm")] = 100.0   # not this row's anchor
         times[gb.av_variant_name("soa_loop_sbs_gibvec")] = 0.5
-        matrix = {"P.hs": {cfg: _make_result(
-            "P.hs", cfg, {"m": {"median_time": t, "pass_type": "map"}})
-            for cfg, t in times.items()}}
-        rows, labels, _d = gb._pldi_stage_rows(matrix, "map")
+        rows, labels, _d = gb._pldi_stage_rows(self._one("KDTree.hs", times), "map")
+        row = rows[0]
         self.assertEqual(labels[0], "Vanilla Gibbon")
         self.assertEqual(len(labels), 6)
-        self.assertAlmostEqual(rows[0]["factors"][0], 1.0)
-        self.assertAlmostEqual(rows[0]["total"], 16.0)
-        self.assertAlmostEqual(rows[0]["factors"][-1], 16.0)
+        self.assertFalse(row["vanilla_av_off"])
+        self.assertAlmostEqual(row["factors"][0], 1.0)
+        self.assertAlmostEqual(row["total"], 16.0)
+        self.assertIsNone(row["av_on"][0])
+
+    def test_vanilla_is_av_off_for_the_arithmetic_intensity_kernels(self):
+        """Their kernels are what gcc vectorizes, so an ordinary Vanilla
+        would be credited with a speedup no later column is measured with."""
+        for program in gb.PLDI_AV_OFF_VANILLA_PROGRAMS:
+            times = {c: 1.0 for c in self.FULL}
+            times["aos_imm"] = 2.0                     # Vanilla, auto-vec on
+            times[gb.av_variant_name("aos_imm")] = 8.0
+            times[gb.av_variant_name("soa_loop_sbs_gibvec")] = 0.5
+            rows, _labels, _d = gb._pldi_stage_rows(self._one(program, times), "map")
+            row = rows[0]
+            self.assertTrue(row["vanilla_av_off"], program)
+            self.assertAlmostEqual(row["total"], 16.0)
+            self.assertAlmostEqual(row["av_on"][0], 4.0)   # its corner
+
+    def test_the_chain_after_vanilla_is_av_off_either_way(self):
+        for program in ("KDTree.hs", "ArithmeticIntensityInt8.hs"):
+            times = {c: 1.0 for c in self.FULL}
+            times["aos_imm"] = 4.0
+            times[gb.av_variant_name("aos_imm")] = 4.0
+            times[gb.av_variant_name("soa_mut")] = 2.0
+            times["soa_mut"] = 1.0
+            rows, labels, _d = gb._pldi_stage_rows(self._one(program, times), "map")
+            self.assertAlmostEqual(rows[0]["factors"][labels.index("SoA layout")], 2.0)
 
     def test_each_cell_carries_its_auto_vectorized_counterpart(self):
         times = {c: 1.0 for c in self.FULL}
         times["aos_imm"] = 8.0
         times["soa_loop"] = 2.0                        # S_l with auto-vec on
         times["soa_loop_sbs_gibvec"] = 0.5             # the ordinary best
-        matrix = {"P.hs": {cfg: _make_result(
-            "P.hs", cfg, {"m": {"median_time": t, "pass_type": "map"}})
-            for cfg, t in times.items()}}
-        rows, labels, _d = gb._pldi_stage_rows(matrix, "map")
+        rows, labels, _d = gb._pldi_stage_rows(self._one("P.hs", times), "map")
         row = rows[0]
-        self.assertIsNone(row["av_on"][0])             # Vanilla has none
         self.assertAlmostEqual(row["av_on"][labels.index("Loopification")], 4.0)
         self.assertAlmostEqual(row["total_av_on"], 16.0)
         self.assertEqual(len(row["av_on"]), len(row["factors"]))
@@ -2622,10 +2650,13 @@ class TestCompactStageChain(unittest.TestCase):
         rows, _labels, _d = gb._pldi_stage_rows(matrix, "map", extended=True)
         self.assertTrue(all(v is None for v in rows[0]["av_on"]))
 
-    def test_vanilla_has_no_av_twin(self):
+    def test_vanilla_is_twinned_without_a_contrast_column(self):
         self.addCleanup(importlib.reload, gb)
         gb.apply_av_variants(("fold", "loopified"))
-        self.assertNotIn(gb.av_variant_name("aos_imm"), gb.PLDI_MAP_CONFIGS["aos"])
+        self.assertIn(gb.av_variant_name("aos_imm"), gb.PLDI_MAP_CONFIGS["aos"])
+        for _l, _sym, base, feat, _d in (gb.PLDI_DELTA_COLUMNS_FOLD
+                                         + gb.PLDI_DELTA_COLUMNS_MAP):
+            self.assertNotIn("aos_imm", (base, feat))
 
 
 
@@ -3210,6 +3241,67 @@ class TestScalarCountsFollowLoopification(unittest.TestCase):
         self.assertIn("scalar_counts", ser)
         self.assertIn("selective_buffer_sharing", ser)
         self.assertEqual(ser["soa_loopified"], [])
+
+class TestStageFigureGroups(unittest.TestCase):
+    """Each stage heatmap lists the real-world benchmarks first and the
+    synthetic ones below a rule."""
+
+    def _merged_names(self):
+        names = set()
+        for program in gb.DEFAULT_PROGRAMS + gb.PLDI_EXTRA_PROGRAMS:
+            for family, prefix in gb.PROGRAM_MERGE_GROUPS.items():
+                if program.startswith(prefix):
+                    program = family
+            names.add(program)
+        return names
+
+    def test_every_real_world_name_is_a_program(self):
+        """A misspelt name would silently move a benchmark to synthetic."""
+        self.assertLessEqual(set(gb.PLDI_REAL_WORLD_PROGRAMS), self._merged_names())
+
+    def test_the_split(self):
+        for program in ("Compiler.hs", "OctTree.hs", "PiecewiseFunctions.hs",
+                        "ColorOctree.hs", "DecisionTreeClassify.hs"):
+            self.assertEqual(gb.pldi_stage_group(program), "realworld", program)
+        for program in ("ArithmeticIntensityInt8.hs", "Add1TreeInt64.hs",
+                        "LinearListReduction.hs", "MonoTree.hs", "List.hs"):
+            self.assertEqual(gb.pldi_stage_group(program), "synthetic", program)
+
+    def test_real_world_rows_come_first(self):
+        matrix = {}
+        for name, best in (("MonoTree.hs", 0.1), ("KDTree.hs", 0.5),
+                           ("Add1TreeInt8.hs", 0.2), ("Compiler.hs", 0.9)):
+            times = {c: 1.0 for c in TestCompactStageChain.FULL}
+            times[gb.av_variant_name("soa_loop_sbs_gibvec")] = best
+            matrix[name] = {cfg: _make_result(
+                name, cfg, {"m": {"median_time": v, "pass_type": "map"}})
+                for cfg, v in times.items()}
+        rows, _labels, _d = gb._pldi_stage_rows(matrix, "map")
+        self.assertEqual([r["program"] for r in rows],
+                         ["KDTree", "Compiler", "MonoTree", "Add1TreeInt8"])
+        self.assertEqual([r["group"] for r in rows],
+                         ["realworld", "realworld", "synthetic", "synthetic"])
+
+    def test_one_figure_per_kind_holds_both_groups(self):
+        drawn = []
+
+        def capture(results, out, kind, title, extended=False):
+            drawn.append((out.name, sorted(results)))
+            return []
+
+        matrix = {name: {"aos_imm": _make_result(name, "aos_imm", {})}
+                  for name in ("KDTree.hs", "MonoTree.hs")}
+        import tempfile
+        with mock.patch.object(gb, "_fig_pldi_stages", capture), \
+                mock.patch.object(gb, "_pub_rc", lambda: None):
+            with tempfile.TemporaryDirectory() as d:
+                gb.generate_pldi_stage_figures(matrix, Path(d))
+        self.assertEqual(sorted(name for name, _p in drawn),
+                         ["pldi_stages_endtoend", "pldi_stages_fold",
+                          "pldi_stages_map"])
+        for _name, programs in drawn:
+            self.assertEqual(programs, ["KDTree.hs", "MonoTree.hs"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -327,10 +327,12 @@ def apply_av_variants(variants: Tuple[str, ...]) -> None:
 
     if fold_bases:
         PLDI_DELTA_COLUMNS_FOLD = _ordered_by_layout(
-            PLDI_DELTA_COLUMNS_FOLD + [av_column(b) for b in fold_bases])
+            PLDI_DELTA_COLUMNS_FOLD + [av_column(b) for b in fold_bases
+                                       if b not in AV_VARIANT_NO_CONTRAST])
     if map_bases:
         PLDI_DELTA_COLUMNS_MAP = _ordered_by_layout(
-            PLDI_DELTA_COLUMNS_MAP + [av_column(b) for b in map_bases])
+            PLDI_DELTA_COLUMNS_MAP + [av_column(b) for b in map_bases
+                                      if b not in AV_VARIANT_NO_CONTRAST])
     if "loopified" in variants:
         # Every Gibbon-side column moves to the vectorizer-OFF pair, which
         # isolates it from the backend. Each keeps its name: it still
@@ -4686,11 +4688,15 @@ AV_VARIANT_SUFFIX = "_navec"
 # the map table its own -- which includes the recursive baseline the map
 # table also shows, since without it loopification cannot be measured in the
 # vectorizer's absence.
+#
+# Vanilla Gibbon (aos_imm) is twinned too, as the anchor of the compact stage
+# heatmaps; it has no contrast column of its own.
 AV_VARIANT_BASES = {
-    "fold": ("aos_mut", "soa_mut"),
-    "loopified": ("aos_mut", "soa_mut", "aos_loop", "soa_loop",
+    "fold": ("aos_imm", "aos_mut", "soa_mut"),
+    "loopified": ("aos_imm", "aos_mut", "soa_mut", "aos_loop", "soa_loop",
                   "soa_loop_sbs", "soa_loop_sbs_gibvec"),
 }
+AV_VARIANT_NO_CONTRAST = ("aos_imm",)
 
 
 # Families that ship one executable per timed pass, and the single program
@@ -9203,11 +9209,18 @@ def _save(fig, stem: Path):
 # 1.823x for the same optimization measured without it).
 PLDI_STAGE_REF = "aos_imm"
 
-# The compact chain: one column per optimization the paper is about. Vanilla
-# Gibbon is an ordinary build; every later column has the C compiler's
-# auto-vectorizer off, so each Gibbon optimization is measured in isolation
-# from it, and the first column also carries the switch. The tail-call and
+# The compact chain: one column per optimization the paper is about. Every
+# column after Vanilla has the C compiler's auto-vectorizer off, so each
+# optimization is measured in isolation from it. Vanilla is an ordinary build,
+# so the first column also carries that switch -- except for the programs in
+# PLDI_AV_OFF_VANILLA_PROGRAMS, whose Vanilla has it off too: their kernels
+# are what the auto-vectorizer vectorizes, and an ordinary Vanilla would be
+# credited with a speedup no later column is measured with. The tail-call and
 # auto-vectorizer steps appear on their own only in the extended chain.
+PLDI_AV_OFF_VANILLA_PROGRAMS = (
+    "ArithmeticIntensityInt8.hs", "ArithmeticIntensityInt16.hs",
+    "ArithmeticIntensityInt32.hs", "ArithmeticIntensityInt64.hs")
+PLDI_AV_OFF_VANILLA_MARK = "\u2020"
 PLDI_COMPACT_FOLD_STAGES = [("Mutable cursors", "aos_imm", "aos_mut"),
                             ("SoA layout", "aos_mut", "soa_mut")]
 PLDI_COMPACT_MAP_STAGES = PLDI_COMPACT_FOLD_STAGES + [
@@ -9217,11 +9230,10 @@ PLDI_COMPACT_MAP_STAGES = PLDI_COMPACT_FOLD_STAGES + [
 
 
 def _pldi_compact_isolated(kind: str, available: set) -> bool:
-    """Whether every configuration of the compact chain after Vanilla has
-    its -av twin."""
+    """Whether every configuration of the compact chain has its -av twin."""
     stages = PLDI_COMPACT_FOLD_STAGES if kind == "fold" else PLDI_COMPACT_MAP_STAGES
-    return all(av_variant_name(target) in available
-               for _label, _source, target in stages)
+    return all(av_variant_name(cfg) in available
+               for _label, source, target in stages for cfg in (source, target))
 
 
 # (label, from, to). Built at render time because the chain depends on which
@@ -9248,9 +9260,7 @@ def _pldi_stage_chain(kind: str,
         stages = PLDI_COMPACT_FOLD_STAGES if kind == "fold" else PLDI_COMPACT_MAP_STAGES
         if not _pldi_compact_isolated(kind, available):
             return list(stages)
-        return [(label,
-                 source if source == PLDI_STAGE_REF else av_variant_name(source),
-                 av_variant_name(target))
+        return [(label, av_variant_name(source), av_variant_name(target))
                 for label, source, target in stages]
 
     # The opening is the same in every figure: tail calls come off first so
@@ -9317,9 +9327,10 @@ PLDI_STAGE_COLOR_GAMMA = 0.5
 # A cell whose displayed value is below its left neighbour's: that step
 # made the program slower, even where the cell is still above Vanilla.
 PLDI_STAGE_DIP_MARK = "\u25bc"
-# The auto-vectorizer-on corner of a split cell, in cell units.
-PLDI_STAGE_CORNER_W = 0.30
-PLDI_STAGE_CORNER_H = 0.55
+# The auto-vectorizer-on corner of a split cell, in cell units: large enough
+# to hold its own number.
+PLDI_STAGE_CORNER_W = 0.56
+PLDI_STAGE_CORNER_H = 0.80
 PLDI_STAGE_TOTAL_LABEL = "Total"
 
 
@@ -9381,6 +9392,21 @@ def _pldi_end_to_end_time(results_for_program: Dict[str, BenchmarkResult],
     return build + passes
 
 
+# Each stage heatmap lists the real-world benchmarks first and the synthetic
+# ones (every other program) below a rule, named after the program each split
+# family was merged back into.
+PLDI_REAL_WORLD_PROGRAMS = (
+    "Compiler.hs", "PiecewiseFunctions.hs", "Trie.hs", "DBQuery.hs",
+    "ObjectGraph.hs", "DecisionTree.hs", "KDTree.hs", "DomTree.hs",
+    "DecisionTreeClassify.hs", "OctTree.hs", "ColorOctree.hs")
+PLDI_STAGE_GROUPS = (("realworld", "Real-world"),
+                     ("synthetic", "Synthetic"))
+
+
+def pldi_stage_group(program: str) -> str:
+    return "realworld" if program in PLDI_REAL_WORLD_PROGRAMS else "synthetic"
+
+
 def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]],
                      kind: str, extended: bool = False,
                      ) -> Tuple[List[Dict], List[str], List[str]]:
@@ -9400,17 +9426,24 @@ def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]]
             return _pldi_end_to_end_time(by_cfg, cfg)
         return _pldi_sum_passes(by_cfg, cfg, pass_type)
 
-    # The baseline is a column of its own rather than an unnamed starting
-    # point: the figure is a progression, and a reader should be able to see
-    # where it starts without inferring it from the first step's label.
-    anchor = stages[0][1]
-    stages = [("Vanilla Gibbon", anchor, anchor)] + stages
+    def program_stages(program: str) -> List[Tuple[str, str, str]]:
+        """The chain with this program's Vanilla as its first column: the
+        baseline is a column of its own rather than an unnamed starting
+        point, so a reader can see where the progression starts."""
+        chain = list(stages)
+        if (chain[0][1] == av_variant_name(PLDI_STAGE_REF)
+                and program not in PLDI_AV_OFF_VANILLA_PROGRAMS):
+            chain[0] = (chain[0][0], PLDI_STAGE_REF, chain[0][2])
+        anchor = chain[0][1]
+        return [("Vanilla Gibbon", anchor, anchor)] + chain
 
     rows: List[Dict] = []
     dropped: List[str] = []
     for program in sorted(pldi_variant_results):
+        chain = program_stages(program)
+        anchor = chain[0][1]
         times = {}
-        for _label, source, target in stages:
+        for _label, source, target in chain:
             for cfg in (source, target):
                 if cfg not in times:
                     times[cfg] = timing(program, cfg)
@@ -9419,25 +9452,28 @@ def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]]
             continue
         reference = times[anchor]
         factors = [reference / times[target]
-                   for _label, _source, target in stages]
+                   for _label, _source, target in chain]
 
         # The same configuration with the C auto-vectorizer on, where a
         # compact-chain stage is an -av twin; None where there is no twin or
         # no timing. The extended chain has its own auto-vectorizer columns.
         def av_on(cfg: str) -> Optional[float]:
-            if (extended or cfg == anchor
-                    or not cfg.endswith(AV_VARIANT_SUFFIX)):
+            if extended or not cfg.endswith(AV_VARIANT_SUFFIX):
                 return None
             t = timing(program, cfg[:-len(AV_VARIANT_SUFFIX)])
             return reference / t if t and t > 0 else None
-        av_on_factors = [av_on(target) for _label, _source, target in stages]
+        av_on_factors = [av_on(target) for _label, _source, target in chain]
         rows.append({"program": program.replace(".hs", ""),
                      "factors": factors,
                      "av_on": av_on_factors,
                      "total_av_on": av_on_factors[-1],
-                     "total": times[stages[0][1]] / times[stages[-1][2]]})
-    rows.sort(key=lambda r: r["total"], reverse=True)
-    return rows, [label for label, _s, _t in stages], dropped
+                     "vanilla_av_off": anchor.endswith(AV_VARIANT_SUFFIX),
+                     "group": pldi_stage_group(program),
+                     "total": times[chain[0][1]] / times[chain[-1][2]]})
+    # Real-world benchmarks first, then synthetic; each by total, best first.
+    group_order = [g for g, _title in PLDI_STAGE_GROUPS]
+    rows.sort(key=lambda r: (group_order.index(r["group"]), -r["total"]))
+    return rows, ["Vanilla Gibbon"] + [label for label, _s, _t in stages], dropped
 
 
 def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
@@ -9462,20 +9498,34 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     corners = any(v is not None for row in av_on for v in row)
     # With a corner the main number sits a little above centre, leaving the
     # lower right to the corner and its label.
-    text_dy = -0.13 if corners else 0.0
+    text_dy = -0.18 if corners else 0.0
     cmap = plt.get_cmap(PLDI_STAGE_CMAP)
 
     fig, ax = plt.subplots(figsize=(1.15 * len(columns) + 3.2,
-                                    (0.42 if corners else 0.34) * len(rows)
+                                    (0.50 if corners else 0.34) * len(rows)
                                     + 2.0))
     ax.imshow(shaded, cmap=PLDI_STAGE_CMAP, aspect="auto", vmin=-1.0, vmax=1.0)
     ax.set_xticks(range(len(columns)))
     ax.set_xticklabels(columns, rotation=30, ha="right", fontsize=8)
     ax.set_yticks(range(len(rows)))
-    ax.set_yticklabels([r["program"] for r in rows], fontsize=7.5)
+    ax.set_yticklabels([r["program"] + (" " + PLDI_AV_OFF_VANILLA_MARK
+                                        if r.get("vanilla_av_off") else "")
+                        for r in rows], fontsize=7.5)
     # The total is the row's headline (the last stage's value), ruled off so
     # it does not read as one more stage.
     ax.axvline(len(labels) - 0.5, color="black", linewidth=1.4)
+    # The benchmark groups are ruled off the same way, and named in the
+    # right margin beside their rows.
+    for group, group_title in PLDI_STAGE_GROUPS:
+        ys = [y for y, r in enumerate(rows) if r.get("group") == group]
+        if not ys:
+            continue
+        if ys[0] > 0:
+            ax.axhline(ys[0] - 0.5, color="black", linewidth=1.4)
+        if len(ys) < len(rows):
+            ax.text(len(columns) - 0.5 + 0.08, (ys[0] + ys[-1]) / 2.0,
+                    group_title, rotation=270, ha="left", va="center",
+                    fontsize=8.5, fontweight="bold", clip_on=False)
     for y in range(len(rows)):
         for x in range(len(columns)):
             value = values[y, x]
@@ -9500,10 +9550,10 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
                      (x + 0.5 - w, y + 0.5)], closed=True,
                     facecolor=cmap((pos + 1.0) / 2.0), edgecolor="white",
                     linewidth=0.6, zorder=2))
-                ax.text(x + 0.5 - w - 0.02, y + 0.30,
-                        "av " + ("%.3g" % av_on[y][x]) + "×", ha="right",
-                        va="center", fontsize=5.6, color=ink, alpha=0.85,
-                        zorder=4)
+                ax.text(x + 0.5 - 0.30 * w, y + 0.5 - 0.27 * h,
+                        ("%.3g" % av_on[y][x]) + "×", ha="center",
+                        va="center", fontsize=5.8, zorder=4,
+                        color="white" if abs(pos) > 0.65 else "black")
             if dips[y][x]:
                 ax.text(x - 0.40, y + text_dy, PLDI_STAGE_DIP_MARK, ha="left",
                         va="center", fontsize=7.0, color="#d7191c", zorder=4,
@@ -9519,13 +9569,16 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     elif _pldi_compact_isolated(kind, available):
         backend = ("\nThe C compiler's auto-vectorizer is off in every column "
                    "after Vanilla Gibbon, so each optimization is measured in "
-                   "isolation from it; the first column includes that switch.")
+                   "isolation from it; Vanilla Gibbon is an ordinary build")
+        backend += (", except in rows marked %s, where it is off too."
+                    % PLDI_AV_OFF_VANILLA_MARK
+                    if any(r.get("vanilla_av_off") for r in rows) else ".")
     else:
         backend = "\nThe C compiler's auto-vectorizer is on in every column."
     if corners:
         backend += ("\nThe lower-right corner is the same configuration with "
-                    "the auto-vectorizer on: shaded on the same scale, with its "
-                    "speedup over Vanilla Gibbon beside it (av).")
+                    "the auto-vectorizer on: its speedup over Vanilla Gibbon, "
+                    "shaded on the same scale.")
     ax.set_title(
         title + "\nVanilla Gibbon is AoS, recursive traversal, immutable "
         "cursors. Each cell is the speedup over Vanilla Gibbon with that "
