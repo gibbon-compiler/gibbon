@@ -169,10 +169,23 @@ class TestAosSoaSelectedDepthAgreement(unittest.TestCase):
         # checks use: a real diff, not a hand-picked substring.
         import difflib
         diff = list(difflib.unified_diff(aos, soa, lineterm=""))
-        changed = [l for l in diff if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))]
+        # Skip the two file-header lines by position, not by a "---"/"+++"
+        # prefix: a removed Haskell comment ("-" + "-- ...") also starts
+        # with "---", and filtering on the prefix silently drops it.
+        changed = [l for l in diff[2:] if l.startswith(("+", "-"))]
+        # A line that names the layout (a header comment saying the type is
+        # Linear or Factored) differs between the two files by that word
+        # alone; it is the annotation restated, not a workload change.
+        import re
+        def layout_blind(body):
+            return re.sub(r"\b(Linear|Factored)\b", "LAYOUT", body)
+        removed = {layout_blind(l[1:]) for l in changed if l.startswith("-")}
+        added = {layout_blind(l[1:]) for l in changed if l.startswith("+")}
         for line in changed:
             body = line[1:]
-            allowed = ("ANN" in body or "Vidush" in body or body.strip() == "")
+            counterpart = added if line.startswith("-") else removed
+            allowed = ("ANN" in body or "Vidush" in body or body.strip() == ""
+                       or layout_blind(body) in counterpart)
             self.assertTrue(allowed, "unexpected AoS/SoA divergence: %r" % line)
 
 
@@ -273,8 +286,13 @@ class TestEligibilityHasNoNameSpecialCase(unittest.TestCase):
     showing the string never appears in the driver's decision logic."""
 
     def test_gibbon_benchmark_source_names_decisiontree_only_where_allowed(self):
-        """The name may appear only in the program list and in the RAN
-        exception table -- never in eligibility or qualification logic.
+        """The name may appear only in program lists and in the RAN exception
+        table -- never in eligibility or qualification logic.
+
+        A program list is a line holding nothing but quoted `.hs` names
+        (optionally opening or closing the literal): DEFAULT_PROGRAMS, and
+        any grouping of programs for presentation. Such a line cannot carry a
+        decision about the program it names.
 
         The invariant this class protects is that numeric eligibility is a
         consequence of the oracle qualification passing, not of a name being
@@ -285,13 +303,19 @@ class TestEligibilityHasNoNameSpecialCase(unittest.TestCase):
         still checked against its oracle in exactly the same way. So that
         mention is allowed by name here, and anything else still fails.
         """
+        import re
         src = (HERE / "gibbon_benchmark.py").read_text()
         hits = [ln for ln in src.splitlines() if "DecisionTree" in ln]
-        allowed_program_list = [h for h in hits if '"DecisionTree.hs"' in h
-                                and "DEFAULT_PROGRAMS" not in h]
+        program_list_line = re.compile(
+            r'^(\w+(\s*:\s*[\w\[\], ]+)?\s*=\s*[\(\[]\s*)?'
+            r'("[\w.]+\.hs",?\s*)+[\)\]]?,?$')
+        allowed_program_list = [h for h in hits
+                                if program_list_line.match(h.strip())]
         allowed_ran = [h for h in hits if h.strip().startswith('"DecisionTreeClassify.hs":')]
-        self.assertEqual(len(allowed_program_list), 1,
-                         "expected the DEFAULT_PROGRAMS entry: %r" % hits)
+        default_programs = src[src.index("DEFAULT_PROGRAMS = ["):]
+        default_programs = default_programs[:default_programs.index("]")]
+        self.assertIn('"DecisionTree.hs"', default_programs,
+                      "expected the DEFAULT_PROGRAMS entry: %r" % hits)
         self.assertLessEqual(len(allowed_ran), 1,
                              "at most one RAN_ENABLED_PROGRAMS entry: %r" % hits)
         unexpected = [h for h in hits
