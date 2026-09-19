@@ -2575,7 +2575,7 @@ def ensure_mlton_sml(aos_hs: Path, mlton_sml: Path, force: bool = False) -> Tupl
         try:
             rel = aos_hs.resolve().relative_to(soa_root.resolve())
         except Exception:
-            rel = aos_hs
+            rel = aos_hs.resolve()
         r = subprocess.run([str(gibbon_exe), "--hs", "--mpl", str(rel)],
                            cwd=str(soa_root),
                            capture_output=True, text=True, env=env)
@@ -5557,17 +5557,23 @@ def parse_soa_loopified(report: str) -> List[str]:
     return out
 
 
-def soa_loopified_functions(source: Path, cfg_kwargs: Dict, scratch: Path,
-                            use_no_ran: bool = True,
-                            c_arith_mode: str = DEFAULT_C_ARITH_MODE,
-                            simd_isa: str = DEFAULT_SIMD_ISA,
-                            ) -> Optional[List[str]]:
-    """The functions SoA loopification rewrites in `source` under
-    `cfg_kwargs`, from the compiler's own --loopification-report (generated
-    C only, scalar counts on). None when the report cannot be produced."""
+def soa_loopification_report(source: Path, cfg_kwargs: Dict, scratch: Path,
+                             use_no_ran: bool = True,
+                             c_arith_mode: str = DEFAULT_C_ARITH_MODE,
+                             simd_isa: str = DEFAULT_SIMD_ISA,
+                             ) -> Tuple[Optional[List[str]], Optional[str]]:
+    """(the functions SoA loopification rewrites in `source` under
+    `cfg_kwargs`, error). From the compiler's own --loopification-report
+    (generated C only, scalar counts on); the functions are None, and the
+    error says why, when the report cannot be produced.
+
+    The compiler runs from the repo root, so every path it is handed is
+    made absolute first: `scratch` usually comes from --output-dir, which is
+    relative to the driver's working directory."""
     res = resolve_gibbon()
     if res.path is None:
-        return None
+        return None, "gibbon executable could not be resolved"
+    scratch = scratch.resolve()
     scratch.mkdir(parents=True, exist_ok=True)
     kwargs = dict(cfg_kwargs, store_scalar_field_counts=True)
     cmd = build_gibbon_command(
@@ -5584,11 +5590,25 @@ def soa_loopified_functions(source: Path, cfg_kwargs: Dict, scratch: Path,
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               cwd=str(REPO_ROOT), env=env, timeout=900)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, "%s: %s" % (type(e).__name__, e)
     if proc.returncode != 0:
-        return None
-    return parse_soa_loopified((proc.stdout or "") + (proc.stderr or ""))
+        output = ((proc.stderr or "") + (proc.stdout or "")).strip()
+        return None, "exit %d: %s\ncommand: %s" % (
+            proc.returncode, "\n".join(output.splitlines()[-15:]),
+            " ".join(cmd))
+    return parse_soa_loopified((proc.stdout or "") + (proc.stderr or "")), None
+
+
+def soa_loopified_functions(source: Path, cfg_kwargs: Dict, scratch: Path,
+                            use_no_ran: bool = True,
+                            c_arith_mode: str = DEFAULT_C_ARITH_MODE,
+                            simd_isa: str = DEFAULT_SIMD_ISA,
+                            ) -> Optional[List[str]]:
+    """soa_loopification_report's functions alone: None when the report
+    cannot be produced."""
+    return soa_loopification_report(source, cfg_kwargs, scratch, use_no_ran,
+                                    c_arith_mode, simd_isa)[0]
 
 
 def build_family(program: str) -> List[str]:
@@ -5675,6 +5695,8 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
     # per build family, so a split family's members and its one shared build
     # all compile with the same scalar-count flags.
     loopified_cache: Dict[Tuple[str, bool], Optional[List[str]]] = {}
+    # {family owner: the compiler's error} for every report that failed.
+    report_failures: Dict[str, str] = {}
 
     def family_loopified(program: str, cfg_kwargs: Dict) -> Optional[List[str]]:
         auto = cfg_kwargs.get("auto_loopification", True)
@@ -5685,11 +5707,15 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                 src = programs_dir / "SOA" / member
                 if not src.exists():
                     continue
-                one = soa_loopified_functions(
+                one, err = soa_loopification_report(
                     src, cfg_kwargs, out_dir / "loopify_report",
                     use_no_ran=program_uses_no_ran(member),
                     c_arith_mode=c_arith_mode, simd_isa=simd_isa)
                 if one is None:
+                    if not report_failures:
+                        print("  !! loopification report failed for %s:\n%s"
+                              % (member, textwrap.indent(err or "", "     ")))
+                    report_failures[key[0]] = err or "unknown error"
                     found = None
                     break
                 found.extend("%s:%s" % (Path(member).stem, f) for f in one)
@@ -5701,6 +5727,37 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                 else ", ".join(found) if found
                 else "none; scalar counts and buffer sharing off"))
         return loopified_cache[key]
+
+    def report_failure_summary() -> None:
+        if report_failures:
+            print("  " + "!" * 70)
+            print("  !! loopification report FAILED for %d program(s): %s"
+                  % (len(report_failures),
+                     ", ".join(Path(p).stem for p in sorted(report_failures))))
+            print("  !! their SoA configurations keep scalar counts and "
+                  "selective buffer sharing whether or not anything is "
+                  "loopified.")
+            print("  " + "!" * 70)
+
+    # Every report is produced before anything is measured. A report that
+    # fails for every program means the command itself is broken, and a
+    # campaign run under the wrong policy is hours wasted, so that stops
+    # here; a single program's failure keeps its counts, since the compiler
+    # rejects a loopified SoA traversal without them.
+    counted = next((kw for kw in PLDI_MAP_CONFIGS.get("soa", {}).values()
+                    if kw.get("store_scalar_field_counts")), None)
+    if counted is not None:
+        attempted = {build_timing_program(p) for p in program_list
+                     if (programs_dir / "SOA" / p).exists()}
+        for program in program_list:
+            if (programs_dir / "SOA" / program).exists():
+                family_loopified(program, counted)
+        if attempted and set(report_failures) >= attempted:
+            raise RuntimeError(
+                "the loopification report failed for every program, so the "
+                "scalar-count policy cannot be applied; first error:\n%s"
+                % next(iter(report_failures.values())))
+        report_failure_summary()
 
     for program in program_list:
         results[program] = {}
@@ -5822,6 +5879,7 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
             if build_err:
                 print("  Build-time warning: %s/%s: %s"
                       % (program, cfg_name, build_err))
+    report_failure_summary()
     return results
 
 

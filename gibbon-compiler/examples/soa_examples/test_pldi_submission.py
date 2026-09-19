@@ -3229,6 +3229,71 @@ class TestScalarCountsFollowLoopification(unittest.TestCase):
             self.assertIs(gated, kw)
             self.assertEqual(gb.scalar_count_mode(gated), "deferred")
 
+    def test_the_report_runs_with_a_relative_output_dir(self):
+        """`main` hands the report a scratch directory under --output-dir,
+        a relative path by default, while the compiler runs from the repo
+        root. The report must still be produced, for a program with nothing
+        to loopify and for one with something."""
+        import os
+        import tempfile
+        if gb.resolve_gibbon().path is None:
+            self.skipTest("gibbon executable not available")
+        here = Path(gb.__file__).resolve().parent
+        scratch = gb.build_parser().parse_args([]).output_dir / "loopify_report"
+        self.assertFalse(scratch.is_absolute())
+        kw = gb.PLDI_MAP_CONFIGS["soa"]["soa_loop"]
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as d:
+            os.chdir(d)
+            try:
+                for program, expected in (("KDTree.hs", []),
+                                          ("Add1TreeInt8.hs", ["add1Tree"])):
+                    got = gb.soa_loopified_functions(
+                        here / "programs" / "SOA" / program, kw, scratch,
+                        use_no_ran=gb.program_uses_no_ran(program))
+                    self.assertEqual(got, expected, program)
+            finally:
+                os.chdir(cwd)
+
+    def _collect_with_reports(self, programs, report):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "SOA").mkdir()
+            for program in programs:
+                (Path(d) / "SOA" / program).write_text("gibbon_main = 0\n")
+            with mock.patch.object(gb, "soa_loopification_report", report), \
+                    mock.patch.object(gb, "compile_one",
+                                      lambda *a, **k: (False, 0.0, "stub")), \
+                    mock.patch.object(gb, "qualify_variant",
+                                      lambda *a, **k: None):
+                return gb.collect_pldi_variant_results(
+                    Path(d), Path(d) / "out", "gcc", False, None,
+                    programs=list(programs))
+
+    def test_every_report_failing_stops_the_phase(self):
+        """A report that fails everywhere is a broken command, not a
+        property of the programs."""
+        with self.assertRaises(RuntimeError) as ctx:
+            self._collect_with_reports(
+                ["KDTree.hs", "MonoTree.hs"],
+                lambda *a, **k: (None, "exit 1: cannot open C file"))
+        self.assertIn("cannot open C file", str(ctx.exception))
+
+    def test_one_failing_report_keeps_that_programs_counts(self):
+        def report(source, *a, **k):
+            if source.name == "MonoTree.hs":
+                return None, "exit 1: boom"
+            return [], None
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            results = self._collect_with_reports(["KDTree.hs", "MonoTree.hs"],
+                                                 report)
+        self.assertIsNone(results["KDTree.hs"]["soa_loop"].scalar_counts)
+        self.assertEqual(results["MonoTree.hs"]["soa_loop"].scalar_counts,
+                         "deferred")
+        self.assertIn("FAILED for 1 program(s): MonoTree", out.getvalue())
+        self.assertIn("exit 1: boom", out.getvalue())
+
     def test_split_family_decides_together(self):
         family = gb.build_family("OctTree_sumMass.hs")
         self.assertIn("OctTree_scaleEnergy.hs", family)
