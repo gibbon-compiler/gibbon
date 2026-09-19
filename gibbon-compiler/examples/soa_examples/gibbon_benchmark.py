@@ -9351,6 +9351,10 @@ PLDI_STAGE_COLOR_GAMMA = 0.5
 # A cell whose displayed value is below its left neighbour's: that step
 # made the program slower, even where the cell is still above Vanilla.
 PLDI_STAGE_DIP_MARK = "\u25bc"
+# The white gap before the Total column and between benchmark groups, in cell
+# units, and the hairline drawn down its middle.
+PLDI_STAGE_GAP = 0.35
+PLDI_STAGE_HAIRLINE = "#9a9a9a"
 # The auto-vectorizer-on corner of a split cell, in cell units: large enough
 # to hold its own number.
 PLDI_STAGE_CORNER_W = 0.56
@@ -9525,68 +9529,84 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     text_dy = -0.18 if corners else 0.0
     cmap = plt.get_cmap(PLDI_STAGE_CMAP)
 
+    # Cells are placed on a grid with white gaps: one before the Total column
+    # and one between benchmark groups, each with a hairline down its middle.
+    # A gap cannot be painted over by a cell's contents, as a rule can.
+    gap = PLDI_STAGE_GAP
+    col_x = [x + (gap if x == len(labels) else 0.0) for x in range(len(columns))]
+    row_y, boundaries, offset = [], [], 0.0
+    for y, r in enumerate(rows):
+        if y > 0 and r.get("group") != rows[y - 1].get("group"):
+            offset += gap
+            boundaries.append(y)
+        row_y.append(y + offset)
+
     fig, ax = plt.subplots(figsize=(1.15 * len(columns) + 3.2,
                                     (0.50 if corners else 0.34) * len(rows)
                                     + 2.0))
-    ax.imshow(shaded, cmap=PLDI_STAGE_CMAP, aspect="auto", vmin=-1.0, vmax=1.0)
-    ax.set_xticks(range(len(columns)))
+    ax.set_xlim(-0.5, col_x[-1] + 0.5)
+    ax.set_ylim(row_y[-1] + 0.5, -0.5)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.grid(False)
+    ax.set_xticks(col_x)
     ax.set_xticklabels(columns, rotation=30, ha="right", fontsize=8)
-    ax.set_yticks(range(len(rows)))
+    ax.set_yticks(row_y)
     ax.set_yticklabels([r["program"] + (" " + PLDI_AV_OFF_VANILLA_MARK
                                         if r.get("vanilla_av_off") else "")
                         for r in rows], fontsize=7.5)
-    # The total is the row's headline (the last stage's value), ruled off so
-    # it does not read as one more stage.
-    ax.axvline(len(labels) - 0.5, color="black", linewidth=1.4)
-    # The benchmark groups are ruled off the same way, and named in the
-    # right margin beside their rows.
+    ax.tick_params(length=0)
+    hairline = dict(color=PLDI_STAGE_HAIRLINE, linewidth=0.7, zorder=0)
+    ax.plot([col_x[-1] - 0.5 - gap / 2.0] * 2, [-0.5, row_y[-1] + 0.5],
+            **hairline)
+    for y in boundaries:
+        ax.plot([-0.5, col_x[-1] + 0.5], [row_y[y] - 0.5 - gap / 2.0] * 2,
+                **hairline)
+    # Each group is named in the right margin beside its rows.
     for group, group_title in PLDI_STAGE_GROUPS:
-        ys = [y for y, r in enumerate(rows) if r.get("group") == group]
-        if not ys:
-            continue
-        if ys[0] > 0:
-            ax.axhline(ys[0] - 0.5, color="black", linewidth=1.4)
-        if len(ys) < len(rows):
-            ax.text(len(columns) - 0.5 + 0.08, (ys[0] + ys[-1]) / 2.0,
+        ys = [row_y[y] for y, r in enumerate(rows) if r.get("group") == group]
+        if ys and len(ys) < len(rows):
+            ax.text(col_x[-1] + 0.5 + 0.08, (ys[0] + ys[-1]) / 2.0,
                     group_title, rotation=270, ha="left", va="center",
                     fontsize=8.5, fontweight="bold", clip_on=False)
     for y in range(len(rows)):
         for x in range(len(columns)):
+            cx, cy = col_x[x], row_y[y]
             value = values[y, x]
+            ax.add_patch(mpatches.Rectangle(
+                (cx - 0.5, cy - 0.5), 1, 1,
+                facecolor=cmap((shaded[y, x] + 1.0) / 2.0),
+                edgecolor="white", linewidth=0.8, zorder=1))
             if saturated[y, x]:
                 # The colour has stopped tracking the value here; say so,
                 # rather than letting two very different cells read alike.
                 ax.add_patch(mpatches.Rectangle(
-                    (x - 0.5, y - 0.5), 1, 1, fill=False,
+                    (cx - 0.5, cy - 0.5), 1, 1, fill=False,
                     edgecolor="black", linewidth=1.1, zorder=3))
             ink = "white" if abs(shaded[y, x]) > 0.65 else "black"
-            ax.text(x, y + text_dy, ("%.3g" % value) + "×", ha="center",
+            ax.text(cx, cy + text_dy, ("%.3g" % value) + "×", ha="center",
                     va="center", fontsize=7.0,
                     fontweight="bold" if x == len(labels) else "normal",
-                    color=ink)
+                    color=ink, zorder=4)
             if av_on[y][x] is not None:
                 # The same configuration with the C auto-vectorizer on: a
                 # corner shaded on the cell's own scale, and its number.
                 pos, _clipped = pldi_stage_shade(av_on[y][x])
                 w, h = PLDI_STAGE_CORNER_W, PLDI_STAGE_CORNER_H
                 ax.add_patch(mpatches.Polygon(
-                    [(x + 0.5, y + 0.5), (x + 0.5, y + 0.5 - h),
-                     (x + 0.5 - w, y + 0.5)], closed=True,
+                    [(cx + 0.5, cy + 0.5), (cx + 0.5, cy + 0.5 - h),
+                     (cx + 0.5 - w, cy + 0.5)], closed=True,
                     facecolor=cmap((pos + 1.0) / 2.0), edgecolor="white",
                     linewidth=0.6, zorder=2))
-                ax.text(x + 0.5 - 0.30 * w, y + 0.5 - 0.27 * h,
+                ax.text(cx + 0.5 - 0.30 * w, cy + 0.5 - 0.27 * h,
                         ("%.3g" % av_on[y][x]) + "×", ha="center",
                         va="center", fontsize=5.8, zorder=4,
                         color="white" if abs(pos) > 0.65 else "black")
             if dips[y][x]:
-                ax.text(x - 0.40, y + text_dy, PLDI_STAGE_DIP_MARK, ha="left",
+                ax.text(cx - 0.40, cy + text_dy, PLDI_STAGE_DIP_MARK, ha="left",
                         va="center", fontsize=7.0, color="#d7191c", zorder=4,
                         path_effects=[patheffects.withStroke(
                             linewidth=1.6, foreground="white")])
-    ax.set_xticks(np.arange(-0.5, len(columns), 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, len(rows), 1), minor=True)
-    ax.grid(which="minor", color="white", linewidth=0.8)
-    ax.tick_params(which="minor", length=0)
     available = {cfg for by_cfg in pldi_variant_results.values() for cfg in by_cfg}
     if extended:
         backend = ""
