@@ -20,9 +20,9 @@
       "note": "Phase 10 step 2 (owner decision 2026-09-04): re-derived for ALL-22-Int64 policy, superseding the prior Int32/mixed-width note. Independently computed by the updated oracles/batch_a_model.py:list_sum (operation-by-operation wrap64 discipline retained per owner instruction; see that file's own docstring for exactly which steps, if any, still wrap at this width). Prior (Int32-era) expected value: \"'#(1087459712 1087459712 100000000)\"."
     },
     "LinearListReduction": {
-      "expected": "50000005000000",
+      "expected": "'#(50000005000000 10000000 9999968 50000075000007 50000035000003 50000015000001)",
       "provenance": "python-model",
-      "note": "Phase 10 step 2 (owner decision 2026-09-04): re-derived for ALL-22-Int64 policy, superseding the prior Int32/mixed-width note. Independently computed by the updated oracles/batch_a_model.py:linear_list_reduction_sum (operation-by-operation wrap64 discipline retained per owner instruction; see that file's own docstring for exactly which steps, if any, still wrap at this width). Prior (Int32-era) expected value: '-2004260032'."
+      "note": "2026-09-19: four folds and three maps now run over the same list (reduce, maxField, countHeavy; bumpFirst, shiftTriple, touchMost), so the expected value is a six-tuple. Every element is derived in oracles/batch_a_model.py from mkList's shape, not read back from the program; AoS and SoA agree exactly. Phase 10 step 2 (owner decision 2026-09-04): re-derived for ALL-22-Int64 policy, superseding the prior Int32/mixed-width note. Independently computed by the updated oracles/batch_a_model.py:linear_list_reduction_sum (operation-by-operation wrap64 discipline retained per owner instruction; see that file's own docstring for exactly which steps, if any, still wrap at this width). Prior (Int32-era) expected value: '-2004260032'."
     },
     "reduceNestedList": {
       "expected": "500000500000",

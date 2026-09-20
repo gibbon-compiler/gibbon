@@ -3,4 +3,24 @@ Running pass reduction (fold, uses=2):
 ITERS: 1
 SIZE: 1
 End
-2080
+Running pass maxField (fold, uses=2): 
+ITERS: 1
+SIZE: 1
+End
+Running pass countHeavy (fold, uses=2): 
+ITERS: 1
+SIZE: 1
+End
+Running pass bumpFirst (map, uses=11, shared=10): 
+ITERS: 1
+SIZE: 1
+End
+Running pass shiftTriple (map, uses=11, shared=8): 
+ITERS: 1
+SIZE: 1
+End
+Running pass touchMost (map, uses=11, shared=3): 
+ITERS: 1
+SIZE: 1
+End
+'#(2080 64 32 2535 2275 2145)

@@ -40,6 +40,27 @@ def list_sum(n: int):
     return "'#(%d %d %d)" % (total, total, n)
 
 
+def linear_list_reduction(n: int):
+    # LinearListReduction.hs: mkList n builds n+1 nodes whose ten fields all
+    # hold the node's value, n down to 0. Each pass is derived here from that
+    # shape rather than from the Haskell:
+    #   reduce      sums field a                        -> n(n+1)/2
+    #   maxField    largest value in field g            -> n
+    #   countHeavy  nodes whose field e exceeds 32      -> n - 32
+    #   bumpFirst   a := a + 7, summed over field a     -> n(n+1)/2 + 7(n+1)
+    #   shiftTriple c := c + 3, summed over field c     -> n(n+1)/2 + 3(n+1)
+    #   touchMost   a := a + 1, summed over field a     -> n(n+1)/2 + (n+1)
+    # Every total fits inside Int64 at the committed n, so wrap64 is an
+    # identity; it is applied anyway, as everywhere else in this model.
+    nodes = n + 1
+    total = wrap64(n * (n + 1) // 2)
+    return "'#(%d %d %d %d %d %d)" % (
+        total, n, n - 32,
+        wrap64(total + 7 * nodes),
+        wrap64(total + 3 * nodes),
+        wrap64(total + nodes))
+
+
 def linear_list_reduction_sum(n: int):
     # LinearListReduction.hs: mkList n builds nodes valued n,n-1,...,0;
     # reduce sums field `a` (== the node's value) over all n+1 nodes as a
@@ -86,7 +107,7 @@ def mono_tree_sum(d: int):
 
 MODELS = {
     "List": lambda: list_sum(100000000),
-    "LinearListReduction": lambda: linear_list_reduction_sum(10000000),
+    "LinearListReduction": lambda: linear_list_reduction(10000000),
     "reduceNestedList": lambda: reduce_nested_list_sum(1000000),
     "TernaryTree": lambda: ternary_tree_sum(15),
     "MonoTree": lambda: mono_tree_sum(23),
