@@ -1,6 +1,7 @@
 -- ColorOctree: ColorOctree (Linear).
--- Functions: absI, sum8, mixSeed, cSumR, cSumG, cSumB, cCount,
+-- Functions: absI, sum8, minI, min8, mixSeed, cSumR, cSumG, cSumB, cCount,
 -- buildColorOctree. ...
+-- Annotated: MayVectorize on toYCoCg, markPaletteLeaves.
 data ColorOctree
   = CNode Int64  -- sumR
           Int64  -- sumG
@@ -28,6 +29,12 @@ absI x = if x < 0 then 0 - x else x
 
 sum8 :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
 sum8 a b c d e f g h = a + b + c + d + e + f + g + h
+
+minI :: Int -> Int -> Int
+minI a b = if a < b then a else b
+
+min8 :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+min8 a b c d e f g h = minI (minI (minI a b) (minI c d)) (minI (minI e f) (minI g h))
 
 mixSeed :: Int -> Int -> Int
 mixSeed s salt = s * 1103 + salt * 97 + 13
@@ -144,6 +151,80 @@ quantizationErrorProxy t maxDepth eta weight =
     CPixel r g b -> absI (r - g) + absI (g - b) + absI (b - r)
     CEmpty -> 0
 
+-- Colours left after one pruning sweep at threshold `ep`: nodes whose
+-- quantization error exceeds `ep` and that still hold pixels.
+reduceColorCount :: ColorOctree -> Int64 -> Int64
+reduceColorCount t ep =
+  case t of
+    CNode _ _ _ cnt _ _ _ _ _ _ _ varP _ _ a b c d e f g h ->
+      let here = if varP > ep then (if cnt > 0 then 1 else 0) else 0
+      in here + sum8 (reduceColorCount a ep) (reduceColorCount b ep)
+                     (reduceColorCount c ep) (reduceColorCount d ep)
+                     (reduceColorCount e ep) (reduceColorCount f ep)
+                     (reduceColorCount g ep) (reduceColorCount h ep)
+    CPixel _ _ _ -> 0
+    CEmpty -> 0
+
+-- Smallest squared RGB distance from (tr, tg, tb) to any colour leaf.
+closestColor :: ColorOctree -> Int64 -> Int64 -> Int64 -> Int64
+closestColor t tr tg tb =
+  case t of
+    CNode _ _ _ _ _ _ _ _ _ _ _ _ _ _ a b c d e f g h ->
+      min8 (closestColor a tr tg tb) (closestColor b tr tg tb)
+           (closestColor c tr tg tb) (closestColor d tr tg tb)
+           (closestColor e tr tg tb) (closestColor f tr tg tb)
+           (closestColor g tr tg tb) (closestColor h tr tg tb)
+    CPixel r g b ->
+      let dr = r - tr
+          dg = g - tg
+          db = b - tb
+      in dr * dr + dg * dg + db * db
+    CEmpty -> 1000000
+
+-- RGB to YCoCg scaled by 4 (Y = R+2G+B, Co = 2R-2B, Cg = 2G-R-B): colour
+-- sums convert linearly, bounding boxes by interval arithmetic.
+{-# ANN toYCoCg "OPT:MayVectorize" #-}
+toYCoCg :: ColorOctree -> ColorOctree
+toYCoCg t =
+  case t of
+    CNode sr sg sb cnt lvl minR minG minB maxR maxG maxB varP energy flags a b c d e f g h ->
+      CNode (sr + sg + sg + sb) (sr + sr - sb - sb) (sg + sg - sr - sb) cnt lvl
+            (minR + minG + minG + minB) (minR + minR - maxB - maxB) (minG + minG - maxR - maxB)
+            (maxR + maxG + maxG + maxB) (maxR + maxR - minB - minB) (maxG + maxG - minR - minB)
+            varP energy flags
+            (toYCoCg a) (toYCoCg b) (toYCoCg c) (toYCoCg d)
+            (toYCoCg e) (toYCoCg f) (toYCoCg g) (toYCoCg h)
+    CPixel r g b -> CPixel (r + g + g + b) (r + r - b - b) (g + g - r - b)
+    CEmpty -> CEmpty
+
+-- Marks every node at level >= 2 holding at least `ppc` pixels as a
+-- palette leaf (flag bit 8).
+{-# ANN markPaletteLeaves "OPT:MayVectorize" #-}
+markPaletteLeaves :: ColorOctree -> Int64 -> ColorOctree
+markPaletteLeaves t ppc =
+  case t of
+    CNode sr sg sb cnt lvl minR minG minB maxR maxG maxB varP energy flags a b c d e f g h ->
+      let flags' = if lvl >= 2
+                   then (if cnt >= ppc then (if flags < 8 then flags + 8 else flags) else flags)
+                   else flags
+      in CNode sr sg sb cnt lvl minR minG minB maxR maxG maxB varP energy flags'
+               (markPaletteLeaves a ppc) (markPaletteLeaves b ppc)
+               (markPaletteLeaves c ppc) (markPaletteLeaves d ppc)
+               (markPaletteLeaves e ppc) (markPaletteLeaves f ppc)
+               (markPaletteLeaves g ppc) (markPaletteLeaves h ppc)
+    CPixel r g b -> CPixel r g b
+    CEmpty -> CEmpty
+
+countMarked :: ColorOctree -> Int64
+countMarked t =
+  case t of
+    CNode _ _ _ _ _ _ _ _ _ _ _ _ _ flags a b c d e f g h ->
+      (if flags >= 8 then 1 else 0)
+        + sum8 (countMarked a) (countMarked b) (countMarked c) (countMarked d)
+               (countMarked e) (countMarked f) (countMarked g) (countMarked h)
+    CPixel _ _ _ -> 0
+    CEmpty -> 0
+
 gibbon_main =
   let _ = printsym (quote "Running program ColorOctree Quantization: ")
       _ = printsym (quote "NEWLINE")
@@ -159,4 +240,26 @@ gibbon_main =
       quantError = iterate (quantizationErrorProxy colorTree 4 11 3)
       _ = printsym (quote "End")
       _ = printsym (quote "NEWLINE")
-  in (paletteEntries, quantError)
+      _ = printsym (quote "Running pass reduceColorCount (fold, uses=2): ")
+      _ = printsym (quote "NEWLINE")
+      colors = iterate (reduceColorCount colorTree 300)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass closestColor (fold, uses=3): ")
+      _ = printsym (quote "NEWLINE")
+      closest = iterate (closestColor colorTree 200 60 120)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass toYCoCg (map, uses=12, shared=5): ")
+      _ = printsym (quote "NEWLINE")
+      yccTree = iterate (toYCoCg colorTree)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      _ = printsym (quote "Running pass markPaletteLeaves (map, uses=3, shared=16): ")
+      _ = printsym (quote "NEWLINE")
+      markedTree = iterate (markPaletteLeaves colorTree 65536)
+      _ = printsym (quote "End")
+      _ = printsym (quote "NEWLINE")
+      lumaSum = cSumR yccTree
+      paletteLeaves = countMarked markedTree
+  in (paletteEntries, quantError, colors, closest, lumaSum, paletteLeaves)

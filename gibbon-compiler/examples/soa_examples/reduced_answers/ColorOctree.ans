@@ -7,4 +7,20 @@ Running pass quantizationErrorProxy (fold, uses=10):
 ITERS: 1
 SIZE: 1
 End
-'#(32768 1798260)
+Running pass reduceColorCount (fold, uses=2): 
+ITERS: 1
+SIZE: 1
+End
+Running pass closestColor (fold, uses=3): 
+ITERS: 1
+SIZE: 1
+End
+Running pass toYCoCg (map, uses=12, shared=5): 
+ITERS: 1
+SIZE: 1
+End
+Running pass markPaletteLeaves (map, uses=3, shared=16): 
+ITERS: 1
+SIZE: 1
+End
+'#(32768 1798260 64 7635 16710656 576)

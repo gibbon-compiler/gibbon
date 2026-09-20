@@ -895,6 +895,7 @@ tests:
       - {from: "buildOctree (8)", to: "buildOctree (4)"}
       - {from: "buildRenderTree (23)", to: "buildRenderTree (6)"}
       - {from: "buildRenderTree (20)", to: "buildRenderTree (5)"}
+      - {from: "markPaletteLeaves colorTree 65536", to: "markPaletteLeaves colorTree 64"}
     compare-with-baseline: true
     baseline-dir: examples/soa_examples/programs/AOS
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]

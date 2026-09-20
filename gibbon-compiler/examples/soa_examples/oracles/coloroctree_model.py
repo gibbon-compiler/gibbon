@@ -134,6 +134,47 @@ def quantization_error_proxy(t, max_depth, eta, weight):
     return wrap64(sum(quantization_error_proxy(k, max_depth, eta, weight) for k in kids))
 
 
+def reduce_color_count(t, ep):
+    """Nodes with variance proxy above `ep` and a nonzero pixel count."""
+    if t[0] == PIXEL:
+        return 0
+    cnt, var_p, kids = t[4], t[12], t[15]
+    here = 1 if (var_p > ep and cnt > 0) else 0
+    return wrap64(here + wrap64(sum(reduce_color_count(k, ep) for k in kids)))
+
+
+def closest_color(t, tr, tg, tb):
+    """Minimum squared distance from (tr, tg, tb) over the pixel leaves."""
+    if t[0] == PIXEL:
+        _, r, g, b = t
+        dr, dg, db = wrap64(r - tr), wrap64(g - tg), wrap64(b - tb)
+        return wrap64(wrap64(wrap64(dr * dr) + wrap64(dg * dg)) + wrap64(db * db))
+    return min(closest_color(k, tr, tg, tb) for k in t[15])
+
+
+def ycocg_root_luma(t):
+    """cSumR of toYCoCg's output: the root's converted first sum, sr + 2sg + sb.
+    toYCoCg rewrites each node from its own input fields only, so the root's
+    result depends on the root's input sums alone."""
+    if t[0] == PIXEL:
+        _, r, g, b = t
+        return wrap64(wrap64(wrap64(r + g) + g) + b)
+    sr, sg, sb = t[1], t[2], t[3]
+    return wrap64(wrap64(wrap64(sr + sg) + sg) + sb)
+
+
+def count_marked_after_mark(t, ppc):
+    """countMarked (markPaletteLeaves t ppc): flags >= 8 after marking."""
+    if t[0] == PIXEL:
+        return 0
+    cnt, lvl, flags, kids = t[4], t[5], t[14], t[15]
+    flags2 = flags
+    if lvl >= 2 and cnt >= ppc and flags < 8:
+        flags2 = wrap64(flags + 8)
+    here = 1 if flags2 >= 8 else 0
+    return wrap64(here + wrap64(sum(count_marked_after_mark(k, ppc) for k in kids)))
+
+
 def build_tree():
     return build(DEPTH0, LEVEL0, SEED0)
 
@@ -142,7 +183,12 @@ def expected():
     t = build_tree()
     palette = palette_entries_quantized(t, 4, 12)
     quant_error = quantization_error_proxy(t, 4, 11, 3)
-    return "'#(%d %d)" % (palette, quant_error)
+    colors = reduce_color_count(t, 300)
+    closest = closest_color(t, 200, 60, 120)
+    luma_sum = ycocg_root_luma(t)
+    palette_leaves = count_marked_after_mark(t, 65536)
+    return "'#(%d %d %d %d %d %d)" % (palette, quant_error, colors, closest,
+                                      luma_sum, palette_leaves)
 
 
 if __name__ == "__main__":
