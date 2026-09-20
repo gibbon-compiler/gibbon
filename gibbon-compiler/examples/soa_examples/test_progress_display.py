@@ -91,10 +91,12 @@ class TestEstimateIsHonest(unittest.TestCase):
         d.phases["a"].done = 1
         self.assertAlmostEqual(d.eta_seconds(), 12.0, places=6)
 
-    def test_median_not_mean_so_one_outlier_does_not_dominate(self):
+    def test_mean_not_median_so_every_second_is_counted(self):
+        # The estimate multiplies this by a unit count, so it must be total
+        # time over total units; a long compile is time the run spends again.
         p = bp._Phase("k", "k", 10)
-        p.durations = [1.0, 1.0, 1.0, 1.0, 100.0]
-        self.assertEqual(p.typical(), 1.0)
+        p.durations = [1.0, 1.0, 1.0, 1.0, 96.0]
+        self.assertEqual(p.typical(), 20.0)
 
     def test_durations_are_formatted_without_false_precision(self):
         self.assertEqual(bp._fmt_duration(45), "45s")
@@ -418,7 +420,7 @@ class TestEstimateArithmeticIsInTheRightCurrency(unittest.TestCase):
                                 ("p", "running", 31)]:
             d.item(_ctx, _act); t[0] += dur
         d.advance(2)                        # 100s of work == 2 units
-        self.assertEqual(d.phases["a"].durations, [50.0])
+        self.assertEqual(d.phases["a"].durations, [50.0, 50.0])
 
     def test_estimate_matches_the_arithmetic_exactly(self):
         t = self._clock()
@@ -444,7 +446,90 @@ class TestEstimateArithmeticIsInTheRightCurrency(unittest.TestCase):
         d.add_phase("a", "c", 10); d.start_phase("a")
         t[0] += 60.0
         d.advance(4)
-        self.assertEqual(d.phases["a"].durations, [15.0])
+        self.assertEqual(d.phases["a"].durations, [15.0] * 4)
+
+    def test_a_burst_of_advances_is_costed_at_its_true_rate(self):
+        # The variant matrix compiles and runs a program's every
+        # configuration, then advances them all at once: one unit carries
+        # the whole 100s, the other nine ~0s. A median made that 0s a unit.
+        t = self._clock()
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("a", "matrix", 20); d.start_phase("a")
+        t[0] += 100.0
+        for _ in range(10):
+            d.advance()
+        self.assertAlmostEqual(d.eta_seconds(), 100.0, places=6)
+
+
+class TestEstimateFromHistory(unittest.TestCase):
+    """Programs differ by orders of magnitude, so one per-unit rate cannot
+    cost the rest of a run; each program is costed at its own previous time."""
+
+    def _clock(self):
+        t = [0.0]
+        real = bp.time.time
+        bp.time.time = lambda: t[0]
+        self.addCleanup(lambda: setattr(bp.time, "time", real))
+        return t
+
+    def _display(self, history):
+        import json, tempfile
+        path = Path(tempfile.mkdtemp()) / "h.json"
+        path.write_text(json.dumps({"phases": {"m": history}}))
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("m", "matrix", 6, groups={"small": 2, "big": 2, "mid": 2})
+        d.load_history(path)
+        return d, path
+
+    def test_history_costs_each_group_before_anything_runs(self):
+        self._clock()
+        d, _ = self._display({"small": 10.0, "big": 1000.0, "mid": 100.0})
+        d.start_phase("m")
+        self.assertAlmostEqual(d.eta_seconds(), 1110.0, places=6)
+        self.assertFalse(d.eta_detail()[1])
+
+    def test_this_runs_pace_scales_the_history(self):
+        t = self._clock()
+        d, _ = self._display({"small": 10.0, "big": 1000.0, "mid": 100.0})
+        d.start_phase("m")
+        d.group("small"); t[0] += 20.0; d.advance(2)   # twice as slow
+        d.group("big")
+        self.assertAlmostEqual(d.eta_seconds(), 2 * 1100.0, places=6)
+
+    def test_the_group_in_progress_is_charged_only_what_is_left(self):
+        t = self._clock()
+        d, _ = self._display({"small": 10.0, "big": 1000.0, "mid": 100.0})
+        d.start_phase("m")
+        d.group("big"); t[0] += 400.0
+        # big: 1000 - 400 left; small and mid untouched.
+        self.assertAlmostEqual(d.eta_seconds(), 600.0 + 10.0 + 100.0, places=6)
+
+    def test_a_group_without_history_uses_the_phase_rate(self):
+        t = self._clock()
+        d, _ = self._display({"small": 10.0, "big": 1000.0})
+        d.start_phase("m")
+        d.group("small"); t[0] += 10.0; d.advance(2)
+        d.group("big"); t[0] += 1000.0; d.advance(2)
+        d.group("mid")
+        # mid has no record: 2 units at the phase's 1010s / 4 units.
+        self.assertAlmostEqual(d.eta_seconds(), 2 * 1010.0 / 4, places=6)
+
+    def test_completed_groups_are_saved_for_the_next_run(self):
+        import json
+        t = self._clock()
+        d, path = self._display({"mid": 100.0})
+        d.start_phase("m")
+        d.group("small"); t[0] += 12.0; d.advance(2)
+        d.finish_phase()
+        saved = json.loads(path.read_text())["phases"]["m"]
+        self.assertEqual(saved, {"small": 12.0, "mid": 100.0})
+
+    def test_missing_history_file_is_harmless(self):
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("m", "matrix", 2, groups={"a": 2})
+        d.load_history("/nonexistent/dir/h.json")
+        d.start_phase("m")
+        self.assertIsNone(d.eta_seconds())
 
 
 class TestEstimateHonesty(unittest.TestCase):
@@ -482,6 +567,106 @@ class TestEstimateHonesty(unittest.TestCase):
     def test_the_driver_marks_the_tables_phase_non_estimable(self):
         src = (HERE / "gibbon_benchmark.py").read_text()
         self.assertIn('add_phase("report", "tables", 1, estimate=False)', src)
+
+
+class TestCampaignPhaseCountsEveryVariant(unittest.TestCase):
+    """The campaign phase's size and the count it advances by must be the
+    same number, or the bar stops short of 100% however far the run gets."""
+
+    def test_variant_count_matches_the_mode(self):
+        self.assertEqual(len(gb.campaign_variants()), 2)
+        self.assertEqual(
+            len(gb.campaign_variants(benchmark_baseline_gibbon=True)), 3)
+        self.assertEqual(len(gb.campaign_variants(benchmark_immutable=True)), 4)
+        self.assertEqual(
+            len(gb.campaign_variants(benchmark_immutable=True,
+                                     benchmark_ghc=True,
+                                     benchmark_mlton=True)), 6)
+
+    def test_benchmark_program_runs_exactly_those_variants(self):
+        self.assertEqual(
+            [name for name, _mut in
+             gb.campaign_variants(benchmark_baseline_gibbon=True)],
+            ["aos", "aos_imm", "soa"])
+
+    def test_the_driver_advances_by_the_registered_count(self):
+        src = (HERE / "gibbon_benchmark.py").read_text()
+        main_src = src[src.index("\ndef main("):]
+        self.assertIn("_n_variants = len(campaign_variants(", main_src)
+        self.assertIn("progress().advance(_n_variants)", main_src)
+
+    def test_a_four_variant_campaign_reaches_a_full_bar(self):
+        d = bp.ProgressDisplay(width=90)
+        n = len(gb.campaign_variants(benchmark_immutable=True))
+        d.add_phase("campaign", "campaign", 2 * n)
+        d.start_phase("campaign")
+        d.advance(n); d.advance(n)
+        self.assertEqual(d.totals(), (2 * n, 2 * n))
+
+
+class TestGroupTimingStopsWithItsWork(unittest.TestCase):
+    """A group's record is used to cost that program in the next run, so it
+    must not absorb work done after the program is finished."""
+
+    def _clock(self):
+        t = [0.0]
+        real = bp.time.time
+        bp.time.time = lambda: t[0]
+        self.addCleanup(lambda: setattr(bp.time, "time", real))
+        return t
+
+    def test_end_group_stops_the_clock(self):
+        t = self._clock()
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("c", "campaign", 2, groups={"P.hs": 2})
+        d.add_phase("r", "tables", 1, estimate=False)
+        d.start_phase("c")
+        d.group("P.hs"); t[0] += 30.0
+        d.end_group()
+        t[0] += 900.0                      # reports, width families, roofline
+        d.finish_phase()
+        self.assertEqual(d.phases["c"].group_seconds, {"P.hs": 30.0})
+
+    def test_without_it_the_last_program_absorbs_the_rest_of_the_run(self):
+        t = self._clock()
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("c", "campaign", 2, groups={"P.hs": 2})
+        d.start_phase("c")
+        d.group("P.hs"); t[0] += 30.0
+        t[0] += 900.0
+        d.finish_phase()
+        self.assertEqual(d.phases["c"].group_seconds, {"P.hs": 930.0})
+
+    def test_the_driver_ends_the_campaign_group_with_the_loop(self):
+        src = (HERE / "gibbon_benchmark.py").read_text()
+        main_src = src[src.index("\ndef main("):]
+        self.assertLess(main_src.index("progress().end_group()"),
+                        main_src.index('progress().start_phase("pldi")'))
+
+    def test_the_pldi_phase_registers_the_width_selected_programs(self):
+        # The matrix itself narrows its program list to the requested payload
+        # width; groups registered under the wider names are never reported
+        # against, so the phase would never finish.
+        src = (HERE / "gibbon_benchmark.py").read_text()
+        main_src = src[src.index("\ndef main("):]
+        block = main_src[main_src.index("_pldi_programs = resolve_program_selection"):
+                         main_src.index('_display.add_phase(\n            "pldi"')]
+        self.assertIn("apply_width_selection(", block)
+
+
+class TestHistoryFileKeepsPhasesThisRunDoesNotHave(unittest.TestCase):
+    def test_a_campaign_only_run_does_not_wipe_the_matrix_history(self):
+        import json, tempfile
+        path = Path(tempfile.mkdtemp()) / "h.json"
+        path.write_text(json.dumps(
+            {"phases": {"campaign": {"A.hs": 1.0}, "pldi": {"A.hs": 900.0}}}))
+        d = bp.ProgressDisplay(width=90)
+        d.add_phase("campaign", "campaign", 2, groups={"A.hs": 2})
+        d.load_history(path)
+        d.save_history()
+        saved = json.loads(path.read_text())["phases"]
+        self.assertEqual(saved["pldi"], {"A.hs": 900.0})
+        self.assertEqual(saved["campaign"], {"A.hs": 1.0})
 
 
 if __name__ == "__main__":

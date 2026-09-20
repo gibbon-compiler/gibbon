@@ -84,7 +84,7 @@ import fnmatch
 import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 HAS_PLOT_LIBS = True
 try:
@@ -268,6 +268,31 @@ def default_av_variants(choice: Optional[str], pldi_submission: bool) -> Optiona
     Vanilla with the auto-vectorizer off, so they need every twin."""
     if choice is None and pldi_submission:
         return "all"
+    return choice
+
+
+# Interleaved repetitions for a submission campaign. One measurement per
+# configuration cannot separate a real difference from run-to-run drift, and
+# the campaign's own comparisons span ~15 process launches.
+PLDI_DEFAULT_PASS_ROUNDS = 5
+
+
+def default_pass_rounds(choice: Optional[int], pldi_submission: bool) -> int:
+    """--pass-rounds as given, or the submission default for a
+    --pldi-submission run that did not say."""
+    if choice is None:
+        return PLDI_DEFAULT_PASS_ROUNDS if pldi_submission else 1
+    return max(1, choice)
+
+
+def default_reclaim_iterate_regions(choice: Optional[bool],
+                                    pldi_submission: bool) -> bool:
+    """--reclaim-iterate-regions as given, or on for a --pldi-submission run
+    that did not say: its maps allocate a whole output tree per iteration
+    (ColorOctree's ~0.8 GB), which at the campaign's iteration count exceeds
+    the per-process memory cap unless each iteration's region is freed."""
+    if choice is None:
+        return pldi_submission
     return choice
 
 
@@ -868,6 +893,23 @@ def _parse_cpu_list(text: str) -> List[int]:
     return out
 
 
+def smt_siblings(cpu: int) -> Set[int]:
+    """The logical CPUs sharing `cpu`'s physical core, `cpu` included.
+
+    A sibling thread shares the core's front end and execution ports, so
+    leaving it schedulable for the driver does not reserve the core -- it
+    only stops the two from sharing a logical CPU."""
+    try:
+        text = Path("/sys/devices/system/cpu/cpu%d/topology/thread_siblings_list"
+                    % cpu).read_text()
+    except OSError:
+        return {cpu}
+    try:
+        return set(_parse_cpu_list(text)) | {cpu}
+    except ValueError:
+        return {cpu}
+
+
 def reserve_pin_cpu(pin_cpu: Optional[int]) -> bool:
     """Keep the DRIVER off the core reserved for measurement.
 
@@ -890,7 +932,11 @@ def reserve_pin_cpu(pin_cpu: Optional[int]) -> bool:
         allowed = set(os.sched_getaffinity(0))
     except OSError:
         return False
-    rest = allowed - {pin_cpu}
+    rest = allowed - smt_siblings(pin_cpu)
+    if not rest:
+        # Reserving the whole physical core would leave the driver nowhere to
+        # run; keep the sibling rather than give up the reservation.
+        rest = allowed - {pin_cpu}
     if not rest:
         # A single-CPU machine (or an already-restricted cpuset): reserving
         # would leave the driver nowhere to run.
@@ -974,6 +1020,12 @@ def set_report_simd_isa(isa: str) -> None:
 RECLAIM_ITERATE_REGIONS = False
 
 
+# Per-program seconds of the last run's campaign and variant-matrix phases,
+# kept in --output-dir; the progress estimate costs each remaining program
+# from it (see bench_progress.ProgressDisplay.eta_detail).
+PROGRESS_HISTORY_FILE = "progress_history.json"
+
+
 def set_reclaim_iterate_regions(enabled: bool) -> None:
     """Turn region reclamation on for every compile in this run."""
     global RECLAIM_ITERATE_REGIONS
@@ -998,8 +1050,9 @@ def set_mutable_cursors_nonrec(enabled: bool) -> None:
     MUTABLE_CURSORS_NONREC = bool(enabled)
 
 
-def reclaim_caption_note() -> str:
-    """One clause for table captions when reclamation is on.
+def reclaim_caption_note(latex: bool = True) -> str:
+    """One clause for a caption when reclamation is on; `latex` off yields the
+    same sentence as plain text, for a matplotlib figure title.
 
     Worth naming in the report: it changes runtime memory behaviour and, at
     large outputs, the measured times too -- the un-fixed loop makes the kernel
@@ -1007,8 +1060,10 @@ def reclaim_caption_note() -> str:
     """
     if not RECLAIM_ITERATE_REGIONS:
         return ""
+    flag = ("\\texttt{--reclaim-iterate-regions}" if latex
+            else "--reclaim-iterate-regions")
     return ("Every configuration was compiled with "
-            "\\texttt{--reclaim-iterate-regions}, so the per-iteration region "
+            + flag + ", so the per-iteration region "
             "chunks are freed rather than stranded; peak memory is flat in the "
             "iteration count instead of linear. ")
 
@@ -3289,6 +3344,31 @@ def benchmark_build_pass(program: str, variant: str, use_mutable_cursors: bool,
 # ---------------------------------------------------------------------------
 # Benchmark one program
 # ---------------------------------------------------------------------------
+def campaign_variants(benchmark_immutable: bool = False,
+                      benchmark_baseline_gibbon: bool = False,
+                      benchmark_ghc: bool = False,
+                      benchmark_mlton: bool = False,
+                      ) -> List[Tuple[str, bool]]:
+    """The (variant, mutable cursors) pairs one campaign program compiles and
+    runs.
+
+    The single definition of a campaign program's unit of work: the progress
+    phase's size and the count it advances by are both taken from here, so a
+    mode that measures three or four variants cannot register two."""
+    if benchmark_immutable:
+        variants = [("aos", True), ("aos_imm", False),
+                    ("soa", True), ("soa_imm", False)]
+    elif benchmark_baseline_gibbon:
+        variants = [("aos", True), ("aos_imm", False), ("soa", True)]
+    else:
+        variants = [("aos", True), ("soa", True)]
+    if benchmark_ghc:
+        variants.append(("ghc", False))
+    if benchmark_mlton:
+        variants.append(("mlton", False))
+    return variants
+
+
 def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
                       iterations: int, force: bool,
                       source_cls_all: Dict,
@@ -3329,19 +3409,8 @@ def benchmark_program(prog: str, programs_dir: Path, out_dir: Path,
     print(f"\n{'='*70}\nBenchmarking: {prog}\n{'='*70}")
 
     # Determine which variants to compile
-    variants = []
-    if benchmark_immutable:
-        variants.extend([("aos", True), ("aos_imm", False),
-                         ("soa", True), ("soa_imm", False)])
-    elif benchmark_baseline_gibbon:
-        variants.extend([("aos", True), ("aos_imm", False), ("soa", True)])
-    else:
-        variants.extend([("aos", True), ("soa", True)])
-
-    if benchmark_ghc:
-        variants.append(("ghc", False))
-    if benchmark_mlton:
-        variants.append(("mlton", False))
+    variants = campaign_variants(benchmark_immutable, benchmark_baseline_gibbon,
+                                 benchmark_ghc, benchmark_mlton)
 
     tasks = []
     variant_compile_opts: Dict[str, Dict[str, bool]] = {}
@@ -3712,6 +3781,45 @@ def fmt(seconds: float) -> str:
     return f"{seconds:.2e}"
 
 
+def pass_error_bar(pass_data: Dict) -> Tuple[float, str]:
+    """(the +- value for a pass, which spread it is).
+
+    Prefer the spread ACROSS repetitions of the whole executable: comparing
+    two configurations compares two processes, and the within-process
+    standard error -- typically a few tenths of a percent -- is not the
+    uncertainty of that comparison. Falls back to the within-process figure
+    when the run measured each configuration once."""
+    ci = pass_data.get("between_round_ci95_abs")
+    if isinstance(ci, (int, float)) and ci > 0:
+        return float(ci), "between-round"
+    err = pass_data.get("stderr")
+    return (float(err) if isinstance(err, (int, float)) else 0.0), "within-process"
+
+
+def any_between_round_error(results) -> bool:
+    """Whether any rendered result carries a between-round spread, which is
+    what the caption must describe."""
+    for res in results:
+        for pd in ((getattr(res, "passes", None) or {}).values()
+                   if res is not None else ()):
+            if isinstance(pd.get("between_round_ci95_abs"), (int, float)):
+                return True
+    return False
+
+
+def error_bar_caption_note(results) -> str:
+    """One caption sentence naming the spread the tables' +- shows."""
+    if any_between_round_error(results):
+        return ("$\\pm$ is the 95\\% confidence interval across the "
+                "\\texttt{--pass-rounds} repetitions of the whole executable, "
+                "which is the spread a comparison between two configurations "
+                "has to clear. ")
+    return ("$\\pm$ is the standard error of the mean across the "
+            "\\texttt{--iterate} samples WITHIN one process; each "
+            "configuration was measured once, so it is not the run-to-run "
+            "spread that governs a comparison between two configurations. ")
+
+
 def fmt_pm(median: float, stderr: float) -> str:
     """Format as 'median ± stderr' using consistent decimal places."""
     if stderr == 0.0:
@@ -3892,11 +4000,23 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
         rows.append(row_data)
 
     has_mlton = any(entry.get("mlton") is not None for entry in all_variants_results)
+    # The Geomean row compares one column against another, so every column's
+    # mean must be over the SAME programs. Taking each column's own numbers
+    # let a compiler that only ran the cheap benchmarks show the lowest
+    # geomean and be bolded as the fastest.
+    gm_columns = ["aos", "soa", "ghc"] + (["mlton"] if has_mlton else [])
+    gm_rows = [r for r in rows
+               if all(r[c][0] is not None and not r[c][1] for c in gm_columns)]
     f.write("\\begin{table}[htbp]\n\\centering\n")
     f.write("\\caption{Runtime comparison of Gibbon (AoS/SoA), GHC"
             + (", and MLton. " if has_mlton else ". ")
             + "Times are total median per iteration (s). "
-            "\\textbf{Bold} marks the fastest time for each program.}\n")
+            "\\textbf{Bold} marks the fastest time for each program. "
+            + ("The Geomean row covers the %d program(s) every column "
+               "measured." % len(gm_rows) if gm_rows else
+               "No program was measured by every column, so there is no "
+               "Geomean row.")
+            + "}\n")
     f.write("\\label{tab:comparison_ghc_mlton}\n\\small\n")
     f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r r" + (" r" if has_mlton else "") + "}\n\\toprule\n")
     header = ("\\textbf{Program}"
@@ -3906,9 +4026,6 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
         header += " & \\textbf{MLton}"
     f.write(header + " \\\\\n")
     f.write("\\midrule\n")
-
-    # geomean collectors
-    aos_times, soa_times, ghc_times, mlton_times = [], [], [], []
 
     for r in rows:
         cells = {}
@@ -3928,12 +4045,6 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
                 if v[1] is not None and v[1] == min_t:
                     cells[k] = (f"\\textbf{{{v[0]}}}", v[1])
         
-        # append to geomean lists
-        if r["aos"][0] is not None and not r["aos"][1]: aos_times.append(r["aos"][0])
-        if r["soa"][0] is not None and not r["soa"][1]: soa_times.append(r["soa"][0])
-        if r["ghc"][0] is not None and not r["ghc"][1]: ghc_times.append(r["ghc"][0])
-        if r["mlton"][0] is not None and not r["mlton"][1]: mlton_times.append(r["mlton"][0])
-
         row = (f"{r['prog']}"
                f" & {cells['aos'][0]} & {cells['soa'][0]}"
                f" & {cells['ghc'][0]}")
@@ -3943,10 +4054,15 @@ def _table_comparison_ghc_mlton(f, all_variants_results):
     
     # Geomean row
     f.write("\\midrule\n")
-    gm_aos = statistics.geometric_mean(aos_times) if aos_times else None
-    gm_soa = statistics.geometric_mean(soa_times) if soa_times else None
-    gm_ghc = statistics.geometric_mean(ghc_times) if ghc_times else None
-    gm_mlton = statistics.geometric_mean(mlton_times) if mlton_times else None
+
+    def _geomean_column(column: str) -> Optional[float]:
+        values = [r[column][0] for r in gm_rows]
+        return statistics.geometric_mean(values) if values else None
+
+    gm_aos = _geomean_column("aos")
+    gm_soa = _geomean_column("soa")
+    gm_ghc = _geomean_column("ghc")
+    gm_mlton = _geomean_column("mlton") if has_mlton else None
 
     gm_cells = {
         "aos": (fmt(gm_aos) if gm_aos else "--", gm_aos),
@@ -4004,9 +4120,11 @@ def _table_speedup_vs_ghc(f, all_variants_results):
 
         ghc_over_aos = speedup(ghc_t, aos_t)
         ghc_over_soa = speedup(ghc_t, soa_t)
-        if ghc_over_aos is not None:
+        # A program enters BOTH geomeans or neither: the two are read
+        # against each other, and a program where only one Gibbon layout
+        # verified would otherwise move one column and not the other.
+        if ghc_over_aos is not None and ghc_over_soa is not None:
             ghc_over_aos_vals.append(ghc_over_aos)
-        if ghc_over_soa is not None:
             ghc_over_soa_vals.append(ghc_over_soa)
 
         rows.append({
@@ -4021,7 +4139,9 @@ def _table_speedup_vs_ghc(f, all_variants_results):
     f.write("\\begin{table}[htbp]\n\\centering\n")
     f.write("\\caption{GHC speedups vs Gibbon mutable variants. "
             "Each entry is total median runtime speedup over all passes for one iteration. "
-            "$\\text{GHC}/\\text{AoS}$ and $\\text{GHC}/\\text{SoA}$ are reported.}\n")
+            "$\\text{GHC}/\\text{AoS}$ and $\\text{GHC}/\\text{SoA}$ are reported. "
+            "The Geomean row covers the %d program(s) with a speedup in both "
+            "columns.}\n" % len(ghc_over_aos_vals))
     f.write("\\label{tab:speedup_vs_ghc}\n\\small\n")
     f.write("\\gibbonfit{%\n\\begin{tabular}{p{3.2cm} r r}\n\\toprule\n")
     f.write("\\textbf{Program} & $\\mathbf{\\text{GHC}/\\text{AoS}}$ & $\\mathbf{\\text{GHC}/\\text{SoA}}$ \\\\\n")
@@ -4378,7 +4498,8 @@ def _table_add1tree_widths(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
     f.write("% Integer-width add1Tree vectorization\n")
     f.write("\\begin{table}[h]\n\\centering\n")
     f.write("\\caption{Integer-width add1Tree vectorization. "
-            + simd_isa_caption_note() + no_gcc_vec_caption_note() + "}\n")
+            + simd_isa_caption_note() + no_gcc_vec_caption_note()
+            + reclaim_caption_note() + "}\n")
     f.write("\\label{tab:add1tree_widths}\n\\small\n")
     f.write("\\gibbonfit{%\n")
     f.write("\\begin{tabular}{lcccccccc}\n\\toprule\n")
@@ -5475,9 +5596,21 @@ def measure_build_time(
 
 
 
+# One untimed launch per configuration before its first timed round. A first
+# run pays for cold page cache, cold branch predictors and the first-touch of
+# the output region; the driver measured a 6.3% difference between a first and
+# a second run of the SAME binary, which is larger than many of the effects
+# the matrix reports. The warm-up runs at a reduced iteration count: it exists
+# to touch the code and data, not to reproduce the measurement.
+MATRIX_WARMUP_RUNS = 1
+MATRIX_WARMUP_ITERATIONS = 1
+
+
 def run_rounds(jobs: List[Tuple[str, Path]], iterations: int, rounds: int,
                pin_cpu: Optional[int] = None,
-               on_run=None) -> Dict[str, List[Dict]]:
+               on_run=None, warmup_runs: int = MATRIX_WARMUP_RUNS,
+               warmup_iterations: int = MATRIX_WARMUP_ITERATIONS,
+               ) -> Dict[str, List[Dict]]:
     """Run every job once per round, rotating the order each round.
 
     `jobs` is [(key, exe)]. Returns {key: [per-round (ok, elapsed, out, err,
@@ -5489,6 +5622,11 @@ def run_rounds(jobs: List[Tuple[str, Path]], iterations: int, rounds: int,
     the same part of the order it started in, which is what the rotation
     exists to avoid."""
     collected: Dict[str, List[Tuple]] = {key: [] for key, _exe in jobs}
+    for _w in range(max(0, warmup_runs)):
+        for key, exe in jobs:
+            progress().item(exe.stem, "warmup")
+            run_exe(exe, max(1, warmup_iterations), use_iterate_flag=True,
+                    pin_cpu=pin_cpu)
     rounds = max(1, rounds)
     stride = max(1, len(jobs) // rounds) if jobs else 1
     for rnd in range(rounds):
@@ -5760,6 +5898,7 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
         report_failure_summary()
 
     for program in program_list:
+        progress().group(program)
         results[program] = {}
         jobs: List[Tuple[str, Path]] = []
         pending: Dict[str, Dict] = {}
@@ -6180,7 +6319,7 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
         "Times are median per iteration (s), 4 significant digits. "
         "Columns are compiled configurations; see Table~\\ref{tab:pldi-legend} "
         "for the symbol key. "
-        + simd_isa_caption_note() +
+        + simd_isa_caption_note() + reclaim_caption_note() +
         "In each row the fastest configuration is "
         "\\textcolor{" + COLOR_FASTEST + "}{green} and the slowest "
         "\\textcolor{" + COLOR_SLOWEST + "}{red}. "
@@ -6360,6 +6499,7 @@ def _table_arith_intensity(f, results_by_width: Dict[int, Dict[str, BenchmarkRes
     f.write("\\caption{Integer-width high-arithmetic-intensity vectorization. "
             + simd_isa_caption_note()
             + no_gcc_vec_caption_note()
+            + reclaim_caption_note()
             + "Selective buffer sharing is enabled from the \\textbf{SoA loopify "
               "shared} column onwards, including the SIMD column, so those cells are "
               "directly comparable with the per-program map tables, whose SoA columns "
@@ -6981,6 +7121,25 @@ def _machine_description() -> Dict[str, str]:
     except Exception:
         pass
     info["platform"] = platform.platform() if "platform" in globals() else sys.platform
+    # Frequency policy decides whether a four-hour campaign's first and last
+    # measurements are comparable, so it is recorded rather than assumed.
+    def _read(path: str) -> Optional[str]:
+        try:
+            return Path(path).read_text().strip()
+        except OSError:
+            return None
+    gov = _read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+    if gov:
+        info["cpu_governor"] = gov
+    no_turbo = _read("/sys/devices/system/cpu/intel_pstate/no_turbo")
+    if no_turbo is not None:
+        info["turbo"] = "off" if no_turbo.strip() == "1" else "on"
+    boost = _read("/sys/devices/system/cpu/cpufreq/boost")
+    if boost is not None and "turbo" not in info:
+        info["turbo"] = "on" if boost.strip() == "1" else "off"
+    aslr = _read("/proc/sys/kernel/randomize_va_space")
+    if aslr is not None:
+        info["aslr"] = aslr
     return info
 
 
@@ -7121,6 +7280,7 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                 f"{', '.join(str(x) for x in seen_no_ran) if seen_no_ran else 'unknown'}\n")
         f.write(latex_provenance_comments(campaign))
         f.write("\n")
+        _table_benchmark_characteristics(f, all_results)
         _table_summary(f, all_results, all_variants_results,
                        include_build_pass=include_build_pass,
                        pldi_variant_results=pldi_variant_results)
@@ -7189,6 +7349,13 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
             print(f"    (per-program tables show 4 variants: mut + imm cursors)")
         else:
             print(f"    (per-program tables show baseline variants: aos, aos_imm, soa)")
+
+
+# ColorOctree.hs's passes, split out of the combined OctTree row.
+COLOR_OCTREE_PASSES = frozenset({
+    "paletteEntriesQuantized", "quantizationErrorProxy", "reduceColorCount",
+    "closestColor", "toYCoCg", "markPaletteLeaves",
+})
 
 
 def _spd_cell(spd: float, bold_threshold: float = 1.1) -> str:
@@ -7333,6 +7500,70 @@ def _summary_loopified_total(
                            pass_type)
 
 
+def _table_benchmark_characteristics(f, all_results) -> None:
+    """What each benchmark's data looks like, independent of any timing.
+
+    Struct-of-arrays pays when a traversal can skip fields it does not read,
+    so a row's speedup is only interpretable next to how wide its node is and
+    how much of it each pass leaves untouched. Without this a reader cannot
+    tell a benchmark that exercises the mechanism from one that cannot."""
+    rows = []
+    for aos, soa in all_results:
+        if not prov.eligible_pair(aos, soa):
+            continue
+        passes = [p for name, p in (aos.passes or {}).items()
+                  if not is_verification_pass(name)]
+        if not passes:
+            continue
+        dead = [p.get("dead_ratio") for p in passes
+                if isinstance(p.get("dead_ratio"), (int, float))]
+        uses = [p.get("uses") for p in passes
+                if isinstance(p.get("uses"), int)]
+        info = getattr(soa, "adt_info", None) or {}
+        rows.append({
+            "program": aos.program.replace(".hs", ""),
+            "adt": info.get("type_name") or "--",
+            "fields": aos.adt_fields,
+            "buffers": info.get("soa_total_buffers"),
+            "folds": sum(1 for p in passes if p.get("pass_type") == "fold"),
+            "maps": sum(1 for p in passes if p.get("pass_type") == "map"),
+            "uses_min": min(uses) if uses else None,
+            "uses_max": max(uses) if uses else None,
+            "dead_max": max(dead) if dead else None,
+        })
+    if not rows:
+        return
+    rows.sort(key=lambda r: r["program"].lower())
+    f.write("% -- Table: benchmark characteristics --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{Benchmark characteristics, independent of any timing. "
+            "\\textbf{Fields} is the benchmark ADT's scalar field count and "
+            "\\textbf{Buffers} the number of SoA buffers it factors into. "
+            "\\textbf{Uses} is the range, over this program's timed passes, "
+            "of fields a pass reads, and \\textbf{Dead} the largest fraction "
+            "of the node a single pass leaves untouched -- the headroom a "
+            "struct-of-arrays layout has to exploit. A benchmark whose data "
+            "fits in cache cannot show a bandwidth effect whatever its dead "
+            "fraction; working-set sizes are not measured here.}\n")
+    f.write("\\label{tab:benchmark-characteristics}\n\\small\n")
+    f.write("\\gibbonfit{%\n")
+    f.write("\\begin{tabular}{llrrrrrr}\n\\toprule\n")
+    f.write("Benchmark & ADT & Fields & Buffers & Folds & Maps & Uses & Dead \\\\\n")
+    f.write("\\midrule\n")
+    for r in rows:
+        uses = ("--" if r["uses_min"] is None else
+                ("%d" % r["uses_min"] if r["uses_min"] == r["uses_max"]
+                 else "%d--%d" % (r["uses_min"], r["uses_max"])))
+        f.write("\\texttt{%s} & \\texttt{%s} & %s & %s & %d & %d & %s & %s \\\\\n"
+                % (_tex_escape(r["program"]), _tex_escape(r["adt"]),
+                   "--" if r["fields"] is None else r["fields"],
+                   "--" if r["buffers"] is None else r["buffers"],
+                   r["folds"], r["maps"], uses,
+                   "--" if r["dead_max"] is None
+                   else "%.0f\\%%" % (100.0 * r["dead_max"])))
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
+
+
 def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = None,
                    include_build_pass: bool = False,
                    pldi_variant_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None,
@@ -7374,12 +7605,19 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
     if oct_members and "ColorOctree.hs" in _progs:
         oct_members.append("ColorOctree.hs")
 
+    # Only claimed where the numbers carry it. The loopified columns come
+    # from the PLDI matrix, which is collected without --include-build-pass
+    # and keeps the construction phase outside `passes`, so the sentence was
+    # describing a term those cells do not contain.
     build_sentence = ("End-to-end includes the build pass. "
+                      if include_build_pass and not include_loopified else
+                      "The loopified columns are pass sums only; the build "
+                      "phase is not included in them. "
                       if include_build_pass else "")
     f.write(
         "\\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) "
         "and speedup split by pass type. "
-        + build_sentence + simd_isa_caption_note() +
+        + build_sentence + simd_isa_caption_note() + reclaim_caption_note() +
         "When present, the OctTree row includes ColorOctree passes; a separate "
         "ColorOctree row reports only those passes. "
         "ADT fields = total fields in the selected benchmark ADT "
@@ -7589,12 +7827,17 @@ def _collect_papi_counter_names(all_results: List[Tuple]) -> List[str]:
 
 def _papi_total_for_result(res: Optional[BenchmarkResult], counter: str) -> Optional[float]:
     """PAPI ratios require verified executions with valid counters on both
-    sides -- `prov.verified_result`, matching `total_pass_time`'s gate."""
+    sides -- `prov.verified_result`, matching `total_pass_time`'s gate --
+    and cover the same passes `total_pass_time` covers: a verification pass
+    is the correctness apparatus, and counting it here pulls every reported
+    counter ratio towards 1x by adding the same term to both sides."""
     if not prov.verified_result(res):
         return None
     total = 0.0
     seen = False
-    for pdata in res.passes.values():
+    for pname, pdata in res.passes.items():
+        if is_verification_pass(pname):
+            continue
         v = ((pdata.get("papi_counters") or {}).get(counter) or {}).get("median")
         if v is None:
             continue
@@ -7888,8 +8131,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
         f.write(
             f"\\caption{{Per-pass performance for \\texttt{{{pdisplay}}}"
             f"{adt_note}{cursor_note}. "
-            "Times are median per iteration (s); $\\pm$ shows standard error of the mean "
-            "across --iterate runs. "
+            "Times are median per iteration (s). "
+            + error_bar_caption_note([aos, soa, aos_imm, soa_imm]) +
             "T: F=fold, M=map. "
             "Uses: fields accessed / total (recursive + non-recursive). "
             "Dead\\%: fraction of fields not accessed by this pass. "
@@ -8019,7 +8262,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
         color_passes = []
         if prog == "OctTree":
             for pname in passes:
-                if pname in ("paletteEntriesQuantized", "quantizationErrorProxy"):
+                if pname in COLOR_OCTREE_PASSES:
                     color_passes.append(pname)
                 else:
                     octree_passes.append(pname)
@@ -8056,7 +8299,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                         return "--", None, False
                     pd = res.passes.get(pname, {})
                     med = pd.get("median_time", 0.0)
-                    err = pd.get("stderr", 0.0)
+                    err, _kind = pass_error_bar(pd)
                     if med == 0.0:
                         return "--", None, False
                     return fmt_pm(med, err), med, False
@@ -8168,8 +8411,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                 ghd   = ghc.passes.get(pname, {}) if (show_ghc and prov.verified_result(ghc)) else {}
 
                 # median ± stderr cells
-                a_err = ad.get("stderr", 0.0)
-                s_err = sd.get("stderr", 0.0)
+                a_err, _ak = pass_error_bar(ad)
+                s_err, _sk = pass_error_bar(sd)
                 at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
                 st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
 
@@ -8183,7 +8426,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
                 spd_s = _spd_cell(spd) if spd > 0 else "--"
                 gh_t  = ghd.get("median_time", 0.0) if ghd else 0.0
-                gh_e  = ghd.get("stderr", 0.0) if ghd else 0.0
+                gh_e  = pass_error_bar(ghd)[0] if ghd else 0.0
                 gh_f  = fmt_pm(gh_t, gh_e) if gh_t > 0 else "--"
                 spd_ghc_over_aos_mut = (gh_t / at_s) if (show_ghc and gh_t > 0 and at_s > 0) else None
                 spd_ghc_over_soa_mut = (gh_t / st_s) if (show_ghc and gh_t > 0 and st_s > 0) else None
@@ -8243,7 +8486,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
                             return "--", None, False
                         pd = res.passes.get(pname, {})
                         med = pd.get("median_time", 0.0)
-                        err = pd.get("stderr", 0.0)
+                        err, _kind = pass_error_bar(pd)
                         if med == 0.0:
                             return "--", None, False
                         return fmt_pm(med, err), med, False
@@ -8341,8 +8584,8 @@ def _table_per_program(f, all_results, all_variants_results=None):
                     spd   = at_s / st_s if st_s > 0 else 0.0
                     ghd   = ghc.passes.get(pname, {}) if (show_ghc and prov.verified_result(ghc)) else {}
 
-                    a_err = ad.get("stderr", 0.0)
-                    s_err = sd.get("stderr", 0.0)
+                    a_err, _ak = pass_error_bar(ad)
+                    s_err, _sk = pass_error_bar(sd)
                     at_f  = fmt_pm(at_s, a_err) if at_s > 0 else "--"
                     st_f  = fmt_pm(st_s, s_err) if st_s > 0 else "--"
 
@@ -8355,7 +8598,7 @@ def _table_per_program(f, all_results, all_variants_results=None):
 
                     spd_s = _spd_cell(spd) if spd > 0 else "--"
                     gh_t  = ghd.get("median_time", 0.0) if ghd else 0.0
-                    gh_e  = ghd.get("stderr", 0.0) if ghd else 0.0
+                    gh_e  = pass_error_bar(ghd)[0] if ghd else 0.0
                     gh_f  = fmt_pm(gh_t, gh_e) if gh_t > 0 else "--"
                     spd_ghc_over_aos_mut = (gh_t / at_s) if (show_ghc and gh_t > 0 and at_s > 0) else None
                     spd_ghc_over_soa_mut = (gh_t / st_s) if (show_ghc and gh_t > 0 and st_s > 0) else None
@@ -8571,7 +8814,7 @@ def _table_per_program_papi_one_pair(
     color_passes = []
     if prog == "OctTree":
         for pname in passes:
-            if pname in ("paletteEntriesQuantized", "quantizationErrorProxy"):
+            if pname in COLOR_OCTREE_PASSES:
                 color_passes.append(pname)
             else:
                 octree_passes.append(pname)
@@ -8710,7 +8953,9 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
     for prog, aos, soa, ghc in grouped_rows:
         pdisplay = prog.replace("_", "\\_")
         passes = sorted(
-            set(list(aos.passes.keys()) + list(soa.passes.keys()) + list(ghc.passes.keys())),
+            {p for p in (list(aos.passes.keys()) + list(soa.passes.keys())
+                         + list(ghc.passes.keys()))
+             if not is_verification_pass(p)},
             key=lambda p: _pass_sort_key(p, aos, soa, ghc),
         )
         if not passes:
@@ -8720,7 +8965,8 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
         f.write("\\begin{table}[t]\n\\centering\n")
         f.write(
             f"\\caption{{Per-pass GHC comparison for \\texttt{{{pdisplay}}}. "
-            "Times are median per iteration (s); $\\pm$ shows standard error. "
+            "Times are median per iteration (s). "
+            + error_bar_caption_note([aos, soa, ghc]) +
             "$\\text{GHC}/\\text{Am}$ and $\\text{GHC}/\\text{Sm}$ are speedups.}}\n"
         )
         f.write(f"\\label{{tab:{prog}_ghc}}\n\\small\n")
@@ -8734,7 +8980,7 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
         color_passes = []
         if prog == "OctTree":
             for pname in passes:
-                if pname in ("paletteEntriesQuantized", "quantizationErrorProxy"):
+                if pname in COLOR_OCTREE_PASSES:
                     color_passes.append(pname)
                 else:
                     octree_passes.append(pname)
@@ -8753,7 +8999,7 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
             at = ad.get("median_time", 0.0)
             st = sd.get("median_time", 0.0)
             gt = gd.get("median_time", 0.0)
-            ge = gd.get("stderr", 0.0)
+            ge, _gk = pass_error_bar(gd)
             ghc_cell = fmt_pm(gt, ge) if gt > 0 else "--"
 
             g_over_a = (gt / at) if (gt > 0 and at > 0) else None
@@ -8771,9 +9017,13 @@ def _table_per_program_ghc(f, all_results, all_variants_results):
                 f" & {(_spd_cell(g_over_s) if g_over_s else '--')} \\\\\n"
             )
 
-        a_tot = sum(p.get("median_time", 0.0) for p in aos.passes.values())
-        s_tot = sum(p.get("median_time", 0.0) for p in soa.passes.values())
-        g_tot = sum(p.get("median_time", 0.0) for p in ghc.passes.values())
+        # Through `total_pass_time`, so this Total is the sum of the rows
+        # above it and agrees with tab:speedup_vs_ghc on the same program:
+        # summing `passes` directly counted the verification pass, which
+        # neither the rows nor that table include.
+        a_tot = total_pass_time(aos) or 0.0
+        s_tot = total_pass_time(soa) or 0.0
+        g_tot = total_pass_time(ghc) or 0.0
         g_over_a_tot = (g_tot / a_tot) if (g_tot > 0 and a_tot > 0) else None
         g_over_s_tot = (g_tot / s_tot) if (g_tot > 0 and s_tot > 0) else None
         gm_g_over_a = statistics.geometric_mean(ghc_over_am_vals) if ghc_over_am_vals else None
@@ -9125,17 +9375,40 @@ def campaign_provenance(args) -> Dict[str, object]:
                      if l.strip()])},
         "cc": prov.cc_identity(resolve_cc()),
         "machine": _machine_description(),
+        # Warm-up and cooldown are recorded per measuring path, not once from
+        # argv: the two paths honour different settings, and a single figure
+        # here would credit the variant matrix -- which produces the PLDI
+        # tables -- with the campaign path's discipline.
         "timing": {"iterations": getattr(args, "iterations", None),
-                   "warmup_runs": getattr(args, "warmup_runs", None),
-                   "warmup_iterations": getattr(args, "warmup_iterations", None),
-                   "cooldown_seconds": getattr(args, "cooldown_seconds", None),
                    "size_param": getattr(args, "size_param", None),
-                   "pin_cpu": getattr(args, "pin_cpu", None)},
-        "codegen": {"simd_isa": getattr(args, "simd_isa", None),
+                   "pin_cpu": getattr(args, "pin_cpu", None),
+                   "pass_rounds": getattr(args, "pass_rounds", None),
+                   "measure_rounds": getattr(args, "measure_rounds", None),
+                   "campaign_phase": {
+                       "warmup_runs": getattr(args, "warmup_runs", None),
+                       "warmup_iterations": getattr(args, "warmup_iterations", None),
+                       "cooldown_seconds": getattr(args, "cooldown_seconds", None)},
+                   "variant_matrix_phase": {
+                       "warmup_runs": MATRIX_WARMUP_RUNS,
+                       "warmup_iterations": MATRIX_WARMUP_ITERATIONS,
+                       "cooldown_seconds": 0.0,
+                       "rounds": getattr(args, "pass_rounds", None)}},
+        # Every field here is a WHOLE-RUN setting. The per-configuration
+        # code-generation flags of the PLDI matrix are a property of each
+        # column, not of the run, and are named by the tables' own legend.
+        "codegen": {"per_configuration_flags": "see PLDI_MAP_CONFIGS / the "
+                                               "table legend; the fields below "
+                                               "are whole-run settings only",
+                    "simd_isa": getattr(args, "simd_isa", None),
                     "c_arithmetic": getattr(args, "c_arithmetic", None),
                     "sse41": getattr(args, "use_sse41", None),
                     "no_gcc_vectorize": getattr(args, "use_no_gcc_vec", None),
                     "use_ran": getattr(args, "use_ran", None),
+                    # Recorded explicitly: --pldi-submission turns this on
+                    # without it appearing in driver_argv, and it changes the
+                    # measured times, so argv alone no longer identifies it.
+                    "reclaim_iterate_regions": RECLAIM_ITERATE_REGIONS,
+                    "mutable_cursors_nonrec": MUTABLE_CURSORS_NONREC,
                     "store_scalar_field_counts": getattr(args, "store_scalar_field_counts", None),
                     "loopification": getattr(args, "enable_loopification", None),
                     "loop_fusion": getattr(args, "enable_loop_fusion", None),
@@ -9180,6 +9453,103 @@ def write_pldi_matrix_json(pldi_variant_results, out_file: Path,
     print(f"  ✓ PLDI matrix JSON → {out_file}"
           + (f"  ({len(failures)} configuration(s) compiled but did not run)"
              if failures else ""))
+
+
+def _deser_result(program: str, variant: str,
+                  rec: Optional[Dict]) -> Optional[BenchmarkResult]:
+    """One '_ser_result' record back into a BenchmarkResult: enough for the
+    tables and figures (passes, build time, qualification, ADT metadata).
+    Verification is re-derived from the stored qualification components, so an
+    unverified result cannot come back verified."""
+    if rec is None:
+        return None
+    res = BenchmarkResult(program, variant)
+    res.compile_success = bool(rec.get("compile_success"))
+    res.run_success = bool(rec.get("run_success"))
+    res.error_message = rec.get("error")
+    res.run_returncode = rec.get("run_returncode")
+    res.arith_mode = rec.get("arith_mode")
+    res.use_no_ran = rec.get("use_no_ran")
+    res.scalar_counts = rec.get("scalar_counts")
+    res.soa_loopified = rec.get("soa_loopified")
+    res.selective_buffer_sharing = bool(rec.get("selective_buffer_sharing"))
+    res.adt_fields = rec.get("adt_fields")
+    if rec.get("adt_type") is not None:
+        res.adt_info = {"type_name": rec.get("adt_type"),
+                        "soa_total_buffers": rec.get("soa_total_buffers"),
+                        "nonrec_field_slots": rec.get("nonrec_field_slots")}
+    res.passes = dict(rec.get("passes") or {})
+    res.build_passes = dict(rec.get("build_passes") or {})
+    res.build_time = rec.get("build_time")
+    res.build_error = rec.get("build_error")
+    res.exec_wall_time = rec.get("exec_wall_time") or 0.0
+    res.exec_time_per_iter = rec.get("exec_time_per_iter") or 0.0
+    res.papi_file = rec.get("papi_file")
+    res.papi_counters = list(rec.get("papi_counters") or [])
+    q = rec.get("qualification")
+    res.qualification = prov.QualificationStatus.from_dict(q) if q else None
+    if res.qualification is not None:
+        res.output = res.qualification.semantic_output
+    return res
+
+
+def load_pldi_matrix_json(path: Path) -> Dict[str, Dict[str, BenchmarkResult]]:
+    """Rebuild the PLDI configuration matrix from 'write_pldi_matrix_json''s
+    file: {program: {configuration: result}}."""
+    report = json.loads(Path(path).read_text())
+    matrix: Dict[str, Dict[str, BenchmarkResult]] = {}
+    for program, cfgs in (report.get("results") or {}).items():
+        matrix[program] = {}
+        for cfg, rec in cfgs.items():
+            res = _deser_result(program, cfg, rec)
+            if res is not None:
+                matrix[program][cfg] = res
+    return matrix
+
+
+def load_results_json(path: Path) -> List[Tuple[Optional[BenchmarkResult],
+                                                Optional[BenchmarkResult]]]:
+    """Rebuild the campaign's AoS/SoA pairs from 'write_json_results''s file,
+    in the order 'generate_all_figures' expects them."""
+    report = json.loads(Path(path).read_text())
+    out = []
+    for rec in (report.get("results") or []):
+        program = rec.get("program")
+        out.append((_deser_result(program, "aos", rec.get("aos")),
+                    _deser_result(program, "soa", rec.get("soa"))))
+    return out
+
+
+def adopt_stored_campaign_settings(path: Path) -> None:
+    """Make the caption-bearing run-scoped settings describe the run that
+    PRODUCED a stored report, not the replot invocation. A report written
+    before a setting was recorded cannot say, and the caption then omits the
+    clause rather than asserting either way."""
+    try:
+        codegen = (json.loads(Path(path).read_text())
+                   .get("campaign") or {}).get("codegen") or {}
+    except (OSError, ValueError):
+        return
+    if "reclaim_iterate_regions" in codegen:
+        set_reclaim_iterate_regions(bool(codegen["reclaim_iterate_regions"]))
+    else:
+        print("  Note: %s records no region-reclaim setting (written before it "
+              "was recorded), so the captions cannot state one." % path)
+    if "mutable_cursors_nonrec" in codegen:
+        set_mutable_cursors_nonrec(bool(codegen["mutable_cursors_nonrec"]))
+
+
+def json_report_kind(path: Path) -> str:
+    """'matrix' for a PLDI variant-matrix report, 'campaign' for a main
+    results report: the two are told apart by their own shape, so either can
+    be handed to --figures-from-json."""
+    report = json.loads(Path(path).read_text())
+    results = report.get("results")
+    if isinstance(results, dict):
+        return "matrix"
+    if isinstance(results, list):
+        return "campaign"
+    raise ValueError("%s has no recognizable `results` section" % path)
 
 
 def write_json_results(all_results: List[Tuple], out_file: Path,
@@ -9413,11 +9783,17 @@ PLDI_STAGE_DIP_MARK = "\u25bc"
 # units, and the hairline drawn down its middle.
 PLDI_STAGE_GAP = 0.35
 PLDI_STAGE_HAIRLINE = "#9a9a9a"
+PLDI_STAGE_SUBGAP = 0.18
 # The auto-vectorizer-on corner of a split cell, in cell units: large enough
 # to hold its own number.
 PLDI_STAGE_CORNER_W = 0.56
 PLDI_STAGE_CORNER_H = 0.80
 PLDI_STAGE_TOTAL_LABEL = "Total"
+# A second line under a column heading: the layout a column is measured in
+# where the heading alone does not say.
+PLDI_STAGE_COLUMN_NOTES = {"Vanilla Gibbon": "AoS", "Mutable cursors": "AoS"}
+# Ink for a corner number below its cell's: the auto-vectorizer slowed it.
+PLDI_STAGE_CORNER_SLOWER = "#d7191c"
 
 
 def pldi_stage_shade(value: float) -> Tuple[float, bool]:
@@ -9465,14 +9841,25 @@ def _pldi_end_to_end_time(results_for_program: Dict[str, BenchmarkResult],
     executable's wall time, which is a single sample per run and, for a
     family split into one executable per pass, charges every member the
     build the family shares. Returns None unless both terms are present, so
-    a row is dropped rather than reporting a partial total."""
+    a row is dropped rather than reporting a partial total.
+
+    The pass term is summed through `_pldi_sum_passes`, exactly as the fold
+    and map figures sum theirs: every pass any configuration of this program
+    reported must be present here, or this configuration carries no total at
+    all. Summing whatever this configuration happens to have would compare
+    one configuration's five passes against another's four."""
     res = results_for_program.get(cfg)
     if res is None or not prov.verified_result(res):
         return None
     build = getattr(res, "build_time", None)
     if not build:
         return None
-    passes = total_pass_time(res)
+    parts = [_pldi_sum_passes(results_for_program, cfg, pass_type)
+             for pass_type in ("fold", "map")
+             if _pldi_pass_names(results_for_program, pass_type)]
+    if not parts or any(p is None for p in parts):
+        return None
+    passes = sum(parts)
     if not passes:
         return None
     return build + passes
@@ -9491,6 +9878,35 @@ PLDI_STAGE_GROUPS = (("realworld", "Real-world"),
 
 def pldi_stage_group(program: str) -> str:
     return "realworld" if program in PLDI_REAL_WORLD_PROGRAMS else "synthetic"
+
+
+# Sub-groups within a group, each set apart below the group's other rows:
+# (key, title, program-name prefix).
+PLDI_STAGE_SUBGROUPS = (("arithintensity", "Arithmetic intensity",
+                         "ArithmeticIntensity"),)
+
+
+def pldi_stage_subgroup(program: str) -> Optional[str]:
+    """The sub-group a program is drawn in within its group, or None."""
+    for key, _title, prefix in PLDI_STAGE_SUBGROUPS:
+        if program.startswith(prefix):
+            return key
+    return None
+
+
+def pldi_stage_sort_key(program: str, group: str) -> Tuple[int, int, str, int]:
+    """Real-world benchmarks first, then synthetic; within a group, programs
+    outside any sub-group first, then each sub-group; within those,
+    alphabetically by family, so a family's integer-width variants
+    (`ArithmeticIntensityInt8` .. `Int64`) sit together in width order."""
+    group_order = [g for g, _title in PLDI_STAGE_GROUPS]
+    sub = pldi_stage_subgroup(program)
+    sub_rank = (0 if sub is None else
+                1 + [k for k, _t, _p in PLDI_STAGE_SUBGROUPS].index(sub))
+    stem = program[:-3] if program.endswith(".hs") else program
+    m = re.match(r"^(.*?)Int(8|16|32|64)$", stem)
+    family, width = (m.group(1), int(m.group(2))) if m else (stem, 0)
+    return (group_order.index(group), sub_rank, family.lower(), width)
 
 
 def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]],
@@ -9555,11 +9971,44 @@ def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]]
                      "total_av_on": av_on_factors[-1],
                      "vanilla_av_off": anchor.endswith(AV_VARIANT_SUFFIX),
                      "group": pldi_stage_group(program),
+                     "subgroup": pldi_stage_subgroup(program),
                      "total": times[chain[0][1]] / times[chain[-1][2]]})
-    # Real-world benchmarks first, then synthetic; each by total, best first.
-    group_order = [g for g, _title in PLDI_STAGE_GROUPS]
-    rows.sort(key=lambda r: (group_order.index(r["group"]), -r["total"]))
+    rows.sort(key=lambda r: pldi_stage_sort_key(r["program"], r["group"]))
     return rows, ["Vanilla Gibbon"] + [label for label, _s, _t in stages], dropped
+
+
+def _pldi_drop_reasons(pldi_variant_results, dropped: List[str],
+                       kind: str) -> Tuple[List[str], List[str]]:
+    """(programs with no pass of this kind at all, programs a failed
+    configuration removed). A reader cannot tell the two apart from an absent
+    row, and only the second is a result worth knowing about."""
+    structural, failed = [], []
+    for program in dropped:
+        by_cfg = pldi_variant_results.get(program, {})
+        names = _pldi_pass_names(by_cfg, "fold" if kind == "fold" else "map")
+        (structural if not names else failed).append(program)
+    return structural, failed
+
+
+def _pldi_stage_caption_omissions(pldi_variant_results, rows, dropped: List[str],
+                                  kind: str) -> str:
+    """One caption sentence accounting for every program not drawn."""
+    if not dropped:
+        return ""
+    shown, total = len(rows), len(rows) + len(dropped)
+    structural, failed = _pldi_drop_reasons(pldi_variant_results, dropped, kind)
+    parts = []
+    if structural:
+        parts.append("%d with no %s pass (%s)"
+                     % (len(structural), "fold" if kind == "fold" else "map",
+                        ", ".join(p.replace(".hs", "") for p in structural)))
+    if failed:
+        parts.append("%d whose chain is incomplete because a configuration "
+                     "failed to build or run (%s)"
+                     % (len(failed),
+                        ", ".join(p.replace(".hs", "") for p in failed)))
+    return ("\n%d of %d programs are shown; %s."
+            % (shown, total, ", and ".join(parts)))
 
 
 def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
@@ -9592,11 +10041,15 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     # A gap cannot be painted over by a cell's contents, as a rule can.
     gap = PLDI_STAGE_GAP
     col_x = [x + (gap if x == len(labels) else 0.0) for x in range(len(columns))]
-    row_y, boundaries, offset = [], [], 0.0
+    # A sub-group within a group gets a narrower gap and a dashed hairline.
+    row_y, boundaries, sub_boundaries, offset = [], [], [], 0.0
     for y, r in enumerate(rows):
         if y > 0 and r.get("group") != rows[y - 1].get("group"):
             offset += gap
             boundaries.append(y)
+        elif y > 0 and r.get("subgroup") != rows[y - 1].get("subgroup"):
+            offset += PLDI_STAGE_SUBGAP
+            sub_boundaries.append(y)
         row_y.append(y + offset)
 
     fig, ax = plt.subplots(figsize=(1.15 * len(columns) + 3.2,
@@ -9608,7 +10061,10 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
         spine.set_visible(False)
     ax.grid(False)
     ax.set_xticks(col_x)
-    ax.set_xticklabels(columns, rotation=30, ha="right", fontsize=8)
+    ax.set_xticklabels(
+        [c + ("\n(%s)" % PLDI_STAGE_COLUMN_NOTES[c]
+              if c in PLDI_STAGE_COLUMN_NOTES else "") for c in columns],
+        rotation=30, ha="right", multialignment="center", fontsize=8)
     ax.set_yticks(row_y)
     ax.set_yticklabels([r["program"] + (" " + PLDI_AV_OFF_VANILLA_MARK
                                         if r.get("vanilla_av_off") else "")
@@ -9620,11 +10076,27 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     for y in boundaries:
         ax.plot([-0.5, col_x[-1] + 0.5], [row_y[y] - 0.5 - gap / 2.0] * 2,
                 **hairline)
-    # Each group is named in the right margin beside its rows.
+    for y in sub_boundaries:
+        ax.plot([-0.5, col_x[-1] + 0.5],
+                [row_y[y] - 0.5 - PLDI_STAGE_SUBGAP / 2.0] * 2,
+                linestyle=(0, (3, 2)), **hairline)
+    # Sub-groups are named in the right margin beside their rows, and each
+    # group beyond them, spanning all of its rows.
+    right = col_x[-1] + 0.5
+    has_sub = any(r.get("subgroup") for r in rows)
+    for key, sub_title, _prefix in PLDI_STAGE_SUBGROUPS:
+        ys = [row_y[y] for y, r in enumerate(rows) if r.get("subgroup") == key]
+        if ys:
+            ax.plot([right + 0.10] * 2, [ys[0] - 0.4, ys[-1] + 0.4],
+                    color=PLDI_STAGE_HAIRLINE, linewidth=0.9, clip_on=False)
+            ax.text(right + 0.16, (ys[0] + ys[-1]) / 2.0, sub_title,
+                    rotation=270, ha="left", va="center", fontsize=7.5,
+                    fontstyle="italic", clip_on=False)
     for group, group_title in PLDI_STAGE_GROUPS:
         ys = [row_y[y] for y, r in enumerate(rows) if r.get("group") == group]
         if ys and len(ys) < len(rows):
-            ax.text(col_x[-1] + 0.5 + 0.08, (ys[0] + ys[-1]) / 2.0,
+            ax.text(right + (0.50 if has_sub else 0.08),
+                    (ys[0] + ys[-1]) / 2.0,
                     group_title, rotation=270, ha="left", va="center",
                     fontsize=8.5, fontweight="bold", clip_on=False)
     for y in range(len(rows)):
@@ -9656,10 +10128,18 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
                      (cx + 0.5 - w, cy + 0.5)], closed=True,
                     facecolor=cmap((pos + 1.0) / 2.0), edgecolor="white",
                     linewidth=0.6, zorder=2))
+                # Red where turning the auto-vectorizer on made this
+                # configuration slower, compared as displayed.
+                slower = float("%.3g" % av_on[y][x]) < float("%.3g" % value)
                 ax.text(cx + 0.5 - 0.30 * w, cy + 0.5 - 0.27 * h,
                         ("%.3g" % av_on[y][x]) + "×", ha="center",
                         va="center", fontsize=5.8, zorder=4,
-                        color="white" if abs(pos) > 0.65 else "black")
+                        color=(PLDI_STAGE_CORNER_SLOWER if slower else
+                               "white" if abs(pos) > 0.65 else "black"),
+                        fontweight="bold" if slower else "normal",
+                        path_effects=([patheffects.withStroke(
+                            linewidth=1.4, foreground="white")]
+                            if slower else None))
             if dips[y][x]:
                 ax.text(cx - 0.40, cy + text_dy, PLDI_STAGE_DIP_MARK, ha="left",
                         va="center", fontsize=7.0, color="#d7191c", zorder=4,
@@ -9680,9 +10160,14 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     if corners:
         backend += ("\nThe lower-right corner is the same configuration with "
                     "the auto-vectorizer on: its speedup over Vanilla Gibbon, "
-                    "shaded on the same scale.")
+                    "shaded on the same scale; its number is red where it is "
+                    "below the cell's.")
+    omissions = _pldi_stage_caption_omissions(pldi_variant_results, rows,
+                                              dropped, kind)
+    reclaim = (" " + reclaim_caption_note(latex=False)).rstrip()
     ax.set_title(
-        title + "\nVanilla Gibbon is AoS, recursive traversal, immutable "
+        title + omissions + reclaim +
+        "\nVanilla Gibbon is AoS, recursive traversal, immutable "
         "cursors. Each cell is the speedup over Vanilla Gibbon with that "
         "optimization and every one to its left enabled." + backend +
         "\nColour is log-scaled, saturating at %g× (blue) and %g× (red); an "
@@ -9693,6 +10178,79 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
         fontsize=9, pad=12)
     _save(fig, out)
     return dropped
+
+
+def stored_campaign_block(paths) -> Optional[Dict]:
+    """The `campaign` provenance of the first stored report that carries one,
+    so a regenerated artifact keeps the provenance of the run that MEASURED
+    it rather than of the invocation that redrew it."""
+    for path in paths:
+        try:
+            block = json.loads(Path(path).read_text()).get("campaign")
+        except (OSError, ValueError):
+            continue
+        if block:
+            return block
+    return None
+
+
+def replot_figures_from_json(paths, figures_dir: Path,
+                             extended: bool = False,
+                             latex_table: Optional[Path] = None) -> int:
+    """Redraw figures from stored results, compiling and running nothing.
+
+    A variant-matrix report redraws the stage heatmaps; a campaign report
+    redraws every figure 'generate_all_figures' produces. Both may be given.
+    With `latex_table`, the tables are rewritten from the same data."""
+    if not HAS_PLOT_LIBS and latex_table is None:
+        print("  Cannot replot: matplotlib/numpy not installed.")
+        return 1
+    paths = [Path(x) for x in ([paths] if isinstance(paths, (str, Path))
+                               else list(paths))]
+    campaign_results: Optional[List[Tuple]] = None
+    matrix_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None
+    drawn = 0
+    for path in ([paths] if isinstance(paths, (str, Path)) else list(paths)):
+        path = Path(path)
+        try:
+            kind = json_report_kind(path)
+        except (OSError, ValueError) as e:
+            print("  Cannot replot from %s: %s" % (path, e))
+            return 1
+        adopt_stored_campaign_settings(path)
+        if kind == "matrix":
+            matrix_results = load_pldi_matrix_json(path)
+            if not matrix_results:
+                print("  %s holds no PLDI results." % path)
+                return 1
+            if HAS_PLOT_LIBS:
+                print("  Replotting stage heatmaps from %s (%d programs) -> %s/"
+                      % (path, len(matrix_results), figures_dir))
+                generate_pldi_stage_figures(matrix_results, figures_dir,
+                                            extended=extended)
+        else:
+            campaign_results = load_results_json(path)
+            if not campaign_results:
+                print("  %s holds no campaign results." % path)
+                return 1
+            if HAS_PLOT_LIBS:
+                print("  Replotting campaign figures from %s (%d programs) -> %s/"
+                      % (path, len(campaign_results), figures_dir))
+                generate_all_figures(campaign_results, figures_dir)
+        drawn += 1
+    if latex_table is not None:
+        if campaign_results is None:
+            print("  Cannot rewrite tables: no campaign report "
+                  "(benchmark_results.json) among the inputs.")
+            return 1
+        write_latex_tables(campaign_results, latex_table,
+                           pldi_variant_results=matrix_results,
+                           simd_isa=((stored_campaign_block(paths) or {})
+                                     .get("codegen", {}).get("simd_isa")
+                                     or DEFAULT_SIMD_ISA),
+                           campaign=stored_campaign_block(paths))
+        print("  Rewrote tables from stored results -> %s" % latex_table)
+    return 0 if drawn else 1
 
 
 def generate_pldi_stage_figures(
@@ -9737,10 +10295,13 @@ def generate_pldi_stage_figures(
 def _fig_speedup_fold_map(good: List, out: Path):
     programs, fold_s, map_s = [], [], []
     for aos, soa in good:
-        af = sum(p["median_time"] for p in aos.passes.values() if p["pass_type"] == "fold")
-        sf = sum(p["median_time"] for p in soa.passes.values() if p["pass_type"] == "fold")
-        am = sum(p["median_time"] for p in aos.passes.values() if p["pass_type"] == "map")
-        sm = sum(p["median_time"] for p in soa.passes.values() if p["pass_type"] == "map")
+        # Through `total_pass_time`, which drops the verification pass: for
+        # the Add1TreeIntN programs `checksumTree` is the only fold, so
+        # summing raw passes made their whole fold bar the checksum.
+        af = total_pass_time(aos, "fold") or 0.0
+        sf = total_pass_time(soa, "fold") or 0.0
+        am = total_pass_time(aos, "map") or 0.0
+        sm = total_pass_time(soa, "map") or 0.0
         programs.append(aos.program.replace(".hs", ""))
         fold_s.append(af / sf if sf > 0 else 0.0)
         map_s.append(am / sm if sm > 0 else 0.0)
@@ -9762,15 +10323,28 @@ def _fig_speedup_fold_map(good: List, out: Path):
 
 
 # ── Figure B: per-program — all passes, error bars, geomean ──────────────────
+def _pass_stdev(pass_data: Dict) -> float:
+    """A pass's standard deviation for an error bar: from its own samples
+    when they are in hand, else the value stored beside them. A report
+    reloaded from JSON has the statistic but not the samples, and computing
+    0.0 there would draw a bar claiming no variance at all."""
+    its = pass_data.get("iter_times") or []
+    if len(its) > 1:
+        return statistics.stdev(its)
+    sd = pass_data.get("stdev")
+    return float(sd) if isinstance(sd, (int, float)) else 0.0
+
+
 def _fig_per_program(good: List, out_dir: Path):
     dest = out_dir / "per_program"
     dest.mkdir(parents=True, exist_ok=True)
 
     for aos, soa in good:
         prog   = aos.program.replace(".hs", "")
-        passes = sorted(set(list(aos.passes) + list(soa.passes)))
+        passes = sorted({p for p in (list(aos.passes) + list(soa.passes))
+                         if not is_verification_pass(p)})
 
-        labels, a_m, s_m, a_e, s_e, spds, bar_colors = [], [], [], [], [], [], []
+        labels, a_m, s_m, a_e, s_e, bar_colors = [], [], [], [], [], []
 
         for pname in passes:
             ad   = aos.passes.get(pname, {})
@@ -9779,16 +10353,11 @@ def _fig_per_program(good: List, out_dir: Path):
             sm_s = sd.get("median_time", 0.0)
             if am_s == 0.0 and sm_s == 0.0:
                 continue
-            a_its = ad.get("iter_times", [])
-            s_its = sd.get("iter_times", [])
-
             ptype = ad.get("pass_type") or sd.get("pass_type") or "unknown"
             labels.append(pname.replace("_", " "))
             a_m.append(am_s); s_m.append(sm_s)
-            a_e.append(statistics.stdev(a_its) if len(a_its) > 1 else 0.0)
-            s_e.append(statistics.stdev(s_its) if len(s_its) > 1 else 0.0)
-            if sm_s > 0:
-                spds.append(am_s / sm_s)
+            a_e.append(_pass_stdev(ad))
+            s_e.append(_pass_stdev(sd))
             bar_colors.append(
                 "#3498db" if ptype == "fold" else
                 "#e67e22" if ptype == "map"  else "#95a5a6"
@@ -9797,10 +10366,15 @@ def _fig_per_program(good: List, out_dir: Path):
         if not labels:
             continue
 
-        # Geomean
-        if spds:
-            gm_a = statistics.geometric_mean([v for v in a_m if v > 0])
-            gm_s = statistics.geometric_mean([v for v in s_m if v > 0])
+        # Geomean, over the passes BOTH sides measured. Taking each side's
+        # own positive values would put a pass only one variant reported in
+        # one bar and not the other, so the pair of bars would compare
+        # different work: with AoS {m1 1.0, m2 4.0} and SoA {m1 0.5} that
+        # read 2.0 against 0.5, a 4x gap where the measured one is 2x.
+        paired = [(a, s) for a, s in zip(a_m, s_m) if a > 0 and s > 0]
+        if paired:
+            gm_a = statistics.geometric_mean([a for a, _s in paired])
+            gm_s = statistics.geometric_mean([s for _a, s in paired])
             labels.append("Geomean")
             a_m.append(gm_a); s_m.append(gm_s)
             a_e.append(0.0);  s_e.append(0.0)
@@ -9865,6 +10439,11 @@ def _fig_dead_vs_speedup(good: List, out: Path):
     for aos, soa in good:
         prog = aos.program.replace(".hs", "")
         for pname, ad in aos.passes.items():
+            # The verification pass reads every field, so it lands at
+            # dead_ratio 0 and anchors the trend line of a figure that asks
+            # whether dead fields predict speedup.
+            if is_verification_pass(pname):
+                continue
             sd = soa.passes.get(pname, {})
             at = ad.get("median_time", 0.0)
             st = sd.get("median_time", 0.0)
@@ -9934,7 +10513,8 @@ def _fig_heatmaps(good: List, out_dir: Path):
         prog     = aos.program.replace(".hs", "")
         adt_info = getattr(aos, "adt_info", None)
         soa_tot  = adt_info["soa_total_buffers"] if adt_info else None
-        passes   = sorted(set(list(aos.passes) + list(soa.passes)))
+        passes   = sorted({p for p in (list(aos.passes) + list(soa.passes))
+                           if not is_verification_pass(p)})
         spds, labs, types = [], [], []
 
         for pname in passes:
@@ -9977,7 +10557,7 @@ def _fig_breakdown(good: List, out: Path):
     all_passes: set = set()
     for aos, soa in good:
         all_passes.update(aos.passes); all_passes.update(soa.passes)
-    passes = sorted(all_passes)
+    passes = sorted(p for p in all_passes if not is_verification_pass(p))
     progs  = [r.program.replace(".hs", "") for r, _ in good]
 
     a_data = {p: [] for p in passes}
@@ -10396,6 +10976,21 @@ def build_parser() -> argparse.ArgumentParser:
                          "column per Gibbon optimization, with the "
                          "auto-vectorizer off throughout when its -av "
                          "twins were measured.")
+    ap.add_argument("--figures-from-json", type=Path, nargs="+", default=None,
+                    metavar="JSON",
+                    help="Redraw figures into --figures-dir from stored "
+                         "results, then exit; nothing is compiled or run. A "
+                         "variant-matrix report (benchmark_results_pldi.json) "
+                         "redraws the stage heatmaps, a campaign report "
+                         "(benchmark_results.json) redraws every other figure, "
+                         "and both may be given.")
+    ap.add_argument("--tables-from-json", action="store_true",
+                    help="With --figures-from-json, also rewrite --latex-table "
+                         "from the stored results. Needs the campaign report "
+                         "(benchmark_results.json); pass the variant-matrix "
+                         "report alongside it for the PLDI tables. The "
+                         "provenance recorded is the stored run's, not this "
+                         "invocation's.")
     ap.add_argument("--av-variants", choices=list(AV_VARIANT_CHOICES),
                     default=None,
                     help="Add the C auto-vectorizer ablations. The "
@@ -10444,16 +11039,18 @@ def build_parser() -> argparse.ArgumentParser:
                          "back from ITER TIMES. Default 9. A few programs "
                          "whose single build is already large cap this "
                          "lower (see BUILD_ITERATION_OVERRIDES).\n")
-    ap.add_argument("--pass-rounds", type=int, default=1, metavar="N",
+    ap.add_argument("--pass-rounds", type=int, default=None, metavar="N",
                     help="Run each --pldi-submission configuration's whole "
                          "executable N times, rotating the order so none is "
                          "systematically measured before or after the "
                          "configurations it is compared against, and report "
-                         "the median per-pass time across rounds. Default 1: "
-                         "a pass timing is already the median of "
-                         "--iterations within a run, and the whole-program "
-                         "wall time no longer feeds the end-to-end figure. "
-                         "Campaign run time scales with N.\n")
+                         "the median per-pass time across rounds, with the "
+                         "between-round spread. Default 1, or %d under "
+                         "--pldi-submission: one measurement per "
+                         "configuration cannot separate a real difference "
+                         "from run-to-run drift, which this driver measured "
+                         "at 6.3%%%% between two runs of one binary. Campaign "
+                         "run time scales with N.\n" % PLDI_DEFAULT_PASS_ROUNDS)
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
     ap.add_argument("--iterations",     type=int,  default=20,
@@ -10710,7 +11307,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "this, a run with --opt-vectorization off is still auto-vectorized by the C "
                          "compiler and is NOT a scalar baseline.")
     ap.add_argument("--reclaim-iterate-regions", dest="reclaim_iterate_regions",
-                    action="store_true",
+                    action="store_true", default=None,
                     help="Compile EVERY variant with Gibbon's "
                          "--reclaim-iterate-regions, so the region chunks each "
                          "--iterate iteration grows are freed instead of stranded. "
@@ -10723,7 +11320,12 @@ def build_parser() -> argparse.ArgumentParser:
                          "comparable. Expect large benchmarks to get FASTER as well "
                          "as smaller -- the un-fixed loop makes the kernel supply "
                          "fresh zeroed pages for memory it has leaked, and that cost "
-                         "is an artifact of the leak, not of the workload.")
+                         "is an artifact of the leak, not of the workload. "
+                         "On by default under --pldi-submission.")
+    ap.add_argument("--no-reclaim-iterate-regions", dest="reclaim_iterate_regions",
+                    action="store_false",
+                    help="Compile WITHOUT --reclaim-iterate-regions, including under "
+                         "--pldi-submission, which otherwise turns it on.")
     ap.add_argument("--no-mutable-cursors-nonrec", dest="no_mutable_cursors_nonrec",
                     action="store_true",
                     help="Compile WITHOUT Gibbon's --opt-mutable-cursors-nonrec, which "
@@ -10755,20 +11357,42 @@ def resolve_pin_cpu_arg(raw) -> Optional[int]:
 def main():
     ap = build_parser()
     args = ap.parse_args()
+    args.reclaim_iterate_regions = default_reclaim_iterate_regions(
+        args.reclaim_iterate_regions, args.pldi_submission)
+    args.pass_rounds = default_pass_rounds(args.pass_rounds,
+                                           args.pldi_submission)
     # Set BEFORE anything reads it -- the run banner and every compile do.
     # This lived further down and the banner, printed above it, always reported
     # "off" even when the flag was given.
     set_reclaim_iterate_regions(args.reclaim_iterate_regions)
     set_mutable_cursors_nonrec(not args.no_mutable_cursors_nonrec)
 
+    # --include-build-pass adds a whole process launch to every Gibbon
+    # variant's pass set, and `benchmark_build_pass` returns nothing for a
+    # GHC or MLton variant, so a cross-compiler total would charge one side a
+    # term the other structurally cannot carry -- enough to reverse which
+    # compiler the table calls faster.
+    if args.include_build_pass and (args.benchmark_ghc or args.benchmark_mlton):
+        ap.error("--include-build-pass cannot be combined with "
+                 "--benchmark-ghc/--benchmark-mlton: the build pass is a "
+                 "Gibbon-only process launch, and including it in a "
+                 "cross-compiler total compares different amounts of work. "
+                 "Run them separately.")
+
     # Before any output directory is touched: the sweep re-runs this script
     # once per width and owns every path those runs write to.
     if args.use_widths == "all":
         return run_width_sweep(args, sys.argv[1:])
 
-    args.av_variants = default_av_variants(args.av_variants,
-                                           args.pldi_submission)
+    args.av_variants = default_av_variants(
+        args.av_variants, args.pldi_submission or bool(args.figures_from_json))
     apply_av_variants(resolve_av_variants(args.av_variants))
+
+    if args.figures_from_json:
+        return replot_figures_from_json(
+            args.figures_from_json, args.figures_dir,
+            extended=args.extended_stages,
+            latex_table=(args.latex_table if args.tables_from_json else None))
 
     if args.quick_run:
         apply_quick_run(args)
@@ -10822,23 +11446,36 @@ def main():
     set_verbosity(bool(args.verbose) or not _display.enabled)
     # Phase totals are registered up front so the bar shows overall
     # completion, not just progress through whichever phase is running.
-    _n_variants = 4 if (args.benchmark_immutable or args.benchmark_baseline_gibbon) else 2
+    # The same count the campaign loop advances by, so the bar reaches 100%.
+    _n_variants = len(campaign_variants(
+        args.benchmark_immutable, args.benchmark_baseline_gibbon,
+        args.benchmark_ghc, args.benchmark_mlton))
+    # Each phase is split into one group per program, so the estimate can
+    # cost every remaining program at its own time in the previous run.
     _display.add_phase("campaign", "campaign",
-                       len(programs_to_run) * _n_variants)
+                       len(programs_to_run) * _n_variants,
+                       groups={p: _n_variants for p in programs_to_run})
     if args.pldi_submission:
         try:
-            _pldi_n = len(resolve_program_selection(
+            _pldi_programs = resolve_program_selection(
                 args.programs, args.exclude_programs,
                 default_programs=(QUICK_RUN_PROGRAMS if args.quick_run
                                   else DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS),
-                programs_dir=args.programs_dir))
+                programs_dir=args.programs_dir)
+            # The same narrowing the matrix itself applies, so the group names
+            # registered here are the ones it will report against.
+            if args.use_width != DEFAULT_PAYLOAD_WIDTH:
+                _pldi_programs, _ = apply_width_selection(
+                    _pldi_programs, args.programs_dir, args.use_width)
         except ProgramSelectionError:
-            _pldi_n = len(programs_to_run)
+            _pldi_programs = list(programs_to_run)
         # Two units per configuration: the pass measurement and the build
         # measurement, each advanced once (see collect_pldi_variant_results).
+        _pldi_units = 2 * sum(len(v) for v in PLDI_MAP_CONFIGS.values())
         _display.add_phase(
-            "pldi", "variant matrix",
-            2 * _pldi_n * sum(len(v) for v in PLDI_MAP_CONFIGS.values()))
+            "pldi", "variant matrix", len(_pldi_programs) * _pldi_units,
+            groups={p: _pldi_units for p in _pldi_programs})
+    _display.load_history(args.output_dir / PROGRESS_HISTORY_FILE)
     # Writing tables and running pdflatex takes seconds, nothing like a
     # benchmark unit, so it is shown as a phase but excluded from the estimate.
     _display.add_phase("report", "tables", 1, estimate=False)
@@ -10973,6 +11610,7 @@ def main():
 
     all_results: List[Tuple] = []
     for prog in programs_to_run:
+        progress().group(prog)
         progress().item(prog.replace(".hs", ""), "campaign")
         aos, soa = benchmark_program(
             prog, args.programs_dir, args.output_dir,
@@ -11001,8 +11639,11 @@ def main():
             allow_unverified_output=args.allow_unverified_output,
             c_arith_mode=args.c_arithmetic,
         )
-        progress().advance(2)   # one AoS + one SoA variant
+        progress().advance(_n_variants)
         all_results.append((aos, soa))
+    # The campaign's per-program timing ends with the loop; everything after
+    # it belongs to no program.
+    progress().end_group()
 
     extended_results = getattr(benchmark_program, '_all_variants_results', [])
     verified_count = sum(1 for a, s in all_results if prov.eligible_pair(a, s))

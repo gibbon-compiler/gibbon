@@ -96,13 +96,17 @@ def _fmt_duration(seconds: float) -> str:
 
 
 class _Phase:
-    __slots__ = ("key", "label", "total", "done", "durations", "estimate")
+    __slots__ = ("key", "label", "total", "done", "durations", "estimate",
+                 "groups", "group_seconds", "history")
 
-    def __init__(self, key: str, label: str, total: int, estimate: bool = True):
+    def __init__(self, key: str, label: str, total: int, estimate: bool = True,
+                 groups: Optional[Dict[str, int]] = None):
         self.key = key
         self.label = label
         self.total = max(0, int(total))
         self.done = 0
+        # One per-unit sample per completed unit: advance(n) over dt seconds
+        # records n samples of dt/n, so their mean is seconds per unit.
         self.durations: List[float] = []
         # Whether this phase should contribute to the time estimate. A phase
         # whose cost is known NOT to resemble the others (writing tables and
@@ -110,18 +114,26 @@ class _Phase:
         # a benchmark unit's price and dominate the figure near the end of a
         # run -- measured predicting 3.5s remaining when the answer was 0.
         self.estimate = estimate
+        # Optional breakdown of the phase into named groups (one per program)
+        # with their unit counts, the seconds each completed group took in
+        # this run, and the seconds each took in a previous run.
+        self.groups: Dict[str, int] = dict(groups or {})
+        self.group_seconds: Dict[str, float] = {}
+        self.history: Dict[str, float] = {}
 
     def typical(self) -> Optional[float]:
-        """Median observed item time for this phase, or None.
+        """Mean observed seconds per unit for this phase, or None.
 
-        Median rather than mean: one 60-second outlier compile should not
-        drag the estimate for the forty short ones after it.
+        The mean, not the median: the estimate multiplies it by a unit
+        count, so it must be total time over total units. A median ignores
+        the unit that absorbed a burst (the variant matrix compiles and runs
+        a program's every configuration, then advances all of them at once,
+        so one unit carries the whole program and the rest carry ~0s), and
+        a long compile is real time the run will spend again.
         """
         if not self.durations:
             return None
-        xs = sorted(self.durations)
-        n = len(xs)
-        return xs[n // 2] if n % 2 else 0.5 * (xs[n // 2 - 1] + xs[n // 2])
+        return sum(self.durations) / len(self.durations)
 
 
 class ProgressDisplay:
@@ -145,6 +157,15 @@ class ProgressDisplay:
         # separate from _item_started (which only drives the "this step"
         # label). They are different clocks: a unit spans several steps.
         self._unit_started: Optional[float] = None
+        # The group (program) being worked on in the current phase, and when
+        # it started; see 'group'.
+        self._group: Optional[str] = None
+        self._group_started: Optional[float] = None
+        self.history_path = None
+        # Phases recorded by a previous run that this run does not have, kept
+        # so saving does not discard them: a campaign-only run must not wipe
+        # the variant matrix's timings out of the history file.
+        self._history_other: Dict[str, Dict[str, float]] = {}
         self._started = time.time()
         self._prev_handlers: Dict[int, object] = {}
         # A compile, or a 51-iteration run, emits no events for minutes. With
@@ -248,17 +269,94 @@ class ProgressDisplay:
 
     # -- work model --------------------------------------------------------
 
-    def add_phase(self, key: str, label: str, total: int, estimate: bool = True):
+    def add_phase(self, key: str, label: str, total: int, estimate: bool = True,
+                  groups: Optional[Dict[str, int]] = None):
+        """Register a phase of `total` units. `groups`, when given, names the
+        phase's groups (one per program) and their unit counts, which lets
+        the estimate cost each group from a previous run's timing."""
         if key not in self.phases:
             self.order.append(key)
-        self.phases[key] = _Phase(key, label, total, estimate)
+        self.phases[key] = _Phase(key, label, total, estimate, groups)
         return self
+
+    # -- history -----------------------------------------------------------
+
+    def load_history(self, path) -> "ProgressDisplay":
+        """Read per-group seconds from a previous run: {phase: {group: s}}.
+        A missing or unreadable file just means no history."""
+        self.history_path = path
+        try:
+            import json
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return self
+        for key, groups in (data.get("phases") or {}).items():
+            if not isinstance(groups, dict):
+                continue
+            kept = {g: float(v) for g, v in groups.items()
+                    if isinstance(v, (int, float)) and v > 0}
+            ph = self.phases.get(key)
+            if ph is not None:
+                ph.history = kept
+            else:
+                self._history_other[key] = kept
+        return self
+
+    def save_history(self):
+        """Write this run's completed group timings, merged over the
+        previous history so a partial run keeps the groups it did not reach."""
+        if not self.history_path:
+            return
+        import json
+        phases = {k: dict(v) for k, v in self._history_other.items() if v}
+        for key, ph in self.phases.items():
+            merged = dict(ph.history)
+            merged.update(ph.group_seconds)
+            if merged:
+                phases[key] = merged
+        tmp = "%s.tmp" % self.history_path
+        try:
+            with open(tmp, "w") as f:
+                json.dump({"phases": phases}, f, indent=1, sort_keys=True)
+            os.replace(tmp, self.history_path)
+        except OSError:
+            pass
+
+    def group(self, name: str):
+        """Start timing the named group of the current phase, closing the
+        previous one."""
+        self._close_group()
+        self._group = name
+        self._group_started = time.time()
+
+    def end_group(self):
+        """Stop timing the current group without starting another.
+
+        A group's record must cover its own work and nothing else: the
+        campaign's last program stays open until the next phase begins, and
+        everything done between (writing the report, the width families, the
+        roofline probe) would otherwise be charged to it and carried into the
+        next run's estimate as that program's cost."""
+        self._close_group()
+
+    def _close_group(self):
+        ph = self.phases.get(self.current or "")
+        if (ph is not None and self._group is not None
+                and self._group_started is not None):
+            ph.group_seconds[self._group] = (
+                ph.group_seconds.get(self._group, 0.0)
+                + time.time() - self._group_started)
+            self.save_history()
+        self._group = None
+        self._group_started = None
 
     def set_total(self, key: str, total: int):
         if key in self.phases:
             self.phases[key].total = max(0, int(total))
 
     def start_phase(self, key: str):
+        self._close_group()
         self.current = key
         self._item_started = None
         self._unit_started = time.time()
@@ -293,12 +391,13 @@ class ProgressDisplay:
         ph = self.phases.get(self.current or "")
         if ph is not None:
             if self._unit_started is not None and n > 0:
-                ph.durations.append((now - self._unit_started) / n)
+                ph.durations.extend([(now - self._unit_started) / n] * n)
             ph.done = min(ph.total, ph.done + n) if ph.total else ph.done + n
         self._unit_started = now
         self.draw()
 
     def finish_phase(self):
+        self._close_group()
         ph = self.phases.get(self.current or "")
         if ph is not None and ph.total:
             ph.done = ph.total
@@ -314,36 +413,91 @@ class ProgressDisplay:
         return done, total
 
     def _global_typical(self) -> Optional[float]:
+        """Mean seconds per unit over every phase measured so far."""
         alld: List[float] = []
         for p in self.phases.values():
             alld.extend(p.durations)
         if not alld:
             return None
-        alld.sort()
-        return alld[len(alld) // 2]
+        return sum(alld) / len(alld)
+
+    def _history_scale(self) -> float:
+        """How this run's pace compares with the history's: actual over
+        recorded seconds, summed over every group completed in this run that
+        has a record. 1.0 until there is one. Absorbs a changed iteration
+        count, a slower machine, or a cold compile cache."""
+        actual = recorded = 0.0
+        for p in self.phases.values():
+            for g, secs in p.group_seconds.items():
+                if g in p.history:
+                    actual += secs
+                    recorded += p.history[g]
+        if recorded <= 0 or actual <= 0:
+            return 1.0
+        return min(4.0, max(0.25, actual / recorded))
+
+    def _phase_remaining(self, p: "_Phase", glob: Optional[float],
+                         scale: float):
+        """(seconds left in phase `p`, whether any of it is extrapolated from
+        another phase's time), or (None, False) with nothing to go on."""
+        own = p.typical()
+        rate = own if own is not None else glob
+        borrowed = own is None
+        if not p.groups:
+            left = max(0, p.total - p.done)
+            if not left:
+                return 0.0, False
+            if rate is None:
+                return None, False
+            return left * rate, borrowed
+        remaining = 0.0
+        rough = False
+        now = time.time()
+        for g, units in p.groups.items():
+            if g in p.group_seconds and not (p.key == self.current
+                                             and g == self._group):
+                continue                                # finished
+            if g in p.history:
+                est = p.history[g] * scale
+            elif rate is not None:
+                est = units * rate
+                rough = rough or borrowed
+            else:
+                return None, False
+            if (p.key == self.current and g == self._group
+                    and self._group_started is not None):
+                est = max(0.0, est - (now - self._group_started))
+            remaining += est
+        return remaining, rough
 
     def eta_detail(self):
         """(remaining_seconds, rough) or (None, False).
 
-        `rough` is True when any phase still to run has no measurements of its
-        own, so its cost is extrapolated from a different phase. A variant-
-        matrix unit is not the same shape of work as a campaign unit, so that
-        extrapolation can be well off -- the display says so rather than
-        presenting a borrowed figure as if it were measured.
+        Each remaining group (program) is costed at its own time in the
+        previous run, scaled by how this run is pacing against that record;
+        the group in progress is charged only what it has left. A group with
+        no record, and a phase with no groups, is costed at the phase's mean
+        seconds per unit. `rough` is True when that rate is borrowed from
+        another phase: a variant-matrix unit is not the same shape of work
+        as a campaign unit, so the display says the figure is extrapolated.
         """
         glob = self._global_typical()
-        if glob is None:
+        scale = self._history_scale()
+        have_history = any(p.history for p in self.phases.values())
+        if glob is None and not have_history:
             return None, False
         remaining = 0.0
         rough = False
         for p in self.phases.values():
-            left = max(0, p.total - p.done)
-            if not left or not p.estimate:
+            if not p.estimate:
                 continue
-            own = p.typical()
-            if own is None:
-                rough = True
-            remaining += left * (own or glob)
+            left, r = self._phase_remaining(p, glob, scale)
+            if left is None:
+                if max(0, p.total - p.done):
+                    return None, False
+                continue
+            remaining += left
+            rough = rough or r
         return remaining, rough
 
     def eta_seconds(self) -> Optional[float]:

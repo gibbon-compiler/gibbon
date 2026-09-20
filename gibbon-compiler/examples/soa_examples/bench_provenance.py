@@ -678,6 +678,19 @@ class QualificationStatus:
             return "UNVERIFIED" if self.allow_unverified else "NO-ORACLE"
         return "NOT-REQUIRED"
 
+    @classmethod
+    def from_dict(cls, d: Dict) -> "QualificationStatus":
+        """Inverse of 'as_dict' for the stored fields; the derived ones
+        (label, verified, eligibility) are recomputed, never read back."""
+        st = cls(d.get("variant", ""), d.get("program", ""))
+        for name in ("compile_status", "exec_status", "oracle_status",
+                     "oracle_detail", "cross_variant_status", "codegen_status",
+                     "timing_status", "semantic_output", "allow_unverified"):
+            if name in d:
+                setattr(st, name, d[name])
+        st.notes = list(d.get("notes") or [])
+        return st
+
     def as_dict(self) -> Dict:
         return {"variant": self.variant, "program": self.program,
                 "compile_status": self.compile_status,

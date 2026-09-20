@@ -28,6 +28,7 @@ import importlib
 import io
 import re
 import sys
+import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -215,6 +216,102 @@ def _make_result(program, variant, pass_data, verified=True, oracle_status=None)
     res.passes = pass_data
     res.qualification = st
     return res
+
+
+class TestMatrixJsonRoundTrip(unittest.TestCase):
+    """--figures-from-json redraws the heatmaps from the stored matrix, so the
+    loader must hand the figure code the same rows the live run did."""
+
+    def _matrix(self):
+        matrix = {}
+        for name, t in (("A.hs", 0.5), ("B.hs", 0.25)):
+            by_cfg = {}
+            for cfg in ("aos_imm", "aos_mut", "soa_mut"):
+                res = _make_result(name, cfg, {
+                    "f": {"median_time": t if cfg != "aos_imm" else 1.0,
+                          "pass_type": "fold", "uses": 2}})
+                res.build_time = 0.1
+                by_cfg[cfg] = res
+            by_cfg["soa_imm"] = _make_result(name, "soa_imm", {}, verified=False)
+            by_cfg["soa_imm"].run_success = False
+            matrix[name] = by_cfg
+        return matrix
+
+    def test_loaded_matrix_matches_the_written_one(self):
+        import tempfile
+        matrix = self._matrix()
+        path = Path(tempfile.mkdtemp()) / "m.json"
+        with mock.patch("builtins.print"):
+            gb.write_pldi_matrix_json(matrix, path)
+        loaded = gb.load_pldi_matrix_json(path)
+        self.assertEqual(set(loaded), set(matrix))
+        for program, by_cfg in matrix.items():
+            for cfg, res in by_cfg.items():
+                back = loaded[program][cfg]
+                self.assertEqual(prov.verified_result(back),
+                                 prov.verified_result(res), (program, cfg))
+                if prov.verified_result(res):
+                    self.assertEqual(back.passes["f"]["median_time"],
+                                     res.passes["f"]["median_time"])
+                    self.assertEqual(back.build_time, res.build_time)
+        self.assertEqual(gb.total_pass_time(loaded["A.hs"]["soa_mut"]), 0.5)
+        self.assertIsNone(gb.total_pass_time(loaded["A.hs"]["soa_imm"]))
+
+    def test_campaign_report_round_trips_into_figure_pairs(self):
+        import tempfile
+        aos = _make_result("A.hs", "aos", {
+            "f": {"median_time": 1.0, "pass_type": "fold", "stdev": 0.25,
+                  "iter_times": [0.75, 1.0, 1.25]}})
+        soa = _make_result("A.hs", "soa", {
+            "f": {"median_time": 0.5, "pass_type": "fold", "stdev": 0.1,
+                  "iter_times": [0.4, 0.5, 0.6]}})
+        path = Path(tempfile.mkdtemp()) / "r.json"
+        with mock.patch("builtins.print"):
+            gb.write_json_results([(aos, soa)], path)
+        pairs = gb.load_results_json(path)
+        self.assertEqual(len(pairs), 1)
+        back_a, back_s = pairs[0]
+        self.assertEqual(back_a.program, "A.hs")
+        self.assertEqual(back_a.passes["f"]["median_time"], 1.0)
+        self.assertEqual(back_s.passes["f"]["median_time"], 0.5)
+        self.assertTrue(prov.verified_result(back_a))
+
+    def test_error_bars_survive_a_round_trip_through_json(self):
+        # write_json_results drops iter_times, so a figure that recomputed the
+        # deviation from them would draw a replotted run as having none.
+        import tempfile
+        aos = _make_result("A.hs", "aos", {
+            "f": {"median_time": 1.0, "pass_type": "fold", "stdev": 0.25,
+                  "iter_times": [0.75, 1.0, 1.25]}})
+        path = Path(tempfile.mkdtemp()) / "r.json"
+        with mock.patch("builtins.print"):
+            gb.write_json_results([(aos, aos)], path)
+        back = gb.load_results_json(path)[0][0]
+        self.assertNotIn("iter_times", back.passes["f"])
+        self.assertAlmostEqual(gb._pass_stdev(aos.passes["f"]), 0.25)
+        self.assertAlmostEqual(gb._pass_stdev(back.passes["f"]), 0.25)
+
+    def test_report_kind_is_detected_from_the_file(self):
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        matrix_path, campaign_path = d / "m.json", d / "c.json"
+        res = _make_result("A.hs", "aos_mut",
+                           {"f": {"median_time": 1.0, "pass_type": "fold"}})
+        with mock.patch("builtins.print"):
+            gb.write_pldi_matrix_json({"A.hs": {"aos_mut": res}}, matrix_path)
+            gb.write_json_results([(res, res)], campaign_path)
+        self.assertEqual(gb.json_report_kind(matrix_path), "matrix")
+        self.assertEqual(gb.json_report_kind(campaign_path), "campaign")
+
+    def test_qualification_round_trips_and_rederives_verified(self):
+        st = prov.QualificationStatus("v", "p")
+        st.compile_status, st.exec_status = prov.COMPILE_OK, prov.EXEC_OK
+        st.oracle_status, st.semantic_output = prov.ORACLE_PASS, "1"
+        back = prov.QualificationStatus.from_dict(st.as_dict())
+        self.assertTrue(back.verified)
+        d = st.as_dict(); d["oracle_status"] = prov.ORACLE_FAIL
+        d["verified"] = True            # a stored flag must not be trusted
+        self.assertFalse(prov.QualificationStatus.from_dict(d).verified)
 
 
 class TestPldiTableRendering(unittest.TestCase):
@@ -821,6 +918,185 @@ class TestVerificationPassExclusion(unittest.TestCase):
             "add1Tree":     {"median_time": 0.01, "pass_type": "map"},
             "checksumTree": {"median_time": 0.02, "pass_type": "fold"}})}
         self.assertEqual(self._fold(results), "")
+
+    # -- the aggregates that do NOT go through total_pass_time --------------
+
+    def _pair(self, counter="PAPI_TOT_CYC"):
+        """AoS 2x faster than SoA on the kernel, identical on the checksum."""
+        def side(variant, kernel_t, kernel_c, fold_t, fold_c):
+            return _make_result("P.hs", variant, {
+                "add1Tree": {"median_time": kernel_t, "pass_type": "map",
+                             "dead_ratio": 0.8,
+                             "papi_counters": {counter: {"median": kernel_c}}},
+                "checksumTree": {"median_time": fold_t, "pass_type": "fold",
+                                 "dead_ratio": 0.0,
+                                 "papi_counters": {counter: {"median": fold_c}}}})
+        return (side("aos", 1.0, 100.0, 9.0, 900.0),
+                side("soa", 0.5, 50.0, 9.0, 900.0))
+
+    def test_excluded_from_the_papi_totals(self):
+        aos, soa = self._pair()
+        c = "PAPI_TOT_CYC"
+        # 100/50 == 2x. Counting the checksum's identical 900 on both sides
+        # gave 1000/950 == 1.05x, pulling every counter ratio towards 1.
+        self.assertEqual(gb._papi_total_for_result(aos, c), 100.0)
+        self.assertEqual(gb._papi_total_for_result(soa, c), 50.0)
+
+    def test_excluded_from_the_fold_vs_map_figure(self):
+        aos, soa = self._pair()
+        # The checksum is this program's only fold, so its fold bar has no
+        # data at all; it used to be drawn as a 1.05x "fold speedup".
+        self.assertEqual(gb.total_pass_time(aos, "fold"), 0.0)
+        self.assertAlmostEqual(gb.total_pass_time(aos, "map") /
+                               gb.total_pass_time(soa, "map"), 2.0)
+
+    def test_excluded_from_the_ghc_table_and_its_total(self):
+        aos, soa = self._pair()
+        ghc = _make_result("P.hs", "ghc", {
+            "add1Tree": {"median_time": 2.0, "pass_type": "map"},
+            "checksumTree": {"median_time": 9.0, "pass_type": "fold"}})
+        buf = io.StringIO()
+        gb._table_per_program_ghc(buf, [(aos, soa)],
+                                  [{"program": "P.hs", "aos": aos,
+                                    "soa": soa, "ghc": ghc}])
+        out = buf.getvalue()
+        self.assertNotIn("checksumTree", out)
+        # Total GHC/Am is 2.0/1.0, matching the one row above it; summing the
+        # raw passes made it 11.0/10.0.
+        self.assertIn("\\textbf{Total}", out)
+        total_row = [l for l in out.splitlines() if "\\textbf{Total}" in l][0]
+        self.assertIn("2.00$\\times$", total_row)
+        self.assertIn("4.00$\\times$", total_row)
+
+    def test_excluded_from_the_dead_ratio_scatter(self):
+        aos, soa = self._pair()
+        captured = {}
+        with mock.patch.object(gb, "_save"), \
+             mock.patch.object(gb.plt, "subplots") as subplots:
+            ax = mock.MagicMock()
+            subplots.return_value = (mock.MagicMock(), ax)
+            ax.scatter.side_effect = lambda x, y, **kw: captured.setdefault(
+                kw.get("label", ""), (list(x), list(y)))
+            gb._fig_dead_vs_speedup([(aos, soa)], Path("/dev/null"))
+        # Only the map kernel is plotted; the checksum reads every field, so
+        # it would sit at dead_ratio 0 and anchor the trend line.
+        self.assertNotIn(0.0, [x for xs, _ys in captured.values() for x in xs])
+
+    def test_excluded_from_the_per_pass_heatmap_and_the_stacked_breakdown(self):
+        aos, soa = self._pair()
+        for fn, arg in ((gb._fig_heatmaps, Path(tempfile.mkdtemp())),
+                        (gb._fig_breakdown, Path("/dev/null"))):
+            ticks, legends = [], []
+            with mock.patch.object(gb, "_save"), \
+                 mock.patch.object(gb.plt, "colorbar"), \
+                 mock.patch.object(gb.plt, "subplots") as subplots:
+                ax = mock.MagicMock()
+                fig = mock.MagicMock()
+                subplots.return_value = (fig, (ax, ax) if fn is gb._fig_breakdown
+                                         else ax)
+                ax.set_xticklabels.side_effect = lambda ls, **kw: ticks.extend(ls)
+                fig.legend.side_effect = lambda h, ls, **kw: legends.extend(ls)
+                fn([(aos, soa)], arg)
+            shown = " ".join(ticks + legends)
+            self.assertNotIn("checksumTree", shown)
+            self.assertIn("add1Tree", shown)
+
+
+class TestGeomeanRowsCompareTheSameSet(unittest.TestCase):
+    """A geomean row is read column against column, so every column's mean
+    must be over the same programs (or the same passes)."""
+
+    def _timed(self, program, variant, seconds):
+        return _make_result(program, variant,
+                            {"m": {"median_time": seconds, "pass_type": "map"}})
+
+    def test_a_compiler_that_skipped_the_slow_program_is_not_the_fastest(self):
+        entries = [
+            {"program": "A.hs",
+             "aos": self._timed("A.hs", "aos", 1.0),
+             "soa": self._timed("A.hs", "soa", 1.0),
+             "ghc": self._timed("A.hs", "ghc", 4.0)},
+            {"program": "B.hs",
+             "aos": self._timed("B.hs", "aos", 100.0),
+             "soa": self._timed("B.hs", "soa", 100.0),
+             "ghc": None},
+        ]
+        buf = io.StringIO()
+        gb._table_comparison_ghc_mlton(buf, entries)
+        out = buf.getvalue()
+        gm = [l for l in out.splitlines() if "\\textbf{Geomean}" in l][0]
+        # GHC is 4x SLOWER on the only program it ran; it must not be bolded
+        # as the fastest merely for skipping the expensive one.
+        self.assertIn("\\textbf{1.000}", gm)
+        self.assertNotIn("\\textbf{4.000}", gm)
+        self.assertIn("covers the 1 program(s)", out)
+
+    def test_both_ghc_speedup_columns_cover_one_program_set(self):
+        entries = [
+            {"program": "A.hs",
+             "aos": self._timed("A.hs", "aos", 1.0),
+             "soa": self._timed("A.hs", "soa", 0.5),
+             "ghc": self._timed("A.hs", "ghc", 2.0)},
+            # SoA never verified here, so this program can move neither column.
+            {"program": "B.hs",
+             "aos": self._timed("B.hs", "aos", 1.0),
+             "soa": _make_result("B.hs", "soa", {}, verified=False),
+             "ghc": self._timed("B.hs", "ghc", 100.0)},
+        ]
+        buf = io.StringIO()
+        gb._table_speedup_vs_ghc(buf, entries)
+        out = buf.getvalue()
+        gm = [l for l in out.splitlines() if "\\textbf{Geomean}" in l][0]
+        self.assertIn("2.00$\\times$", gm)      # GHC/AoS over A.hs alone
+        self.assertIn("4.00$\\times$", gm)      # GHC/SoA over A.hs alone
+        self.assertIn("covers the 1 program(s)", out)
+
+    def test_per_program_geomean_bars_use_the_passes_both_sides_measured(self):
+        aos = _make_result("P.hs", "aos", {
+            "m1": {"median_time": 1.0, "pass_type": "map"},
+            "m2": {"median_time": 4.0, "pass_type": "map"}})
+        soa = _make_result("P.hs", "soa", {
+            "m1": {"median_time": 0.5, "pass_type": "map"}})
+        bars = []
+        with mock.patch.object(gb, "_save"), \
+             mock.patch.object(gb.plt, "subplots") as subplots:
+            ax = mock.MagicMock()
+            subplots.return_value = (mock.MagicMock(), ax)
+            ax.bar.side_effect = lambda x, h, w, **kw: bars.append(
+                (kw.get("label"), list(h))) or mock.MagicMock()
+            gb._fig_per_program([(aos, soa)],
+                                Path(tempfile.mkdtemp()))
+        heights = dict(bars)
+        # Last bar of each series is the geomean: over m1 only, 1.0 vs 0.5.
+        self.assertAlmostEqual(heights["AOS"][-1], 1.0)
+        self.assertAlmostEqual(heights["SOA"][-1], 0.5)
+
+
+class TestEndToEndTimeIsComplete(unittest.TestCase):
+    """The end-to-end figure divides one configuration's total by another's,
+    so both must cover the same passes."""
+
+    def _matrix(self, missing_in=None):
+        matrix = {}
+        for cfg, t in (("aos_imm", 1.0), ("aos_mut", 0.5)):
+            passes = {"m": {"median_time": t, "pass_type": "map"},
+                      "n": {"median_time": t, "pass_type": "map"}}
+            if cfg == missing_in:
+                del passes["n"]
+            res = _make_result("P.hs", cfg, passes)
+            res.build_time = 0.1
+            matrix[cfg] = res
+        return matrix
+
+    def test_a_complete_configuration_totals_build_plus_every_pass(self):
+        m = self._matrix()
+        self.assertAlmostEqual(gb._pldi_end_to_end_time(m, "aos_mut"), 1.1)
+
+    def test_a_configuration_missing_a_pass_carries_no_total(self):
+        m = self._matrix(missing_in="aos_mut")
+        # 0.1 + 0.5 against the other's 0.1 + 2.0 would read as a 3.5x
+        # speedup built from one pass against two.
+        self.assertIsNone(gb._pldi_end_to_end_time(m, "aos_mut"))
 
 
 class TestRowExtremeHighlighting(unittest.TestCase):
@@ -2522,15 +2798,44 @@ class TestStageFigures(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertEqual(dropped, ["P.hs"])
 
-    def test_rows_are_ordered_by_total(self):
+    def test_rows_are_ordered_by_name_not_total(self):
         matrix = {}
-        for name, best in (("A.hs", 0.5), ("B.hs", 0.1), ("C.hs", 0.9)):
+        for name, best in (("B.hs", 0.5), ("A.hs", 0.1), ("C.hs", 0.9)):
             times = {c: 1.0 for c in self.ISOLATED}
             times["soa_loop_sbs_gibvec"] = best
             matrix.update(self._matrix(times)["P.hs"] and
                           {name: self._matrix(times)["P.hs"]})
         rows, _labels, _d = gb._pldi_stage_rows(matrix, "map", extended=True)
-        self.assertEqual([r["program"] for r in rows], ["B", "A", "C"])
+        self.assertEqual([r["program"] for r in rows], ["A", "B", "C"])
+
+    def test_arithmetic_intensity_is_a_subgroup_after_the_other_synthetics(self):
+        names = ["ArithmeticIntensityInt8.hs", "TernaryTree.hs",
+                 "Add1TreeInt8.hs", "Compiler.hs"]
+        ordered = sorted(names, key=lambda p: gb.pldi_stage_sort_key(
+            p, gb.pldi_stage_group(p)))
+        self.assertEqual(ordered, ["Compiler.hs", "Add1TreeInt8.hs",
+                                   "TernaryTree.hs",
+                                   "ArithmeticIntensityInt8.hs"])
+        self.assertEqual(gb.pldi_stage_group("ArithmeticIntensityInt8.hs"),
+                         "synthetic")
+        self.assertEqual(gb.pldi_stage_subgroup("ArithmeticIntensityInt8.hs"),
+                         "arithintensity")
+        self.assertIsNone(gb.pldi_stage_subgroup("Add1TreeInt8.hs"))
+
+    def test_aos_columns_carry_a_layout_note(self):
+        self.assertEqual(gb.PLDI_STAGE_COLUMN_NOTES,
+                         {"Vanilla Gibbon": "AoS", "Mutable cursors": "AoS"})
+
+    def test_a_width_family_sits_together_in_width_order(self):
+        names = ["ArithmeticIntensityInt64.hs", "List.hs",
+                 "ArithmeticIntensityInt8.hs", "Add1TreeInt16.hs",
+                 "ArithmeticIntensityInt16.hs", "Add1TreeInt8.hs"]
+        ordered = sorted(names, key=lambda p: gb.pldi_stage_sort_key(
+            p, gb.pldi_stage_group(p)))
+        self.assertEqual(ordered, [
+            "Add1TreeInt8.hs", "Add1TreeInt16.hs", "List.hs",
+            "ArithmeticIntensityInt8.hs", "ArithmeticIntensityInt16.hs",
+            "ArithmeticIntensityInt64.hs"])
 
 
 class TestCompactStageChain(unittest.TestCase):
@@ -2807,6 +3112,225 @@ class TestHeatmapColorScale(unittest.TestCase):
                          [False, False, False])
 
 
+class TestBenchmarkCharacteristicsTable(unittest.TestCase):
+    """A speedup is not interpretable without the shape of the data behind
+    it: node width, buffer count and how much of a node a pass ignores."""
+
+    def _render(self, pairs):
+        buf = io.StringIO()
+        gb._table_benchmark_characteristics(buf, pairs)
+        return buf.getvalue()
+
+    def _pair(self, program="A.hs", dead=0.5, uses=3, fields=6, buffers=5):
+        aos = _make_result(program, "aos", {
+            "f": {"median_time": 1.0, "pass_type": "fold", "uses": uses,
+                  "dead_ratio": dead},
+            "m": {"median_time": 2.0, "pass_type": "map", "uses": uses + 1,
+                  "dead_ratio": dead / 2}})
+        soa = _make_result(program, "soa", dict(aos.passes))
+        aos.adt_fields = soa.adt_fields = fields
+        soa.adt_info = {"type_name": "T", "soa_total_buffers": buffers,
+                        "nonrec_field_slots": None}
+        return (aos, soa)
+
+    def test_it_reports_width_buffers_pass_counts_and_dead_headroom(self):
+        tex = self._render([self._pair()])
+        self.assertIn("\\label{tab:benchmark-characteristics}", tex)
+        row = [l for l in tex.splitlines() if l.startswith("\\texttt{A}")][0]
+        self.assertIn("& 6 &", row)      # fields
+        self.assertIn("& 5 &", row)      # buffers
+        self.assertIn("& 1 & 1 &", row)  # one fold, one map
+        self.assertIn("3--4", row)       # uses range
+        self.assertIn("50\\%", row)      # largest dead fraction
+
+    def test_the_verification_pass_is_not_a_benchmark_kernel(self):
+        aos, soa = self._pair()
+        for res in (aos, soa):
+            res.passes["checksumTree"] = {"median_time": 9.0,
+                                          "pass_type": "fold", "uses": 1,
+                                          "dead_ratio": 0.0}
+        row = [l for l in self._render([(aos, soa)]).splitlines()
+               if l.startswith("\\texttt{A}")][0]
+        self.assertIn("& 1 & 1 &", row)
+        self.assertIn("50\\%", row)
+
+    def test_an_unverified_program_is_not_described(self):
+        aos, soa = self._pair()
+        soa.qualification.oracle_status = prov.ORACLE_FAIL
+        self.assertEqual(self._render([(aos, soa)]), "")
+
+    def test_the_caption_does_not_claim_a_working_set(self):
+        tex = self._render([self._pair()])
+        self.assertIn("working-set sizes are not measured here", tex)
+
+
+class TestTablesFromStoredResults(unittest.TestCase):
+    def test_tables_need_the_campaign_report(self):
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        res = _make_result("A.hs", "aos_mut",
+                           {"f": {"median_time": 1.0, "pass_type": "fold"}})
+        with mock.patch("builtins.print"):
+            gb.write_pldi_matrix_json({"A.hs": {"aos_mut": res}}, d / "m.json")
+            rc = gb.replot_figures_from_json([d / "m.json"], d / "figs",
+                                             latex_table=d / "t.tex")
+        self.assertEqual(rc, 1)
+        self.assertFalse((d / "t.tex").exists())
+
+    def test_the_stored_runs_provenance_is_what_is_recorded(self):
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        res = _make_result("A.hs", "aos",
+                           {"f": {"median_time": 1.0, "pass_type": "fold"}})
+        with mock.patch("builtins.print"):
+            gb.write_json_results([(res, res)], d / "c.json",
+                                  campaign_extra={"codegen": {"simd_isa": "sse2"},
+                                                  "driver_argv": ["original-run"]})
+            gb.replot_figures_from_json([d / "c.json"], d / "figs",
+                                        latex_table=d / "t.tex")
+        tex = (d / "t.tex").read_text()
+        self.assertIn("original-run", tex)
+        self.assertIn("sse2", tex)
+
+
+class TestMeasurementEnvironment(unittest.TestCase):
+    def test_a_pinned_core_reserves_its_smt_siblings(self):
+        with mock.patch.object(gb.Path, "read_text", lambda self: "2-3"):
+            self.assertEqual(gb.smt_siblings(2), {2, 3})
+
+    def test_a_core_with_no_topology_file_is_its_own_sibling(self):
+        def boom(self):
+            raise OSError("no such file")
+        with mock.patch.object(gb.Path, "read_text", boom):
+            self.assertEqual(gb.smt_siblings(5), {5})
+
+    def test_reservation_keeps_the_driver_off_the_whole_core(self):
+        applied = {}
+        with mock.patch.object(gb.os, "sched_getaffinity", lambda _p: set(range(8))), \
+             mock.patch.object(gb.os, "sched_setaffinity",
+                               lambda _p, cpus: applied.update(cpus=set(cpus))), \
+             mock.patch.object(gb, "smt_siblings", lambda c: {c, c + 1}):
+            self.assertTrue(gb.reserve_pin_cpu(2))
+        self.assertNotIn(2, applied["cpus"])
+        self.assertNotIn(3, applied["cpus"])
+
+    def test_the_sibling_is_kept_when_reserving_both_leaves_nothing(self):
+        applied = {}
+        with mock.patch.object(gb.os, "sched_getaffinity", lambda _p: {0, 1}), \
+             mock.patch.object(gb.os, "sched_setaffinity",
+                               lambda _p, cpus: applied.update(cpus=set(cpus))), \
+             mock.patch.object(gb, "smt_siblings", lambda c: {0, 1}):
+            self.assertTrue(gb.reserve_pin_cpu(0))
+        self.assertEqual(applied["cpus"], {1})
+
+    def test_frequency_policy_is_recorded(self):
+        info = gb._machine_description()
+        # Present on this Linux machine; a kernel without them records neither.
+        for key in ("cpu_governor", "turbo"):
+            if key in info:
+                self.assertTrue(info[key])
+
+
+class TestBuildPassIsNotComparedAcrossCompilers(unittest.TestCase):
+    def test_the_combination_is_refused(self):
+        src = Path(gb.__file__).read_text()
+        main_src = src[src.index("\ndef main("):]
+        self.assertIn("--include-build-pass cannot be combined with", main_src)
+        i = main_src.index("args.include_build_pass and (args.benchmark_ghc")
+        # Refused before anything is compiled or measured.
+        self.assertLess(i, main_src.index("for prog in programs_to_run:"))
+
+
+class TestErrorBarIsTheRightSpread(unittest.TestCase):
+    """A comparison between two configurations compares two processes, so the
+    within-process standard error is not its uncertainty."""
+
+    def test_between_round_ci_is_preferred_when_present(self):
+        pd = {"stderr": 0.0001, "between_round_ci95_abs": 0.02}
+        self.assertEqual(gb.pass_error_bar(pd), (0.02, "between-round"))
+
+    def test_within_process_stderr_is_the_fallback(self):
+        self.assertEqual(gb.pass_error_bar({"stderr": 0.0001}),
+                         (0.0001, "within-process"))
+
+    def test_absent_statistics_give_no_bar(self):
+        self.assertEqual(gb.pass_error_bar({}), (0.0, "within-process"))
+
+    def test_caption_names_whichever_spread_the_tables_show(self):
+        one = _make_result("A.hs", "aos", {
+            "f": {"median_time": 1.0, "pass_type": "fold", "stderr": 0.001}})
+        many = _make_result("A.hs", "aos", {
+            "f": {"median_time": 1.0, "pass_type": "fold", "stderr": 0.001,
+                  "between_round_ci95_abs": 0.05}})
+        self.assertIn("WITHIN one process", gb.error_bar_caption_note([one]))
+        self.assertIn("measured once", gb.error_bar_caption_note([one]))
+        self.assertIn("pass-rounds", gb.error_bar_caption_note([many]))
+        self.assertNotIn("measured once", gb.error_bar_caption_note([many]))
+
+    def test_a_missing_result_does_not_break_the_caption(self):
+        self.assertIn("WITHIN one process", gb.error_bar_caption_note([None]))
+
+
+class TestSubmissionDefaults(unittest.TestCase):
+    """--pldi-submission implies the measurement discipline a submission
+    needs, rather than relying on the operator to remember the flags."""
+
+    def test_pass_rounds_default_to_repetition_for_a_submission(self):
+        self.assertEqual(gb.default_pass_rounds(None, True),
+                         gb.PLDI_DEFAULT_PASS_ROUNDS)
+        self.assertGreaterEqual(gb.PLDI_DEFAULT_PASS_ROUNDS, 3)
+
+    def test_an_ordinary_run_still_measures_once(self):
+        self.assertEqual(gb.default_pass_rounds(None, False), 1)
+
+    def test_an_explicit_count_wins(self):
+        self.assertEqual(gb.default_pass_rounds(2, True), 2)
+        self.assertEqual(gb.default_pass_rounds(7, False), 7)
+
+    def test_a_nonsense_count_is_floored_at_one(self):
+        self.assertEqual(gb.default_pass_rounds(0, True), 1)
+
+    def test_main_resolves_it_before_the_matrix_uses_it(self):
+        src = Path(gb.__file__).read_text()
+        main_src = src[src.index("\ndef main("):]
+        self.assertLess(main_src.index("default_pass_rounds("),
+                        main_src.index("pass_rounds=args.pass_rounds"))
+
+
+class TestProvenanceDescribesWhatRan(unittest.TestCase):
+    """The recorded block travels into the paper; it must not credit the
+    numbers with a discipline the path that produced them did not apply."""
+
+    def _block(self):
+        args = gb.build_parser().parse_args(["--pldi-submission"])
+        args.pass_rounds = gb.default_pass_rounds(args.pass_rounds, True)
+        return gb.campaign_provenance(args)["timing"]
+
+    def test_each_measuring_path_records_its_own_warmup(self):
+        t = self._block()
+        self.assertIn("campaign_phase", t)
+        self.assertIn("variant_matrix_phase", t)
+        self.assertEqual(t["variant_matrix_phase"]["warmup_runs"],
+                         gb.MATRIX_WARMUP_RUNS)
+        self.assertEqual(t["variant_matrix_phase"]["cooldown_seconds"], 0.0)
+
+    def test_no_bare_warmup_field_that_could_be_read_as_global(self):
+        t = self._block()
+        for key in ("warmup_runs", "warmup_iterations", "cooldown_seconds"):
+            self.assertNotIn(key, t)
+
+    def test_the_round_count_is_recorded(self):
+        t = self._block()
+        self.assertEqual(t["pass_rounds"], gb.PLDI_DEFAULT_PASS_ROUNDS)
+        self.assertEqual(t["variant_matrix_phase"]["rounds"],
+                         gb.PLDI_DEFAULT_PASS_ROUNDS)
+
+    def test_codegen_says_its_flags_are_whole_run_only(self):
+        args = gb.build_parser().parse_args(["--pldi-submission"])
+        codegen = gb.campaign_provenance(args)["codegen"]
+        self.assertIn("per_configuration_flags", codegen)
+
+
 class TestRunRounds(unittest.TestCase):
     """Interleaving itself. Every delta subtracts one configuration from
     another measured in a separate process, so what matters is that neither
@@ -2823,7 +3347,7 @@ class TestRunRounds(unittest.TestCase):
         run_exe, calls = self._fake()
         jobs = [(c, Path(c)) for c in "abc"]
         with mock.patch.object(gb, "run_exe", run_exe):
-            out = gb.run_rounds(jobs, 5, 4)
+            out = gb.run_rounds(jobs, 5, 4, warmup_runs=0)
         self.assertEqual([len(v) for v in out.values()], [4, 4, 4])
         self.assertEqual(calls.count("a"), 4)
 
@@ -2831,7 +3355,7 @@ class TestRunRounds(unittest.TestCase):
         run_exe, calls = self._fake()
         jobs = [(c, Path(c)) for c in "abc"]
         with mock.patch.object(gb, "run_exe", run_exe):
-            gb.run_rounds(jobs, 5, 3)
+            gb.run_rounds(jobs, 5, 3, warmup_runs=0)
         rounds = [calls[i * 3:(i + 1) * 3] for i in range(3)]
         for slot in range(3):
             self.assertEqual(sorted(r[slot] for r in rounds), ["a", "b", "c"])
@@ -2843,7 +3367,7 @@ class TestRunRounds(unittest.TestCase):
         run_exe, calls = self._fake()
         jobs = [("%02d" % i, Path("%02d" % i)) for i in range(18)]
         with mock.patch.object(gb, "run_exe", run_exe):
-            gb.run_rounds(jobs, 5, 3)
+            gb.run_rounds(jobs, 5, 3, warmup_runs=0)
         starts = [calls[i * 18] for i in range(3)]
         self.assertEqual(len(set(starts)), 3)
         ordered = sorted(int(x) for x in starts)
@@ -2853,7 +3377,7 @@ class TestRunRounds(unittest.TestCase):
         run_exe, calls = self._fake()
         jobs = [(c, Path(c)) for c in "abc"]
         with mock.patch.object(gb, "run_exe", run_exe):
-            gb.run_rounds(jobs, 5, 1)
+            gb.run_rounds(jobs, 5, 1, warmup_runs=0)
         self.assertEqual(calls, ["a", "b", "c"])
 
     def test_zero_rounds_still_runs_once(self):
@@ -2861,7 +3385,7 @@ class TestRunRounds(unittest.TestCase):
         behind it."""
         run_exe, calls = self._fake()
         with mock.patch.object(gb, "run_exe", run_exe):
-            out = gb.run_rounds([("a", Path("a"))], 5, 0)
+            out = gb.run_rounds([("a", Path("a"))], 5, 0, warmup_runs=0)
         self.assertEqual(len(out["a"]), 1)
 
     def test_every_round_uses_the_top_level_iteration_count(self):
@@ -2872,9 +3396,46 @@ class TestRunRounds(unittest.TestCase):
             seen.append(iterations)
             return (True, 1.0, "out", "", 0)
         with mock.patch.object(gb, "run_exe", run_exe):
-            gb.run_rounds([("a", Path("a")), ("b", Path("b"))], 21, 3)
+            gb.run_rounds([("a", Path("a")), ("b", Path("b"))], 21, 3,
+                          warmup_runs=0)
         self.assertEqual(set(seen), {21})
         self.assertEqual(len(seen), 6)
+
+    def test_every_job_is_warmed_up_before_the_first_timed_round(self):
+        """A first run pays cold caches and first-touch of the output region;
+        the driver measured 6.3% between a first and a second run of one
+        binary, larger than many effects the matrix reports."""
+        seen = []
+        def run_exe(exe, iterations, use_iterate_flag=True, pin_cpu=None, **kw):
+            seen.append((Path(exe).name, iterations))
+            return (True, 1.0, "out", "", 0)
+        jobs = [(c, Path(c)) for c in "abc"]
+        with mock.patch.object(gb, "run_exe", run_exe):
+            out = gb.run_rounds(jobs, 20, 2)
+        warm = seen[:3]
+        self.assertEqual([n for n, _i in warm], ["a", "b", "c"])
+        self.assertTrue(all(i == gb.MATRIX_WARMUP_ITERATIONS for _n, i in warm))
+        # Warm-ups are discarded: only the timed rounds are collected.
+        self.assertEqual([len(v) for v in out.values()], [2, 2, 2])
+        self.assertTrue(all(i == 20 for _n, i in seen[3:]))
+
+    def test_the_warm_up_precedes_every_timed_run_not_just_its_own_job(self):
+        # Warming a job immediately before timing it would leave the LAST
+        # job's timed run adjacent to the first job's warm-up instead.
+        order = []
+        def run_exe(exe, iterations, use_iterate_flag=True, pin_cpu=None, **kw):
+            order.append((Path(exe).name, iterations))
+            return (True, 1.0, "out", "", 0)
+        jobs = [(c, Path(c)) for c in "ab"]
+        with mock.patch.object(gb, "run_exe", run_exe):
+            gb.run_rounds(jobs, 20, 1)
+        self.assertEqual(order, [("a", 1), ("b", 1), ("a", 20), ("b", 20)])
+
+    def test_warm_up_can_be_turned_off(self):
+        run_exe, calls = self._fake()
+        with mock.patch.object(gb, "run_exe", run_exe):
+            gb.run_rounds([("a", Path("a"))], 5, 1, warmup_runs=0)
+        self.assertEqual(calls, ["a"])
 
 
 class TestBuildTimedSources(unittest.TestCase):
@@ -3343,7 +3904,7 @@ class TestStageFigureGroups(unittest.TestCase):
                 for cfg, v in times.items()}
         rows, _labels, _d = gb._pldi_stage_rows(matrix, "map")
         self.assertEqual([r["program"] for r in rows],
-                         ["KDTree", "Compiler", "MonoTree", "Add1TreeInt8"])
+                         ["Compiler", "KDTree", "Add1TreeInt8", "MonoTree"])
         self.assertEqual([r["group"] for r in rows],
                          ["realworld", "realworld", "synthetic", "synthetic"])
 

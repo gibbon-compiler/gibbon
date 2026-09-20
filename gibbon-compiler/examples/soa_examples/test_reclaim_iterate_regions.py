@@ -114,6 +114,36 @@ class TestCli(_Scoped):
         self.assertFalse(p.parse_args([]).reclaim_iterate_regions)
         self.assertTrue(p.parse_args([FLAG]).reclaim_iterate_regions)
 
+    def test_no_flag_turns_it_off(self):
+        p = gb.build_parser()
+        self.assertIs(p.parse_args(["--no-reclaim-iterate-regions"])
+                      .reclaim_iterate_regions, False)
+
+    def test_pldi_submission_defaults_it_on(self):
+        self.assertTrue(gb.default_reclaim_iterate_regions(None, True))
+        self.assertFalse(gb.default_reclaim_iterate_regions(None, False))
+
+    def test_explicit_choice_overrides_pldi_default(self):
+        self.assertFalse(gb.default_reclaim_iterate_regions(False, True))
+        self.assertTrue(gb.default_reclaim_iterate_regions(True, False))
+
+    def test_main_resolves_the_default_before_setting_it(self):
+        src = Path(gb.__file__).read_text()
+        main_src = src[src.index("\ndef main("):]
+        self.assertLess(main_src.index("default_reclaim_iterate_regions("),
+                        main_src.index("set_reclaim_iterate_regions(args."))
+
+    def test_the_recorded_provenance_names_the_setting(self):
+        # --pldi-submission turns it on without the flag appearing in
+        # driver_argv, and it changes the measured times, so argv alone no
+        # longer says which way a recorded number was compiled.
+        args = gb.build_parser().parse_args([])
+        for enabled in (True, False):
+            gb.set_reclaim_iterate_regions(enabled)
+            block = gb.campaign_provenance(args)
+            self.assertEqual(block["codegen"]["reclaim_iterate_regions"],
+                             enabled)
+
     def test_help_explains_the_cost_of_leaving_it_off(self):
         h = gb.build_parser().format_help()
         self.assertIn("929 MB/iteration", h)

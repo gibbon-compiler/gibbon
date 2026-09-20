@@ -68,9 +68,19 @@ class TestPinningOffTouchesNothing(unittest.TestCase):
     def test_affinity_call_when_pinning_is_on(self):
         # The contrast case: proves the assertion above is not vacuous.
         with mock.patch.object(os, "sched_getaffinity", return_value={0, 1, 2, 3}), \
+             mock.patch.object(gb, "smt_siblings", lambda c: {c}), \
              mock.patch.object(os, "sched_setaffinity") as setaff:
             self.assertTrue(gb.reserve_pin_cpu(2))
         setaff.assert_called_once_with(0, {0, 1, 3})
+
+    def test_the_pinned_cores_sibling_thread_is_reserved_too(self):
+        # A sibling shares the physical core's front end and ports, so leaving
+        # it schedulable for the driver does not reserve the core.
+        with mock.patch.object(os, "sched_getaffinity", return_value={0, 1, 2, 3}), \
+             mock.patch.object(gb, "smt_siblings", lambda c: {2, 3}), \
+             mock.patch.object(os, "sched_setaffinity") as setaff:
+            self.assertTrue(gb.reserve_pin_cpu(2))
+        setaff.assert_called_once_with(0, {0, 1})
 
     def test_reservation_declines_rather_than_stranding_the_driver(self):
         with mock.patch.object(os, "sched_getaffinity", return_value={2}), \

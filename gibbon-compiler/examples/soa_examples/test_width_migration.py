@@ -457,7 +457,7 @@ class TestVW24CurrentInt64OracleCoverage(unittest.TestCase):
         "OctTree_scaleEnergy": 300158116707,
         "OctTree_clearFlags": 18680,
     }
-    RE_DERIVED_COLOROCTREE = "'#(16777216 24540)"
+    RE_DERIVED_COLOROCTREE = "'#(16777216 24540 32832 1875 8555808768 64)"
 
     @classmethod
     def setUpClass(cls):
@@ -618,6 +618,11 @@ MUST_BE_INT64 = {
     ("ColorOctree", "cCount"): "Int64",
     ("ColorOctree", "paletteEntriesQuantized"): "Int64",
     ("ColorOctree", "quantizationErrorProxy"): "Int64",
+    ("ColorOctree", "reduceColorCount"): "Int64",
+    ("ColorOctree", "closestColor"): "Int64",
+    ("ColorOctree", "countMarked"): "Int64",
+    ("ColorOctree", "minI"): "Int",
+    ("ColorOctree", "min8"): "Int",
     # KDTree: no longer a separate "KDTREE_MUST_STAY_INT64" table -- it is
     # audited the same way as every other program now.
     ("KDTree", "nearestDist"): "Int",
