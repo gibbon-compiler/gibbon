@@ -10488,7 +10488,11 @@ def _fig_dead_vs_speedup(good: List, out: Path):
     # Trend line across all points
     all_x = fold_x + map_x + unk_x
     all_y = fold_y + map_y + unk_y
-    if len(all_x) >= 3:
+    # Distinct x values, not just three points: a one-program campaign
+    # contributes several passes at the SAME dead-field ratio, and fitting a
+    # line through one x fails to converge and takes the whole figure phase
+    # down with it -- after the campaign has been measured.
+    if len(all_x) >= 3 and len(set(all_x)) >= 2:
         z   = np.polyfit(all_x, all_y, 1)
         px  = np.linspace(min(all_x), max(all_x), 100)
         ax.plot(px, np.polyval(z, px), "k--", linewidth=1.2, alpha=0.4,

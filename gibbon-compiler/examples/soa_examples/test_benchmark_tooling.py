@@ -677,5 +677,47 @@ class TestTimedRunsArePinnedToOneCore(unittest.TestCase):
         self.assertLess(src.index("record_argv.append"), src.index('"taskset"'))
 
 
+
+class TestDeadFieldScatterDegenerateInput(unittest.TestCase):
+    """The trend line must not take the figure phase down.
+
+    A one-program campaign contributes several passes at the same
+    dead-field ratio. Fitting a line through a single x value raises
+    LinAlgError, which used to abort every remaining figure -- including
+    the stage heatmaps -- after the campaign had already been measured.
+    """
+
+    def test_one_program_still_draws(self):
+        import gibbon_benchmark as gb
+        if not gb.HAS_PLOT_LIBS:
+            self.skipTest("matplotlib/numpy not installed")
+        import tempfile
+        res = {}
+        for variant in ("aos", "soa"):
+            r = gb.BenchmarkResult("P.hs", variant)
+            r.compile_success = r.run_success = True
+            r.adt_fields = 8
+            # Every pass of one program shares a dead-field ratio, and a
+            # program that uses every field shares the ratio 0.0 -- which is
+            # what makes the fit's scaling divide by zero. Speedups differ,
+            # as they do in a real run.
+            times = (("a", 0.10), ("b", 0.20), ("c", 0.30)) if variant == "aos" \
+                else (("a", 0.11), ("b", 0.17), ("c", 0.26))
+            r.passes = {n: {"median_time": t, "pass_type": "fold", "uses": 8,
+                            "dead_ratio": 0.0}
+                        for n, t in times}
+            import bench_provenance as prov
+            st = prov.QualificationStatus(variant, "P.hs")
+            st.compile_status = prov.COMPILE_OK
+            st.exec_status = prov.EXEC_OK
+            st.oracle_status = prov.ORACLE_PASS
+            st.semantic_output = "42"
+            r.qualification = st
+            res[variant] = r
+        with tempfile.TemporaryDirectory() as d:
+            # Must not raise: every pass shares one dead-field ratio.
+            gb._fig_dead_vs_speedup([(res["aos"], res["soa"])],
+                                    Path(d) / "dead_vs_speedup")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
