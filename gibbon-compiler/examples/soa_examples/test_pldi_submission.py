@@ -199,6 +199,18 @@ class TestPldiConfigRegistries(unittest.TestCase):
             self.assertFalse(kwargs.get("enable_loopification", False))
 
 
+
+def _pldi_document(kind, results, program="P.hs"):
+    """The shared reading notes plus one per-pass table, as the document
+    emits them: the notes are written once for the whole run, so an
+    explanation belongs in the document, not in every caption."""
+    buf = io.StringIO()
+    gb._pldi_reading_notes(buf)
+    (gb._table_pldi_fold if kind == "fold" else gb._table_pldi_map)(
+        buf, program, results)
+    return buf.getvalue()
+
+
 def _make_result(program, variant, pass_data, verified=True, oracle_status=None):
     res = gb.BenchmarkResult(program, variant)
     st = prov.QualificationStatus(variant, program)
@@ -1337,9 +1349,7 @@ class TestFailureSymbols(unittest.TestCase):
     def test_caption_defines_every_symbol_it_can_emit(self):
         results = {"aos_mut": _make_result("P.hs", "aos_mut", {
             "f": {"median_time": 0.01, "pass_type": "fold"}})}
-        buf = io.StringIO()
-        gb._table_pldi_fold(buf, "P.hs", results)
-        caption = buf.getvalue()
+        caption = _pldi_document("fold", results)
         for sym in (gb.PLDI_SYM_COMPILE_FAIL, gb.PLDI_SYM_RUN_FAIL,
                     gb.PLDI_SYM_WRONG_OUTPUT, gb.PLDI_SYM_NOT_MEASURED):
             self.assertIn("`%s'" % sym, caption,
@@ -1418,9 +1428,7 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
     def test_caption_explains_the_column(self):
         results = {"aos_mut": _make_result("P.hs", "aos_mut", {
             "g": {"median_time": 0.02, "pass_type": "fold"}})}
-        buf = io.StringIO()
-        gb._table_pldi_fold(buf, "P.hs", results)
-        caption = buf.getvalue()
+        caption = _pldi_document("fold", results)
         self.assertIn("$A^{\\min}$/$S^{\\min}$", caption)
         self.assertIn("fastest AoS configuration", caption)
 
@@ -1455,10 +1463,8 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
         that from the columns, so the caption has to say it."""
         results = {"aos_mut": _make_result("P.hs", "aos_mut", {
             "g": {"median_time": 0.02, "pass_type": "fold"}})}
-        buf = io.StringIO()
-        gb._table_pldi_fold(buf, "P.hs", results)
-        cap = buf.getvalue()
-        self.assertIn("columns THIS table", cap)
+        cap = _pldi_document("fold", results)
+        self.assertIn("columns that table shows and no others", cap)
         self.assertIn("recursive configurations only", cap)
         self.assertIn("tab:summary", cap)
         self.assertIn("reverse which one leads", cap)
@@ -1476,9 +1482,7 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
         rather than rewrites" states the opposite of what happened."""
         results = {"aos_mut": _make_result("P.hs", "aos_mut", {
             "m": {"median_time": 0.02, "pass_type": "map"}})}
-        buf = io.StringIO()
-        gb._table_pldi_map(buf, "P.hs", results)
-        cap = buf.getvalue()
+        cap = _pldi_document("map", results)
         self.assertIn("leaves unmodified", cap)
         self.assertIn("upper bound", cap)
         self.assertIn("NOT a measurement", cap)
@@ -1492,10 +1496,8 @@ class TestBestOfLayoutSpeedup(unittest.TestCase):
         over every map pass there."""
         results = {"aos_mut": _make_result("P.hs", "aos_mut", {
             "m": {"median_time": 0.02, "pass_type": "map"}})}
-        buf = io.StringIO()
-        gb._table_pldi_map(buf, "P.hs", results)
-        cap = buf.getvalue()
-        self.assertIn("columns THIS table", cap)
+        cap = _pldi_document("map", results)
+        self.assertIn("columns that table shows and no others", cap)
         self.assertIn("pass-SUM", cap)
         self.assertIn("lead here and trail there", cap)
 

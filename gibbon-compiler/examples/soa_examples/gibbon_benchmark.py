@@ -5159,15 +5159,10 @@ def _render_pldi_delta_table(f, program: str,
         f"\\texttt{{{prog_display}}} (percent; companion to "
         f"Table~\\ref{{tab:pldi-{kind}-{prog_stem}}}). Every column is "
         "(\\emph{baseline} $-$ \\emph{feature enabled}) / \\emph{feature "
-        "enabled}, which is identically $(\\text{speedup} - 1) \\times 100$: "
-        "$+100\\%$ means the feature made the pass twice as fast, $+700\\%$ "
-        "eight times as fast, and a negative value means it made the pass "
-        "slower. Percentages are scale-free, so they are comparable across "
-        "passes whose absolute times differ widely. "
-        "See "
-        "Table~\\ref{tab:pldi-delta-legend} for each column's exact "
-        "definition. `--' marks a pass where either side of the difference "
-        "was not measured; the timing table above says which.}\n")
+        "enabled}, identically $(\\text{speedup} - 1) \\times 100$; a negative "
+        "value means the feature made the pass slower. "
+        "Table~\\ref{tab:pldi-delta-legend} defines each column. `--' marks a "
+        "pass where either side was not measured.}\n")
     f.write(f"\\label{{tab:pldi-{kind}-delta-{prog_stem}}}\n")
     f.write(_table_size_directive(len(columns)))
     f.write("\\gibbonfit{%\n\\begin{tabular}{l" + " r" * len(columns) + "}\n\\toprule\n")
@@ -6316,70 +6311,16 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
     f.write(
         f"\\caption{{Per-pass {kind} performance for \\texttt{{{prog_display}}}. "
         + ran_caption_note(program) +
-        "Times are median per iteration (s), 4 significant digits. "
-        "Columns are compiled configurations; see Table~\\ref{tab:pldi-legend} "
-        "for the symbol key. "
-        + simd_isa_caption_note() + reclaim_caption_note() +
-        "In each row the fastest configuration is "
-        "\\textcolor{" + COLOR_FASTEST + "}{green} and the slowest "
-        "\\textcolor{" + COLOR_SLOWEST + "}{red}. "
-        + ("\\textbf{$\\Sigma_b$} is the BUFFERS this pass leaves unmodified, "
-           "out of the fully factored value's total, and "
-           "\\textbf{$\\Sigma_b\\%$} that as a fraction. It is read from the "
-           "pass's own source annotation -- a property of what the pass "
-           "WRITES, and therefore an upper bound on what selective buffer "
-           "sharing ($b$) could exploit, NOT a measurement of what the "
-           "optimization achieved. Whether sharing fired is the "
-           "$\\Delta^{S}_{b}$ column of the companion delta table: a pass can "
-           "read $\\Sigma_b$ near 100\\% and $\\Delta^{S}_{b}$ near zero, "
-           "which is what a traversal that declined loopification looks like "
-           "-- sharing is implemented on the loopified form, so a pass that "
-           "is not loopified is not shared either. A factored "
-           "value is one buffer per scalar field plus the constructor "
-           "stream, and a dependence-free map shares that constructor stream "
-           "too -- it rebuilds the same shape, so the tags are copied "
-           "unchanged. Counting fields alone would understate every map by "
-           "one buffer. A map copies every field into the output region, so "
-           "\"fields used\" is vacuously all of them and distinguishes "
-           "nothing; what separates one map from another is how much of the "
-           "data it merely COPIES. Recursive child fields are not buffers "
-           "and are excluded from both counts. "
-           if pass_type == "map" else
-           "\\textbf{Uses} is the fields this pass accesses out of the benchmark "
-           "ADT's total (recursive and non-recursive alike), and \\textbf{Dead\\%} "
-           "the fraction it never touches -- the quantity a struct-of-arrays "
-           "layout exists to exploit, since an unused field costs an AoS "
-           "traversal bandwidth it cannot avoid. ") +
-        "$A^{\\min}$/$S^{\\min}$ divides that row's fastest AoS configuration "
-        "by its fastest SoA one, so each layout is represented by whichever "
-        "configuration actually served this pass best; ${>}1{\\times}$ means "
-        "SoA is faster. The minimum is taken over the columns THIS table "
-        "shows and no others, so the ratio can be checked against the row "
-        "above it. "
-        + ("Those columns are the recursive configurations only: the "
-           "loopified pair Table~\\ref{tab:summary} contrasts is absent "
-           "here, because nothing in a fold is loopifiable. The two tables "
-           "therefore compare different binaries of the same source, and "
-           "where a program's two layouts sit within a few percent of each "
-           "other that is enough to reverse which one leads. "
+        "Times are median per iteration (s). Columns are compiled "
+        "configurations (Table~\\ref{tab:pldi-legend}); the paragraph "
+        "below it explains the shared columns and the failure symbols. "
+        + ("Nothing in a fold is loopifiable, so the loopified pair "
+           "Table~\\ref{tab:summary} contrasts is absent here. "
            if pass_type == "fold" else
-           "Those columns include the pair Table~\\ref{tab:summary} "
-           "contrasts, but that table reports a pass-SUM per program while "
-           "each row here is one pass, so a program with several map passes "
-           "can lead here and trail there. ")
-        + "A cell with no time names its failure: "
-        "`" + PLDI_SYM_COMPILE_FAIL + "' did not compile, "
-        "`" + PLDI_SYM_RUN_FAIL + "' compiled but the executable failed to run, "
-        "`" + PLDI_SYM_WRONG_OUTPUT + "' ran but its output did not match the "
-        "oracle (an empty output included), "
-        "`" + PLDI_SYM_STACK_EXHAUSTED + "' exhausted the C stack, and "
-        "`" + PLDI_SYM_NOT_MEASURED + "' was not measured -- either not run in "
-        "this campaign or having no registered oracle to check it against. "
-        "A `" + PLDI_SYM_STACK_EXHAUSTED + "' is a RESULT, not a defect: that "
-        "configuration recurses once per element where mutable cursors and "
-        "tail calls produce a loop, and the curated inputs are sized for the "
-        "loop. "
-        "The benchmark driver prints a warning naming each one.}\n")
+           "Table~\\ref{tab:summary} reports a pass-SUM per program "
+           "while each row here is one pass, so a program with several "
+           "map passes can lead here and trail there. ")
+        + "}\n")
     # The 6-column fold tables sit at \small, exactly like the other
     # per-program tables; only the 13-column map tables step down one size
     # (and tighten \tabcolsep, which is local to this table environment) so
@@ -6425,6 +6366,55 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
                 + "".join(" & %s" % c for c in cells)
                 + " & " + spd + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
+
+
+def _pldi_reading_notes(f) -> None:
+    """The prose every per-pass table shares, written once.
+
+    Each per-program caption otherwise repeated it: 35 tables carrying the
+    same six paragraphs came to 88 KB of caption text, which buries the one
+    sentence that differs from table to table."""
+    f.write("\\paragraph{Reading the per-pass tables.}\n")
+    f.write(
+        "Times are the median per iteration (s), 4 significant digits, and "
+        "columns are compiled configurations: Table~\\ref{tab:pldi-legend} "
+        "is the symbol key. In each row the fastest configuration is "
+        "\\textcolor{" + COLOR_FASTEST + "}{green} and the slowest "
+        "\\textcolor{" + COLOR_SLOWEST + "}{red}. "
+        + simd_isa_caption_note() + reclaim_caption_note() +
+        "$A^{\\min}$/$S^{\\min}$ divides a row's fastest AoS configuration by "
+        "its fastest SoA one, over the columns that table shows and no "
+        "others; ${>}1{\\times}$ means SoA is faster.\n\n")
+    f.write(
+        "\\textbf{Fold tables} carry \\textbf{Uses}, the fields a pass accesses "
+        "out of the ADT's total, and \\textbf{Dead\\%} the fraction it never "
+        "touches -- the quantity a struct-of-arrays layout exists to exploit. "
+        "Their columns are the recursive configurations only, since nothing "
+        "in a fold is loopifiable, so they and Table~\\ref{tab:summary} read "
+        "different binaries of the same source: where a program's two layouts "
+        "sit within a few percent of each other, that is enough to reverse "
+        "which one leads.\n\n")
+    f.write(
+        "\\textbf{Map tables} carry \\textbf{$\\Sigma_b$}, the buffers a pass "
+        "leaves unmodified out of the fully factored value's total, and "
+        "\\textbf{$\\Sigma_b\\%$} that as a fraction. It is read from the "
+        "pass's own source annotation -- an upper bound on what selective "
+        "buffer sharing could exploit, NOT a measurement of what it "
+        "achieved; whether sharing fired is the $\\Delta^{S}_{b}$ column of "
+        "the companion delta table. A factored value is one buffer per "
+        "scalar field plus the constructor stream, which a dependence-free "
+        "map shares too. Recursive child fields are not buffers and are "
+        "excluded from both counts.\n\n")
+    f.write(
+        "A cell with no time names its failure: "
+        "`" + PLDI_SYM_COMPILE_FAIL + "' did not compile, "
+        "`" + PLDI_SYM_RUN_FAIL + "' compiled but the executable failed to run, "
+        "`" + PLDI_SYM_WRONG_OUTPUT + "' ran but did not match the oracle, "
+        "`" + PLDI_SYM_STACK_EXHAUSTED + "' exhausted the C stack, and "
+        "`" + PLDI_SYM_NOT_MEASURED + "' was not measured. A "
+        "`" + PLDI_SYM_STACK_EXHAUSTED + "' is a RESULT, not a defect: that "
+        "configuration recurses once per element where mutable cursors and "
+        "tail calls produce a loop, and the inputs are sized for the loop.\n\n")
 
 
 def _table_pldi_fold(f, program: str, results_for_program: Dict[str, BenchmarkResult]) -> None:
@@ -7319,6 +7309,7 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
             # One legend for the whole run; every per-program table below
             # \ref{}s it rather than repeating the configuration prose.
             _table_pldi_legend(f)
+            _pldi_reading_notes(f)
             # Render exactly what was collected (--programs/--exclude-programs
             # may have narrowed it, and --programs may name something outside
             # DEFAULT_PROGRAMS), keeping the canonical order for the rest.
@@ -10162,20 +10153,19 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
                     "the auto-vectorizer on: its speedup over Vanilla Gibbon, "
                     "shaded on the same scale; its number is red where it is "
                     "below the cell's.")
-    omissions = _pldi_stage_caption_omissions(pldi_variant_results, rows,
-                                              dropped, kind)
-    reclaim = (" " + reclaim_caption_note(latex=False)).rstrip()
-    ax.set_title(
-        title + omissions + reclaim +
-        "\nVanilla Gibbon is AoS, recursive traversal, immutable "
-        "cursors. Each cell is the speedup over Vanilla Gibbon with that "
-        "optimization and every one to its left enabled." + backend +
-        "\nColour is log-scaled, saturating at %g× (blue) and %g× (red); an "
-        "outlined cell is beyond that. %s marks a cell below the one to its "
-        "left: that optimization slowed the program down."
-        % (2 ** PLDI_STAGE_BLUE_CLIP, 2 ** -PLDI_STAGE_RED_CLIP,
-           PLDI_STAGE_DIP_MARK),
-        fontsize=9, pad=12)
+    # A key, not an explanation: the figure names the symbols a reader
+    # cannot decode from the cells themselves, and nothing else. What the
+    # columns mean, which programs were dropped and how the run was
+    # configured are in the tables and the report.
+    key = ["outlined: beyond the %g\u00d7/%g\u00d7 colour range"
+           % (2 ** PLDI_STAGE_BLUE_CLIP, 2 ** -PLDI_STAGE_RED_CLIP),
+           "%s: slower than the column to its left" % PLDI_STAGE_DIP_MARK]
+    if corners:
+        key.append("corner: same configuration, auto-vectorizer on")
+    if any(r.get("vanilla_av_off") for r in rows):
+        key.append("%s: auto-vectorizer off in Vanilla Gibbon too"
+                   % PLDI_AV_OFF_VANILLA_MARK)
+    ax.set_title(title + "\n" + "   ".join(key), fontsize=9, pad=10)
     _save(fig, out)
     return dropped
 
@@ -10277,10 +10267,13 @@ def generate_pldi_stage_figures(
         if dropped is None:
             print("  Skipping %s: no program has a complete chain." % stem)
             continue
+        # The figure carries a symbol key only, so the account of what was
+        # left out is reported here instead of in its title.
         note = ("" if not dropped else
-                "  (%d without a complete chain: %s)"
-                % (len(dropped),
-                   ", ".join(p.replace(".hs", "") for p in dropped)))
+                "  " + _pldi_stage_caption_omissions(
+                    pldi_variant_results, _pldi_stage_rows(
+                        pldi_variant_results, kind, extended)[0],
+                    dropped, kind).strip())
         print("  ✓ %s.*%s" % (stem, note))
         available = {cfg for by_cfg in pldi_variant_results.values()
                      for cfg in by_cfg}
