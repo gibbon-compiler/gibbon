@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  17 SEP 2026 13:24
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  20 SEP 2026 14:08
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -190,97 +190,124 @@ e
 (figures/performance_table.tex
 \gibbon@fitbox=\box53
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <7> on input line 64.
+(Font)              <9> on input line 101.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <5> on input line 64.
+(Font)              <6> on input line 101.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <5> on input line 101.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <7> on input line 102.
 
 
 LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <10.5> not available
-(Font)              size <10.95> substituted on input line 66.
+(Font)              size <10.95> substituted on input line 109.
 
-LaTeX Font Info:    Calculating math sizes for size <10.5> on input line 91.
+LaTeX Font Info:    Calculating math sizes for size <10.5> on input line 134.
 
 LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <10.5> not available
-(Font)              size <10.95> substituted on input line 91.
+(Font)              size <10.95> substituted on input line 134.
 
 
 LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <10.5> not available
-(Font)              size <10.95> substituted on input line 91.
+(Font)              size <10.95> substituted on input line 134.
 
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <10.5> on input line 91.
+(Font)              <10.5> on input line 134.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <7.34996> on input line 91.
+(Font)              <7.34996> on input line 134.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <5.25> on input line 91.
+(Font)              <5.25> on input line 134.
 
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <10.5> not available
-(Font)              size <10.95> substituted on input line 91.
+(Font)              size <10.95> substituted on input line 134.
 
 [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
-! Undefined control sequence.
-<argument> ...ntage, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.166 ...es the configuration symbols themselves.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...ntage, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.166 ...es the configuration symbols themselves.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...ntage, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.166 ...es the configuration symbols themselves.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
+Overfull \hbox (51.60248pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]norm2Estimate| 
+ []
 
 
-LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <9.5> not available
-(Font)              size <9> substituted on input line 200.
-
-LaTeX Font Info:    Calculating math sizes for size <9.5> on input line 219.
-
-LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <9.5> not available
-(Font)              size <9> substituted on input line 219.
+Overfull \hbox (77.68147pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]truncateTolViolations| 
+ []
 
 
-LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <9.5> not available
-(Font)              size <9> substituted on input line 219.
+Overfull \hbox (46.74557pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]compressMass| 
+ []
 
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <9.5> on input line 219.
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <6.64996> on input line 219.
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <4.75> on input line 219.
 
-LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <9.5> not available
-(Font)              size <9> substituted on input line 219.
+Overfull \hbox (69.03218pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]autorefineMaxLevel| 
+ []
+
+
+Overfull \hbox (69.71278pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]pmapCutHistogram| 
+ []
+
+
+Overfull \hbox (62.85515pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]lbDeuxLoadProxy| 
+ []
+
+
+Overfull \hbox (44.12544pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]addConstPW| 
+ []
+
+
+Overfull \hbox (18.63672pt too wide) in paragraph at lines 212--212
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]diffPW| 
+ []
+
+
+Overfull \hbox (51.60248pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]norm2Estimate| 
+ []
+
+
+Overfull \hbox (77.68147pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]truncateTolViolations| 
+ []
+
+
+Overfull \hbox (46.74557pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]compressMass| 
+ []
+
+
+Overfull \hbox (69.03218pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]autorefineMaxLevel| 
+ []
+
+
+Overfull \hbox (69.71278pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]pmapCutHistogram| 
+ []
+
+
+Overfull \hbox (62.85515pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]lbDeuxLoadProxy| 
+ []
+
+
+Overfull \hbox (44.12544pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]addConstPW| 
+ []
+
+
+Overfull \hbox (18.63672pt too wide) in paragraph at lines 249--249
+[]\OT1/cmr/m/n/9 PiecewiseFunctions[]diffPW| 
+ []
 
 [2]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ntage, which is identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.225 ...ured; the timing table above says which.}
+l.299 ...es the configuration symbols themselves.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -289,9 +316,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ntage, which is identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.225 ...ured; the timing table above says which.}
+l.299 ...es the configuration symbols themselves.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -300,89 +327,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ntage, which is identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.225 ...ured; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-
-LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 253.
-
-LaTeX Font Info:    Calculating math sizes for size <6.5> on input line 265.
-
-LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <4.54997> not available
-(Font)              size <5> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <3.25> not available
-(Font)              size <5> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <6.5> not available
-(Font)              size <6> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <4.54997> not available
-(Font)              size <5> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <3.25> not available
-(Font)              size <5> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <4.54997> not available
-(Font)              size <5> substituted on input line 265.
-
-
-LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <3.25> not available
-(Font)              size <5> substituted on input line 265.
-
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <6.5> on input line 265.
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <4.54997> on input line 265.
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <3.25> on input line 265.
-
-LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 265.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.271 ...ured; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.271 ...ured; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.271 ...ured; the timing table above says which.}
+l.299 ...es the configuration symbols themselves.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -392,44 +339,44 @@ and I'll forget about whatever was undefined.
 
 
 LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <8.5> not available
-(Font)              size <8> substituted on input line 273.
+(Font)              size <8> substituted on input line 333.
 
-LaTeX Font Info:    Calculating math sizes for size <8.5> on input line 285.
+LaTeX Font Info:    Calculating math sizes for size <8.5> on input line 352.
 
 LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <4.25> not available
-(Font)              size <5> substituted on input line 285.
+(Font)              size <5> substituted on input line 352.
 
 
 LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <8.5> not available
-(Font)              size <8> substituted on input line 285.
+(Font)              size <8> substituted on input line 352.
 
 
 LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <4.25> not available
-(Font)              size <5> substituted on input line 285.
+(Font)              size <5> substituted on input line 352.
 
 
 LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <8.5> not available
-(Font)              size <8> substituted on input line 285.
+(Font)              size <8> substituted on input line 352.
 
 
 LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <4.25> not available
-(Font)              size <5> substituted on input line 285.
+(Font)              size <5> substituted on input line 352.
 
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <8.5> on input line 285.
+(Font)              <8.5> on input line 352.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <5.94997> on input line 285.
+(Font)              <5.94997> on input line 352.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <4.25> on input line 285.
+(Font)              <4.25> on input line 352.
 
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <8.5> not available
-(Font)              size <8> substituted on input line 285.
+(Font)              size <8> substituted on input line 352.
 
 [3]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.315 ...ured; the timing table above says which.}
+l.358 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -438,9 +385,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.315 ...ured; the timing table above says which.}
+l.358 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -449,9 +396,67 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.315 ...ured; the timing table above says which.}
+l.358 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <6.5> not available
+(Font)              size <6> substituted on input line 386.
+
+LaTeX Font Info:    Calculating math sizes for size <6.5> on input line 398.
+
+LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <4.54997> not available
+(Font)              size <5> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <3.25> not available
+(Font)              size <5> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <6.5> not available
+(Font)              size <6> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <4.54997> not available
+(Font)              size <5> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OML/cmm/m/it' in size <3.25> not available
+(Font)              size <5> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <6.5> not available
+(Font)              size <6> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <4.54997> not available
+(Font)              size <5> substituted on input line 398.
+
+
+LaTeX Font Warning: Font shape `OMS/cmsy/m/n' in size <3.25> not available
+(Font)              size <5> substituted on input line 398.
+
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <6.5> on input line 398.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <4.54997> on input line 398.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <3.25> on input line 398.
+
+LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
+(Font)              size <6> substituted on input line 398.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.404 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -460,9 +465,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.358 ...ured; the timing table above says which.}
+l.404 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -471,9 +476,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.358 ...ured; the timing table above says which.}
+l.404 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -482,9 +487,64 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.358 ...ured; the timing table above says which.}
+l.448 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.448 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.448 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.491 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.491 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.491 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -494,9 +554,9 @@ and I'll forget about whatever was undefined.
 
 [4]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.405 ...ured; the timing table above says which.}
+l.538 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -505,9 +565,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.405 ...ured; the timing table above says which.}
+l.538 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -516,9 +576,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.405 ...ured; the timing table above says which.}
+l.538 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -527,9 +587,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.451 ...ured; the timing table above says which.}
+l.584 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -538,9 +598,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.451 ...ured; the timing table above says which.}
+l.584 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -549,9 +609,42 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.451 ...ured; the timing table above says which.}
+l.584 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.625 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.625 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.625 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -561,9 +654,9 @@ and I'll forget about whatever was undefined.
 
 [5]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.492 ...ured; the timing table above says which.}
+l.666 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -572,9 +665,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.492 ...ured; the timing table above says which.}
+l.666 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -583,9 +676,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.492 ...ured; the timing table above says which.}
+l.666 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -594,9 +687,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.533 ...ured; the timing table above says which.}
+l.710 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -605,9 +698,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.533 ...ured; the timing table above says which.}
+l.710 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -616,9 +709,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.533 ...ured; the timing table above says which.}
+l.710 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -627,9 +720,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.577 ...ured; the timing table above says which.}
+l.754 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -638,9 +731,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.577 ...ured; the timing table above says which.}
+l.754 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -649,9 +742,42 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.577 ...ured; the timing table above says which.}
+l.754 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.795 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.795 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.795 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -661,9 +787,9 @@ and I'll forget about whatever was undefined.
 
 [6]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.619 ...ured; the timing table above says which.}
+l.835 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -672,9 +798,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.619 ...ured; the timing table above says which.}
+l.835 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -683,9 +809,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.619 ...ured; the timing table above says which.}
+l.835 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -694,9 +820,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.656 ...ured; the timing table above says which.}
+l.874 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -705,9 +831,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.656 ...ured; the timing table above says which.}
+l.874 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -716,9 +842,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.656 ...ured; the timing table above says which.}
+l.874 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -727,9 +853,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.695 ...ured; the timing table above says which.}
+l.913 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -738,9 +864,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.695 ...ured; the timing table above says which.}
+l.913 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -749,9 +875,75 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.695 ...ured; the timing table above says which.}
+l.913 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.952 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.952 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.952 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.990 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.990 ...pass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.990 ...pass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -761,9 +953,9 @@ and I'll forget about whatever was undefined.
 
 [7]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.734 ...ured; the timing table above says which.}
+l.1034 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -772,9 +964,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.734 ...ured; the timing table above says which.}
+l.1034 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -783,9 +975,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.734 ...ured; the timing table above says which.}
+l.1034 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -794,9 +986,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.773 ...ured; the timing table above says which.}
+l.1078 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -805,9 +997,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.773 ...ured; the timing table above says which.}
+l.1078 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -816,9 +1008,108 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.773 ...ured; the timing table above says which.}
+l.1078 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1117 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1117 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1117 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1154 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1154 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1154 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1196 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1196 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1196 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -828,9 +1119,9 @@ and I'll forget about whatever was undefined.
 
 [8]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.811 ...ured; the timing table above says which.}
+l.1238 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -839,9 +1130,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.811 ...ured; the timing table above says which.}
+l.1238 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -850,9 +1141,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.811 ...ured; the timing table above says which.}
+l.1238 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -861,9 +1152,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.855 ...ured; the timing table above says which.}
+l.1280 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -872,9 +1163,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.855 ...ured; the timing table above says which.}
+l.1280 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -883,9 +1174,75 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.855 ...ured; the timing table above says which.}
+l.1280 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1321 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1321 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1321 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1360 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1360 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1360 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -895,9 +1252,9 @@ and I'll forget about whatever was undefined.
 
 [9]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.899 ...ured; the timing table above says which.}
+l.1398 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -906,9 +1263,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.899 ...ured; the timing table above says which.}
+l.1398 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -917,9 +1274,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.899 ...ured; the timing table above says which.}
+l.1398 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -928,9 +1285,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.938 ...ured; the timing table above says which.}
+l.1436 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -939,9 +1296,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.938 ...ured; the timing table above says which.}
+l.1436 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -950,9 +1307,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.938 ...ured; the timing table above says which.}
+l.1436 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -961,9 +1318,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.975 ...ured; the timing table above says which.}
+l.1474 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -972,9 +1329,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.975 ...ured; the timing table above says which.}
+l.1474 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -983,9 +1340,108 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.975 ...ured; the timing table above says which.}
+l.1474 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1512 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1512 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1512 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1550 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1550 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1550 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1588 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1588 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1588 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -995,9 +1451,9 @@ and I'll forget about whatever was undefined.
 
 [10]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1012 ...red; the timing table above says which.}
+l.1626 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1006,9 +1462,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1012 ...red; the timing table above says which.}
+l.1626 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1017,9 +1473,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1012 ...red; the timing table above says which.}
+l.1626 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1028,9 +1484,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1049 ...red; the timing table above says which.}
+l.1669 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1039,9 +1495,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1049 ...red; the timing table above says which.}
+l.1669 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1050,9 +1506,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1049 ...red; the timing table above says which.}
+l.1669 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1061,9 +1517,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1086 ...red; the timing table above says which.}
+l.1712 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1072,9 +1528,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1086 ...red; the timing table above says which.}
+l.1712 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1083,9 +1539,42 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1086 ...red; the timing table above says which.}
+l.1712 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1756 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1756 ...ass where either side was not measured.}
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+! Undefined control sequence.
+<argument> ...ature enabled}, identically $(\text 
+                                                  {speedup} - 1) \times 100$...
+l.1756 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1095,9 +1584,9 @@ and I'll forget about whatever was undefined.
 
 [11]
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1123 ...red; the timing table above says which.}
+l.1799 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1106,9 +1595,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1123 ...red; the timing table above says which.}
+l.1799 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1117,9 +1606,9 @@ spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
 ! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
+<argument> ...ature enabled}, identically $(\text 
                                                   {speedup} - 1) \times 100$...
-l.1123 ...red; the timing table above says which.}
+l.1799 ...ass where either side was not measured.}
                                                   
 The control sequence at the end of the top line
 of your error message was never \def'ed. If you have
@@ -1127,579 +1616,8 @@ misspelled it (e.g., `\hobx'), type `I' and the correct
 spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1160 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1160 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1160 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1198 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1198 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1198 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[12]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1236 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1236 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1236 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1273 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1273 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1273 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1315 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1315 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1315 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[13]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1357 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1357 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1357 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1397 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1397 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1397 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[14]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1435 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1435 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1435 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1473 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1473 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1473 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1511 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1511 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1511 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[15]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1549 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1549 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1549 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1587 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1587 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1587 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1625 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1625 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1625 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[16]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1663 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1663 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1663 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1701 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1701 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1701 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1744 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1744 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1744 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-[17]
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1787 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1787 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-! Undefined control sequence.
-<argument> ...bled}, which is identically $(\text 
-                                                  {speedup} - 1) \times 100$...
-l.1787 ...red; the timing table above says which.}
-                                                  
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <9> on input line 1820.
-LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <6> on input line 1820.
 GIBBON-TABLE-SCALED: 851.14812pt into 772.77686pt
-) [18] (figures/table_preview.aux)
+) [12] (figures/table_preview.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
@@ -1711,13 +1629,13 @@ LaTeX Font Warning: Size substitutions with differences
 
  ) 
 Here is how much of TeX's memory you used:
- 2583 strings out of 474222
- 41674 string characters out of 5748733
- 1994975 words of memory out of 5000000
- 24841 multiletter control sequences out of 15000+600000
- 563779 words of font info for 55 fonts, out of 8000000 for 9000
+ 2567 strings out of 474222
+ 41198 string characters out of 5748733
+ 2014975 words of memory out of 5000000
+ 24824 multiletter control sequences out of 15000+600000
+ 563946 words of font info for 56 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,12n,65p,3073b,307s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 57i,12n,65p,2826b,314s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx6.pfb></usr/share
 /texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx8.pfb></usr/share/texliv
@@ -1726,7 +1644,7 @@ e/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/share/texlive/texmf
 fonts/type1/public/amsfonts/cm/cmmi5.pfb></usr/share/texlive/texmf-dist/fonts/t
 ype1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type1/pu
 blic/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/am
-sfonts/cm/cmmi9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/
+sfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/
 cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5
 .pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></u
 sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/share
@@ -1738,11 +1656,12 @@ e1/public/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-dist/fonts/type1/publ
 ic/amsfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
 onts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
 /cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10
-.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
-Output written on figures/table_preview.pdf (18 pages, 416994 bytes).
+.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb><
+/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb>
+Output written on figures/table_preview.pdf (12 pages, 381747 bytes).
 PDF statistics:
- 178 PDF objects out of 1000 (max. 8388607)
- 110 compressed objects within 2 object streams
+ 163 PDF objects out of 1000 (max. 8388607)
+ 100 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

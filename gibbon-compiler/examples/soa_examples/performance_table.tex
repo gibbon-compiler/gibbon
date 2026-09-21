@@ -1,373 +1,1853 @@
 % Gibbon Benchmark Suite v3.1 – auto-generated
-% Requires: \usepackage{booktabs} in preamble
+% Requires: \usepackage{booktabs}, \usepackage{graphicx}, \usepackage{amsmath} and \usepackage{xcolor} in preamble
+\providecommand{\gibbondefinecolors}{}
+\definecolor{gibbonfast}{RGB}{0,100,0}% dark green: row-fastest
+\definecolor{gibbonslow}{RGB}{204,0,0}% red: row-slowest
+\makeatletter
+\@ifundefined{gibbon@fitbox}{\newsavebox{\gibbon@fitbox}}{}
+\providecommand{\gibbonfit}[1]{#1}
+\renewcommand{\gibbonfit}[1]{%%
+  \sbox{\gibbon@fitbox}{#1}%%
+  \ifdim\wd\gibbon@fitbox>\linewidth
+    \typeout{GIBBON-TABLE-SCALED: \the\wd\gibbon@fitbox\space into \the\linewidth}%%
+    \resizebox{\linewidth}{!}{\usebox{\gibbon@fitbox}}%%
+  \else
+    \usebox{\gibbon@fitbox}%%
+  \fi}
+\makeatother
+
+\makeatletter
+\providecommand{\gibbonnumfont}{}
+\renewcommand{\gibbonnumfont}{%%
+  \fontsize{\dimexpr\f@size pt+1.5pt\relax}%%
+          {\dimexpr\f@size pt+3.9pt\relax}\selectfont}
+\makeatother
+
+% Provenance: arithmetic mode(s) = unsafe
+% Provenance: no-RAN in effect = False, True
+% Provenance: gibbon.path = /workdisk/git/gibbon/dist-newstyle/build/x86_64-linux/ghc-9.10.1/gibbon-0.3/x/gibbon/build/gibbon/gibbon
+% Provenance: gibbon.resolved_via = cabal
+% Provenance: gibbon.sha256 = 1ad7f3358e815e238a0c67aa6f317cfe3ea93bb2a15c8c9eeb65aaffc495e215
+% Provenance: gibbon.size_bytes = 52809912
+% Provenance: gibbon.mtime = 2026-09-18T10:53:52
+% Provenance: repo.root = /workdisk/git/gibbon
+% Provenance: repo.head = 9dbfcb2001092d3d370125a014a35bc54b46b2e8
+% Provenance: repo.describe = v0.3-446-g9dbfcb20-dirty
+% Provenance: repo.branch = fix/audit-2026-09-12
+% Provenance: repo.dirty_tracked_files = 307
+% Provenance: cc.cc = gcc-16
+% Provenance: cc.path = /usr/bin/gcc-16
+% Provenance: cc.version = gcc-16 (GCC) 16.2.0
+% Provenance: machine.cpu = 12th Gen Intel(R) Core(TM) i7-12700K
+% Provenance: machine.platform = Linux-6.17.0-40-generic-x86_64-with-glibc2.39
+% Provenance: machine.cpu_governor = performance
+% Provenance: machine.turbo = on
+% Provenance: machine.aslr = 2
+% Provenance: timing.iterations = 51
+% Provenance: timing.size_param = 0
+% Provenance: timing.pin_cpu = 2
+% Provenance: timing.pass_rounds = 3
+% Provenance: timing.measure_rounds = 9
+% Provenance: timing.campaign_phase.warmup_runs = 1
+% Provenance: timing.campaign_phase.warmup_iterations = 1
+% Provenance: timing.campaign_phase.cooldown_seconds = 3.0
+% Provenance: timing.variant_matrix_phase.warmup_runs = 1
+% Provenance: timing.variant_matrix_phase.warmup_iterations = 1
+% Provenance: timing.variant_matrix_phase.cooldown_seconds = 0.0
+% Provenance: timing.variant_matrix_phase.rounds = 3
+% Provenance: codegen.per_configuration_flags = see PLDI_MAP_CONFIGS / the table legend; the fields below are whole-run settings only
+% Provenance: codegen.simd_isa = avx2
+% Provenance: codegen.c_arithmetic = unsafe
+% Provenance: codegen.sse41 = False
+% Provenance: codegen.no_gcc_vectorize = False
+% Provenance: codegen.use_ran = False
+% Provenance: codegen.reclaim_iterate_regions = True
+% Provenance: codegen.mutable_cursors_nonrec = True
+% Provenance: codegen.store_scalar_field_counts = False
+% Provenance: codegen.loopification = False
+% Provenance: codegen.loop_fusion = False
+% Provenance: codegen.selective_buffer_sharing = False
+% Provenance: codegen.vectorization = False
+% Provenance: driver_argv = gibbon_benchmark.py --generate-paper --pldi-submission --add1tree-widths --arithintensity-widths --benchmark-immutable --pin-cpu auto --pass-rounds 3 --reclaim-iterate-regions --iterations 51 --c-arithmetic unsafe --roofline --roofline-overlay --roofline-cpu 4
+
+% -- Table: benchmark characteristics --
+\begin{table}[t]
+\centering
+\caption{Benchmark characteristics, independent of any timing. \textbf{Fields} is the benchmark ADT's scalar field count and \textbf{Buffers} the number of SoA buffers it factors into. \textbf{Uses} is the range, over this program's timed passes, of fields a pass reads, and \textbf{Dead} the largest fraction of the node a single pass leaves untouched -- the headroom a struct-of-arrays layout has to exploit. A benchmark whose data fits in cache cannot show a bandwidth effect whatever its dead fraction; working-set sizes are not measured here.}
+\label{tab:benchmark-characteristics}
+\small
+\gibbonfit{%
+\begin{tabular}{llrrrrrr}
+\toprule
+Benchmark & ADT & Fields & Buffers & Folds & Maps & Uses & Dead \\
+\midrule
+\texttt{ColorOctree} & \texttt{ColorOctree} & 25 & 18 & 4 & 2 & 2--13 & 92\% \\
+\texttt{Compiler} & \texttt{IR} & 9 & 8 & 9 & 2 & 2--9 & 78\% \\
+\texttt{DBQuery} & \texttt{Query} & 15 & 13 & 6 & 2 & 3--15 & 80\% \\
+\texttt{DecisionTree} & \texttt{DTree} & 7 & 6 & 9 & 0 & 2--3 & 71\% \\
+\texttt{DecisionTreeClassify} & \texttt{DTree} & 7 & 6 & 2 & 0 & 4--5 & 43\% \\
+\texttt{DomTree} & \texttt{DOM} & 15 & 14 & 4 & 2 & 3--15 & 80\% \\
+\texttt{KDTree} & \texttt{KDTree} & 17 & 16 & 6 & 0 & 11--14 & 35\% \\
+\texttt{LinearListReduction} & \texttt{List} & 11 & 11 & 3 & 3 & 2--11 & 82\% \\
+\texttt{List} & \texttt{List} & 2 & 2 & 3 & 1 & 1--2 & 50\% \\
+\texttt{MonoTree} & \texttt{Tree} & 3 & 2 & 2 & 1 & 3 & 0\% \\
+\texttt{ObjectGraph} & \texttt{Heap} & 5 & 4 & 7 & 2 & 3--5 & 40\% \\
+\texttt{OctTree} & \texttt{Octree} & 16 & 9 & 6 & 2 & 8--16 & 50\% \\
+\texttt{PiecewiseFunctions} & \texttt{PW} & 8 & 7 & 6 & 2 & 3--8 & 62\% \\
+\texttt{reduceNestedList} & \texttt{List} & 3 & 3 & 1 & 0 & 2 & 33\% \\
+\texttt{TernaryTree} & \texttt{Tree} & 5 & 3 & 1 & 1 & 5 & 0\% \\
+\texttt{Trie} & \texttt{Trie} & 10 & 9 & 5 & 2 & 3--10 & 70\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
 
 % -- Table 1: Summary by pass type --
 \begin{table}[t]
 \centering
-\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = total fields in the selected benchmark ADT (prefer parsed ADT definition; fall back to {\tt @BENCH adt\_fields}). SoA bufs = 1 tag buffer plus one buffer for each scalar field, plus one buffer for each non-self packed field annotated Linear, plus recursively counted buffers for each non-self packed field annotated Factored; self-recursive fields add no new buffers. Speedup ${>}1{\times}$ means the denominator is faster; \textbf{bold} marks ${>}1.1{\times}$.}
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Every configuration was compiled with \texttt{--reclaim-iterate-regions}, so the per-iteration region chunks are freed rather than stranded; peak memory is flat in the iteration count instead of linear. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = total fields in the selected benchmark ADT (prefer parsed ADT definition; fall back to {\tt @BENCH adt\_fields}). SoA bufs = 1 tag buffer plus one buffer for each scalar field, plus one buffer for each non-self packed field annotated Linear, plus recursively counted buffers for each non-self packed field annotated Factored; self-recursive fields add no new buffers. Speedup ${>}1{\times}$ means the denominator is faster; \textbf{bold} marks ${>}1.1{\times}$. Every group contrasts the same two configurations: $A_{\ell}^{\scriptscriptstyle +av}$ (AoS, loopified, C auto-vectorization enabled) against $S_{\ell bv}^{\scriptscriptstyle +av}$ (SoA, loopified, selective buffer sharing, Gibbon SIMD vectorization, C auto-vectorization enabled); Table~\ref{tab:pldi-legend} lists both in full. Nothing in a fold is loopifiable, so neither layout's fold column gains anything from loopification; measured against the per-program fold tables, both sides of the fold group land within a few percent of that layout's recursive mutable-cursor column. These two configurations are NOT among the columns of the per-program FOLD tables, which show only the recursive variants, so that table's $A^{\min}$/$S^{\min}$ is a comparison between different binaries from this one and may differ from the fold ratio here -- in magnitude, and where the two layouts are within a few percent of each other, in direction. The per-program MAP tables do contain both columns. Either way a group here is a pass-SUM, so a program whose passes disagree is reported by whichever dominates the sum. The OctTree row sums its merged programs, and is reported only when every one of them verified in both configurations.}
 \label{tab:summary}
-\small
+\small\gibbonnumfont
+\gibbonfit{%
 \begin{tabular}{l c c r r r r r r r r r}
 \toprule
 \textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{3}{c}{\textbf{End-to-end}} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
- & fields & bufs & Am (s) & Sm (s) & Am/Sm & Am (s) & Sm (s) & Am/Sm & Am (s) & Sm (s) & Am/Sm \\
+ & fields & bufs & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ \\
 \midrule
-OctTree & 16 & 9 & 0.6802 & 0.6650 & 1.02$\times$ & 0.3735 & 0.3171 & \textbf{1.18$\times$} & 0.3067 & 0.3480 & 0.88$\times$ \\
-Compiler & 9 & 8 & 0.2761 & 0.2116 & \textbf{1.30$\times$} & 0.1130 & 0.0362 & \textbf{3.13$\times$} & 0.1631 & 0.1754 & 0.93$\times$ \\
-DBQuery & 15 & 13 & 0.2635 & 0.2553 & 1.03$\times$ & 0.1258 & 0.0877 & \textbf{1.43$\times$} & 0.1377 & 0.1675 & 0.82$\times$ \\
-DecisionTree & 7 & 6 & 0.4801 & 0.2699 & \textbf{1.78$\times$} & 0.4801 & 0.2699 & \textbf{1.78$\times$} & -- & -- & -- \\
-DomTree & 15 & 14 & 0.2141 & 0.1519 & \textbf{1.41$\times$} & 0.1545 & 0.0650 & \textbf{2.38$\times$} & 0.0596 & 0.0869 & 0.69$\times$ \\
-KDTree & 17 & 16 & 0.1777 & 0.1395 & \textbf{1.27$\times$} & 0.1777 & 0.1395 & \textbf{1.27$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 0.0331 & 0.0050 & \textbf{6.59$\times$} & 0.0331 & 0.0050 & \textbf{6.59$\times$} & -- & -- & -- \\
-reduceNestedList & 3 & 3 & 0.0845 & 0.0073 & \textbf{11.53$\times$} & 0.0845 & 0.0073 & \textbf{11.53$\times$} & -- & -- & -- \\
-List & 2 & 2 & 0.5805 & 0.6434 & 0.90$\times$ & 0.3258 & 0.3041 & 1.07$\times$ & 0.2547 & 0.3393 & 0.75$\times$ \\
-MonoTree & 3 & 2 & 0.0620 & 0.0657 & 0.94$\times$ & 0.0176 & 0.0222 & 0.79$\times$ & 0.0444 & 0.0436 & 1.02$\times$ \\
-ObjectGraph & 5 & 4 & 0.2355 & 0.2404 & 0.98$\times$ & 0.0932 & 0.0800 & \textbf{1.17$\times$} & 0.1423 & 0.1605 & 0.89$\times$ \\
-PiecewiseFunctions & 8 & 7 & 0.3709 & 0.3512 & 1.06$\times$ & 0.1345 & 0.0904 & \textbf{1.49$\times$} & 0.2364 & 0.2609 & 0.91$\times$ \\
-TernaryTree & 5 & 3 & 0.1115 & 0.1050 & 1.06$\times$ & 0.0288 & 0.0271 & 1.06$\times$ & 0.0828 & 0.0779 & 1.06$\times$ \\
-Trie & 10 & 9 & 0.2173 & 0.2005 & 1.08$\times$ & 0.0679 & 0.0327 & \textbf{2.08$\times$} & 0.1494 & 0.1678 & 0.89$\times$ \\
-ColorOctree & 25 & 18 & 0.0886 & 0.0681 & \textbf{1.30$\times$} & 0.0886 & 0.0681 & \textbf{1.30$\times$} & -- & -- & -- \\
+OctTree & 16 & 9 & 1.079 & 0.6499 & \textbf{1.66$\times$} & 0.4570 & 0.3917 & \textbf{1.17$\times$} & 0.6222 & 0.2582 & \textbf{2.41$\times$} \\
+Compiler & 9 & 8 & 0.3230 & 0.0619 & \textbf{5.22$\times$} & 0.1658 & 0.0412 & \textbf{4.02$\times$} & 0.1573 & 0.0206 & \textbf{7.63$\times$} \\
+DBQuery & 15 & 13 & 0.2572 & 0.1112 & \textbf{2.31$\times$} & 0.1243 & 0.0849 & \textbf{1.46$\times$} & 0.1329 & 0.0262 & \textbf{5.07$\times$} \\
+DecisionTree & 7 & 6 & 0.1335 & 0.0641 & \textbf{2.08$\times$} & 0.1335 & 0.0641 & \textbf{2.08$\times$} & -- & -- & -- \\
+DecisionTreeClassify & 7 & 6 & 0.1782 & 0.1903 & 0.94$\times$ & 0.1782 & 0.1903 & 0.94$\times$ & -- & -- & -- \\
+DomTree & 15 & 14 & 0.2193 & 0.1184 & \textbf{1.85$\times$} & 0.1612 & 0.0614 & \textbf{2.63$\times$} & 0.0581 & 0.0570 & 1.02$\times$ \\
+KDTree & 17 & 16 & 0.1927 & 0.1626 & \textbf{1.19$\times$} & 0.1927 & 0.1626 & \textbf{1.19$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.7184 & 0.2819 & \textbf{2.55$\times$} & 0.1381 & 0.0416 & \textbf{3.32$\times$} & 0.5802 & 0.2402 & \textbf{2.42$\times$} \\
+reduceNestedList & 3 & 3 & 1.437 & 0.9546 & \textbf{1.51$\times$} & 1.437 & 0.9546 & \textbf{1.51$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.4083 & 0.3101 & \textbf{1.32$\times$} & 0.1539 & 0.1201 & \textbf{1.28$\times$} & 0.2544 & 0.1900 & \textbf{1.34$\times$} \\
+MonoTree & 3 & 2 & 0.0542 & 0.0380 & \textbf{1.43$\times$} & 0.0258 & 0.0225 & \textbf{1.14$\times$} & 0.0284 & 0.0154 & \textbf{1.84$\times$} \\
+ObjectGraph & 5 & 4 & 0.2530 & 0.1488 & \textbf{1.70$\times$} & 0.1314 & 0.0809 & \textbf{1.62$\times$} & 0.1216 & 0.0679 & \textbf{1.79$\times$} \\
+TernaryTree & 5 & 3 & 0.0924 & 0.0710 & \textbf{1.30$\times$} & 0.0298 & 0.0290 & 1.03$\times$ & 0.0626 & 0.0420 & \textbf{1.49$\times$} \\
+Trie & 10 & 9 & 0.2116 & 0.0734 & \textbf{2.88$\times$} & 0.0728 & 0.0323 & \textbf{2.25$\times$} & 0.1387 & 0.0411 & \textbf{3.38$\times$} \\
+PiecewiseFunctions & 8 & 7 & 0.3733 & 0.1471 & \textbf{2.54$\times$} & 0.1554 & 0.0979 & \textbf{1.59$\times$} & 0.2179 & 0.0492 & \textbf{4.43$\times$} \\
+ColorOctree & 25 & 18 & 0.5348 & 0.3505 & \textbf{1.53$\times$} & 0.1723 & 0.1437 & \textbf{1.20$\times$} & 0.3625 & 0.2068 & \textbf{1.75$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 
-% -- Table: OctTree --
+% -- Table 1: Summary by pass type --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{OctTree}, OctTree SoA uses 9 buffers; ColorOctree SoA uses 18 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:OctTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Pass-sum execution time (s, median per iteration; sum of pass medians, not full executable wall time) and speedup split by pass type. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Every configuration was compiled with \texttt{--reclaim-iterate-regions}, so the per-iteration region chunks are freed rather than stranded; peak memory is flat in the iteration count instead of linear. When present, the OctTree row includes ColorOctree passes; a separate ColorOctree row reports only those passes. ADT fields = total fields in the selected benchmark ADT (prefer parsed ADT definition; fall back to {\tt @BENCH adt\_fields}). SoA bufs = 1 tag buffer plus one buffer for each scalar field, plus one buffer for each non-self packed field annotated Linear, plus recursively counted buffers for each non-self packed field annotated Factored; self-recursive fields add no new buffers. Speedup ${>}1{\times}$ means the denominator is faster; \textbf{bold} marks ${>}1.1{\times}$. This table repeats Table~\ref{tab:summary} with vanilla Gibbon on the AoS side -- no optimization enabled, and, as in every column not marked $+av$, the C auto-vectorizer off -- so the speedups are what the SoA layout and its optimizations buy over the unoptimized baseline rather than over AoS's own best configuration. The C auto-vectorizer is held off on both sides of every comparison except the $+av$ columns, which is what keeps it from being credited to whichever Gibbon optimization happens to be measured beside it. Every group contrasts the same two configurations: $A_{ri}^{\scriptscriptstyle +av}$ (AoS, recursive traversal, immutable cursors, C auto-vectorization enabled) against $S_{\ell bv}^{\scriptscriptstyle +av}$ (SoA, loopified, selective buffer sharing, Gibbon SIMD vectorization, C auto-vectorization enabled); Table~\ref{tab:pldi-legend} lists both in full. These two configurations are NOT among the columns of the per-program FOLD tables, which show only the recursive variants, so that table's $A^{\min}$/$S^{\min}$ is a comparison between different binaries from this one and may differ from the fold ratio here -- in magnitude, and where the two layouts are within a few percent of each other, in direction. The per-program MAP tables do contain both columns. Either way a group here is a pass-SUM, so a program whose passes disagree is reported by whichever dominates the sum. The OctTree row sums its merged programs, and is reported only when every one of them verified in both configurations.}
+\label{tab:summary-vs-vanilla}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Program} & \textbf{ADT} & \textbf{SoA} & \multicolumn{3}{c}{\textbf{End-to-end}} & \multicolumn{3}{c}{\textbf{Fold passes}} & \multicolumn{3}{c}{\textbf{Map passes}} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
+ & fields & bufs & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ \\
 \midrule
-barnesHutPotential & F & 11/16 & 31\% & 0.0397$\pm$0.00027 & 0.0367$\pm$0.00230 & 1.08$\times$ \\
-countActive & F & 10/16 & 38\% & 0.0376$\pm$0.00189 & \textbf{0.0299$\pm$0.00001} & \textbf{1.26$\times$} \\
-countParticles & F & 8/16 & 50\% & 0.0360$\pm$0.00025 & \textbf{0.0264$\pm$0.00003} & \textbf{1.36$\times$} \\
-fmmPotential & F & 12/16 & 25\% & 0.0967$\pm$0.00004 & 0.0953$\pm$0.00210 & 1.01$\times$ \\
-sumEnergy & F & 12/16 & 25\% & 0.0383$\pm$0.00154 & \textbf{0.0336$\pm$0.00004} & \textbf{1.14$\times$} \\
-sumMass & F & 10/16 & 38\% & 0.0366$\pm$0.00252 & \textbf{0.0270$\pm$0.00001} & \textbf{1.35$\times$} \\
-clearFlags & M & 15/16 & 6\% & \textbf{0.1539$\pm$0.00228} & 0.1725$\pm$0.00167 & 0.89$\times$ \\
-scaleEnergy & M & 16/16 & 0\% & \textbf{0.1527$\pm$0.00036} & 0.1755$\pm$0.00204 & 0.87$\times$ \\
-\midrule
-paletteEntriesQuantized & F & 13/25 & 48\% & 0.0421$\pm$0.00189 & \textbf{0.0288$\pm$0.00002} & \textbf{1.46$\times$} \\
-quantizationErrorProxy & F & 10/25 & 60\% & 0.0465$\pm$0.00002 & \textbf{0.0393$\pm$0.00002} & \textbf{1.18$\times$} \\
-\midrule
-\textbf{Total} & & & & 0.6802 & 0.6650 & 1.02$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.15$\times$} \\
+OctTree & 16 & 9 & 1.269 & 0.6499 & \textbf{1.95$\times$} & 0.5585 & 0.3917 & \textbf{1.43$\times$} & 0.7108 & 0.2582 & \textbf{2.75$\times$} \\
+Compiler & 9 & 8 & 1.204 & 0.0619 & \textbf{19.47$\times$} & 0.7467 & 0.0412 & \textbf{18.10$\times$} & 0.4574 & 0.0206 & \textbf{22.19$\times$} \\
+DBQuery & 15 & 13 & 0.3433 & 0.1112 & \textbf{3.09$\times$} & 0.1781 & 0.0849 & \textbf{2.10$\times$} & 0.1651 & 0.0262 & \textbf{6.30$\times$} \\
+DecisionTree & 7 & 6 & 0.3019 & 0.0641 & \textbf{4.71$\times$} & 0.3019 & 0.0641 & \textbf{4.71$\times$} & -- & -- & -- \\
+DecisionTreeClassify & 7 & 6 & 0.1864 & 0.1903 & 0.98$\times$ & 0.1864 & 0.1903 & 0.98$\times$ & -- & -- & -- \\
+DomTree & 15 & 14 & 0.3594 & 0.1184 & \textbf{3.04$\times$} & 0.2969 & 0.0614 & \textbf{4.84$\times$} & 0.0625 & 0.0570 & 1.10$\times$ \\
+KDTree & 17 & 16 & 0.2635 & 0.1626 & \textbf{1.62$\times$} & 0.2635 & 0.1626 & \textbf{1.62$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 1.667 & 0.2819 & \textbf{5.92$\times$} & 0.4143 & 0.0416 & \textbf{9.95$\times$} & 1.253 & 0.2402 & \textbf{5.22$\times$} \\
+reduceNestedList & 3 & 3 & -- & 0.9546 & -- & -- & 0.9546 & -- & -- & -- & -- \\
+List & 2 & 2 & -- & 0.3101 & -- & -- & 0.1201 & -- & -- & 0.1900 & -- \\
+MonoTree & 3 & 2 & 0.1341 & 0.0380 & \textbf{3.53$\times$} & 0.0801 & 0.0225 & \textbf{3.56$\times$} & 0.0540 & 0.0154 & \textbf{3.49$\times$} \\
+ObjectGraph & 5 & 4 & 0.4756 & 0.1488 & \textbf{3.20$\times$} & 0.3089 & 0.0809 & \textbf{3.82$\times$} & 0.1667 & 0.0679 & \textbf{2.45$\times$} \\
+TernaryTree & 5 & 3 & 0.1318 & 0.0710 & \textbf{1.86$\times$} & 0.0503 & 0.0290 & \textbf{1.73$\times$} & 0.0815 & 0.0420 & \textbf{1.94$\times$} \\
+Trie & 10 & 9 & 0.3029 & 0.0734 & \textbf{4.13$\times$} & 0.1403 & 0.0323 & \textbf{4.34$\times$} & 0.1626 & 0.0411 & \textbf{3.96$\times$} \\
+PiecewiseFunctions & 8 & 7 & 0.5746 & 0.1471 & \textbf{3.91$\times$} & 0.3156 & 0.0979 & \textbf{3.22$\times$} & 0.2590 & 0.0492 & \textbf{5.26$\times$} \\
+ColorOctree & 25 & 18 & 0.6318 & 0.3505 & \textbf{1.80$\times$} & 0.2232 & 0.1437 & \textbf{1.55$\times$} & 0.4087 & 0.2068 & \textbf{1.98$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 
-% -- Table: Compiler --
+
+
+% ============================================================================
+% Table 2: Mutable vs Immutable Cursor Comparison
+% ============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Mutable vs immutable cursor comparison (times only). Times are full executable end-to-end wall time per run (s), not pass-sum time. \textbf{Bold} marks the fastest time across all four variants.}
+\label{tab:cursor_comparison_times}
+\small
+\gibbonfit{%
+\begin{tabular}{p{3.2cm} r r r r}
+\toprule
+\textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} \\
+\midrule
+Compiler & 18.63 & 68.26 & \textbf{14.78} & -- \\
+DBQuery & \textbf{14.84} & 16.76 & 15.03 & 64.66 \\
+DecisionTree & 6.972 & 8.268 & \textbf{3.341} & 64.66 \\
+DecisionTreeClassify & \textbf{78.28} & 121.1 & 138.4 & -- \\
+DomTree & 12.16 & 13.12 & \textbf{8.313} & 60.98 \\
+KDTree & 9.933 & 10.13 & \textbf{7.117} & 31.14 \\
+LinearListReduction & \textbf{45.88} & 92.63 & 49.35 & -- \\
+reduceNestedList & 80.87 & -- & \textbf{56.16} & -- \\
+List & \textbf{25.40} & -- & 26.07 & -- \\
+MonoTree & 3.623 & 4.669 & \textbf{3.545} & 13.70 \\
+ObjectGraph & 15.17 & 17.60 & \textbf{13.09} & 54.09 \\
+OctTree & 34.88 & \textbf{34.73} & 38.80 & -- \\
+PiecewiseFunctions\_norm2Estimate & 1.510 & 1.612 & \textbf{1.178} & 17.40 \\
+PiecewiseFunctions\_truncateTolViolations & 1.311 & 1.676 & \textbf{0.7432} & 13.50 \\
+PiecewiseFunctions\_compressMass & 1.392 & 1.687 & \textbf{0.7436} & 13.88 \\
+PiecewiseFunctions\_autorefineMaxLevel & 1.521 & 1.572 & \textbf{1.131} & 15.46 \\
+PiecewiseFunctions\_pmapCutHistogram & 1.428 & 2.112 & \textbf{0.7726} & 14.97 \\
+PiecewiseFunctions\_lbDeuxLoadProxy & 1.479 & 1.606 & \textbf{1.003} & 16.18 \\
+PiecewiseFunctions\_addConstPW & \textbf{7.438} & 7.698 & 7.934 & 32.32 \\
+PiecewiseFunctions\_diffPW & \textbf{7.606} & 7.830 & 8.414 & 29.58 \\
+TernaryTree & 5.847 & 6.167 & \textbf{5.805} & 32.20 \\
+Trie & 12.81 & 13.84 & \textbf{12.16} & 56.45 \\
+ColorOctree & 34.48 & \textbf{34.28} & 51.14 & -- \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Mutable vs immutable cursor comparison (speedups). Shown: AoS-mut/SoA-mut, AoS-imm/AoS-mut, AoS-imm/SoA-mut, AoS-imm/SoA-imm. Speedups are computed from full executable end-to-end wall time per run. ${>}1{\times}$ means the denominator is faster.}
+\label{tab:cursor_comparison_speedups}
+\small
+\gibbonfit{%
+\begin{tabular}{p{3.2cm} r r r r}
+\toprule
+\textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
+\midrule
+Compiler & \textbf{1.26$\times$} & \textbf{3.66$\times$} & \textbf{4.62$\times$} & -- \\
+DBQuery & 0.99$\times$ & \textbf{1.13$\times$} & \textbf{1.12$\times$} & 0.26$\times$ \\
+DecisionTree & \textbf{2.09$\times$} & \textbf{1.19$\times$} & \textbf{2.48$\times$} & 0.13$\times$ \\
+DecisionTreeClassify & 0.57$\times$ & \textbf{1.55$\times$} & 0.88$\times$ & -- \\
+DomTree & \textbf{1.46$\times$} & 1.08$\times$ & \textbf{1.58$\times$} & 0.22$\times$ \\
+KDTree & \textbf{1.40$\times$} & 1.02$\times$ & \textbf{1.42$\times$} & 0.33$\times$ \\
+LinearListReduction & 0.93$\times$ & \textbf{2.02$\times$} & \textbf{1.88$\times$} & -- \\
+reduceNestedList & \textbf{1.44$\times$} & -- & -- & -- \\
+List & 0.97$\times$ & -- & -- & -- \\
+MonoTree & 1.02$\times$ & \textbf{1.29$\times$} & \textbf{1.32$\times$} & 0.34$\times$ \\
+ObjectGraph & \textbf{1.16$\times$} & \textbf{1.16$\times$} & \textbf{1.34$\times$} & 0.33$\times$ \\
+OctTree & 0.90$\times$ & 1.00$\times$ & 0.90$\times$ & -- \\
+PiecewiseFunctions\_norm2Estimate & \textbf{1.28$\times$} & 1.07$\times$ & \textbf{1.37$\times$} & 0.09$\times$ \\
+PiecewiseFunctions\_truncateTolViolations & \textbf{1.76$\times$} & \textbf{1.28$\times$} & \textbf{2.25$\times$} & 0.12$\times$ \\
+PiecewiseFunctions\_compressMass & \textbf{1.87$\times$} & \textbf{1.21$\times$} & \textbf{2.27$\times$} & 0.12$\times$ \\
+PiecewiseFunctions\_autorefineMaxLevel & \textbf{1.34$\times$} & 1.03$\times$ & \textbf{1.39$\times$} & 0.10$\times$ \\
+PiecewiseFunctions\_pmapCutHistogram & \textbf{1.85$\times$} & \textbf{1.48$\times$} & \textbf{2.73$\times$} & 0.14$\times$ \\
+PiecewiseFunctions\_lbDeuxLoadProxy & \textbf{1.47$\times$} & 1.09$\times$ & \textbf{1.60$\times$} & 0.10$\times$ \\
+PiecewiseFunctions\_addConstPW & 0.94$\times$ & 1.03$\times$ & 0.97$\times$ & 0.24$\times$ \\
+PiecewiseFunctions\_diffPW & 0.90$\times$ & 1.03$\times$ & 0.93$\times$ & 0.26$\times$ \\
+TernaryTree & 1.01$\times$ & 1.05$\times$ & 1.06$\times$ & 0.19$\times$ \\
+Trie & 1.05$\times$ & 1.08$\times$ & \textbf{1.14$\times$} & 0.25$\times$ \\
+ColorOctree & 0.67$\times$ & 0.99$\times$ & 0.67$\times$ & -- \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI configuration legend --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{Compiler}, ADT has 9 fields, SoA uses 8 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:Compiler}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Configuration key for the per-program fold and map tables. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Base letter: $A$ = array-of-structs (AoS), $S$ = struct-of-arrays (SoA). Subscripts name the Gibbon-side code generation ($r$ recursive traversal, $i$ immutable cursors, $m$ mutable cursors, $\ell$ loopified, $b$ selective buffer sharing, $v$ Gibbon SIMD vectorization). Superscripts name a C-compiler knob that DIFFERS from the default, always with a leading minus: $-t$ compiles with C tail-call optimization disabled and $-av$ with the C auto-vectorizer disabled. The auto-vectorizer is ON in every column that does not say otherwise, because that is what an ordinary build does, so no comparison between two columns can confuse it with the optimization being measured. Columns marked $-av$ appear only when the auto-vectorizer ablations were requested, and are there to be read against their unmarked counterpart. The recursive configurations of each layout carry the fold passes; map tables additionally report the loopified configurations.}
+\label{tab:pldi-legend}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{c p{0.72\linewidth}}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Symbol} & \textbf{Configuration} \\
 \midrule
-blockCountPass & F & 2/9 & 78\% & 0.0120$\pm$0.00001 & \textbf{0.0019$\pm$0.00000} & \textbf{6.23$\times$} \\
-branchStatsPass & F & 2/9 & 78\% & 0.0116$\pm$0.00001 & \textbf{0.0034$\pm$0.00000} & \textbf{3.41$\times$} \\
-castInstCountPass & F & 3/9 & 67\% & 0.0178$\pm$0.00001 & \textbf{0.0013$\pm$0.00000} & \textbf{13.83$\times$} \\
-has cycle & F & 4/9 & 56\% & 0.0242$\pm$0.00021 & \textbf{0.0178$\pm$0.00033} & \textbf{1.36$\times$} \\
-instCountPass & F & 2/9 & 78\% & 0.0120$\pm$0.00001 & \textbf{0.0019$\pm$0.00000} & \textbf{6.25$\times$} \\
-latencyModelPass & F & 3/9 & 67\% & 0.0119$\pm$0.00001 & \textbf{0.0030$\pm$0.00000} & \textbf{4.00$\times$} \\
-memoryOpStatsPass & F & 3/9 & 67\% & 0.0117$\pm$0.00001 & \textbf{0.0038$\pm$0.00001} & \textbf{3.07$\times$} \\
-throughputModelPass & F & 3/9 & 67\% & 0.0119$\pm$0.00001 & \textbf{0.0030$\pm$0.00000} & \textbf{3.96$\times$} \\
-stripSideEffectsPass & M & 7/9 & 22\% & 0.0844$\pm$0.00031 & 0.0865$\pm$0.00058 & 0.98$\times$ \\
-targetReturnPass & M & 9/9 & 0\% & \textbf{0.0787$\pm$0.00026} & 0.0890$\pm$0.00033 & 0.88$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.2761 & 0.2116 & \textbf{1.30$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{3.18$\times$} \\
+$A_{ri}^{\scriptscriptstyle -t}$ & AoS, recursive traversal, immutable cursors, C tail-call optimization disabled \\
+$A_{ri}^{\scriptscriptstyle -av}$ & AoS, recursive traversal, immutable cursors, C auto-vectorization disabled \\
+$A_{ri}^{\scriptscriptstyle +av}$ & AoS, recursive traversal, immutable cursors, C auto-vectorization enabled \\
+$A_{rm}^{\scriptscriptstyle -t}$ & AoS, recursive traversal, mutable cursors, C tail-call optimization disabled \\
+$A_{rm}^{\scriptscriptstyle -av}$ & AoS, recursive traversal, mutable cursors, C auto-vectorization disabled \\
+$A_{rm}^{\scriptscriptstyle +av}$ & AoS, recursive traversal, mutable cursors, C auto-vectorization enabled \\
+$A_{\ell}^{\scriptscriptstyle -av}$ & AoS, loopified, C auto-vectorization disabled \\
+$A_{\ell}^{\scriptscriptstyle +av}$ & AoS, loopified, C auto-vectorization enabled \\
+\addlinespace
+$S_{ri}^{\scriptscriptstyle -t}$ & SoA, recursive traversal, immutable cursors, C tail-call optimization disabled \\
+$S_{ri}$ & SoA, recursive traversal, immutable cursors \\
+$S_{rm}^{\scriptscriptstyle -t}$ & SoA, recursive traversal, mutable cursors, C tail-call optimization disabled \\
+$S_{rm}^{\scriptscriptstyle -av}$ & SoA, recursive traversal, mutable cursors, C auto-vectorization disabled \\
+$S_{rm}^{\scriptscriptstyle +av}$ & SoA, recursive traversal, mutable cursors, C auto-vectorization enabled \\
+$S_{\ell}^{\scriptscriptstyle -av}$ & SoA, loopified, no selective buffer sharing, C auto-vectorization disabled \\
+$S_{\ell}^{\scriptscriptstyle +av}$ & SoA, loopified, no selective buffer sharing, C auto-vectorization enabled \\
+$S_{\ell b}^{\scriptscriptstyle -av}$ & SoA, loopified, selective buffer sharing, C auto-vectorization disabled \\
+$S_{\ell b}^{\scriptscriptstyle +av}$ & SoA, loopified, selective buffer sharing, C auto-vectorization enabled \\
+$S_{\ell bv}^{\scriptscriptstyle -av}$ & SoA, loopified, selective buffer sharing, Gibbon SIMD vectorization, C auto-vectorization disabled \\
+$S_{\ell bv}^{\scriptscriptstyle +av}$ & SoA, loopified, selective buffer sharing, Gibbon SIMD vectorization, C auto-vectorization enabled \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
+\paragraph{Reading the per-pass tables.}
+Times are the median per iteration (s), 4 significant digits, and columns are compiled configurations: Table~\ref{tab:pldi-legend} is the symbol key. In each row the fastest configuration is \textcolor{gibbonfast}{green} and the slowest \textcolor{gibbonslow}{red}. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Every configuration was compiled with \texttt{--reclaim-iterate-regions}, so the per-iteration region chunks are freed rather than stranded; peak memory is flat in the iteration count instead of linear. $A^{\min}$/$S^{\min}$ divides a row's fastest AoS configuration by its fastest SoA one, over the columns that table shows and no others; ${>}1{\times}$ means SoA is faster.
 
-% -- Table: DBQuery --
+\textbf{Fold tables} carry \textbf{Uses}, the fields a pass accesses out of the ADT's total, and \textbf{Dead\%} the fraction it never touches -- the quantity a struct-of-arrays layout exists to exploit. Their columns are the recursive configurations only, since nothing in a fold is loopifiable, so they and Table~\ref{tab:summary} read different binaries of the same source: where a program's two layouts sit within a few percent of each other, that is enough to reverse which one leads.
+
+\textbf{Map tables} carry \textbf{$\Sigma_b$}, the buffers a pass leaves unmodified out of the fully factored value's total, and \textbf{$\Sigma_b\%$} that as a fraction. It is read from the pass's own source annotation -- an upper bound on what selective buffer sharing could exploit, NOT a measurement of what it achieved; whether sharing fired is the $\Delta^{S}_{b}$ column of the companion delta table. A factored value is one buffer per scalar field plus the constructor stream, which a dependence-free map shares too. Recursive child fields are not buffers and are excluded from both counts.
+
+A cell with no time names its failure: `*' did not compile, `-' compiled but the executable failed to run, `**' ran but did not match the oracle, `$\ddagger$' exhausted the C stack, and `?' was not measured. A `$\ddagger$' is a RESULT, not a defect: that configuration recurses once per element where mutable cursors and tail calls produce a loop, and the inputs are sized for the loop.
+
+% -- PLDI delta-column legend --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{DBQuery}, ADT has 15 fields, SoA uses 13 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:DBQuery}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Key for the per-pass delta tables. Each column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, expressed as a percentage, which is identically $(\text{speedup} - 1) \times 100$: $+100\%$ means the feature made the pass twice as fast, $+700\%$ eight times as fast, and a negative value means it made the pass slower. Normalizing to the FEATURE rather than the baseline is deliberate -- against the baseline the scale saturates, with a 5$\times$ win reading 80\% and an 8$\times$ win 87.5\%, so large improvements compress into a narrow band and stop being distinguishable. Superscript names the layout ($A$ = array-of-structs, $S$ = struct-of-arrays); subscript names the feature. The two $|$-subscripted columns ask whether one vectorizer helps or hinders the other, which is why these are signed differences rather than magnitudes. A subscript after a $|$ names what the feature was added ON TOP OF, so $\Delta_{av|\ell}$ is the C auto-vectorizer applied to loopified code. $\Delta^{S}_{\ell}$ additionally turns on deferred scalar-count footers, which SoA loopification cannot run without; a program in which nothing is loopified is compiled without them. Each column's formula below names the exact pair it subtracts, which is also where to read off whether the C auto-vectorizer was on or off for it. Table~\ref{tab:pldi-legend} defines the configuration symbols themselves.}
+\label{tab:pldi-delta-legend}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{c p{0.82\linewidth}}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Column} & \textbf{Meaning: (baseline $-$ feature) / feature} \\
 \midrule
-countJoins & F & 3/15 & 80\% & 0.0197$\pm$0.00001 & \textbf{0.0111$\pm$0.00001} & \textbf{1.78$\times$} \\
-filterSelectivitySkew & F & 5/15 & 67\% & 0.0195$\pm$0.00001 & \textbf{0.0125$\pm$0.00001} & \textbf{1.57$\times$} \\
-hashJoinPressure & F & 5/15 & 67\% & 0.0207$\pm$0.00001 & \textbf{0.0129$\pm$0.00002} & \textbf{1.60$\times$} \\
-sumCost & F & 6/15 & 60\% & 0.0197$\pm$0.00002 & \textbf{0.0146$\pm$0.00003} & \textbf{1.35$\times$} \\
-sumMemory & F & 6/15 & 60\% & 0.0195$\pm$0.00001 & \textbf{0.0148$\pm$0.00018} & \textbf{1.31$\times$} \\
-sumRows & F & 6/15 & 60\% & 0.0267$\pm$0.00002 & \textbf{0.0219$\pm$0.00003} & \textbf{1.22$\times$} \\
-clearQueryFlags & M & 14/15 & 7\% & \textbf{0.0682$\pm$0.00015} & 0.0831$\pm$0.00004 & 0.82$\times$ \\
-scaleCosts & M & 15/15 & 0\% & \textbf{0.0695$\pm$0.00027} & 0.0845$\pm$0.00218 & 0.82$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.2635 & 0.2553 & 1.03$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.26$\times$} \\
+$\Delta^{A}_{m}$ & What mutable cursors alone bought vanilla Gibbon. BOTH sides have the C tail-call optimization disabled, so this isolates mutability: measured against $A_{ri}$ (tail calls ENABLED) it would report mutability plus whatever tail calls contributed, and mutability is precisely what puts the traversal in tail position for them to work on: $(A_{ri}^{\scriptscriptstyle -t} - A_{rm}^{\scriptscriptstyle -t}) / A_{rm}^{\scriptscriptstyle -t}$ \\
+$\Delta^{A}_{t}$ & What the C tail-call optimization bought AoS mutable. Mutable cursors are what leave the traversal in tail position, so this optimization has something to work on only once they are in use: $(A_{rm}^{\scriptscriptstyle -t} - A_{rm}^{\scriptscriptstyle +av}) / A_{rm}^{\scriptscriptstyle +av}$ \\
+$\Delta^{A}_{av|rm}$ & What the C auto-vectorizer added to AoS, recursive traversal, mutable cursors: $(A_{rm}^{\scriptscriptstyle -av} - A_{rm}^{\scriptscriptstyle +av}) / A_{rm}^{\scriptscriptstyle +av}$ \\
+\addlinespace
+$\Delta^{S}_{m}$ & What mutable cursors alone bought SoA; as in AoS, both sides have the C tail-call optimization disabled so the two effects are not conflated: $(S_{ri}^{\scriptscriptstyle -t} - S_{rm}^{\scriptscriptstyle -t}) / S_{rm}^{\scriptscriptstyle -t}$ \\
+$\Delta^{S}_{t}$ & What the C tail-call optimization bought SoA mutable; as in AoS, it is mutability that leaves the traversal in tail position: $(S_{rm}^{\scriptscriptstyle -t} - S_{rm}^{\scriptscriptstyle +av}) / S_{rm}^{\scriptscriptstyle +av}$ \\
+$\Delta^{S}_{av|rm}$ & What the C auto-vectorizer added to SoA, recursive traversal, mutable cursors: $(S_{rm}^{\scriptscriptstyle -av} - S_{rm}^{\scriptscriptstyle +av}) / S_{rm}^{\scriptscriptstyle +av}$ \\
+\addlinespace
+$\Delta^{A}_{\ell}$ & What loopification gained over recursion in AoS mutable, with the C auto-vectorizer off on BOTH sides so that it measures loopification and nothing else: $(A_{rm}^{\scriptscriptstyle -av} - A_{\ell}^{\scriptscriptstyle -av}) / A_{\ell}^{\scriptscriptstyle -av}$ \\
+$\Delta^{A}_{av|\ell}$ & What the C auto-vectorizer added to AoS, loopified: $(A_{\ell}^{\scriptscriptstyle -av} - A_{\ell}^{\scriptscriptstyle +av}) / A_{\ell}^{\scriptscriptstyle +av}$ \\
+\addlinespace
+$\Delta^{S}_{\ell}$ & What loopification gained over recursion in SoA mutable, with the C auto-vectorizer off on BOTH sides; neither side has selective buffer sharing, so this is loopification alone: $(S_{rm}^{\scriptscriptstyle -av} - S_{\ell}^{\scriptscriptstyle -av}) / S_{\ell}^{\scriptscriptstyle -av}$ \\
+$\Delta^{S}_{av|\ell}$ & What the C auto-vectorizer added to SoA, loopified, no selective buffer sharing: $(S_{\ell}^{\scriptscriptstyle -av} - S_{\ell}^{\scriptscriptstyle +av}) / S_{\ell}^{\scriptscriptstyle +av}$ \\
+$\Delta^{S}_{b}$ & What selective buffer sharing added over SoA loopified, with the C auto-vectorizer off on both sides: $(S_{\ell}^{\scriptscriptstyle -av} - S_{\ell b}^{\scriptscriptstyle -av}) / S_{\ell b}^{\scriptscriptstyle -av}$ \\
+$\Delta^{S}_{av|\ell b}$ & What the C auto-vectorizer added to SoA, loopified, selective buffer sharing: $(S_{\ell b}^{\scriptscriptstyle -av} - S_{\ell b}^{\scriptscriptstyle +av}) / S_{\ell b}^{\scriptscriptstyle +av}$ \\
+$\Delta^{S}_{v}$ & What Gibbon's SIMD vectorization added over SoA loopified $+$ selective buffer sharing, with the C auto-vectorizer off on BOTH sides. Measured with it ON, this column reports only what is left after the backend has already vectorized the loop, which is nothing --- the $\Delta^{S}_{av|\ell b}$ column is where the backend's own contribution is reported: $(S_{\ell b}^{\scriptscriptstyle -av} - S_{\ell bv}^{\scriptscriptstyle -av}) / S_{\ell bv}^{\scriptscriptstyle -av}$ \\
+$\Delta^{S}_{av|\ell bv}$ & What the C auto-vectorizer added to SoA, loopified, selective buffer sharing, Gibbon SIMD vectorization: $(S_{\ell bv}^{\scriptscriptstyle -av} - S_{\ell bv}^{\scriptscriptstyle +av}) / S_{\ell bv}^{\scriptscriptstyle +av}$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: DecisionTree --
+% -- PLDI fold table: Compiler --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{DecisionTree}, ADT has 7 fields, SoA uses 6 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:DecisionTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass fold performance for \texttt{Compiler}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-Compiler}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-classify Batch & F & 5/7 & 29\% & \textbf{0.00$\pm$0.000} & 0.00$\pm$0.000 & 0.72$\times$ \\
-countFeatureUses & F & 3/7 & 57\% & 0.0538$\pm$0.00003 & \textbf{0.0326$\pm$0.00003} & \textbf{1.65$\times$} \\
-countLeaves & F & 2/7 & 71\% & 0.0505$\pm$0.00003 & \textbf{0.0247$\pm$0.00002} & \textbf{2.04$\times$} \\
-countNodes & F & 2/7 & 71\% & 0.0510$\pm$0.00002 & \textbf{0.0238$\pm$0.00002} & \textbf{2.15$\times$} \\
-countSmallLeaves & F & 3/7 & 57\% & 0.0548$\pm$0.00005 & \textbf{0.0322$\pm$0.00006} & \textbf{1.70$\times$} \\
-inferenceCost & F & 2/7 & 71\% & 0.0539$\pm$0.00002 & \textbf{0.0287$\pm$0.00001} & \textbf{1.88$\times$} \\
-sumImpurity & F & 3/7 & 57\% & 0.0538$\pm$0.00003 & \textbf{0.0328$\pm$0.00003} & \textbf{1.64$\times$} \\
-sumPathLengths & F & 3/7 & 57\% & 0.0561$\pm$0.00004 & \textbf{0.0340$\pm$0.00003} & \textbf{1.65$\times$} \\
-sumSamples & F & 3/7 & 57\% & 0.0514$\pm$0.00003 & \textbf{0.0324$\pm$0.00003} & \textbf{1.59$\times$} \\
-treeDepth & F & 2/7 & 71\% & 0.0547$\pm$0.00037 & \textbf{0.0287$\pm$0.00002} & \textbf{1.91$\times$} \\
-\midrule
-\textbf{Total} & & & & 0.4801 & 0.2699 & \textbf{1.78$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.64$\times$} \\
+verifyIR & 9/9 & 0\% & 0.08113 & \textcolor{gibbonslow}{0.09513} & 0.08111 & 0.06215 & 0.0137 & 0.01372 & $\ddagger$ & $\ddagger$ & 0.04432 & \textcolor{gibbonfast}{0.003413} & 0.003505 & \textbf{4.02$\times$} \\
+instCountPass & 2/9 & 78\% & 0.08228 & \textcolor{gibbonslow}{0.09569} & 0.08242 & 0.06199 & 0.01345 & 0.01345 & $\ddagger$ & $\ddagger$ & 0.04284 & \textcolor{gibbonfast}{0.00192} & 0.001923 & \textbf{7.00$\times$} \\
+blockCountPass & 2/9 & 78\% & 0.08117 & \textcolor{gibbonslow}{0.09603} & 0.08116 & 0.06203 & 0.01344 & 0.01342 & $\ddagger$ & $\ddagger$ & 0.04276 & \textcolor{gibbonfast}{0.001917} & 0.001918 & \textbf{7.00$\times$} \\
+memoryOpStatsPass & 3/9 & 67\% & 0.08167 & \textcolor{gibbonslow}{0.09569} & 0.08165 & 0.06456 & 0.01354 & 0.01354 & $\ddagger$ & $\ddagger$ & 0.04634 & \textcolor{gibbonfast}{0.003819} & 0.003826 & \textbf{3.54$\times$} \\
+castInstCountPass & 3/9 & 67\% & 0.08107 & \textcolor{gibbonslow}{0.09517} & 0.08113 & 0.06333 & 0.01333 & 0.01334 & $\ddagger$ & $\ddagger$ & 0.045 & 0.003407 & \textcolor{gibbonfast}{0.003402} & \textbf{3.92$\times$} \\
+branchStatsPass & 2/9 & 78\% & 0.08109 & \textcolor{gibbonslow}{0.09573} & 0.08117 & 0.06342 & 0.01332 & 0.01332 & $\ddagger$ & $\ddagger$ & 0.04498 & \textcolor{gibbonfast}{0.003438} & 0.003449 & \textbf{3.87$\times$} \\
+latencyModelPass & 3/9 & 67\% & 0.08108 & \textcolor{gibbonslow}{0.09399} & 0.08109 & 0.06221 & 0.0134 & 0.0134 & $\ddagger$ & $\ddagger$ & 0.04415 & \textcolor{gibbonfast}{0.002988} & 0.00299 & \textbf{4.48$\times$} \\
+has cycle & 4/9 & 56\% & 0.0952 & \textcolor{gibbonslow}{0.09595} & 0.09522 & 0.06321 & 0.05589 & 0.05817 & $\ddagger$ & $\ddagger$ & 0.0453 & 0.01732 & \textcolor{gibbonfast}{0.01731} & \textbf{3.23$\times$} \\
+throughputModelPass & 3/9 & 67\% & 0.08179 & \textcolor{gibbonslow}{0.09511} & 0.08181 & 0.06221 & 0.01344 & 0.01344 & $\ddagger$ & $\ddagger$ & 0.04399 & \textcolor{gibbonfast}{0.003002} & 0.003007 & \textbf{4.48$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: DomTree --
+% -- PLDI fold delta table: Compiler --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{DomTree}, ADT has 15 fields, SoA uses 14 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:DomTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{What each optimization bought, per fold pass, for \texttt{Compiler} (percent; companion to Table~\ref{tab:pldi-fold-Compiler}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-Compiler}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-count styled & F & 3/15 & 80\% & 0.0383$\pm$0.00002 & \textbf{0.0116$\pm$0.00001} & \textbf{3.31$\times$} \\
-find max Bottom & F & 5/15 & 67\% & 0.0385$\pm$0.00108 & \textbf{0.0226$\pm$0.00004} & \textbf{1.70$\times$} \\
-SumArea & F & 6/15 & 60\% & 0.0398$\pm$0.00004 & \textbf{0.0191$\pm$0.00157} & \textbf{2.08$\times$} \\
-sumTextWidth & F & 3/15 & 80\% & 0.0380$\pm$0.00002 & \textbf{0.0117$\pm$0.00001} & \textbf{3.25$\times$} \\
-computeWidths & M & 14/15 & 7\% & \textbf{0.0307$\pm$0.00012} & 0.0472$\pm$0.00013 & 0.65$\times$ \\
-scaleLayout & M & 15/15 & 0\% & \textbf{0.0289$\pm$0.00005} & 0.0398$\pm$0.00008 & 0.73$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.2141 & 0.1519 & \textbf{1.41$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.62$\times$} \\
+verifyIR & +30.54\% & +353.1\% & $-$0.09477\% & -- & +1164\% & $-$2.625\% \\
+instCountPass & +32.74\% & +360.8\% & $-$0.05947\% & -- & +2128\% & $-$0.156\% \\
+blockCountPass & +30.86\% & +362.2\% & +0.1043\% & -- & +2130\% & $-$0.05214\% \\
+memoryOpStatsPass & +26.5\% & +376.9\% & +0.01477\% & -- & +1111\% & $-$0.183\% \\
+castInstCountPass & +28\% & +374.7\% & $-$0.1049\% & -- & +1223\% & +0.147\% \\
+branchStatsPass & +27.85\% & +376.2\% & $-$0.007508\% & -- & +1204\% & $-$0.3189\% \\
+latencyModelPass & +30.33\% & +364.3\% & +0.02239\% & -- & +1377\% & $-$0.06689\% \\
+has cycle & +50.6\% & +8.669\% & $-$3.928\% & -- & +161.6\% & +0.05198\% \\
+throughputModelPass & +31.46\% & +363\% & +0.007442\% & -- & +1363\% & $-$0.1663\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: KDTree --
+% -- PLDI map table: Compiler --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{KDTree}, ADT has 17 fields, SoA uses 16 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:KDTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass map performance for \texttt{Compiler}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Compiler}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-countInRange tight\_box & F & 13/17 & 24\% & 0.0276$\pm$0.00002 & \textbf{0.0199$\pm$0.00002} & \textbf{1.39$\times$} \\
-Find nearest Neighbour & F & 13/17 & 24\% & 0.0275$\pm$0.00003 & \textbf{0.0213$\pm$0.00002} & \textbf{1.29$\times$} \\
-photonMappingBenchmark & F & 12/17 & 29\% & 0.0423$\pm$0.00002 & 0.0412$\pm$0.00003 & 1.03$\times$ \\
-pointCloudNeighborhood & F & 11/17 & 35\% & 0.0249$\pm$0.00001 & \textbf{0.0166$\pm$0.00001} & \textbf{1.50$\times$} \\
-sumMassInRange & F & 14/17 & 18\% & 0.0271$\pm$0.00002 & \textbf{0.0200$\pm$0.00165} & \textbf{1.36$\times$} \\
-twoPointCorrelation bin\_8\_16 & F & 11/17 & 35\% & 0.0284$\pm$0.00001 & \textbf{0.0206$\pm$0.00001} & \textbf{1.38$\times$} \\
-\midrule
-\textbf{Total} & & & & 0.1777 & 0.1395 & \textbf{1.27$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{1.31$\times$} \\
+targetReturnPass & 7/8 & 88\% & 0.2263 & 0.2149 & \textcolor{gibbonslow}{0.2263} & 0.2226 & 0.08428 & 0.08258 & 0.08022 & 0.0794 & $\ddagger$ & $\ddagger$ & 0.2023 & 0.1046 & 0.09529 & 0.1047 & 0.1038 & 0.011 & \textcolor{gibbonfast}{0.0104} & 0.01102 & 0.01042 & \textbf{7.63$\times$} \\
+stripSideEffectsPass & 7/8 & 88\% & \textcolor{gibbonslow}{0.2313} & 0.2112 & 0.2311 & 0.1817 & 0.08033 & 0.08014 & 0.07813 & 0.07787 & $\ddagger$ & $\ddagger$ & 0.2027 & 0.101 & 0.09333 & 0.1045 & 0.1042 & 0.01021 & \textcolor{gibbonfast}{0.01018} & 0.0102 & 0.01019 & \textbf{7.65$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: LinearListReduction --
+% -- PLDI map delta table: Compiler --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{LinearListReduction}, ADT has 11 fields, SoA uses 11 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:LinearListReduction}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{What each optimization bought, per map pass, for \texttt{Compiler} (percent; companion to Table~\ref{tab:pldi-map-Compiler}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Compiler}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-reduction & F & 2/11 & 82\% & 0.0331$\pm$0.00001 & \textbf{0.0050$\pm$0.00001} & \textbf{6.59$\times$} \\
-\midrule
-\textbf{Total} & & & & 0.0331 & 0.0050 & \textbf{6.59$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{6.59$\times$} \\
+targetReturnPass & +1.641\% & +169.5\% & +2.05\% & +5.063\% & +1.026\% & -- & +112.3\% & +9.722\% & $-$0.169\% & +0.8931\% & +852\% & +5.759\% & $-$0.1543\% & +5.739\% \\
+stripSideEffectsPass & +27.29\% & +126.7\% & +0.2296\% & +2.817\% & +0.3339\% & -- & +117.1\% & +8.212\% & $-$3.398\% & +0.3388\% & +924.1\% & +0.2357\% & +0.08824\% & +0.0785\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: reduceNestedList --
+% -- PLDI fold table: DBQuery --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{reduceNestedList}, ADT has 3 fields, SoA uses 3 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:reduceNestedList}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass fold performance for \texttt{DBQuery}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-DBQuery}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-reduction & F & 2/3 & 33\% & 0.0845$\pm$0.00008 & \textbf{0.0073$\pm$0.00001} & \textbf{11.53$\times$} \\
-\midrule
-\textbf{Total} & & & & 0.0845 & 0.0073 & \textbf{11.53$\times$} \\
-\textbf{Geomean} & & & & & & \textbf{11.53$\times$} \\
+sumCost & 6/15 & 60\% & 0.0286 & 0.02368 & 0.02861 & 0.02009 & 0.01959 & 0.01956 & 0.09097 & \textcolor{gibbonslow}{0.09217} & 0.01662 & 0.01433 & \textcolor{gibbonfast}{0.01424} & \textbf{1.37$\times$} \\
+sumRows & 6/15 & 60\% & 0.03027 & 0.02644 & 0.03035 & 0.02342 & 0.02591 & 0.02585 & 0.09025 & \textcolor{gibbonslow}{0.09159} & \textcolor{gibbonfast}{0.01995} & 0.02089 & 0.02056 & \textbf{1.17$\times$} \\
+countJoins & 3/15 & 80\% & 0.02906 & 0.02407 & 0.02898 & 0.02146 & 0.01979 & 0.01983 & 0.08791 & \textcolor{gibbonslow}{0.08918} & 0.01369 & 0.01097 & \textcolor{gibbonfast}{0.01093} & \textbf{1.81$\times$} \\
+sumMemory & 6/15 & 60\% & 0.02853 & 0.02302 & 0.02856 & 0.02001 & 0.01951 & 0.01931 & 0.09106 & \textcolor{gibbonslow}{0.09225} & 0.01651 & \textcolor{gibbonfast}{0.01428} & 0.01431 & \textbf{1.35$\times$} \\
+hashJoinPressure & 5/15 & 67\% & 0.03292 & 0.02754 & 0.0329 & 0.0208 & 0.0201 & 0.02013 & 0.08838 & \textcolor{gibbonslow}{0.08962} & 0.01461 & \textcolor{gibbonfast}{0.01243} & 0.01265 & \textbf{1.62$\times$} \\
+filterSelectivitySkew & 5/15 & 67\% & 0.02869 & 0.02432 & 0.0287 & 0.02068 & 0.01882 & 0.01889 & 0.0919 & \textcolor{gibbonslow}{0.09221} & 0.01577 & 0.01243 & \textcolor{gibbonfast}{0.01238} & \textbf{1.52$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: List --
+% -- PLDI fold delta table: DBQuery --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{List}, ADT has 2 fields, SoA uses 2 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:List}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{What each optimization bought, per fold pass, for \texttt{DBQuery} (percent; companion to Table~\ref{tab:pldi-fold-DBQuery}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-DBQuery}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-length List & F & 1/2 & 50\% & 0.0494$\pm$0.00009 & \textbf{0.0264$\pm$0.00002} & \textbf{1.87$\times$} \\
-sumList & F & 2/2 & 0\% & 0.1382$\pm$0.00004 & 0.1387$\pm$0.00326 & 1.00$\times$ \\
-sumList tail recursive & F & 2/2 & 0\% & 0.1383$\pm$0.00004 & 0.1390$\pm$0.00025 & 0.99$\times$ \\
-add1 List & M & 2/2 & 0\% & \textbf{0.2547$\pm$0.00270} & 0.3393$\pm$0.00222 & 0.75$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.5805 & 0.6434 & 0.90$\times$ \\
-\textbf{Geomean} & & & & & & 1.09$\times$ \\
+sumCost & +42.33\% & +2.709\% & +0.138\% & +447.2\% & +16.76\% & +0.6813\% \\
+sumRows & +29.24\% & $-$9.397\% & +0.236\% & +352.4\% & $-$2.991\% & +1.59\% \\
+countJoins & +35.41\% & +8.241\% & $-$0.1916\% & +542.2\% & +25.29\% & +0.4119\% \\
+sumMemory & +42.57\% & +3.603\% & +0.9992\% & +451.5\% & +15.43\% & $-$0.1957\% \\
+hashJoinPressure & +58.26\% & +3.333\% & $-$0.1689\% & +505.1\% & +15.48\% & $-$1.716\% \\
+filterSelectivitySkew & +38.72\% & +9.514\% & $-$0.3336\% & +482.6\% & +27.37\% & +0.4037\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: MonoTree --
+% -- PLDI map table: DBQuery --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{MonoTree}, ADT has 3 fields, SoA uses 2 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:MonoTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass map performance for \texttt{DBQuery}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-DBQuery}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sumTree & F & 3/3 & 0\% & \textbf{0.0090$\pm$0.00001} & 0.0113$\pm$0.00002 & 0.80$\times$ \\
-sumTree TailRec & F & 3/3 & 0\% & \textbf{0.0086$\pm$0.00001} & 0.0108$\pm$0.00004 & 0.79$\times$ \\
-add1Tree & M & 3/3 & 0\% & 0.0444$\pm$0.00208 & 0.0436$\pm$0.00012 & 1.02$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.0620 & 0.0657 & 0.94$\times$ \\
-\textbf{Geomean} & & & & & & 0.86$\times$ \\
+scaleCosts & 10/13 & 77\% & 0.0829 & 0.07658 & 0.0832 & 0.07563 & 0.07155 & 0.06935 & 0.06629 & 0.06694 & \textcolor{gibbonslow}{0.3205} & 0.3204 & 0.09584 & 0.08739 & 0.09 & 0.08094 & 0.08116 & 0.01822 & 0.01815 & 0.01839 & \textcolor{gibbonfast}{0.01803} & \textbf{3.68$\times$} \\
+clearQueryFlags & 12/13 & 92\% & 0.0817 & 0.0763 & 0.08195 & 0.07615 & 0.07093 & 0.0694 & 0.06556 & 0.06595 & \textcolor{gibbonslow}{0.3211} & 0.3203 & 0.09561 & 0.08613 & 0.08955 & 0.08106 & 0.08191 & 0.008212 & \textcolor{gibbonfast}{0.008165} & 0.008408 & 0.008195 & \textbf{8.03$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: ObjectGraph --
+% -- PLDI map delta table: DBQuery --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{ObjectGraph}, ADT has 5 fields, SoA uses 4 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:ObjectGraph}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{What each optimization bought, per map pass, for \texttt{DBQuery} (percent; companion to Table~\ref{tab:pldi-map-DBQuery}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-DBQuery}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-countLargeItems & F & 3/5 & 40\% & 0.0130$\pm$0.00001 & \textbf{0.0103$\pm$0.00003} & \textbf{1.25$\times$} \\
-countMarked & F & 3/5 & 40\% & 0.0129$\pm$0.00001 & \textbf{0.0105$\pm$0.00003} & \textbf{1.22$\times$} \\
-countSurvivors & F & 4/5 & 20\% & 0.0139$\pm$0.00001 & 0.0132$\pm$0.00001 & 1.06$\times$ \\
-deadBytes & F & 4/5 & 20\% & 0.0143$\pm$0.00001 & \textbf{0.0126$\pm$0.00001} & \textbf{1.14$\times$} \\
-liveBytes & F & 4/5 & 20\% & 0.0135$\pm$0.00001 & 0.0126$\pm$0.00001 & 1.07$\times$ \\
-sumObjIds & F & 3/5 & 40\% & 0.0129$\pm$0.00001 & \textbf{0.0102$\pm$0.00003} & \textbf{1.26$\times$} \\
-totalHeapSize & F & 3/5 & 40\% & 0.0127$\pm$0.00001 & \textbf{0.0104$\pm$0.00003} & \textbf{1.22$\times$} \\
-sweepUnmarked & M & 5/5 & 0\% & \textbf{0.0715$\pm$0.00025} & 0.0806$\pm$0.00167 & 0.89$\times$ \\
-touchHotObjects & M & 5/5 & 0\% & \textbf{0.0708$\pm$0.00199} & 0.0799$\pm$0.00004 & 0.89$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.2355 & 0.2404 & 0.98$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.10$\times$} \\
+scaleCosts & +9.607\% & +9.064\% & +3.177\% & +7.941\% & $-$0.977\% & +234.4\% & +6.487\% & $-$2.898\% & +7.971\% & $-$0.2735\% & +344.3\% & +0.3636\% & $-$0.9407\% & +2.014\% \\
+clearQueryFlags & +7.289\% & +9.725\% & +2.205\% & +8.196\% & $-$0.602\% & +235.9\% & +6.76\% & $-$3.818\% & +6.254\% & $-$1.03\% & +887.1\% & +0.5756\% & $-$2.331\% & +2.599\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: PiecewiseFunctions --
+% -- PLDI fold table: DecisionTree --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{PiecewiseFunctions}, ADT has 8 fields, SoA uses 7 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:PiecewiseFunctions}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass fold performance for \texttt{DecisionTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-DecisionTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-autorefineMaxLevel & F & 4/8 & 50\% & 0.0209$\pm$0.00002 & \textbf{0.0187$\pm$0.00009} & \textbf{1.12$\times$} \\
-compressMass & F & 3/8 & 62\% & 0.0187$\pm$0.00002 & \textbf{0.0116$\pm$0.00002} & \textbf{1.61$\times$} \\
-lbDeuxLoadProxy & F & 5/8 & 38\% & 0.0206$\pm$0.00001 & \textbf{0.0177$\pm$0.00003} & \textbf{1.17$\times$} \\
-norm2Estimate & F & 5/8 & 38\% & 0.0242$\pm$0.00003 & \textbf{0.0182$\pm$0.00003} & \textbf{1.33$\times$} \\
-pmapCutHistogram & F & 4/8 & 50\% & 0.0312$\pm$0.00032 & \textbf{0.0127$\pm$0.00123} & \textbf{2.46$\times$} \\
-truncateTolViolations & F & 3/8 & 62\% & 0.0190$\pm$0.00002 & \textbf{0.0114$\pm$0.00002} & \textbf{1.67$\times$} \\
-addConstPW & M & 8/8 & 0\% & \textbf{0.1186$\pm$0.00053} & 0.1319$\pm$0.00048 & 0.90$\times$ \\
-diffPW & M & 8/8 & 0\% & 0.1178$\pm$0.00232 & 0.1289$\pm$0.00017 & 0.91$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.3709 & 0.3512 & 1.06$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.32$\times$} \\
+countNodes & 2/7 & 71\% & 0.0341 & 0.01784 & 0.034 & 0.01705 & 0.01454 & 0.01481 & \textcolor{gibbonslow}{0.1371} & 0.1363 & 0.01004 & \textcolor{gibbonfast}{0.005661} & 0.005694 & \textbf{2.57$\times$} \\
+countLeaves & 2/7 & 71\% & 0.03404 & 0.01726 & 0.03393 & 0.01689 & 0.0144 & 0.01455 & \textcolor{gibbonslow}{0.1371} & 0.1363 & 0.01071 & \textcolor{gibbonfast}{0.005405} & 0.005564 & \textbf{2.66$\times$} \\
+treeDepth & 2/7 & 71\% & 0.03378 & 0.01731 & 0.03363 & 0.01711 & 0.01806 & 0.01723 & \textcolor{gibbonslow}{0.137} & 0.1362 & 0.01346 & 0.006925 & \textcolor{gibbonfast}{0.006486} & \textbf{2.64$\times$} \\
+sumImpurity & 3/7 & 57\% & 0.03368 & 0.01731 & 0.03356 & 0.01542 & 0.01419 & 0.01423 & \textcolor{gibbonslow}{0.1414} & 0.1405 & 0.01372 & 0.007733 & \textcolor{gibbonfast}{0.00764} & \textbf{1.86$\times$} \\
+sumSamples & 3/7 & 57\% & 0.03256 & 0.01789 & 0.03248 & 0.01717 & 0.01417 & 0.01415 & \textcolor{gibbonslow}{0.136} & 0.1353 & 0.01008 & \textcolor{gibbonfast}{0.007664} & 0.007673 & \textbf{1.85$\times$} \\
+countFeatureUses & 3/7 & 57\% & 0.0342 & 0.01801 & 0.03411 & 0.01566 & 0.01429 & 0.01427 & \textcolor{gibbonslow}{0.1437} & 0.1429 & 0.01386 & 0.007835 & \textcolor{gibbonfast}{0.007598} & \textbf{1.88$\times$} \\
+countSmallLeaves & 3/7 & 57\% & 0.03298 & 0.01885 & 0.03288 & 0.01654 & 0.01387 & 0.01386 & \textcolor{gibbonslow}{0.1417} & 0.141 & 0.01011 & 0.007757 & \textcolor{gibbonfast}{0.007707} & \textbf{1.80$\times$} \\
+inferenceCost & 2/7 & 71\% & 0.03386 & 0.01801 & 0.03368 & 0.01787 & 0.0174 & 0.01569 & \textcolor{gibbonslow}{0.137} & 0.1362 & 0.01367 & \textcolor{gibbonfast}{0.006751} & 0.00751 & \textbf{2.32$\times$} \\
+sumPathLengths & 3/7 & 57\% & 0.03361 & 0.01808 & 0.03361 & 0.01705 & 0.0146 & 0.01467 & \textcolor{gibbonslow}{0.1384} & 0.1377 & 0.0136 & 0.008231 & \textcolor{gibbonfast}{0.00815} & \textbf{1.79$\times$} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: TernaryTree --
+% -- PLDI fold delta table: DecisionTree --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{TernaryTree}, ADT has 5 fields, SoA uses 3 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:TernaryTree}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{What each optimization bought, per fold pass, for \texttt{DecisionTree} (percent; companion to Table~\ref{tab:pldi-fold-DecisionTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-DecisionTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sum tree & F & 5/5 & 0\% & 0.0288$\pm$0.00012 & 0.0271$\pm$0.00010 & 1.06$\times$ \\
-add 1 tree & M & 5/5 & 0\% & 0.0828$\pm$0.00279 & 0.0779$\pm$0.00014 & 1.06$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.1115 & 0.1050 & 1.06$\times$ \\
-\textbf{Geomean} & & & & & & 1.06$\times$ \\
+countNodes & +100\% & +15.11\% & $-$1.843\% & +1266\% & +76.27\% & $-$0.5796\% \\
+countLeaves & +101.5\% & +16.08\% & $-$1.051\% & +1180\% & +92.47\% & $-$2.858\% \\
+treeDepth & +97.47\% & $-$0.6909\% & +4.819\% & +918\% & +107.5\% & +6.768\% \\
+sumImpurity & +118.4\% & +8.385\% & $-$0.2882\% & +931.1\% & +79.53\% & +1.217\% \\
+sumSamples & +89.57\% & +21.36\% & +0.1131\% & +1249\% & +31.38\% & $-$0.1173\% \\
+countFeatureUses & +118.3\% & +9.731\% & +0.1261\% & +936.8\% & +82.47\% & +3.119\% \\
+countSmallLeaves & +99.4\% & +19.3\% & +0.05771\% & +1301\% & +31.22\% & +0.6488\% \\
+inferenceCost & +89.48\% & +13.92\% & +10.91\% & +902\% & +82.06\% & $-$10.11\% \\
+sumPathLengths & +97.16\% & +16.2\% & $-$0.4771\% & +917.9\% & +66.83\% & +0.9939\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
-
-% -- Table: Trie --
+% -- PLDI fold table: DecisionTreeClassify --
 \begin{table}[t]
 \centering
-\caption{Per-pass performance for \texttt{Trie}, ADT has 10 fields, SoA uses 9 buffers. Times are median per iteration (s); $\pm$ shows standard error of the mean across --iterate runs. T: F=fold, M=map. Uses: fields accessed / total (recursive + non-recursive). Dead\%: fraction of fields not accessed by this pass. Speedup ${>}1{\times}$ means SoA is faster. OOM = out of memory.}}
-\label{tab:Trie}
-\small
-\begin{tabular}{l c c r r r r}
+\caption{Per-pass fold performance for \texttt{DecisionTreeClassify}. \textbf{Measured with random-access nodes enabled} (no \texttt{--no-ran}), unlike every other benchmark in this campaign: without them this program measures subtree-skipping rather than the traversal it names. See \texttt{RAN\_ENABLED\_PROGRAMS} for the justification and its re-qualification against the oracle. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-DecisionTreeClassify}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
 \toprule
-\textbf{Pass} & \textbf{T} & \textbf{Uses} & \textbf{Dead\%} & \textbf{AoS med$\pm$err} & \textbf{SoA med$\pm$err} & \textbf{Speedup} \\
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-autocompleteTopKProxy & F & 5/10 & 50\% & 0.0154$\pm$0.00001 & \textbf{0.0087$\pm$0.00003} & \textbf{1.77$\times$} \\
-countLazyNodes & F & 4/10 & 60\% & 0.0136$\pm$0.00002 & \textbf{0.0067$\pm$0.00001} & \textbf{2.04$\times$} \\
-countTerminals & F & 3/10 & 70\% & 0.0128$\pm$0.00001 & \textbf{0.0058$\pm$0.00001} & \textbf{2.21$\times$} \\
-sumPrefixFreq & F & 3/10 & 70\% & 0.0130$\pm$0.00001 & \textbf{0.0058$\pm$0.00001} & \textbf{2.25$\times$} \\
-sumSubtreeHints & F & 3/10 & 70\% & 0.0130$\pm$0.00001 & \textbf{0.0057$\pm$0.00001} & \textbf{2.27$\times$} \\
-decayTrieStats & M & 10/10 & 0\% & \textbf{0.0750$\pm$0.00025} & 0.0859$\pm$0.00231 & 0.87$\times$ \\
-resetTraversalState & M & 10/10 & 0\% & 0.0745$\pm$0.00191 & 0.0819$\pm$0.00261 & 0.91$\times$ \\
-\midrule
-\textbf{Total} & & & & 0.2173 & 0.2005 & 1.08$\times$ \\
-\textbf{Geomean} & & & & & & \textbf{1.64$\times$} \\
+classify Depth & 4/7 & 43\% & 0.04101 & 0.03802 & 0.03784 & 0.04161 & \textcolor{gibbonfast}{0.03583} & 0.03632 & \textcolor{gibbonslow}{0.06213} & 0.05621 & 0.04781 & 0.03745 & 0.03933 & 0.96$\times$ \\
+classify Batch & 5/7 & 29\% & 0.1608 & 0.1473 & 0.1486 & 0.1641 & \textcolor{gibbonfast}{0.1405} & 0.1421 & \textcolor{gibbonslow}{0.2455} & 0.2202 & 0.1889 & 0.1455 & 0.1522 & 0.97$\times$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
+% -- PLDI fold delta table: DecisionTreeClassify --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{DecisionTreeClassify} (percent; companion to Table~\ref{tab:pldi-fold-DecisionTreeClassify}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-DecisionTreeClassify}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+classify Depth & $-$1.456\% & +14.59\% & $-$1.347\% & +29.95\% & +21.56\% & $-$4.78\% \\
+classify Batch & $-$2.011\% & +15.46\% & $-$1.119\% & +29.96\% & +24.11\% & $-$4.406\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: DomTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{DomTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-DomTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+SumArea & 6/15 & 60\% & 0.07424 & 0.04417 & 0.07432 & 0.04015 & 0.04083 & 0.04084 & \textcolor{gibbonslow}{0.2765} & 0.276 & 0.01936 & \textcolor{gibbonfast}{0.01767} & 0.01887 & \textbf{2.27$\times$} \\
+find max Bottom & 5/15 & 67\% & 0.07383 & 0.04551 & 0.07377 & 0.04017 & 0.04047 & 0.04047 & \textcolor{gibbonslow}{0.2184} & 0.2178 & 0.02262 & \textcolor{gibbonfast}{0.01786} & 0.01829 & \textbf{2.25$\times$} \\
+count styled & 3/15 & 80\% & 0.07406 & 0.04431 & 0.07413 & 0.0396 & 0.03978 & 0.03972 & \textcolor{gibbonslow}{0.2036} & 0.2031 & 0.01645 & \textcolor{gibbonfast}{0.01159} & 0.01162 & \textbf{3.42$\times$} \\
+sumTextWidth & 3/15 & 80\% & 0.07472 & 0.04294 & 0.07465 & 0.03914 & 0.03886 & 0.03924 & \textcolor{gibbonslow}{0.2156} & 0.2153 & 0.01525 & 0.01155 & \textcolor{gibbonfast}{0.01143} & \textbf{3.40$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: DomTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{DomTree} (percent; companion to Table~\ref{tab:pldi-fold-DomTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-DomTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+SumArea & +84.91\% & $-$1.69\% & $-$0.02938\% & +1328\% & +2.596\% & $-$6.385\% \\
+find max Bottom & +83.78\% & $-$0.7265\% & +0.01236\% & +865.8\% & +23.65\% & $-$2.351\% \\
+count styled & +87.03\% & $-$0.2996\% & +0.1511\% & +1138\% & +41.57\% & $-$0.2496\% \\
+sumTextWidth & +90.91\% & $-$0.2498\% & $-$0.9481\% & +1314\% & +33.43\% & +1.05\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: DomTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{DomTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-DomTree}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+computeWidths & 13/14 & 93\% & 0.03223 & 0.03225 & 0.03237 & 0.03107 & 0.03154 & 0.03132 & 0.03148 & \textcolor{gibbonfast}{0.03081} & 0.1057 & \textcolor{gibbonslow}{0.1069} & 0.0425 & 0.04685 & 0.04561 & 0.04806 & 0.04605 & 0.04735 & 0.04588 & 0.04717 & 0.04543 & 0.73$\times$ \\
+scaleLayout & 8/14 & 57\% & 0.03016 & 0.03075 & 0.03012 & 0.02966 & 0.02987 & 0.02912 & 0.02777 & 0.02733 & \textcolor{gibbonslow}{0.08828} & 0.08799 & 0.03703 & 0.03961 & 0.03812 & 0.03591 & 0.0357 & 0.01228 & \textcolor{gibbonfast}{0.01156} & 0.01225 & 0.01157 & \textbf{2.36$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: DomTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{DomTree} (percent; companion to Table~\ref{tab:pldi-map-DomTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-DomTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+computeWidths & +3.711\% & $-$0.776\% & +0.7249\% & +0.2097\% & +2.152\% & +148.6\% & $-$6.812\% & +2.732\% & $-$2.513\% & +4.362\% & +1.495\% & +3.204\% & +0.3901\% & +3.823\% \\
+scaleLayout & +1.686\% & +1.848\% & +2.593\% & +7.561\% & +1.617\% & +138.4\% & $-$2.857\% & +3.903\% & +10.3\% & +0.5967\% & +192.5\% & +6.194\% & +0.2368\% & +5.815\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: KDTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{KDTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-KDTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+Find nearest Neighbour & 13/17 & 24\% & 0.04225 & 0.02974 & 0.04228 & 0.02998 & 0.02994 & 0.02996 & 0.1035 & \textcolor{gibbonslow}{0.1041} & 0.02417 & \textcolor{gibbonfast}{0.02149} & 0.02364 & \textbf{1.38$\times$} \\
+countInRange tight\_box & 13/17 & 24\% & 0.04292 & 0.0295 & 0.04288 & 0.0297 & 0.02963 & 0.02962 & \textcolor{gibbonslow}{0.08454} & 0.08121 & 0.02323 & \textcolor{gibbonfast}{0.01879} & 0.02307 & \textbf{1.57$\times$} \\
+sumMassInRange & 14/17 & 18\% & 0.04264 & 0.02976 & 0.04263 & 0.02951 & 0.02935 & 0.02936 & \textcolor{gibbonslow}{0.0779} & 0.07788 & 0.02472 & \textcolor{gibbonfast}{0.02057} & 0.02235 & \textbf{1.43$\times$} \\
+twoPointCorrelation bin\_8\_16 & 11/17 & 35\% & 0.04386 & 0.03226 & 0.04383 & 0.0325 & 0.03156 & 0.03233 & \textcolor{gibbonslow}{0.1048} & 0.1028 & 0.02891 & \textcolor{gibbonfast}{0.01971} & 0.02889 & \textbf{1.60$\times$} \\
+pointCloudNeighborhood & 11/17 & 35\% & 0.04242 & 0.02837 & 0.04243 & 0.02848 & 0.0283 & 0.02849 & \textcolor{gibbonslow}{0.1036} & 0.1033 & 0.02136 & \textcolor{gibbonfast}{0.01667} & 0.0214 & \textbf{1.70$\times$} \\
+photonMappingBenchmark & 12/17 & 29\% & 0.04964 & 0.04533 & 0.04944 & 0.04295 & 0.04299 & 0.04298 & 0.08677 & \textcolor{gibbonslow}{0.0893} & 0.04248 & \textcolor{gibbonfast}{0.0386} & 0.04239 & \textbf{1.11$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: KDTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{KDTree} (percent; companion to Table~\ref{tab:pldi-fold-KDTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-KDTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+Find nearest Neighbour & +40.93\% & +0.0701\% & $-$0.06343\% & +328.2\% & +2.276\% & $-$9.071\% \\
+countInRange tight\_box & +44.53\% & +0.243\% & +0.02025\% & +263.9\% & +0.7021\% & $-$18.55\% \\
+sumMassInRange & +44.51\% & +0.487\% & $-$0.05108\% & +215.2\% & +10.57\% & $-$7.981\% \\
+twoPointCorrelation bin\_8\_16 & +34.94\% & +0.5537\% & $-$2.379\% & +262.4\% & +0.06577\% & $-$31.79\% \\
+pointCloudNeighborhood & +48.93\% & $-$0.01404\% & $-$0.6564\% & +384.8\% & $-$0.1496\% & $-$22.11\% \\
+photonMappingBenchmark & +15.56\% & $-$0.06747\% & +0.00698\% & +104.3\% & +0.2194\% & $-$8.927\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{LinearListReduction}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-LinearListReduction}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+reduction & 2/11 & 82\% & 0.1433 & \textcolor{gibbonslow}{0.1461} & 0.1412 & 0.07465 & 0.03163 & 0.03086 & $\ddagger$ & $\ddagger$ & 0.07095 & 0.005024 & \textcolor{gibbonfast}{0.005019} & \textbf{6.15$\times$} \\
+maxField & 2/11 & 82\% & 0.1367 & 0.1371 & \textcolor{gibbonslow}{0.1374} & 0.07588 & 0.07577 & 0.07557 & $\ddagger$ & $\ddagger$ & 0.08781 & 0.03159 & \textcolor{gibbonfast}{0.03069} & \textbf{2.46$\times$} \\
+countHeavy & 2/11 & 82\% & 0.1352 & 0.1352 & \textcolor{gibbonslow}{0.1357} & 0.07505 & 0.03259 & 0.03172 & $\ddagger$ & $\ddagger$ & 0.0714 & 0.005903 & \textcolor{gibbonfast}{0.005878} & \textbf{5.40$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{LinearListReduction} (percent; companion to Table~\ref{tab:pldi-fold-LinearListReduction}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-LinearListReduction}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+reduction & +91.93\% & +141.9\% & +2.495\% & -- & +1314\% & +0.09962\% \\
+maxField & +80.15\% & +0.4169\% & +0.2753\% & -- & +186.2\% & +2.952\% \\
+countHeavy & +80.18\% & +136.6\% & +2.756\% & -- & +1115\% & +0.4253\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{LinearListReduction}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-LinearListReduction}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+bumpFirst & 11/11 & 100\% & 0.4387 & 0.408 & 0.4181 & 0.4292 & 0.2054 & 0.2035 & 0.2053 & 0.2006 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4793} & 0.2596 & 0.2407 & 0.2629 & 0.2632 & 0.0193 & 0.01857 & 0.01852 & \textcolor{gibbonfast}{0.0185} & \textbf{10.84$\times$} \\
+shiftTriple & 9/11 & 82\% & 0.4477 & 0.4018 & 0.4228 & 0.3696 & 0.1932 & 0.1923 & 0.1945 & 0.1909 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4739} & 0.2631 & 0.2419 & 0.2579 & 0.2571 & 0.05872 & \textcolor{gibbonfast}{0.05634} & 0.06048 & 0.06051 & \textbf{3.39$\times$} \\
+touchMost & 4/11 & 36\% & 0.4342 & 0.4272 & 0.4123 & 0.4231 & 0.2022 & 0.1982 & 0.2009 & 0.1888 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4806} & 0.2508 & 0.2328 & 0.255 & 0.2567 & 0.1992 & 0.1976 & 0.1621 & \textcolor{gibbonfast}{0.1612} & \textbf{1.17$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: LinearListReduction --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{LinearListReduction} (percent; companion to Table~\ref{tab:pldi-map-LinearListReduction}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-LinearListReduction}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+bumpFirst & +2.202\% & +110.9\% & +0.949\% & +0.06284\% & +2.341\% & -- & +99.12\% & +7.824\% & $-$1.27\% & $-$0.1326\% & +1262\% & +3.909\% & +4.195\% & +0.1027\% \\
+shiftTriple & +21.14\% & +92.15\% & +0.4679\% & $-$0.6504\% & +1.889\% & -- & +95.92\% & +8.787\% & +2.019\% & +0.3201\% & +339.2\% & +4.233\% & $-$2.912\% & $-$0.04132\% \\
+touchMost & +2.62\% & +113.5\% & +2.023\% & +0.6716\% & +6.409\% & -- & +106.4\% & +7.715\% & $-$1.644\% & $-$0.6759\% & +27.97\% & +0.8397\% & +22.89\% & +0.5552\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: reduceNestedList --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{reduceNestedList}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-reduceNestedList}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+reduction & 2/3 & 33\% & - & - & - & \textcolor{gibbonslow}{9.782} & 1.437 & 1.439 & - & - & 9.352 & \textcolor{gibbonfast}{0.9525} & 0.955 & \textbf{1.51$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: reduceNestedList --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{reduceNestedList} (percent; companion to Table~\ref{tab:pldi-fold-reduceNestedList}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-reduceNestedList}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+reduction & -- & +579.7\% & $-$0.1518\% & -- & +879.3\% & $-$0.2536\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: List --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{List}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-List}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+length List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05181} & 0.05172 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.02168 & \textcolor{gibbonfast}{0.02166} & \textbf{2.39$\times$} \\
+sumList & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05142} & 0.05108 & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.04947} & 0.04969 & 1.03$\times$ \\
+sumList tail recursive & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05147} & 0.05124 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.04939 & \textcolor{gibbonfast}{0.04912} & 1.04$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: List --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{List} (percent; companion to Table~\ref{tab:pldi-fold-List}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-List}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+length List & -- & -- & +0.1837\% & -- & -- & +0.07848\% \\
+sumList & -- & -- & +0.6734\% & -- & -- & $-$0.4387\% \\
+sumList tail recursive & -- & -- & +0.4469\% & -- & -- & +0.5374\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: List --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{List}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-List}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1 List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.2886 & 0.2768 & 0.2553 & 0.2544 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.2966 & \textcolor{gibbonslow}{0.3488} & 0.2464 & 0.2293 & 0.1973 & 0.1907 & 0.1905 & \textcolor{gibbonfast}{0.19} & \textbf{1.34$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: List --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{List} (percent; companion to Table~\ref{tab:pldi-map-List}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-List}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1 List & -- & -- & +4.262\% & +13.05\% & +0.366\% & -- & -- & $-$14.97\% & +20.37\% & +7.466\% & +24.85\% & +3.468\% & +3.612\% & +0.2358\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{MonoTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-MonoTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+sumTree & 3/3 & 0\% & 0.03997 & 0.01911 & 0.04001 & 0.01882 & 0.01449 & 0.01448 & 0.05325 & \textcolor{gibbonslow}{0.05326} & 0.01502 & 0.01135 & \textcolor{gibbonfast}{0.0113} & \textbf{1.28$\times$} \\
+sumTree TailRec & 3/3 & 0\% & 0.0401 & 0.01889 & 0.04013 & 0.01755 & 0.01238 & 0.01241 & 0.05155 & \textcolor{gibbonslow}{0.05156} & 0.01806 & 0.01115 & \textcolor{gibbonfast}{0.01114} & \textbf{1.11$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{MonoTree} (percent; companion to Table~\ref{tab:pldi-fold-MonoTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-MonoTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+sumTree & +112.3\% & +30\% & +0.06907\% & +254.6\% & +32.93\% & +0.5046\% \\
+sumTree TailRec & +128.5\% & +41.45\% & $-$0.2015\% & +185.5\% & +62.14\% & +0.1257\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{MonoTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-MonoTree}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1Tree & 1/2 & 50\% & 0.05216 & 0.04993 & 0.05397 & 0.04355 & 0.04093 & 0.04122 & 0.02986 & 0.02839 & \textcolor{gibbonslow}{0.1067} & 0.1066 & 0.04204 & 0.0439 & 0.04401 & 0.02269 & 0.02026 & 0.01611 & \textcolor{gibbonfast}{0.01543} & 0.01547 & 0.01545 & \textbf{1.84$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: MonoTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{MonoTree} (percent; companion to Table~\ref{tab:pldi-map-MonoTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-MonoTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1Tree & +19.77\% & +5.645\% & $-$0.7011\% & +37.08\% & +5.193\% & +153.8\% & $-$4.481\% & $-$0.2567\% & +93.46\% & +11.99\% & +40.88\% & +4.415\% & +4.111\% & +0.1489\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{ObjectGraph}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-ObjectGraph}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+totalHeapSize & 3/5 & 40\% & 0.04345 & 0.02202 & 0.04347 & 0.02119 & 0.01918 & 0.0199 & \textcolor{gibbonslow}{0.06992} & 0.06991 & 0.01531 & \textcolor{gibbonfast}{0.01024} & 0.0105 & \textbf{1.87$\times$} \\
+countMarked & 3/5 & 40\% & 0.04502 & 0.0222 & 0.04506 & 0.01856 & 0.01761 & 0.01753 & \textcolor{gibbonslow}{0.07777} & 0.07777 & 0.01684 & 0.01033 & \textcolor{gibbonfast}{0.01022} & \textbf{1.71$\times$} \\
+countLargeItems & 3/5 & 40\% & 0.0449 & 0.02278 & 0.04491 & 0.02128 & 0.0183 & 0.01858 & \textcolor{gibbonslow}{0.07855} & 0.07854 & 0.01549 & \textcolor{gibbonfast}{0.01033} & 0.0107 & \textbf{1.77$\times$} \\
+liveBytes & 4/5 & 20\% & 0.04373 & 0.0272 & 0.04369 & 0.02168 & 0.01816 & 0.01861 & \textcolor{gibbonslow}{0.0786} & 0.07858 & 0.0206 & \textcolor{gibbonfast}{0.01202} & 0.01287 & \textbf{1.51$\times$} \\
+deadBytes & 4/5 & 20\% & 0.04437 & 0.02357 & 0.04438 & 0.02161 & 0.01896 & 0.01719 & \textcolor{gibbonslow}{0.07857} & 0.07853 & 0.0215 & \textcolor{gibbonfast}{0.01199} & 0.01284 & \textbf{1.43$\times$} \\
+countSurvivors & 4/5 & 20\% & 0.04386 & 0.02241 & 0.04392 & 0.02233 & 0.01892 & 0.01879 & 0.07794 & \textcolor{gibbonslow}{0.07867} & 0.02206 & \textcolor{gibbonfast}{0.0128} & 0.01341 & \textbf{1.47$\times$} \\
+sumObjIds & 3/5 & 40\% & 0.04345 & 0.02212 & 0.0435 & 0.01976 & 0.0176 & 0.0178 & 0.0785 & \textcolor{gibbonslow}{0.07852} & 0.01896 & \textcolor{gibbonfast}{0.01002} & 0.01017 & \textbf{1.76$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{ObjectGraph} (percent; companion to Table~\ref{tab:pldi-fold-ObjectGraph}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-ObjectGraph}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+totalHeapSize & +105\% & +6.497\% & $-$3.643\% & +356.7\% & +45.85\% & $-$2.429\% \\
+countMarked & +142.6\% & +5.864\% & +0.4564\% & +361.8\% & +64.71\% & +0.9878\% \\
+countLargeItems & +110.9\% & +14.58\% & $-$1.486\% & +407.2\% & +44.68\% & $-$3.504\% \\
+liveBytes & +101.7\% & +16.48\% & $-$2.418\% & +281.5\% & +60.08\% & $-$6.558\% \\
+deadBytes & +105.4\% & +25.66\% & +10.28\% & +265.5\% & +67.48\% & $-$6.575\% \\
+countSurvivors & +96.41\% & +18.83\% & +0.6758\% & +253.4\% & +64.41\% & $-$4.57\% \\
+sumObjIds & +119.9\% & +10.99\% & $-$1.135\% & +314.1\% & +86.42\% & $-$1.455\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ObjectGraph}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ObjectGraph}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+sweepUnmarked & 2/4 & 50\% & 0.08436 & 0.07821 & 0.08433 & 0.07245 & 0.07276 & 0.07169 & 0.06094 & 0.06066 & 0.165 & \textcolor{gibbonslow}{0.1662} & 0.09436 & 0.07764 & 0.09362 & 0.05756 & 0.05277 & 0.0342 & \textcolor{gibbonfast}{0.03229} & 0.0324 & 0.03241 & \textbf{1.88$\times$} \\
+touchHotObjects & 2/4 & 50\% & 0.08233 & 0.07939 & 0.08234 & 0.07543 & 0.07278 & 0.07396 & 0.06246 & 0.06097 & 0.171 & \textcolor{gibbonslow}{0.1712} & 0.09556 & 0.07887 & 0.09517 & 0.06019 & 0.0557 & 0.0368 & \textcolor{gibbonfast}{0.03499} & 0.03762 & 0.03553 & \textbf{1.74$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ObjectGraph --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ObjectGraph} (percent; companion to Table~\ref{tab:pldi-map-ObjectGraph}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ObjectGraph}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+sweepUnmarked & +16.45\% & +1.052\% & +1.495\% & +19.4\% & +0.4682\% & +74.85\% & +0.7872\% & $-$17.07\% & +34.88\% & +9.076\% & +68.33\% & +5.909\% & +5.553\% & $-$0.03394\% \\
+touchHotObjects & +9.147\% & +1.993\% & $-$1.601\% & +16.51\% & +2.449\% & +78.91\% & +0.4014\% & $-$17.13\% & +31.04\% & +8.063\% & +63.54\% & +5.193\% & $-$2.161\% & +5.877\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{TernaryTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-TernaryTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+sum tree & 5/5 & 0\% & 0.05026 & 0.03282 & 0.0503 & 0.02795 & 0.02767 & 0.028 & \textcolor{gibbonslow}{0.2665} & 0.2662 & 0.0287 & \textcolor{gibbonfast}{0.02634} & 0.02864 & 1.05$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{TernaryTree} (percent; companion to Table~\ref{tab:pldi-fold-TernaryTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-TernaryTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+sum tree & +79.85\% & $-$0.2035\% & $-$1.189\% & +828.6\% & +0.22\% & $-$8.001\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{TernaryTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-TernaryTree}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add 1 tree & 1/3 & 33\% & 0.08127 & 0.07941 & 0.08146 & 0.07146 & 0.07867 & 0.07837 & 0.0586 & 0.06258 & 0.3728 & \textcolor{gibbonslow}{0.373} & 0.08111 & 0.07846 & 0.07811 & 0.05234 & 0.04872 & 0.04359 & 0.04203 & \textcolor{gibbonfast}{0.04197} & 0.04197 & \textbf{1.40$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: TernaryTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{TernaryTree} (percent; companion to Table~\ref{tab:pldi-map-TernaryTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-TernaryTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add 1 tree & +13.72\% & $-$8.817\% & +0.3815\% & +34.25\% & $-$6.364\% & +359.6\% & +3.846\% & +0.4481\% & +49.9\% & +7.439\% & +20.07\% & +3.714\% & +3.86\% & $-$0.00953\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: Trie --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{Trie}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-Trie}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+sumPrefixFreq & 3/10 & 70\% & 0.02726 & 0.01622 & 0.02739 & 0.01449 & 0.01424 & 0.01412 & 0.1024 & \textcolor{gibbonslow}{0.1025} & 0.008073 & \textcolor{gibbonfast}{0.005829} & 0.00587 & \textbf{2.42$\times$} \\
+countTerminals & 3/10 & 70\% & 0.02682 & 0.01629 & 0.02727 & 0.01432 & 0.01366 & 0.01377 & \textcolor{gibbonslow}{0.1013} & 0.1011 & 0.01106 & \textcolor{gibbonfast}{0.00585} & 0.005907 & \textbf{2.34$\times$} \\
+sumSubtreeHints & 3/10 & 70\% & 0.02732 & 0.01627 & 0.02772 & 0.01473 & 0.01442 & 0.01433 & \textcolor{gibbonslow}{0.1008} & 0.1006 & 0.01035 & \textcolor{gibbonfast}{0.005849} & 0.00588 & \textbf{2.45$\times$} \\
+autocompleteTopKProxy & 5/10 & 50\% & 0.02828 & 0.01918 & 0.02882 & 0.01654 & 0.01492 & 0.01493 & \textcolor{gibbonslow}{0.1072} & 0.1065 & 0.01281 & \textcolor{gibbonfast}{0.008783} & 0.009103 & \textbf{1.70$\times$} \\
+countLazyNodes & 4/10 & 60\% & 0.02882 & 0.01727 & 0.02911 & 0.01554 & 0.01473 & 0.01471 & 0.1013 & \textcolor{gibbonslow}{0.1019} & 0.00992 & \textcolor{gibbonfast}{0.006516} & 0.006634 & \textbf{2.26$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: Trie --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{Trie} (percent; companion to Table~\ref{tab:pldi-fold-Trie}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-Trie}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+sumPrefixFreq & +88.14\% & +2.606\% & +0.8215\% & +1169\% & +37.53\% & $-$0.6985\% \\
+countTerminals & +87.34\% & +3.942\% & $-$0.8132\% & +816.2\% & +87.17\% & $-$0.965\% \\
+sumSubtreeHints & +85.56\% & +2.764\% & +0.6211\% & +873.8\% & +76.07\% & $-$0.5272\% \\
+autocompleteTopKProxy & +70.94\% & +10.78\% & $-$0.06028\% & +737.1\% & +40.7\% & $-$3.515\% \\
+countLazyNodes & +85.37\% & +5.691\% & +0.1496\% & +921.7\% & +49.53\% & $-$1.779\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: Trie --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{Trie}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Trie}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+decayTrieStats & 6/9 & 67\% & 0.08173 & 0.08169 & 0.08353 & 0.0796 & 0.0782 & 0.07588 & 0.07059 & 0.07078 & 0.2448 & \textcolor{gibbonslow}{0.2569} & 0.09329 & 0.08933 & 0.09152 & 0.0896 & 0.0903 & 0.02595 & \textcolor{gibbonfast}{0.02554} & 0.02647 & 0.0256 & \textbf{2.76$\times$} \\
+resetTraversalState & 7/9 & 78\% & 0.07853 & 0.08117 & 0.07907 & 0.07698 & 0.07596 & 0.0759 & 0.06753 & 0.06795 & \textcolor{gibbonslow}{0.2453} & 0.2426 & 0.09273 & 0.08901 & 0.09208 & 0.08972 & 0.08929 & 0.01547 & \textcolor{gibbonfast}{0.0154} & 0.01569 & 0.01547 & \textbf{4.39$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: Trie --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{Trie} (percent; companion to Table~\ref{tab:pldi-map-Trie}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Trie}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+decayTrieStats & +2.671\% & +4.902\% & +3.055\% & +10.77\% & $-$0.2614\% & +162.4\% & +1.939\% & $-$2.394\% & $-$0.3025\% & $-$0.7741\% & +245.3\% & +1.586\% & $-$1.979\% & +3.418\% \\
+resetTraversalState & +2.011\% & +1.415\% & +0.07641\% & +12.49\% & $-$0.6225\% & +164.5\% & +0.7092\% & $-$3.341\% & $-$0.7991\% & +0.4849\% & +479.8\% & +0.5066\% & $-$1.339\% & +1.357\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: ColorOctree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{ColorOctree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-ColorOctree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+paletteEntriesQuantized & 13/25 & 48\% & 0.05123 & 0.04139 & \textcolor{gibbonslow}{0.05172} & 0.04117 & 0.04152 & 0.04178 & - & - & 0.03651 & \textcolor{gibbonfast}{0.02868} & 0.03621 & \textbf{1.44$\times$} \\
+quantizationErrorProxy & 10/25 & 60\% & \textcolor{gibbonslow}{0.06489} & 0.04706 & 0.06481 & 0.04604 & 0.04695 & 0.04723 & - & - & 0.04723 & \textcolor{gibbonfast}{0.04049} & 0.04862 & \textbf{1.14$\times$} \\
+reduceColorCount & 2/25 & 92\% & 0.0514 & 0.04214 & \textcolor{gibbonslow}{0.05154} & 0.04084 & 0.04173 & 0.04245 & - & - & \textcolor{gibbonfast}{0.02744} & 0.028 & 0.02809 & \textbf{1.49$\times$} \\
+closestColor & 3/25 & 88\% & \textcolor{gibbonslow}{0.05555} & 0.04451 & 0.05508 & 0.04272 & 0.04382 & 0.04389 & - & - & 0.03311 & 0.03234 & \textcolor{gibbonfast}{0.03078} & \textbf{1.39$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: ColorOctree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{ColorOctree} (percent; companion to Table~\ref{tab:pldi-fold-ColorOctree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-ColorOctree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+paletteEntriesQuantized & +24.44\% & $-$1.462\% & $-$0.6199\% & -- & +0.8368\% & $-$20.79\% \\
+quantizationErrorProxy & +40.94\% & $-$2.511\% & $-$0.5802\% & -- & $-$2.859\% & $-$16.71\% \\
+reduceColorCount & +25.86\% & $-$3.783\% & $-$1.703\% & -- & $-$2.303\% & $-$0.3204\% \\
+closestColor & +30.03\% & $-$2.663\% & $-$0.1686\% & -- & +7.559\% & +5.045\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ColorOctree --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ColorOctree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ColorOctree}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+toYCoCg & 6/18 & 33\% & 0.2141 & 0.2158 & 0.2105 & 0.201 & 0.2054 & 0.2105 & 0.1872 & \textcolor{gibbonfast}{0.1865} & - & - & 0.2955 & \textcolor{gibbonslow}{0.3689} & 0.3463 & 0.285 & 0.2854 & 0.2166 & 0.2135 & 0.2009 & 0.1988 & 0.94$\times$ \\
+markPaletteLeaves & 17/18 & 94\% & 0.1975 & 0.207 & 0.1981 & 0.1988 & 0.2033 & 0.205 & 0.18 & 0.176 & - & - & 0.2966 & \textcolor{gibbonslow}{0.3545} & 0.3289 & 0.2636 & 0.2684 & 0.009246 & 0.008162 & 0.009051 & \textcolor{gibbonfast}{0.007954} & \textbf{22.12$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ColorOctree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ColorOctree} (percent; companion to Table~\ref{tab:pldi-map-ColorOctree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ColorOctree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+toYCoCg & +6.521\% & $-$4.5\% & $-$2.387\% & +9.752\% & +0.3571\% & -- & $-$14.65\% & +6.537\% & +29.42\% & $-$0.1272\% & +31.61\% & +1.421\% & +7.819\% & +1.028\% \\
+markPaletteLeaves & $-$0.6498\% & $-$3.033\% & $-$0.873\% & +12.94\% & +2.272\% & -- & $-$9.82\% & +7.763\% & +34.47\% & $-$1.797\% & +2751\% & +13.28\% & +2.154\% & +13.79\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: Add1TreeInt8 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{Add1TreeInt8}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Add1TreeInt8}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1Tree & 1/2 & 50\% & 0.04521 & 0.04264 & 0.04559 & 0.0359 & 0.03774 & 0.04025 & 0.02084 & 0.02315 & \textcolor{gibbonslow}{0.1072} & 0.1072 & 0.03427 & 0.0361 & 0.0357 & 0.01072 & 0.00708 & 0.003735 & 0.002239 & 0.002177 & \textcolor{gibbonfast}{0.002156} & \textbf{9.66$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: Add1TreeInt8 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{Add1TreeInt8} (percent; companion to Table~\ref{tab:pldi-map-Add1TreeInt8}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Add1TreeInt8}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1Tree & +25.96\% & $-$10.81\% & $-$6.237\% & +81.1\% & $-$9.98\% & +212.7\% & $-$3.989\% & +1.143\% & +236.8\% & +51.43\% & +187\% & +66.82\% & +71.57\% & +0.974\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: Add1TreeInt16 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{Add1TreeInt16}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Add1TreeInt16}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1Tree & 1/2 & 50\% & 0.0458 & 0.04391 & 0.04598 & 0.03313 & 0.03354 & 0.03407 & 0.02287 & 0.02451 & \textcolor{gibbonslow}{0.1055} & 0.105 & 0.03474 & 0.03648 & 0.03621 & 0.01209 & 0.008768 & 0.005236 & \textcolor{gibbonfast}{0.004109} & 0.004219 & 0.004152 & \textbf{5.57$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: Add1TreeInt16 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{Add1TreeInt16} (percent; companion to Table~\ref{tab:pldi-map-Add1TreeInt16}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Add1TreeInt16}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1Tree & +38.22\% & $-$2.739\% & $-$1.529\% & +46.65\% & $-$6.671\% & +203.8\% & $-$4.054\% & +0.7623\% & +201.7\% & +37.9\% & +130.9\% & +27.43\% & +24.11\% & +1.614\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: Add1TreeInt32 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{Add1TreeInt32}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Add1TreeInt32}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1Tree & 1/2 & 50\% & 0.04994 & 0.04436 & 0.05008 & 0.03576 & 0.0378 & 0.0408 & 0.02488 & 0.02406 & 0.1081 & \textcolor{gibbonslow}{0.1082} & 0.03818 & 0.03918 & 0.039 & 0.01616 & 0.01322 & 0.00934 & 0.008397 & 0.0084 & \textcolor{gibbonfast}{0.00837} & \textbf{2.87$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: Add1TreeInt32 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{Add1TreeInt32} (percent; companion to Table~\ref{tab:pldi-map-Add1TreeInt32}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Add1TreeInt32}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1Tree & +39.66\% & $-$12.34\% & $-$7.336\% & +51.96\% & +3.391\% & +183.3\% & $-$2.095\% & +0.4769\% & +142.5\% & +22.26\% & +73\% & +11.23\% & +11.19\% & +0.3584\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: Add1TreeInt64 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{Add1TreeInt64}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-Add1TreeInt64}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+add1Tree & 1/2 & 50\% & 0.05734 & 0.05437 & 0.05606 & 0.04452 & 0.04748 & 0.04531 & 0.03422 & 0.03416 & 0.1172 & \textcolor{gibbonslow}{0.1172} & 0.04638 & 0.04706 & 0.04691 & 0.02505 & 0.02243 & 0.0178 & 0.01713 & \textcolor{gibbonfast}{0.01711} & 0.01712 & \textbf{2.00$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: Add1TreeInt64 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{Add1TreeInt64} (percent; companion to Table~\ref{tab:pldi-map-Add1TreeInt64}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-Add1TreeInt64}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+add1Tree & +28.79\% & $-$1.746\% & +4.793\% & +38.74\% & +0.1903\% & +152.6\% & $-$1.136\% & +0.324\% & +87.87\% & +11.67\% & +40.74\% & +3.917\% & +4.014\% & $-$0.0584\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ArithmeticIntensityInt8 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ArithmeticIntensityInt8}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ArithmeticIntensityInt8}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+arithKernel & 1/2 & 50\% & 0.395 & 0.4866 & 0.3956 & 0.3749 & 0.4837 & 0.3707 & 0.4746 & 0.3585 & \textcolor{gibbonslow}{0.5529} & 0.5528 & 0.3807 & 0.4764 & 0.3784 & 0.4442 & 0.08113 & 0.4274 & \textcolor{gibbonfast}{0.07017} & 0.0729 & 0.07231 & \textbf{5.11$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ArithmeticIntensityInt8 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ArithmeticIntensityInt8} (percent; companion to Table~\ref{tab:pldi-map-ArithmeticIntensityInt8}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ArithmeticIntensityInt8}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+arithKernel & +5.376\% & +1.115\% & +30.48\% & +1.923\% & +32.38\% & +45.25\% & +0.5933\% & +25.91\% & +7.256\% & +447.5\% & +3.925\% & +509.1\% & +486.3\% & +0.8229\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ArithmeticIntensityInt16 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ArithmeticIntensityInt16}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ArithmeticIntensityInt16}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+arithKernel & 1/2 & 50\% & 0.2015 & \textcolor{gibbonslow}{0.4898} & 0.2018 & 0.1836 & 0.4784 & 0.1791 & 0.483 & 0.161 & 0.4048 & 0.405 & 0.19 & 0.484 & 0.1791 & 0.4523 & 0.0645 & 0.4351 & 0.05297 & 0.05344 & \textcolor{gibbonfast}{0.05293} & \textbf{3.04$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ArithmeticIntensityInt16 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ArithmeticIntensityInt16} (percent; companion to Table~\ref{tab:pldi-map-ArithmeticIntensityInt16}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ArithmeticIntensityInt16}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+arithKernel & +9.779\% & +2.503\% & +167.2\% & $-$0.94\% & +199.9\% & +113\% & +6.082\% & +170.2\% & +7.019\% & +601.2\% & +3.955\% & +721.4\% & +714.1\% & +0.9597\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ArithmeticIntensityInt32 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ArithmeticIntensityInt32}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ArithmeticIntensityInt32}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+arithKernel & 1/2 & 50\% & 0.3698 & \textcolor{gibbonslow}{0.5193} & 0.3697 & 0.3523 & 0.5173 & 0.3423 & 0.4937 & 0.3138 & 0.5062 & 0.5066 & 0.3436 & 0.4979 & 0.3326 & 0.4617 & 0.153 & 0.4441 & 0.1417 & 0.1378 & \textcolor{gibbonfast}{0.1367} & \textbf{2.30$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ArithmeticIntensityInt32 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ArithmeticIntensityInt32} (percent; companion to Table~\ref{tab:pldi-map-ArithmeticIntensityInt32}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ArithmeticIntensityInt32}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+arithKernel & +4.979\% & +2.918\% & +51.11\% & +4.769\% & +57.36\% & +47.34\% & +3.311\% & +49.71\% & +7.83\% & +201.7\% & +3.969\% & +213.3\% & +222.2\% & +0.8628\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: ArithmeticIntensityInt64 --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{ArithmeticIntensityInt64}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-ArithmeticIntensityInt64}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+arithKernel & 1/2 & 50\% & 0.5448 & 0.5169 & 0.5432 & 0.5171 & 0.5081 & 0.5069 & 0.5051 & 0.5058 & \textcolor{gibbonslow}{0.5951} & 0.5948 & 0.5056 & 0.5085 & 0.5078 & 0.5001 & 0.4955 & 0.4802 & \textcolor{gibbonfast}{0.4786} & 0.4793 & 0.4803 & 1.06$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: ArithmeticIntensityInt64 --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{ArithmeticIntensityInt64} (percent; companion to Table~\ref{tab:pldi-map-ArithmeticIntensityInt64}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-ArithmeticIntensityInt64}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+arithKernel & +5.341\% & +2.015\% & +0.2241\% & +0.5974\% & $-$0.1376\% & +17.7\% & $-$0.433\% & +0.1371\% & +1.678\% & +0.9377\% & +4.155\% & +0.3331\% & +0.1899\% & $-$0.2184\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{OctTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-OctTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+sumMass & 10/16 & 38\% & \textcolor{gibbonslow}{0.04422} & 0.03536 & 0.04359 & 0.03306 & 0.03492 & 0.03488 & $\ddagger$ & $\ddagger$ & 0.02681 & \textcolor{gibbonfast}{0.02592} & 0.02599 & \textbf{1.28$\times$} \\
+sumEnergy & 12/16 & 25\% & 0.04842 & 0.03896 & \textcolor{gibbonslow}{0.04842} & 0.03636 & 0.03747 & 0.03748 & $\ddagger$ & $\ddagger$ & 0.03259 & \textcolor{gibbonfast}{0.0284} & 0.02974 & \textbf{1.28$\times$} \\
+countActive & 10/16 & 38\% & \textcolor{gibbonslow}{0.04285} & 0.03562 & \textcolor{gibbonslow}{0.04285} & 0.03481 & 0.03543 & 0.03546 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.02711} & 0.02719 & 0.02727 & \textbf{1.28$\times$} \\
+countParticles & 8/16 & 50\% & \textcolor{gibbonslow}{0.04275} & 0.0332 & 0.04267 & 0.03411 & 0.03436 & 0.03439 & $\ddagger$ & $\ddagger$ & 0.02665 & \textcolor{gibbonfast}{0.02611} & 0.02627 & \textbf{1.27$\times$} \\
+barnesHutPotential & 11/16 & 31\% & \textcolor{gibbonslow}{0.05869} & 0.0435 & 0.05868 & 0.04325 & 0.04352 & 0.04351 & $\ddagger$ & $\ddagger$ & 0.04142 & \textcolor{gibbonfast}{0.04061} & 0.04455 & 1.06$\times$ \\
+fmmPotential & 12/16 & 25\% & \textcolor{gibbonslow}{0.1015} & 0.09905 & 0.09912 & 0.09909 & 0.09905 & 0.09901 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.09553} & 0.09581 & 0.09585 & 1.04$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: OctTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{OctTree} (percent; companion to Table~\ref{tab:pldi-fold-OctTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-OctTree}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+sumMass & +33.75\% & $-$5.217\% & +0.09173\% & -- & +3.151\% & $-$0.3001\% \\
+sumEnergy & +33.17\% & $-$3.001\% & $-$0.02134\% & -- & +9.59\% & $-$4.509\% \\
+countActive & +23.09\% & $-$1.811\% & $-$0.07051\% & -- & $-$0.616\% & $-$0.3263\% \\
+countParticles & +25.31\% & $-$0.8228\% & $-$0.08722\% & -- & +1.443\% & $-$0.59\% \\
+barnesHutPotential & +35.71\% & $-$0.5884\% & +0.04137\% & -- & $-$7.026\% & $-$8.833\% \\
+fmmPotential & +2.414\% & +0.08787\% & +0.04444\% & -- & $-$0.3359\% & $-$0.04069\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: OctTree --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{OctTree}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-OctTree}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+scaleEnergy & 7/9 & 78\% & 0.1502 & 0.154 & 0.1503 & 0.149 & 0.1541 & 0.1487 & 0.1316 & 0.1296 & $\ddagger$ & $\ddagger$ & 0.1856 & 0.186 & \textcolor{gibbonslow}{0.1882} & 0.1482 & 0.1426 & 0.04549 & 0.04548 & \textcolor{gibbonfast}{0.04543} & 0.04546 & \textbf{2.85$\times$} \\
+clearFlags & 8/9 & 89\% & 0.1522 & 0.1514 & 0.1518 & 0.152 & 0.1568 & 0.1618 & 0.1315 & 0.1302 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.1904} & 0.183 & 0.1843 & 0.1417 & 0.1359 & \textcolor{gibbonfast}{0.005922} & 0.006038 & 0.006008 & 0.005954 & \textbf{21.98$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: OctTree --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{OctTree} (percent; companion to Table~\ref{tab:pldi-map-OctTree}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-OctTree}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+scaleEnergy & +0.7515\% & +0.2394\% & +3.651\% & +17.13\% & +1.522\% & -- & $-$1.416\% & $-$1.168\% & +25.51\% & +3.978\% & +225.9\% & +0.01539\% & +0.1343\% & $-$0.06819\% \\
+clearFlags & +0.1744\% & $-$6.07\% & $-$3.105\% & +19.22\% & +1.019\% & -- & +3.286\% & $-$0.6809\% & +29.19\% & +4.227\% & +2293\% & $-$1.921\% & $-$1.431\% & +0.907\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{Per-pass fold performance for \texttt{PiecewiseFunctions}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Nothing in a fold is loopifiable, so the loopified pair Table~\ref{tab:summary} contrasts is absent here. }
+\label{tab:pldi-fold-PiecewiseFunctions}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{6}{c}{\textbf{AoS}} & \multicolumn{5}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-9}\cmidrule(lr){10-14}
+ & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+norm2Estimate & 5/8 & 38\% & 0.06555 & 0.03008 & 0.06545 & 0.02726 & 0.02793 & 0.028 & 0.3173 & \textcolor{gibbonslow}{0.332} & 0.03941 & \textcolor{gibbonfast}{0.02088} & 0.02273 & \textbf{1.31$\times$} \\
+truncateTolViolations & 3/8 & 62\% & 0.04858 & 0.03069 & 0.04834 & 0.02634 & 0.02395 & 0.0237 & 0.2735 & \textcolor{gibbonslow}{0.2737} & 0.01888 & \textcolor{gibbonfast}{0.01195} & 0.01199 & \textbf{1.98$\times$} \\
+compressMass & 3/8 & 62\% & 0.04685 & 0.03088 & 0.04703 & 0.02681 & 0.02595 & 0.02515 & 0.2731 & \textcolor{gibbonslow}{0.2751} & 0.0149 & 0.01194 & \textcolor{gibbonfast}{0.01181} & \textbf{2.13$\times$} \\
+autorefineMaxLevel & 4/8 & 50\% & 0.04711 & 0.02844 & 0.04824 & 0.02815 & 0.02739 & 0.02728 & 0.2922 & \textcolor{gibbonslow}{0.2949} & 0.0209 & \textcolor{gibbonfast}{0.0193} & 0.02031 & \textbf{1.41$\times$} \\
+pmapCutHistogram & 4/8 & 50\% & 0.05824 & 0.03888 & 0.05794 & 0.0262 & 0.02548 & 0.02532 & \textcolor{gibbonslow}{0.2805} & 0.2657 & 0.01977 & \textcolor{gibbonfast}{0.01223} & 0.01326 & \textbf{2.07$\times$} \\
+lbDeuxLoadProxy & 5/8 & 38\% & 0.04858 & 0.02905 & 0.04857 & 0.02711 & 0.02615 & 0.02628 & 0.2801 & \textcolor{gibbonslow}{0.2933} & 0.02089 & \textcolor{gibbonfast}{0.01677} & 0.01738 & \textbf{1.56$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI fold delta table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per fold pass, for \texttt{PiecewiseFunctions} (percent; companion to Table~\ref{tab:pldi-fold-PiecewiseFunctions}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-fold-delta-PiecewiseFunctions}
+\small\gibbonnumfont
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{3}{c}{\textbf{AoS}} & \multicolumn{3}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
+\midrule
+norm2Estimate & +140.4\% & $-$2.643\% & $-$0.2464\% & +705.1\% & +73.4\% & $-$8.143\% \\
+truncateTolViolations & +84.42\% & +11.13\% & +1.051\% & +1349\% & +57.49\% & $-$0.2837\% \\
+compressMass & +74.76\% & +6.614\% & +3.213\% & +1733\% & +26.16\% & +1.135\% \\
+autorefineMaxLevel & +67.32\% & +3.208\% & +0.4216\% & +1298\% & +2.91\% & $-$4.988\% \\
+pmapCutHistogram & +122.2\% & +3.487\% & +0.624\% & +1319\% & +49.12\% & $-$7.717\% \\
+lbDeuxLoadProxy & +79.19\% & +3.166\% & $-$0.5023\% & +1241\% & +20.18\% & $-$3.532\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{Per-pass map performance for \texttt{PiecewiseFunctions}. Times are median per iteration (s). Columns are compiled configurations (Table~\ref{tab:pldi-legend}); the paragraph below it explains the shared columns and the failure symbols. Table~\ref{tab:summary} reports a pass-SUM per program while each row here is one pass, so a program with several map passes can lead here and trail there. }
+\label{tab:pldi-map-PiecewiseFunctions}
+\tiny\gibbonnumfont
+\setlength{\tabcolsep}{2pt}
+\gibbonfit{%
+\begin{tabular}{l c c r r r r r r r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & & & \multicolumn{8}{c}{\textbf{AoS}} & \multicolumn{11}{c}{\textbf{SoA}} & \\
+\cmidrule(lr){4-11}\cmidrule(lr){12-22}
+ & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
+\midrule
+addConstPW & 6/7 & 86\% & 0.1305 & 0.1282 & 0.13 & 0.1225 & 0.1251 & 0.1231 & 0.1083 & 0.1092 & \textcolor{gibbonslow}{0.4994} & 0.4972 & 0.1401 & 0.1396 & 0.1345 & 0.1037 & 0.09928 & 0.01618 & 0.01553 & 0.01555 & \textcolor{gibbonfast}{0.01552} & \textbf{6.97$\times$} \\
+diffPW & 5/7 & 71\% & 0.1288 & 0.1274 & 0.1291 & 0.125 & 0.1233 & 0.1221 & 0.1105 & 0.1087 & \textcolor{gibbonslow}{0.5509} & 0.5319 & 0.1389 & 0.1375 & 0.1342 & 0.1021 & 0.09919 & 0.03467 & \textcolor{gibbonfast}{0.03357} & 0.0338 & 0.0337 & \textbf{3.24$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% -- PLDI map delta table: PiecewiseFunctions --
+\begin{table}[t]
+\centering
+\caption{What each optimization bought, per map pass, for \texttt{PiecewiseFunctions} (percent; companion to Table~\ref{tab:pldi-map-PiecewiseFunctions}). Every column is (\emph{baseline} $-$ \emph{feature enabled}) / \emph{feature enabled}, identically $(\text{speedup} - 1) \times 100$; a negative value means the feature made the pass slower. Table~\ref{tab:pldi-delta-legend} defines each column. `--' marks a pass where either side was not measured.}
+\label{tab:pldi-map-delta-PiecewiseFunctions}
+\scriptsize\gibbonnumfont
+\setlength{\tabcolsep}{3pt}
+\gibbonfit{%
+\begin{tabular}{l r r r r r r r r r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{5}{c}{\textbf{AoS}} & \multicolumn{9}{c}{\textbf{SoA}} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-15}
+ & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
+\midrule
+addConstPW & +6.56\% & $-$0.5271\% & +1.603\% & +15.54\% & $-$0.858\% & +256.5\% & +4.185\% & +3.801\% & +34.61\% & +4.427\% & +540.9\% & +4.159\% & +4.046\% & +0.1611\% \\
+diffPW & +3.003\% & +2.397\% & +1.036\% & +11.63\% & +1.61\% & +296.7\% & +3.468\% & +2.459\% & +34.74\% & +2.918\% & +194.5\% & +3.268\% & +2.568\% & +0.3027\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% Integer-width add1Tree vectorization
+\begin{table}[h]
+\centering
+\caption{Integer-width add1Tree vectorization. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Every column is compiled with the C compiler's auto-vectorizer disabled (\texttt{--no-gcc-vectorize}, which suppresses basic-block/SLP vectorization as well as loop vectorization), so the SIMD column isolates Gibbon's own vectorizer rather than the backend's; absolute times are correspondingly higher than a default build. Every configuration was compiled with \texttt{--reclaim-iterate-regions}, so the per-iteration region chunks are freed rather than stranded; peak memory is flat in the iteration count instead of linear. }
+\label{tab:add1tree_widths}
+\small
+\gibbonfit{%
+\begin{tabular}{lcccccccc}
+\toprule
+Width & AoS raw & SoA raw & AoS/SoA & SoA loopify & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Qual. \\
+\midrule
+Int8 & 0.034806 & 0.033609 & 1.04$\times$ & 0.009621 & 0.008314 & \textbf{1.16$\times$} & \textbf{4.19$\times$} & OK \\
+Int16 & 0.032953 & 0.034875 & 0.94$\times$ & 0.011263 & 0.010235 & \textbf{1.10$\times$} & \textbf{3.22$\times$} & OK \\
+Int32 & 0.037522 & 0.038797 & 0.97$\times$ & 0.016008 & 0.014991 & 1.07$\times$ & \textbf{2.50$\times$} & OK \\
+Int64 & 0.047491 & 0.046930 & 1.01$\times$ & 0.024976 & 0.024346 & 1.03$\times$ & \textbf{1.95$\times$} & OK \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+% Integer-width high-arithmetic-intensity vectorization
+\begin{table}[h]
+\centering
+\caption{Integer-width high-arithmetic-intensity vectorization. Every configuration was compiled for the same SIMD target, 256-bit AVX2 (\texttt{-mavx2}); Gibbon's vectorizer and the C compiler's auto-vectorizer both target it, so the columns are like-for-like. Every column is compiled with the C compiler's auto-vectorizer disabled (\texttt{--no-gcc-vectorize}, which suppresses basic-block/SLP vectorization as well as loop vectorization), so the SIMD column isolates Gibbon's own vectorizer rather than the backend's; absolute times are correspondingly higher than a default build. Every configuration was compiled with \texttt{--reclaim-iterate-regions}, so the per-iteration region chunks are freed rather than stranded; peak memory is flat in the iteration count instead of linear. Selective buffer sharing is enabled from the \textbf{SoA loopify shared} column onwards, including the SIMD column, so those cells are directly comparable with the per-program map tables, whose SoA columns also enable it. \textbf{SIMD spd.} divides the shared column by the SIMD one -- the two differ by the vectorizer alone, so it reports what vectorization buys and nothing else; \textbf{AoS-vs-SIMD} keeps AoS as its baseline and therefore includes every SoA-side optimization. Int64's packed multiply is EMULATED, and its SIMD column is compiled with \texttt{--simd-w64-multiply} to measure it. x86 has no packed 64-bit multiply below AVX-512DQ, so the helper synthesizes one from three packed $32{\times}32{\to}64$ multiplies plus two shifts and two adds, all in registers -- correct SIMD, but seven instructions for two lanes against one \texttt{imul} per lane scalar. The compiler therefore refuses it by default; the number here is what enabling it costs, and a speedup below $1{\times}$ in that row is the expected result rather than a defect.}
+\label{tab:arith_intensity}
+\small
+\gibbonfit{%
+\begin{tabular}{lccccccccccccc}
+\toprule
+Width & Ops/elem & Bytes ld/elem & Bytes st/elem & Ops/byte & AoS raw & SoA raw & SoA loopify & SoA loopify shared & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Status & Qual. \\
+\midrule
+Int8 & 415 & 1 & 1 & 207.50 & 0.481370 & 0.473759 & 0.443244 & 0.425760 & 0.072345 & \textbf{5.89$\times$} & \textbf{6.65$\times$} & SIMD & OK \\
+Int16 & 415 & 2 & 2 & 103.75 & 0.476647 & 0.481458 & 0.451213 & 0.433232 & 0.053201 & \textbf{8.14$\times$} & \textbf{8.96$\times$} & SIMD & OK \\
+Int32 & 415 & 4 & 4 & 51.88 & 0.498036 & 0.495553 & 0.460476 & 0.441634 & 0.137355 & \textbf{3.22$\times$} & \textbf{3.63$\times$} & SIMD & OK \\
+Int64 & 415 & 8 & 8 & 25.94 & 0.487155 & 0.487397 & 0.481373 & 0.460452 & 0.534107 & 0.86$\times$ & 0.91$\times$ & SIMD (emulated multiply) & OK \\
+\bottomrule
+\end{tabular}}
+\end{table}
 

@@ -3931,5 +3931,355 @@ class TestStageFigureGroups(unittest.TestCase):
             self.assertEqual(programs, ["KDTree.hs", "MonoTree.hs"])
 
 
+def _counter_result(program, cfg, per_pass, verified=True):
+    """A result whose passes carry hardware counts.
+
+    `per_pass` is {pass name: (pass_type, {counter: median})}; the median
+    time is present too, since a counter run is still a run."""
+    data = {}
+    for pname, (ptype, counters) in per_pass.items():
+        data[pname] = {
+            "median_time": 0.1, "pass_type": ptype,
+            "papi_counters": {c: {"median": v, "n": 3}
+                              for c, v in counters.items()},
+            "papi_native_events": {c: "perf::" + c for c in counters},
+        }
+    res = _make_result(program, cfg, data, verified=verified)
+    res.papi_counters = sorted({c for _t, cs in per_pass.values() for c in cs})
+    return res
+
+
+class TestCounterTotals(unittest.TestCase):
+    """A counter total is a sum of per-pass medians, and refuses to be a
+    partial one."""
+
+    def _by_cfg(self, **counts_per_cfg):
+        return {cfg: _counter_result("P.hs", cfg, per_pass)
+                for cfg, per_pass in counts_per_cfg.items()}
+
+    def test_sums_every_timed_pass(self):
+        by_cfg = self._by_cfg(aos_mut={
+            "f": ("fold", {"LLC_LOAD_MISSES": 10.0}),
+            "m": ("map", {"LLC_LOAD_MISSES": 32.0})})
+        self.assertEqual(
+            gb.pldi_counter_total(by_cfg, "aos_mut", "LLC_LOAD_MISSES"), 42.0)
+
+    def test_pass_type_selects_a_subset(self):
+        by_cfg = self._by_cfg(aos_mut={
+            "f": ("fold", {"LLC_LOAD_MISSES": 10.0}),
+            "m": ("map", {"LLC_LOAD_MISSES": 32.0})})
+        self.assertEqual(
+            gb.pldi_counter_total(by_cfg, "aos_mut", "LLC_LOAD_MISSES", "fold"),
+            10.0)
+        self.assertEqual(
+            gb.pldi_counter_total(by_cfg, "aos_mut", "LLC_LOAD_MISSES", "map"),
+            32.0)
+
+    def test_a_pass_missing_the_counter_makes_the_total_none(self):
+        """Not a smaller sum: a total over fewer traversals is not this
+        program's count, and a ratio built from one compares different
+        amounts of work."""
+        by_cfg = self._by_cfg(aos_mut={
+            "f": ("fold", {"LLC_LOAD_MISSES": 10.0}),
+            "m": ("map", {"L1D_LOAD_MISSES": 5.0})})
+        self.assertIsNone(
+            gb.pldi_counter_total(by_cfg, "aos_mut", "LLC_LOAD_MISSES"))
+
+    def test_no_pass_of_that_kind_is_none(self):
+        by_cfg = self._by_cfg(aos_mut={"f": ("fold", {"L2D_MISSES": 1.0})})
+        self.assertIsNone(
+            gb.pldi_counter_total(by_cfg, "aos_mut", "L2D_MISSES", "map"))
+
+    def test_an_unverified_configuration_carries_no_counts(self):
+        res = _counter_result("P.hs", "soa_mut",
+                              {"f": ("fold", {"L2D_MISSES": 7.0})},
+                              verified=False)
+        self.assertIsNone(
+            gb.pldi_counter_total({"soa_mut": res}, "soa_mut", "L2D_MISSES"))
+        self.assertIsNone(
+            gb.pldi_counter_value({"soa_mut": res}, "soa_mut", "f",
+                                  "L2D_MISSES"))
+
+    def test_a_merged_family_reads_the_member_that_ran_the_pass(self):
+        owner = _counter_result("Fam.hs", "aos_mut",
+                                {"a": ("fold", {"L2D_MISSES": 3.0})})
+        member = _counter_result("Fam_b.hs", "aos_mut",
+                                 {"b": ("fold", {"L2D_MISSES": 4.0})})
+        owner.passes["b"] = member.passes["b"]
+        owner.pass_origin = {"b": member}
+        self.assertEqual(
+            gb.pldi_counter_value({"aos_mut": owner}, "aos_mut", "b",
+                                  "L2D_MISSES"), 4.0)
+
+
+class TestCounterOrdering(unittest.TestCase):
+    def test_data_counters_come_before_context_ones(self):
+        res = _counter_result("P.hs", "aos_mut", {
+            "f": ("fold", {"CPU_CYCLES": 1.0, "LLC_LOAD_MISSES": 2.0,
+                           "L1D_LOAD_MISSES": 3.0})})
+        order = gb.pldi_counters_present({"P.hs": {"aos_mut": res}})
+        self.assertEqual(order,
+                         ["L1D_LOAD_MISSES", "LLC_LOAD_MISSES", "CPU_CYCLES"])
+
+    def test_an_unknown_counter_is_kept_and_sorted_last(self):
+        res = _counter_result("P.hs", "aos_mut", {
+            "f": ("fold", {"L2D_MISSES": 1.0, "SOMETHING_NEW": 2.0})})
+        self.assertEqual(
+            gb.pldi_counters_present({"P.hs": {"aos_mut": res}}),
+            ["L2D_MISSES", "SOMETHING_NEW"])
+
+
+class TestCounterStageRows(unittest.TestCase):
+    """The stage heatmaps take a metric, so a counter telescopes through the
+    same chain a time does."""
+
+    def _matrix(self, per_cfg):
+        return {"P.hs": {cfg: _counter_result("P.hs", cfg, {
+            "m": ("map", {"LLC_LOAD_MISSES": misses})})
+            for cfg, misses in per_cfg.items()}}
+
+    def _chain_configs(self):
+        chain = gb._pldi_stage_chain("map", None, False)
+        return [chain[0][1]] + [t for _l, _s, t in chain]
+
+    def test_cells_are_previous_over_this_and_multiply_to_the_total(self):
+        cfgs = self._chain_configs()
+        # Each stage halves the misses, so every cell is 2x and the total is
+        # 2^(number of stages).
+        matrix = self._matrix({cfg: 1024.0 / (2 ** i)
+                               for i, cfg in enumerate(cfgs)})
+        rows, labels, dropped = gb._pldi_stage_rows(
+            matrix, "map", False,
+            metric=gb.pldi_counter_metric("LLC_LOAD_MISSES", "map"))
+        self.assertEqual(dropped, [])
+        self.assertEqual(len(rows), 1)
+        factors = rows[0]["factors"]
+        self.assertEqual(len(factors), len(labels))
+        self.assertAlmostEqual(factors[0], 1.0)
+        for i, f in enumerate(factors):
+            self.assertAlmostEqual(f, 2.0 ** i, places=9)
+        self.assertAlmostEqual(rows[0]["total"], 2.0 ** (len(factors) - 1))
+
+    def test_a_missing_count_drops_the_program_rather_than_holing_the_row(self):
+        cfgs = self._chain_configs()
+        matrix = self._matrix({cfg: 100.0 for cfg in cfgs})
+        # One configuration reports a different counter and none of this one.
+        broken = cfgs[-1]
+        matrix["P.hs"][broken] = _counter_result(
+            "P.hs", broken, {"m": ("map", {"L1D_LOAD_MISSES": 5.0})})
+        rows, _labels, dropped = gb._pldi_stage_rows(
+            matrix, "map", False,
+            metric=gb.pldi_counter_metric("LLC_LOAD_MISSES", "map"))
+        self.assertEqual(rows, [])
+        self.assertEqual(dropped, ["P.hs"])
+
+    def test_without_a_metric_the_rows_are_still_timings(self):
+        """The default path is untouched: no metric means time, exactly as
+        before."""
+        cfgs = self._chain_configs()
+        matrix = {"P.hs": {cfg: _make_result("P.hs", cfg, {
+            "m": {"median_time": 1.0 / (i + 1), "pass_type": "map"}})
+            for i, cfg in enumerate(cfgs)}}
+        rows, _labels, _dropped = gb._pldi_stage_rows(matrix, "map", False)
+        self.assertAlmostEqual(rows[0]["total"], float(len(cfgs)))
+
+
+class TestCounterLayoutPair(unittest.TestCase):
+    def test_the_pair_is_the_step_that_changes_only_the_layout(self):
+        available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
+        matrix = {"P.hs": {cfg: _counter_result(
+            "P.hs", cfg, {"f": ("fold", {"L2D_MISSES": 1.0})})
+            for cfg in available}}
+        pair = gb.pldi_counter_layout_pair(matrix)
+        self.assertIsNotNone(pair)
+        aos_cfg, soa_cfg = pair
+        self.assertTrue(aos_cfg.startswith("aos"), aos_cfg)
+        self.assertTrue(soa_cfg.startswith("soa"), soa_cfg)
+        # It is a step of the chain the figures use, not a name of its own.
+        chain = gb._pldi_stage_chain("map", available, False)
+        self.assertIn((gb.PLDI_COUNTER_LAYOUT_STAGE, aos_cfg, soa_cfg), chain)
+
+
+class TestCounterTables(unittest.TestCase):
+    def _tex(self, matrix):
+        import io as _io
+        f = _io.StringIO()
+        gb.write_pldi_counter_tables(f, matrix)
+        return f.getvalue()
+
+    def _full_matrix(self, aos_misses=200.0, soa_misses=100.0, insns=1e6):
+        available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
+        matrix = {"KDTree.hs": {}}
+        for cfg in available:
+            misses = aos_misses if cfg.startswith("aos") else soa_misses
+            matrix["KDTree.hs"][cfg] = _counter_result("KDTree.hs", cfg, {
+                "f": ("fold", {"LLC_LOAD_MISSES": misses,
+                               "INSTRUCTIONS": insns})})
+        return matrix
+
+    def test_totals_ratio_and_mpki_are_rendered(self):
+        tex = self._tex(self._full_matrix())
+        self.assertIn("\\label{tab:pldi_counters_totals}", tex)
+        self.assertIn("\\label{tab:pldi_counters_mpki}", tex)
+        self.assertIn("KDTree", tex)
+        # 200 / 100
+        self.assertIn("2.00", tex)
+        # 100 misses per 1e6 instructions -> 0.10 per thousand
+        self.assertIn("0.10", tex)
+
+    def test_the_notes_say_the_counts_are_not_from_the_timed_binaries(self):
+        """The one fact a reader cannot recover from a cell."""
+        tex = self._tex(self._full_matrix())
+        self.assertIn("separate", tex)
+        self.assertIn("libpapi", tex)
+
+    def test_a_per_program_table_lists_the_passes(self):
+        tex = self._tex(self._full_matrix())
+        self.assertIn("\\label{tab:KDTree_pldi_counters}", tex)
+        self.assertIn("\\texttt{f}", tex)
+
+    def test_nothing_is_written_when_no_counter_was_reported(self):
+        available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
+        matrix = {"KDTree.hs": {
+            cfg: _make_result("KDTree.hs", cfg,
+                              {"f": {"median_time": 0.1, "pass_type": "fold"}})
+            for cfg in available}}
+        tex = self._tex(matrix)
+        self.assertNotIn("tab:pldi_counters_totals", tex)
+
+
+class TestCounterFigures(unittest.TestCase):
+    def test_one_figure_per_data_counter_and_pass_kind(self):
+        drawn = []
+
+        def capture(results, out, kind, title, extended=False,
+                    metric=None, worse_note=None):
+            drawn.append((out.name, kind, metric is not None))
+            return []
+
+        available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
+        matrix = {"KDTree.hs": {cfg: _counter_result("KDTree.hs", cfg, {
+            "f": ("fold", {"LLC_LOAD_MISSES": 10.0, "L2D_MISSES": 5.0})})
+            for cfg in available}}
+        import tempfile
+        with mock.patch.object(gb, "_fig_pldi_stages", capture), \
+                mock.patch.object(gb, "_pub_rc", lambda: None):
+            with tempfile.TemporaryDirectory() as d:
+                gb.generate_pldi_counter_figures(matrix, Path(d))
+        names = sorted(n for n, _k, _m in drawn)
+        self.assertEqual(names, [
+            "pldi_counters_l2d_misses_all",
+            "pldi_counters_l2d_misses_fold",
+            "pldi_counters_l2d_misses_map",
+            "pldi_counters_llc_load_misses_all",
+            "pldi_counters_llc_load_misses_fold",
+            "pldi_counters_llc_load_misses_map",
+        ])
+        # Every one draws a counter, never the default timing metric.
+        self.assertTrue(all(has_metric for _n, _k, has_metric in drawn))
+
+    def test_a_dip_is_described_as_misses_not_as_slowness(self):
+        notes = []
+
+        def capture(results, out, kind, title, extended=False,
+                    metric=None, worse_note=None):
+            notes.append(worse_note)
+            return []
+
+        available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
+        matrix = {"KDTree.hs": {cfg: _counter_result("KDTree.hs", cfg, {
+            "f": ("fold", {"LLC_LOAD_MISSES": 10.0})}) for cfg in available}}
+        import tempfile
+        with mock.patch.object(gb, "_fig_pldi_stages", capture), \
+                mock.patch.object(gb, "_pub_rc", lambda: None):
+            with tempfile.TemporaryDirectory() as d:
+                gb.generate_pldi_counter_figures(matrix, Path(d))
+        self.assertTrue(notes)
+        for note in notes:
+            self.assertIn("misses", note)
+            self.assertNotIn("slower", note)
+
+
+class TestCounterPhaseWiring(unittest.TestCase):
+    def test_the_counter_matrix_json_says_what_it_holds(self):
+        import tempfile
+        matrix = {"P.hs": {"aos_mut": _counter_result(
+            "P.hs", "aos_mut", {"f": ("fold", {"L2D_MISSES": 1.0})})}}
+        with tempfile.TemporaryDirectory() as d:
+            counters = Path(d) / "c.json"
+            timings = Path(d) / "t.json"
+            gb.write_pldi_matrix_json(matrix, counters, {},
+                                      matrix_kind="counters")
+            gb.write_pldi_matrix_json(matrix, timings, {})
+            self.assertEqual(gb.json_report_kind(counters), "counters")
+            self.assertEqual(gb.json_report_kind(timings), "matrix")
+
+    def test_the_phase_refuses_to_run_unpinned(self):
+        """Counters read zero on this machine's efficiency cores, so an
+        unpinned run would report zeros rather than failing."""
+        with self.assertRaises(RuntimeError) as caught:
+            gb.collect_pldi_counter_results(
+                Path("programs"), Path("out"), "gcc", False, iterations=1,
+                pin_cpu=None)
+        self.assertIn("pin-cpu", str(caught.exception))
+
+    def test_the_phase_instruments_and_skips_build_timing(self):
+        seen = {}
+
+        def fake(*args, **kwargs):
+            seen.update(kwargs)
+            return {}
+
+        with mock.patch.object(gb, "collect_pldi_variant_results", fake):
+            gb.collect_pldi_counter_results(
+                Path("programs"), Path("out"), "gcc", False, iterations=4,
+                pin_cpu=3)
+        self.assertTrue(seen["enable_papi_native"])
+        self.assertFalse(seen["measure_build"])
+        self.assertEqual(seen["iterations"], 4)
+
+    def test_its_binaries_live_apart_from_the_timed_ones(self):
+        """A counter build must never stand in for the binary a published
+        time came from."""
+        seen = {}
+
+        def fake(programs_dir, out_dir, *args, **kwargs):
+            seen["out_dir"] = out_dir
+            return {}
+
+        with mock.patch.object(gb, "collect_pldi_variant_results", fake):
+            gb.collect_pldi_counter_results(
+                Path("programs"), Path("bench_out"), "gcc", False,
+                iterations=1, pin_cpu=3)
+        self.assertNotEqual(seen["out_dir"], Path("bench_out"))
+        self.assertEqual(seen["out_dir"].parent, Path("bench_out"))
+
+
+class TestCounterCommandLine(unittest.TestCase):
+    """In a subprocess, because main() rewrites the module-level
+    configuration registries -- calling it in-process leaves every later test
+    reading a mutated PLDI matrix."""
+
+    def _error(self, argv):
+        import subprocess
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "gibbon_benchmark.py")] + argv,
+            capture_output=True, text=True, timeout=120)
+        self.assertNotEqual(proc.returncode, 0, proc.stdout)
+        return proc.stderr
+
+    def test_it_requires_the_pldi_matrix(self):
+        self.assertIn("--pldi-submission",
+                      self._error(["--pldi-cache-counters", "--pin-cpu", "auto"]))
+
+    def test_it_requires_pinning(self):
+        self.assertIn("pin-cpu",
+                      self._error(["--pldi-cache-counters", "--pldi-submission"]))
+
+    def test_counter_iterations_defaults_below_the_timing_count(self):
+        args = gb.build_parser().parse_args([])
+        self.assertLess(args.counter_iterations, args.iterations)
+
+
 if __name__ == "__main__":
     unittest.main()

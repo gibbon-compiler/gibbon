@@ -1,21 +1,17 @@
-Gibbon testsuite summary:  (2026-06-05 01:15:49.585342275 EDT)
+Gibbon testsuite summary:  (2026-09-14 00:24:10.51177568 EDT)
 --------------------------------------------------------------------------------
-Time taken: 609s
+Time taken: 830s
 
-148 expected passes
-2 unexpected passes
-30 expected failures
-13 unexpected failures
+237 expected passes
+0 unexpected passes
+29 expected failures
+21 unexpected failures
 107 skipped
 
 Skipped: 
 --------------------------------------------------------------------------------
 void_type.hs, void_type.gib, unariser_bug1.hs, test_unpacking.gib, test_sumup_seteven.gib, test_power.hs, test_circsim.hs, test_buildtwotrees.gib, test_168.hs, test29d_list.gib, test29c_list.gib, test29_list.gib, test27b_subst.gib, test27a_subst.gib, test26a_treewalk.gib, test26_treewalk.gib, test25f_countnodes.gib, test25d_racketcore.gib, test25c_racketcore.gib, test25b_racketcore.gib, test25a_withprint.gib, test25_rackcore.gib, test24_defs.gib, test18_badconstraint.gib, test17_forfold.gib, test16_forlist.gib, test15c_printsym.gib, test15b_symappend.gib, test14b_tup.gib, test14b_tup.gib, test14_repair.gib, test12c_traverse.gib, test12b_traverse.gib, test12_skip.gib, test12_skip.gib, test06c_nested.gib, replicate_traverse_copyPacked_bug.hs, replicate_failing_gc.hs, replicate_copyPacked_bug.hs, replicate_calculateBounds_bug.hs, render_tree_two_passes.hs, render_tree_four_passes.hs, render_tree_five_passes.hs, render_tree.hs, processAdtTagsTca2.hs, processAdtTagsTca.hs, processAdtTagsTac2.hs, processAdtTagsTac.hs, processAdtTagsCta2.hs, processAdtTagsCta.hs, processAdtTagsCat2.hs, processAdtTagsCat.hs, processAdtTagsAtc2.hs, processAdtTagsAtc.hs, processAdtTagsAct2.hs, processAdtTagsAct.hs, processAdtContentAC.hs, pp_projs.gib, layout8TagSearch.hs, layout8InsertTag.hs, layout8DeleteTag.hs, layout8ContentSearch.hs, layout7TagSearch.hs, layout7InsertTag.hs, layout7DeleteTag.hs, layout7ContentSearch.hs, layout6TagSearch.hs, layout6InsertTag.hs, layout6DeleteTag.hs, layout6ContentSearch.hs, layout5TagSearch.hs, layout5InsertTag.hs, layout5DeleteTag.hs, layout5ContentSearch.hs, layout4TagSearch.hs, layout4InsertTag.hs, layout4DeleteTag.hs, layout4ContentSearch.hs, layout3TagSearch.hs, layout3InsertTag.hs, layout3DeleteTag.hs, layout3ContentSearch.hs, layout2TagSearch.hs, layout2ListLen.hs, layout2InsertTag.hs, layout2DeleteTag.hs, layout2ContentSearch.hs, layout1TagSearch.hs, layout1ListLen.hs, layout1InsertTag.hs, layout1DeleteTag.hs, layout1ContentSearch.hs, eval_bench.hs, bench_tree_insert.gib, bench_compose2.gib, bench_compose1.gib, Vector.hs, TupleTest.hs, Test187.hs, T64_2.gib, SortPrim.hs, Sort.hs, NestedTuples.hs, LC.hs, DataVector.hs, CurriedFns.hs, C1.hs
 
-Unexpected passes:
---------------------------------------------------------------------------------
-test_printpacked.hs       : GibbonInt32
-tree.hs                   : GibbonInt32
 
 Unexpected failures:
 --------------------------------------------------------------------------------
@@ -24,499 +20,22 @@ Gibbon2:
   Segmentation fault (core dumped)
     Treelang program exited with error code  139
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 1798260)
-
-    Actual normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 0)
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 1798260)
-
-    Actual normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 0)
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 1798260)
-
-    Actual normalized output:
-    Running program ColorOctree Quantization: 
-    Running pass paletteEntriesQuantized (fold, uses=13): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass quantizationErrorProxy (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(32768 0)
-
-
 OctTree.hs               :
 Gibbon2:
   Treelang program exited with error code  1
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 168666193 261 32768 449557 456751 163489516 261)
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 5399794 213 32768 387278 73391 3952785 213)
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 168666193 261 32768 449557 456751 163489516 261)
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 5399794 213 32768 387278 73391 3952785 213)
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 168666193 261 32768 449557 456751 163489516 261)
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumMass (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass countParticles (fold, uses=8): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    '#(98302 5399794 213 32768 387278 73391 3952785 213)
-
-
 OctTree_barnesHutPotential.hs:
 Gibbon2:
   Treelang program exited with error code  1
-
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    449557
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    387278
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    449557
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    387278
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    449557
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass barnesHutPotential (fold_like, uses=11): 
-    ITERS: 1
-    SIZE: 1
-    End
-    387278
-
 
 OctTree_clearFlags.hs    :
 Gibbon2:
   Segmentation fault (core dumped)
     Treelang program exited with error code  139
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    81
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    85
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    81
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    85
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    81
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass clearFlags (map, uses=15): 
-    ITERS: 1
-    SIZE: 1
-    End
-    85
-
-
 OctTree_countActive.hs   :
 Gibbon2:
   Treelang program exited with error code  1
-
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    261
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    213
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    261
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    213
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    261
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass countActive (fold, uses=10): 
-    ITERS: 1
-    SIZE: 1
-    End
-    213
-
 
 OctTree_countParticles.hs:
 Gibbon2:
@@ -526,189 +45,240 @@ OctTree_fmmPotential.hs  :
 Gibbon2:
   Treelang program exited with error code  1
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    456751
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    73391
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    456751
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    73391
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    456751
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass fmmPotential (fold_like, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    73391
-
-
 OctTree_scaleEnergy.hs   :
 Gibbon2:
   Segmentation fault (core dumped)
     Treelang program exited with error code  139
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    40351857
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    33021
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    40351857
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    33021
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    40351857
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass scaleEnergy (map, uses=16): 
-    ITERS: 1
-    SIZE: 1
-    End
-    33021
-
-
 OctTree_sumEnergy.hs     :
 Gibbon2:
   Treelang program exited with error code  1
 
-  GibbonLoopify:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    168666193
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    5399794
-
-
-  GibbonSelective:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    168666193
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    5399794
-
-
-  GibbonVectorize:
-  Output differed from baseline after removing timing lines.
-    Expected normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    168666193
-
-    Actual normalized output:
-    Running program OctTree Physics Simulation: 
-    Running pass sumEnergy (fold, uses=12): 
-    ITERS: 1
-    SIZE: 1
-    End
-    5399794
-
-
 OctTree_sumMass.hs       :
 Gibbon2:
   Treelang program exited with error code  1
+
+Reverse.hs               :
+Gibbon2:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "500000500000", got "ITERS:"
+      expected around here: 500000500000
+      actual   around here: ITERS: 1 SIZE: 1 1
+    Expected normalized output:
+    500000500000
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    1
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbon2.out.normalized-expected	2026-09-14 00:14:21.082560967 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbon2.out.normalized-actual	2026-09-14 00:14:21.083666751 -0400
+    @@ -1 +1,3 @@
+    -500000500000
+    +ITERS: 1
+    +SIZE: 1
+    +1
+
+  GibbonLoopify:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "500000500000", got "ITERS:"
+      expected around here: 500000500000
+      actual   around here: ITERS: 1 SIZE: 1 1
+    Expected normalized output:
+    500000500000
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    1
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonLoopify.out.normalized-expected	2026-09-14 00:14:22.106584706 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonLoopify.out.normalized-actual	2026-09-14 00:14:22.107378234 -0400
+    @@ -1 +1,3 @@
+    -500000500000
+    +ITERS: 1
+    +SIZE: 1
+    +1
+
+  GibbonSelective:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "500000500000", got "ITERS:"
+      expected around here: 500000500000
+      actual   around here: ITERS: 1 SIZE: 1 1
+    Expected normalized output:
+    500000500000
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    1
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonSelective.out.normalized-expected	2026-09-14 00:14:23.143608747 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonSelective.out.normalized-actual	2026-09-14 00:14:23.143762440 -0400
+    @@ -1 +1,3 @@
+    -500000500000
+    +ITERS: 1
+    +SIZE: 1
+    +1
+
+  GibbonVectorize:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "500000500000", got "ITERS:"
+      expected around here: 500000500000
+      actual   around here: ITERS: 1 SIZE: 1 1
+    Expected normalized output:
+    500000500000
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    1
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonVectorize.out.normalized-expected	2026-09-14 00:14:24.115409991 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/Reverse_gibbonVectorize.out.normalized-actual	2026-09-14 00:14:24.115757147 -0400
+    @@ -1 +1,3 @@
+    -500000500000
+    +ITERS: 1
+    +SIZE: 1
+    +1
+
+SS.hs                    :
+Gibbon2:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "6", got "ITERS:"
+      expected around here: 6
+      actual   around here: ITERS: 1 SIZE: 1 ITERS: 1 SIZE:
+    Expected normalized output:
+    6
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    ITERS: 1
+    SIZE: 1
+    6
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbon2.out.normalized-expected	2026-09-14 00:14:25.074653513 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbon2.out.normalized-actual	2026-09-14 00:14:25.074653513 -0400
+    @@ -1 +1,5 @@
+    +ITERS: 1
+    +SIZE: 1
+    +ITERS: 1
+    +SIZE: 1
+     6
+
+  GibbonLoopify:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "6", got "ITERS:"
+      expected around here: 6
+      actual   around here: ITERS: 1 SIZE: 1 ITERS: 1 SIZE:
+    Expected normalized output:
+    6
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    ITERS: 1
+    SIZE: 1
+    6
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonLoopify.out.normalized-expected	2026-09-14 00:14:26.047676071 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonLoopify.out.normalized-actual	2026-09-14 00:14:26.047982056 -0400
+    @@ -1 +1,5 @@
+    +ITERS: 1
+    +SIZE: 1
+    +ITERS: 1
+    +SIZE: 1
+     6
+
+  GibbonSelective:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "6", got "ITERS:"
+      expected around here: 6
+      actual   around here: ITERS: 1 SIZE: 1 ITERS: 1 SIZE:
+    Expected normalized output:
+    6
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    ITERS: 1
+    SIZE: 1
+    6
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonSelective.out.normalized-expected	2026-09-14 00:14:26.955697121 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonSelective.out.normalized-actual	2026-09-14 00:14:26.957383260 -0400
+    @@ -1 +1,5 @@
+    +ITERS: 1
+    +SIZE: 1
+    +ITERS: 1
+    +SIZE: 1
+     6
+
+  GibbonVectorize:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "6", got "ITERS:"
+      expected around here: 6
+      actual   around here: ITERS: 1 SIZE: 1 ITERS: 1 SIZE:
+    Expected normalized output:
+    6
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    ITERS: 1
+    SIZE: 1
+    6
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonVectorize.out.normalized-expected	2026-09-14 00:14:27.878718519 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/SS_gibbonVectorize.out.normalized-actual	2026-09-14 00:14:27.879714434 -0400
+    @@ -1 +1,5 @@
+    +ITERS: 1
+    +SIZE: 1
+    +ITERS: 1
+    +SIZE: 1
+     6
+
+VfyAbiExpNegPow.hs       :
+Gibbon2:
+  C compiler failed! 
+    /workdisk/git/gibbon/gibbon-rts/build/gibbon_rts.o: file not recognized: file format not recognized
+    clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+    Code: 1
+
+VfyAbiNegSlice.hs        :
+Gibbon2:
+  C compiler failed! 
+    /workdisk/git/gibbon/gibbon-rts/build/gibbon_rts.o: file not recognized: file format not recognized
+    clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+    Code: 1
+
+VfyAbiNegSliceUpper.hs   :
+Gibbon2:
+  C compiler failed! 
+    /workdisk/git/gibbon/gibbon-rts/build/gibbon_rts.o: file not recognized: file format not recognized
+    clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+    Code: 1
+
+VfySizeParamPrint.hs     :
+Gibbon2:
+  C compiler failed! 
+    /workdisk/git/gibbon/gibbon-rts/build/gibbon_rts.o: file not recognized: file format not recognized
+    clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+    Code: 1
 
 list.hs                  :
 Gibbon2:
@@ -722,11 +292,38 @@ Gibbon2:
 
 packedList.hs            :
 Gibbon2:
-  gibbon: Var fldloc_670 not found. Checking: 
-    : Ext (IndirectionBarrier "List"
-                              (fldloc_670, end_r_676, fldloc_667, end_r_673))
+  gibbon: 
+    Gibbon cannot re-place this packed value: it is fully factored (SoA), so its start is one cursor per buffer and the buffers do not line up.
+
+      the value    : VarE "lst_60_210_285"
+      currently at : SoA "loc_360"
+        [(("Cons", 0), Single "loc_IntTy_W64_361"),
+         (("Cons", 1), Single "fldloc_362")]
+      required at  : SoA "loc_363"
+        [(("Cons", 0), Single "loc_IntTy_W64_364"),
+         (("Cons", 1), Single "fldloc_365")]
+
+    Two constructor alternatives need this value at different places, so a copy
+    was required, and the copy cannot be expressed: the destination overlaps the
+    value's own storage, so both an indirection node and a real copy would write
+    over the value they are re-placing.
+
+    This normally comes from a let-bound packed value consumed by more than one
+    constructor alternative:
+
+        let rst = mkT (n - 1)
+         in if p then A x rst else B y rst
+
+    Write the producing call inside each alternative instead:
+
+        if p then A x (mkT (n - 1)) else B y (mkT (n - 1))
+
+    For an array-of-structs type ({-# ANN type T "Linear" #-}) the alternatives
+    must also agree on where the packed field starts, or be far enough apart that
+    an indirection fits between them.
+
     CallStack (from HasCallStack):
-      error, called at src/Gibbon/L3/Typecheck.hs:1157:21 in gibbon-0.3-inplace:Gibbon.L3.Typecheck
+      error, called at src/Gibbon/Passes/RemoveCopies.hs:136:3 in gibbon-0.3-inplace:Gibbon.Passes.RemoveCopies
     HasCallStack backtrace:
       collectBacktraces, called at libraries/ghc-internal/src/GHC/Internal/Exception.hs:92:13 in ghc-internal:GHC.Internal.Exception
       toExceptionWithBacktrace, called at libraries/ghc-internal/src/GHC/Internal/IO.hs:260:11 in ghc-internal:GHC.Internal.IO
@@ -744,3 +341,94 @@ Gibbon2:
 
 
 
+test_printpacked.hs      :
+Gibbon2:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 3: expected "1)(Leaf", got "1)"
+      expected around here: (Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf
+      actual   around here: (Node (Node (Leaf 1) (Leaf 1)) (Node
+    Expected normalized output:
+    (Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+     ->i (Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+    1
+    '#()
+
+    Actual normalized output:
+    (Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1)))
+     ->i (Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1)))
+    1
+    '#()
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/test_printpacked_gibbon2.out.normalized-expected	2026-09-14 00:23:44.178591524 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/test_printpacked_gibbon2.out.normalized-actual	2026-09-14 00:23:44.178591524 -0400
+    @@ -1,4 +1,4 @@
+    -(Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+    - ->i (Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+    +(Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1)))
+    + ->i (Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1)))
+     1
+     '#()
+
+tree.hs                  :
+Gibbon2:
+  Output differed from the answer file after removing timing records (ITER TIMES/BATCHTIME/SELFTIMED).
+    First difference at token 0: expected "(sum:", got "ITERS:"
+      expected around here: (sum: 54604, rightmost: 1) '#()
+      actual   around here: ITERS: 1 SIZE: 1 (sum: 3495241, rightmost:
+    Expected normalized output:
+    (sum: 54604, rightmost: 1)
+
+    '#()
+
+    Actual normalized output:
+    ITERS: 1
+    SIZE: 1
+    (sum: 3495241, rightmost: )
+
+    3495241
+
+    Normalized diff (expected vs actual):
+    --- /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/tree_gibbon2.out.normalized-expected	2026-09-14 00:24:02.904048716 -0400
+    +++ /workdisk/git/gibbon/gibbon-compiler/examples/build_tmp/tree_gibbon2.out.normalized-actual	2026-09-14 00:24:02.905278909 -0400
+    @@ -1,3 +1,5 @@
+    -(sum: 54604, rightmost: 1)
+    +ITERS: 1
+    +SIZE: 1
+    +(sum: 3495241, rightmost: )
+     
+    -'#()
+    +3495241
+
+
+Expected failures:
+--------------------------------------------------------------------------------
+Adts.hs                   : GibbonLoopify, GibbonSelective, GibbonVectorize
+Fail1.hs                  : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+Fail2.hs                  : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+Fail3.hs                  : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+ParseLinearTypes.hs       : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+Poly1.hs                  : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+Test185.hs                : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+calcAdtLengthAc.hs        : GibbonLoopify, GibbonSelective, GibbonVectorize
+calcAdtLengthCa.hs        : GibbonLoopify, GibbonSelective, GibbonVectorize
+list.hs                   : GibbonLoopify, GibbonSelective, GibbonVectorize
+packedList.hs             : GibbonLoopify, GibbonSelective, GibbonVectorize
+packedTree.hs             : GibbonLoopify, GibbonSelective, GibbonVectorize
+processAdtContentCA.hs    : GibbonLoopify, GibbonSelective, GibbonVectorize
+test08_dict.gib           : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test08b_dict.gib          : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test08c_dict.gib          : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test08d_sharedict.gib     : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test12b_traverse.gib      : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test12c_traverse.gib      : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test18f_flip.gib          : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test28_copyprop.gib       : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_153.hs               : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_164.hs               : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_166.hs               : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_191.hs               : Gibbon2
+test_303.hs               : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_parse.hs             : Gibbon2, GibbonLoopify, GibbonSelective, GibbonVectorize
+test_printpacked.hs       : GibbonLoopify, GibbonSelective, GibbonVectorize
+tree.hs                   : GibbonLoopify, GibbonSelective, GibbonVectorize

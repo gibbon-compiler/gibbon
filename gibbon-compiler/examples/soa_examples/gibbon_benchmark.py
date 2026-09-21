@@ -5788,6 +5788,8 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                                  programs: Optional[List[str]] = None,
                                  build_iterations: int = 9,
                                  pass_rounds: int = 1,
+                                 enable_papi_native: bool = False,
+                                 measure_build: bool = True,
                                  ) -> Dict[str, Dict[str, BenchmarkResult]]:
     """Compiles and runs every PLDI_MAP_CONFIGS variant for every curated
     program, using the same compile_one/run_exe/qualify_variant path as
@@ -5807,6 +5809,14 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
     Each configuration's construction phase is timed separately, iterated
     `build_iterations` times (see measure_build_time); with the per-pass
     medians it is what the synthesized end-to-end time is made of.
+    `measure_build` False skips that, for a phase whose numbers are not times.
+
+    With `enable_papi_native`, every configuration is compiled with the RTS
+    counter instrumentation and each pass carries its hardware-counter
+    medians. Those binaries read counters inside the iterate loop and link
+    against libpapi, so they are NOT the binaries a published time should
+    come from: give this phase an output directory of its own and leave the
+    timing phase's binaries alone.
 
     Returns {program: {config_name: BenchmarkResult}}."""
     _validate_c_arith_mode(c_arith_mode)
@@ -5924,6 +5934,7 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                                                     use_no_ran=program_uses_no_ran(program),
                                                     c_arith_mode=c_arith_mode,
                                                     simd_isa=simd_isa,
+                                                    enable_papi_native=enable_papi_native,
                                                     **cfg_kwargs)
                 res.compile_success = ok
                 res.compile_time = compile_time
@@ -5980,6 +5991,17 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                             ordered.append(name)
                 res.passes = {name: aggregate_rounds([one.get(name) for one in parsed])
                               for name in ordered}
+                if enable_papi_native:
+                    # From the representative round's stdout, so a pass's
+                    # counters and the time printed beside them describe the
+                    # same run of the same binary.
+                    attach_papi_native_to_passes(res, out)
+                    if not res.papi_counters:
+                        print("  !! no hardware counters attached to %s/%s: %s"
+                              % (program, cfg_name,
+                                 "counter lines present but unattributable"
+                                 if out and "PAPI_NATIVE" in out
+                                 else "the executable printed none"))
             apply_source_classification(
                 res, source_cls_all.get(program,
                                         {"adt_fields": None, "adt_info": None,
@@ -5996,7 +6018,7 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
         # program is finished. Timing it in the loop above would put a
         # compile alongside a timed run, which is the contamination the
         # compile-everything-first discipline exists to avoid.
-        for cfg_name, _exe in jobs:
+        for cfg_name, _exe in (jobs if measure_build else []):
             info = pending[cfg_name]
             res = info["res"]
             progress().item("%s.%s" % (Path(program).stem, cfg_name),
@@ -6015,6 +6037,41 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                       % (program, cfg_name, build_err))
     report_failure_summary()
     return results
+
+
+def collect_pldi_counter_results(programs_dir: Path, out_dir: Path, cc: str,
+                                 force: bool, iterations: int,
+                                 c_arith_mode: str = DEFAULT_C_ARITH_MODE,
+                                 simd_isa: str = DEFAULT_SIMD_ISA,
+                                 pin_cpu: Optional[int] = None,
+                                 programs: Optional[List[str]] = None,
+                                 pass_rounds: int = 1,
+                                 ) -> Dict[str, Dict[str, BenchmarkResult]]:
+    """The PLDI matrix again, compiled with the runtime's counter
+    instrumentation, for the cache tables and figures.
+
+    Its own output directory, so the instrumented executables never stand in
+    for the ones a published time came from. The construction phase is not
+    instrumented, so a counter total covers the timed passes and there is no
+    end-to-end counter.
+
+    Pinning is required, not merely advisable: this is a hybrid CPU whose
+    performance and efficiency cores carry separate counter sets, and a
+    process the kernel puts on an efficiency core reads zero for every event
+    -- cycles included -- rather than failing."""
+    if pin_cpu is None:
+        raise RuntimeError(
+            "hardware counters need --pin-cpu (auto is fine): on this hybrid "
+            "CPU an unpinned run may land on an efficiency core, where every "
+            "counter reads zero instead of failing")
+    global _PAPI_COUNTER_ORDER
+    _PAPI_COUNTER_ORDER = select_preferred_papi_native_metrics()
+    print("  Counter phase: %s" % ", ".join(_PAPI_COUNTER_ORDER))
+    return collect_pldi_variant_results(
+        programs_dir, out_dir / "counters", cc, force, gibbon_exe=None,
+        iterations=iterations, c_arith_mode=c_arith_mode, simd_isa=simd_isa,
+        pin_cpu=pin_cpu, programs=programs, pass_rounds=pass_rounds,
+        enable_papi_native=True, measure_build=False)
 
 
 def _sig4(value: Optional[float]) -> str:
@@ -7202,6 +7259,7 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                        add1tree_width_results: Optional[Dict[int, Dict[str, BenchmarkResult]]] = None,
                        arithintensity_width_results: Optional[Dict[int, Dict[str, BenchmarkResult]]] = None,
                        pldi_variant_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None,
+                       pldi_counter_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None,
                        simd_isa: str = DEFAULT_SIMD_ISA,
                        campaign: Optional[Dict] = None):
     # Name the SIMD target in this report's captions.  One report is one ISA:
@@ -7326,6 +7384,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                 _table_pldi_map_deltas(f, program, pldi_variant_results[program])
         else:
             _table_per_program(f, all_results, all_variants_results)
+        if pldi_counter_results:
+            write_pldi_counter_tables(f, pldi_counter_results)
         if all_variants_results and any(e.get('ghc') for e in all_variants_results):
             _table_per_program_ghc(f, all_results, all_variants_results)
         if add1tree_width_results:
@@ -7340,6 +7400,248 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
             print(f"    (per-program tables show 4 variants: mut + imm cursors)")
         else:
             print(f"    (per-program tables show baseline variants: aos, aos_imm, soa)")
+
+
+# The chain step that changes the layout and nothing else: the pair a
+# "does SoA miss less" claim is made from.
+PLDI_COUNTER_LAYOUT_STAGE = "SoA layout"
+
+
+def pldi_counter_layout_pair(counter_results, kind: str = "map",
+                             extended: bool = False,
+                             ) -> Optional[Tuple[str, str]]:
+    """(AoS configuration, SoA configuration) for the step that changes only
+    the layout, taken from the same chain the figures telescope along rather
+    than named here, so the pair follows whichever -av twins were measured."""
+    available = {cfg for by_cfg in counter_results.values() for cfg in by_cfg}
+    for label, source, target in _pldi_stage_chain(kind, available, extended):
+        if label == PLDI_COUNTER_LAYOUT_STAGE:
+            return source, target
+    return None
+
+
+def _counter_cell(value: Optional[float]) -> str:
+    return "--" if value is None else _fmt_counter(value)
+
+
+def _pldi_counter_programs(counter_results) -> List[str]:
+    """The programs to give a row, in the canonical order the other tables
+    use."""
+    canonical = DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS
+    ordered = [p for p in canonical if p in counter_results]
+    return ordered + [p for p in counter_results if p not in canonical]
+
+
+def _table_pldi_counter_notes(f, counter_results, pair: Tuple[str, str]) -> None:
+    """What every counter table below rests on, said once.
+
+    The binaries, the events and the pinning each decide whether a number
+    means anything, and none of them is visible in a cell."""
+    events: Dict[str, str] = {}
+    for by_cfg in counter_results.values():
+        for res in by_cfg.values():
+            for pdata in (getattr(res, "passes", None) or {}).values():
+                for metric, event in (pdata.get("papi_native_events") or {}).items():
+                    events.setdefault(metric, event)
+    f.write("% -- Counter tables: shared notes --\n")
+    f.write("\\paragraph{Hardware counters.}\n")
+    f.write("Counts come from PAPI, read by the runtime around each pass "
+            "inside the iteration loop, and each entry is the median over "
+            "the iterations of that pass. They were measured in a "
+            "\\emph{separate} campaign phase from every time reported above: "
+            "those binaries carry the counter reads and link against "
+            "libpapi, so a time and a count in this report never come from "
+            "the same executable.\n")
+    if pair:
+        f.write("The layout comparison is \\texttt{%s} versus "
+                "\\texttt{%s}, the one chain step that changes the layout "
+                "and nothing else.\n"
+                % (_tex_escape(pair[0]), _tex_escape(pair[1])))
+    if events:
+        f.write("Events: "
+                + ", ".join("%s $=$ \\texttt{%s}"
+                            % (_tex_escape(counter_label(m)),
+                               _tex_escape(events[m]))
+                            for m in pldi_counters_present(counter_results)
+                            if m in events)
+                + ". ")
+        f.write("PAPI exposes no preset events on this hybrid CPU, so these "
+                "are native names; runs are pinned to a performance core, "
+                "where alone they count.\n")
+    f.write("\n\n")
+
+
+def _table_pldi_counter_summary(f, counter_results,
+                                pair: Tuple[str, str]) -> None:
+    """Per program: each counter's total over every timed pass, for the two
+    layouts, and the ratio between them."""
+    counters = [c for c in pldi_counters_present(counter_results)
+                if c in PLDI_COUNTER_METRICS]
+    if not counters or not pair:
+        return
+    aos_cfg, soa_cfg = pair
+    programs = _pldi_counter_programs(counter_results)
+
+    f.write("% -- Table: counter totals, AoS vs SoA --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{Hardware-counter totals over every timed pass, AoS "
+            "versus SoA. Each cell is (AoS/SoA); a ratio above $1\\times$ "
+            "means the SoA layout caused fewer of that event. A program is "
+            "absent where any pass of either configuration reported no "
+            "count.}\n")
+    f.write("\\label{tab:pldi_counters_totals}\n\\small\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l"
+            + (" r r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\textbf{Program}"
+            + "".join(" & \\multicolumn{2}{c}{\\textbf{%s}}"
+                      % _tex_escape(counter_label(c)) for c in counters)
+            + " \\\\\n")
+    f.write("".join("\\cmidrule(lr){%d-%d}" % (2 + 2 * i, 3 + 2 * i)
+                    for i in range(len(counters))) + "\n")
+    f.write("" + "".join(" & AoS/SoA & Ratio" for _c in counters) + " \\\\\n")
+    f.write("\\midrule\n")
+
+    ratios: Dict[str, List[float]] = {c: [] for c in counters}
+    for program in programs:
+        by_cfg = counter_results[program]
+        cells = []
+        drawn = False
+        for c in counters:
+            a = pldi_counter_total(by_cfg, aos_cfg, c)
+            sv = pldi_counter_total(by_cfg, soa_cfg, c)
+            cells.append(" & %s/%s" % (_counter_cell(a), _counter_cell(sv)))
+            if a is not None and sv is not None and sv > 0:
+                ratios[c].append(a / sv)
+                cells.append(" & %s" % _spd_cell(a / sv))
+                drawn = True
+            else:
+                cells.append(" & --")
+        if not drawn:
+            continue
+        f.write(_tex_escape(program.replace(".hs", "")) + "".join(cells)
+                + " \\\\\n")
+    gm = "\\textbf{Geomean}"
+    for c in counters:
+        gm += " & "
+        gm += (" & %s" % _spd_cell(statistics.geometric_mean(ratios[c]))
+               if ratios[c] else " & --")
+    f.write("\\midrule\n" + gm + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
+
+
+def _table_pldi_counter_normalized(f, counter_results,
+                                   pair: Tuple[str, str]) -> None:
+    """The same totals per thousand instructions, so programs of different
+    sizes are comparable."""
+    counters = [c for c in pldi_counters_present(counter_results)
+                if c in PLDI_COUNTER_METRICS]
+    if not counters or not pair:
+        return
+    aos_cfg, soa_cfg = pair
+    f.write("% -- Table: misses per thousand instructions --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{Misses per thousand instructions (MPKI), AoS versus "
+            "SoA, over every timed pass. Normalizing by retired instructions "
+            "rather than by elements makes programs of different sizes "
+            "comparable; it also divides out part of the effect, since the "
+            "two layouts do not execute the same number of instructions, so "
+            "Table~\\ref{tab:pldi_counters_totals} is where the traffic "
+            "itself is read. The implied DRAM traffic of an LLC miss is "
+            "%d bytes, one cache line.}\n" % CACHE_LINE_BYTES)
+    f.write("\\label{tab:pldi_counters_mpki}\n\\small\n")
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l"
+            + (" r r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\textbf{Program}"
+            + "".join(" & \\multicolumn{2}{c}{\\textbf{%s}}"
+                      % _tex_escape(counter_label(c)) for c in counters)
+            + " \\\\\n")
+    f.write("".join("\\cmidrule(lr){%d-%d}" % (2 + 2 * i, 3 + 2 * i)
+                    for i in range(len(counters))) + "\n")
+    f.write("".join(" & AoS & SoA" for _c in counters) + " \\\\\n")
+    f.write("\\midrule\n")
+    for program in _pldi_counter_programs(counter_results):
+        by_cfg = counter_results[program]
+        cells, drawn = [], False
+        for c in counters:
+            for cfg in (aos_cfg, soa_cfg):
+                misses = pldi_counter_total(by_cfg, cfg, c)
+                insns = pldi_counter_total(by_cfg, cfg, PLDI_COUNTER_NORM)
+                if misses is None or not insns:
+                    cells.append(" & --")
+                    continue
+                cells.append(" & %.2f"
+                             % (misses * PLDI_COUNTER_NORM_SCALE / insns))
+                drawn = True
+        if drawn:
+            f.write(_tex_escape(program.replace(".hs", "")) + "".join(cells)
+                    + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
+
+
+def _table_pldi_counter_per_program(f, program: str, by_cfg,
+                                    pair: Tuple[str, str]) -> None:
+    """One program, one row per timed pass: each counter for the two
+    layouts."""
+    counters = [c for c in pldi_counters_present({program: by_cfg})
+                if c in PLDI_COUNTER_METRICS]
+    if not counters or not pair:
+        return
+    aos_cfg, soa_cfg = pair
+    names = (_pldi_pass_names(by_cfg, "fold") + _pldi_pass_names(by_cfg, "map"))
+    rows = []
+    for pname in names:
+        cells, drawn = [], False
+        for c in counters:
+            a = pldi_counter_value(by_cfg, aos_cfg, pname, c)
+            sv = pldi_counter_value(by_cfg, soa_cfg, pname, c)
+            cells.append(" & %s/%s" % (_counter_cell(a), _counter_cell(sv)))
+            if a is not None and sv is not None and sv > 0:
+                cells.append(" & %s" % _spd_cell(a / sv))
+                drawn = True
+            else:
+                cells.append(" & --")
+        if drawn:
+            rows.append((pname, cells))
+    if not rows:
+        return
+    display = program.replace(".hs", "")
+    f.write(f"% -- Table: {display} per-pass counters --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{Per-pass hardware counters for \\texttt{%s}, AoS "
+            "versus SoA. Each cell is (AoS/SoA) with their ratio; above "
+            "$1\\times$ means SoA caused fewer.}\n" % _tex_escape(display))
+    f.write("\\label{tab:%s_pldi_counters}\n\\small\n" % display)
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l"
+            + (" r r" * len(counters)) + "}\n\\toprule\n")
+    f.write("\\textbf{Pass}"
+            + "".join(" & \\multicolumn{2}{c}{\\textbf{%s}}"
+                      % _tex_escape(counter_label(c)) for c in counters)
+            + " \\\\\n")
+    f.write("".join("\\cmidrule(lr){%d-%d}" % (2 + 2 * i, 3 + 2 * i)
+                    for i in range(len(counters))) + "\n")
+    f.write("".join(" & AoS/SoA & Ratio" for _c in counters) + " \\\\\n")
+    f.write("\\midrule\n")
+    for pname, cells in rows:
+        f.write("\\texttt{%s}" % _tex_escape(pname) + "".join(cells)
+                + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
+
+
+def write_pldi_counter_tables(f, counter_results) -> None:
+    """Every counter table, in reading order: the shared notes, the totals,
+    the normalized view, then one table per program."""
+    counter_results = merge_pldi_program_groups(counter_results)
+    pair = pldi_counter_layout_pair(counter_results)
+    if not pair:
+        print("  Skipping counter tables: no layout step in the measured "
+              "configurations.")
+        return
+    _table_pldi_counter_notes(f, counter_results, pair)
+    _table_pldi_counter_summary(f, counter_results, pair)
+    _table_pldi_counter_normalized(f, counter_results, pair)
+    for program in _pldi_counter_programs(counter_results):
+        _table_pldi_counter_per_program(f, program,
+                                        counter_results[program], pair)
 
 
 # ColorOctree.hs's passes, split out of the combined OctTree row.
@@ -9410,7 +9712,8 @@ def campaign_provenance(args) -> Dict[str, object]:
 
 
 def write_pldi_matrix_json(pldi_variant_results, out_file: Path,
-                           campaign_extra: Optional[Dict] = None):
+                           campaign_extra: Optional[Dict] = None,
+                           matrix_kind: str = "timings"):
     """Serialize the per-program PLDI configuration matrix.
 
     The main report carries six variants per program; the fold/map tables are
@@ -9436,6 +9739,11 @@ def write_pldi_matrix_json(pldi_variant_results, out_file: Path,
     report = {
         "report_schema": prov.REPORT_SCHEMA,
         "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+        # What the numbers in this file ARE. A counter matrix has the same
+        # shape as a timing one and its results carry times too, but those
+        # times come from instrumented binaries and are not the campaign's;
+        # without this marker a replot would redraw them as if they were.
+        "matrix_kind": matrix_kind,
         "campaign": dict(campaign_extra or {}),
         "run_failures": failures,
         "results": data,
@@ -9531,13 +9839,15 @@ def adopt_stored_campaign_settings(path: Path) -> None:
 
 
 def json_report_kind(path: Path) -> str:
-    """'matrix' for a PLDI variant-matrix report, 'campaign' for a main
-    results report: the two are told apart by their own shape, so either can
-    be handed to --figures-from-json."""
+    """'matrix' for a PLDI variant-matrix report, 'counters' for one holding
+    hardware counts, 'campaign' for a main results report: told apart by
+    their own shape and their own marker, so any of them can be handed to
+    --figures-from-json."""
     report = json.loads(Path(path).read_text())
     results = report.get("results")
     if isinstance(results, dict):
-        return "matrix"
+        return ("counters" if report.get("matrix_kind") == "counters"
+                else "matrix")
     if isinstance(results, list):
         return "campaign"
     raise ValueError("%s has no recognizable `results` section" % path)
@@ -9900,11 +10210,129 @@ def pldi_stage_sort_key(program: str, group: str) -> Tuple[int, int, str, int]:
     return (group_order.index(group), sub_rank, family.lower(), width)
 
 
+# ---------------------------------------------------------------------------
+# Hardware counters over the PLDI matrix
+# ---------------------------------------------------------------------------
+# The data-side counters a cache argument is made of, in the order every
+# counter table and figure shows them. The RTS reads seven; the code-side and
+# instruction ones are context and denominators, not the claim.
+PLDI_COUNTER_METRICS = ("L1D_LOAD_MISSES", "L2D_MISSES", "LLC_LOAD_MISSES")
+PLDI_COUNTER_CONTEXT = ("L1I_LOAD_MISSES", "L2I_MISSES",
+                        "INSTRUCTIONS", "CPU_CYCLES")
+# Misses per thousand instructions is the normalization these tables use.
+# An element count would be the layout-native denominator, but only two of
+# the fifteen oracle models expose one (arithintensity_model.leaf_count),
+# and inventing the rest from build sources would put an unverified number
+# under every row.
+PLDI_COUNTER_NORM = "INSTRUCTIONS"
+PLDI_COUNTER_NORM_SCALE = 1000.0
+
+PLDI_COUNTER_LABELS = {
+    "L1D_LOAD_MISSES": "L1D load misses",
+    "L2D_MISSES": "L2 data misses",
+    "LLC_LOAD_MISSES": "LLC misses",
+    "L1I_LOAD_MISSES": "L1I load misses",
+    "L2I_MISSES": "L2 code misses",
+    "INSTRUCTIONS": "Instructions",
+    "CPU_CYCLES": "Cycles",
+}
+
+# A miss brings in one line, so a miss count times the line size is the
+# traffic that count implies.
+CACHE_LINE_BYTES = 64
+
+
+def pldi_counter_total(results_for_program: Dict[str, BenchmarkResult],
+                       cfg: str, counter: str,
+                       pass_type: Optional[str] = None) -> Optional[float]:
+    """One configuration's total for `counter`: the sum of its passes' median
+    counts.
+
+    `pass_type` limits it to "fold" or "map" passes; None sums every timed
+    pass, which is this phase's analogue of the end-to-end figure -- there is
+    no build term, the construction phase not being instrumented.
+
+    None when any pass of the kind is missing the counter, for the same
+    reason _pldi_sum_passes returns None on a missing time: a sum over fewer
+    traversals is not this program's count, and a ratio of two such sums
+    compares different amounts of work."""
+    types = (pass_type,) if pass_type else ("fold", "map")
+    names = [n for t in types
+             for n in _pldi_pass_names(results_for_program, t)]
+    if not names:
+        return None
+    total = 0.0
+    for pname in names:
+        value = pldi_counter_value(results_for_program, cfg, pname, counter)
+        if value is None:
+            return None
+        total += value
+    return total
+
+
+def pldi_counter_value(results_for_program: Dict[str, BenchmarkResult],
+                       cfg: str, pass_name: str,
+                       counter: str) -> Optional[float]:
+    """One pass's median count for `counter`, or None where there is none.
+
+    Follows the same two rules as _pldi_cell: a merged family's pass is read
+    from the member that ran it, and an unverified result carries no numbers
+    at all."""
+    res = results_for_program.get(cfg)
+    origin = getattr(res, "pass_origin", None) if res is not None else None
+    if origin is not None and pass_name in origin:
+        res = origin[pass_name]
+    if not prov.verified_result(res) or not res.passes:
+        return None
+    pdata = res.passes.get(pass_name) or {}
+    stats = (pdata.get("papi_counters") or {}).get(counter) or {}
+    value = stats.get("median")
+    return None if value is None else float(value)
+
+
+def pldi_counter_metric(counter: str, pass_type: Optional[str] = None):
+    """The stage-figure metric for one counter.
+
+    Fewer misses is better exactly as less time is better, so the figures'
+    `previous / this` cells, their colour scale and their dip marks all carry
+    over with no change of meaning."""
+    def metric(results_for_program: Dict[str, BenchmarkResult],
+               cfg: str) -> Optional[float]:
+        return pldi_counter_total(results_for_program, cfg, counter, pass_type)
+    return metric
+
+
+def pldi_counters_present(counter_results) -> List[str]:
+    """Every counter any pass of any configuration reported, in the tables'
+    order: the data-side counters first, then the context ones, then anything
+    the RTS added that this file does not name."""
+    found = set()
+    for by_cfg in (counter_results or {}).values():
+        for res in by_cfg.values():
+            for pdata in (getattr(res, "passes", None) or {}).values():
+                found.update((pdata.get("papi_counters") or {}).keys())
+    ordered = [c for c in PLDI_COUNTER_METRICS + PLDI_COUNTER_CONTEXT
+               if c in found]
+    return ordered + sorted(found - set(ordered))
+
+
+def counter_label(counter: str) -> str:
+    return PLDI_COUNTER_LABELS.get(counter, counter.replace("_", " ").title())
+
+
 def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]],
                      kind: str, extended: bool = False,
+                     metric=None,
                      ) -> Tuple[List[Dict], List[str], List[str]]:
-    """One row per program: each stage's cumulative speedup over Vanilla
+    """One row per program: each stage's cumulative gain over Vanilla
     Gibbon, and the total (equal to the last stage).
+
+    `metric(results_for_program, cfg)` supplies the quantity each cell
+    divides; it defaults to the configuration's time for `kind`. Any
+    lower-is-better quantity works -- a counter total reads on the same
+    scale, a cell still being previous/this.
+
+    `kind` selects the chain of stages whatever the metric is.
 
     Returns (rows, stage labels, dropped). A program is dropped when any
     link of the chain has no verified measurement -- a row with a hole in
@@ -9915,6 +10343,8 @@ def _pldi_stage_rows(pldi_variant_results: Dict[str, Dict[str, BenchmarkResult]]
 
     def timing(program: str, cfg: str) -> Optional[float]:
         by_cfg = pldi_variant_results[program]
+        if metric is not None:
+            return metric(by_cfg, cfg)
         if kind == "endtoend":
             return _pldi_end_to_end_time(by_cfg, cfg)
         return _pldi_sum_passes(by_cfg, cfg, pass_type)
@@ -10003,11 +10433,17 @@ def _pldi_stage_caption_omissions(pldi_variant_results, rows, dropped: List[str]
 
 
 def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
-                     title: str, extended: bool = False) -> Optional[List[str]]:
+                     title: str, extended: bool = False,
+                     metric=None, worse_note: Optional[str] = None,
+                     ) -> Optional[List[str]]:
     """One heatmap. Returns the dropped programs, or None when there was
-    nothing to draw."""
+    nothing to draw.
+
+    `metric` is passed through to _pldi_stage_rows; `worse_note` names what a
+    dip means for that metric, since "slower" describes only a time."""
     rows, labels, dropped = _pldi_stage_rows(pldi_variant_results, kind,
-                                             extended)
+                                             extended, metric=metric)
+    worse_note = worse_note or "slower than the column to its left"
     if not rows:
         return None
     import numpy as np
@@ -10159,7 +10595,7 @@ def _fig_pldi_stages(pldi_variant_results, out: Path, kind: str,
     # configured are in the tables and the report.
     key = ["outlined: beyond the %g\u00d7/%g\u00d7 colour range"
            % (2 ** PLDI_STAGE_BLUE_CLIP, 2 ** -PLDI_STAGE_RED_CLIP),
-           "%s: slower than the column to its left" % PLDI_STAGE_DIP_MARK]
+           "%s: %s" % (PLDI_STAGE_DIP_MARK, worse_note)]
     if corners:
         key.append("corner: same configuration, auto-vectorizer on")
     if any(r.get("vanilla_av_off") for r in rows):
@@ -10199,6 +10635,7 @@ def replot_figures_from_json(paths, figures_dir: Path,
                                else list(paths))]
     campaign_results: Optional[List[Tuple]] = None
     matrix_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None
+    counter_results: Optional[Dict[str, Dict[str, BenchmarkResult]]] = None
     drawn = 0
     for path in ([paths] if isinstance(paths, (str, Path)) else list(paths)):
         path = Path(path)
@@ -10208,7 +10645,17 @@ def replot_figures_from_json(paths, figures_dir: Path,
             print("  Cannot replot from %s: %s" % (path, e))
             return 1
         adopt_stored_campaign_settings(path)
-        if kind == "matrix":
+        if kind == "counters":
+            counter_results = load_pldi_matrix_json(path)
+            if not counter_results:
+                print("  %s holds no counter results." % path)
+                return 1
+            if HAS_PLOT_LIBS:
+                print("  Replotting counter heatmaps from %s (%d programs) "
+                      "-> %s/" % (path, len(counter_results), figures_dir))
+                generate_pldi_counter_figures(counter_results, figures_dir,
+                                              extended=extended)
+        elif kind == "matrix":
             matrix_results = load_pldi_matrix_json(path)
             if not matrix_results:
                 print("  %s holds no PLDI results." % path)
@@ -10235,6 +10682,7 @@ def replot_figures_from_json(paths, figures_dir: Path,
             return 1
         write_latex_tables(campaign_results, latex_table,
                            pldi_variant_results=matrix_results,
+                           pldi_counter_results=counter_results,
                            simd_isa=((stored_campaign_block(paths) or {})
                                      .get("codegen", {}).get("simd_isa")
                                      or DEFAULT_SIMD_ISA),
@@ -10281,6 +10729,53 @@ def generate_pldi_stage_figures(
             print("    (C auto-vectorizer ON: its -av twins were not measured; "
                   "run with --av-variants all to isolate the optimizations "
                   "from it)")
+
+
+
+def generate_pldi_counter_figures(counter_results, out_dir: Path,
+                                  extended: bool = False) -> None:
+    """One heatmap per data-side counter and per pass kind: what each
+    optimization did to that counter, telescoping exactly as the timing
+    heatmaps do.
+
+    A cell is previous/this, so >1 means the stage REMOVED misses, the same
+    direction the timing heatmaps read. The `all` figures cover every timed
+    pass, which is as far as this phase reaches: the construction phase is
+    not instrumented, so there is no end-to-end counter figure."""
+    counter_results = merge_pldi_program_groups(counter_results)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _pub_rc()
+    present = [c for c in pldi_counters_present(counter_results)
+               if c in PLDI_COUNTER_METRICS]
+    if not present:
+        print("  Skipping counter heatmaps: no configuration reported a "
+              "data-cache counter.")
+        return
+    for counter in present:
+        label = counter_label(counter)
+        for kind, pass_type, what in (("fold", "fold", "Fold passes"),
+                                      ("map", "map", "Map passes"),
+                                      ("endtoend", None, "Every timed pass")):
+            metric = pldi_counter_metric(counter, pass_type)
+            stem = "pldi_counters_%s_%s" % (
+                counter.lower(), pass_type or "all")
+            dropped = _fig_pldi_stages(
+                counter_results, out_dir / stem, kind,
+                "%s: %s removed relative to Vanilla Gibbon, per program"
+                % (what, label),
+                extended, metric=metric,
+                # Not lowercased: the labels carry acronyms (L1D, LLC).
+                worse_note="more %s than the column to its left" % label)
+            if dropped is None:
+                print("  Skipping %s: no program has a complete chain." % stem)
+                continue
+            note = ("" if not dropped else
+                    "  " + _pldi_stage_caption_omissions(
+                        counter_results,
+                        _pldi_stage_rows(counter_results, kind, extended,
+                                         metric=metric)[0],
+                        dropped, kind).strip())
+            print("  \u2713 %s.*%s" % (stem, note))
 
 
 
@@ -11050,6 +11545,21 @@ def build_parser() -> argparse.ArgumentParser:
                          "run time scales with N.\n" % PLDI_DEFAULT_PASS_ROUNDS)
     ap.add_argument("--programs-dir",   type=Path, default=Path("programs"))
     ap.add_argument("--output-dir",     type=Path, default=Path("benchmark_output"))
+    ap.add_argument("--pldi-cache-counters", action="store_true",
+                    help="After the --pldi-submission matrix is measured, "
+                         "compile and run it again with the runtime's PAPI "
+                         "instrumentation and add the cache-counter tables "
+                         "and heatmaps. Its binaries carry counter reads and "
+                         "live in their own output directory, so no published "
+                         "time comes from them. Requires --pin-cpu: on a "
+                         "hybrid CPU an efficiency core reports zero for "
+                         "every event. Counters cover the timed passes; the "
+                         "construction phase is not instrumented.")
+    ap.add_argument("--counter-iterations", type=int, default=5, metavar="N",
+                    help="Iterations per pass in the --pldi-cache-counters "
+                         "phase (default: 5). Counts vary far less between "
+                         "iterations than times do, so this is much smaller "
+                         "than --iterations.")
     ap.add_argument("--iterations",     type=int,  default=20,
                     help="Number of timed iterations passed as --iterate N to each measured exe run. "
                          "Use enough samples for confidence intervals; use --iterations 1 "
@@ -11416,6 +11926,17 @@ def main():
 
     if args.enable_papi and args.enable_papi_native:
         ap.error("Choose only one mode: --enable-papi OR --enable-papi-native")
+    if args.pldi_cache_counters:
+        if not args.pldi_submission:
+            ap.error("--pldi-cache-counters measures the --pldi-submission "
+                     "matrix; pass --pldi-submission too")
+        # --pin-cpu is still the raw string here; it is resolved further
+        # down, and "none" is its default, so testing the parsed value is
+        # what makes this check fire at all.
+        if resolve_pin_cpu_arg(args.pin_cpu) is None:
+            ap.error("--pldi-cache-counters requires --pin-cpu (auto is "
+                     "fine): on a hybrid CPU an unpinned run may land on an "
+                     "efficiency core, where every counter reads zero")
     if args.benchmark_immutable and args.benchmark_baseline_gibbon:
         ap.error("Choose only one mode: --benchmark-imm OR --bencmark-baseline-gibbon")
 
@@ -11780,6 +12301,7 @@ def main():
             except RuntimeError as e:
                 print("  ⚠ roofline measurement failed: %s" % e, file=sys.stderr)
         pldi_variant_results = None
+        pldi_counter_results = None
         if args.pldi_submission:
             # The campaign list PLUS the width-sweep extras, run through the
             # same selection logic so --programs / --exclude-programs narrow
@@ -11816,6 +12338,22 @@ def main():
             write_pldi_matrix_json(pldi_variant_results,
                                    args.json.with_name(args.json.stem + "_pldi.json"),
                                    campaign_provenance(args))
+            if args.pldi_cache_counters:
+                print("  Collecting hardware counters over the same matrix "
+                      f"({len(pldi_programs)} programs x up to {_cfgc} configs "
+                      f"each, {args.counter_iterations} iterations) ...")
+                pldi_counter_results = collect_pldi_counter_results(
+                    args.programs_dir, args.output_dir, resolve_cc(args.cc),
+                    args.force_recompile,
+                    iterations=args.counter_iterations,
+                    c_arith_mode=args.c_arithmetic, simd_isa=args.simd_isa,
+                    pin_cpu=args.pin_cpu, programs=pldi_programs,
+                    pass_rounds=1)
+                report_pldi_qualification_warnings(pldi_counter_results)
+                write_pldi_matrix_json(
+                    pldi_counter_results,
+                    args.json.with_name(args.json.stem + "_pldi_counters.json"),
+                    campaign_provenance(args), matrix_kind="counters")
         # Get extended results if they were collected
         progress().finish_phase()
         progress().start_phase("report")
@@ -11829,6 +12367,7 @@ def main():
             add1tree_width_results=add1tree_width_results,
             arithintensity_width_results=arithintensity_width_results,
             pldi_variant_results=pldi_variant_results,
+            pldi_counter_results=pldi_counter_results,
             simd_isa=args.simd_isa,
             campaign=campaign_block,
         )
@@ -11843,6 +12382,10 @@ def main():
                 generate_pldi_stage_figures(pldi_variant_results,
                                             args.figures_dir,
                                             extended=args.extended_stages)
+            if pldi_counter_results:
+                generate_pldi_counter_figures(pldi_counter_results,
+                                              args.figures_dir,
+                                              extended=args.extended_stages)
         else:
             print("  Skipping figures: matplotlib/numpy not installed.")
         print(f"\n  LaTeX  : {args.latex_table}")
