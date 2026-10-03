@@ -1481,6 +1481,47 @@ tests:
     answer-file: tests/nonrec_redirection/RanReader.ans
     run-modes: [nonrec]
 
+  # Fully-factored values shared through indirections; also checked under the
+  # remaining flag sets by factored_indirections.sh.  Each runs in the modes it
+  # passes: GcShare, GcSafe and MixedLayout hit compile failures under mutable
+  # cursors that occur without any indirection (see the script).
+  - name: IdTree.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/IdTree.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: RightTree.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/RightTree.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: PassThru.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/PassThru.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: MultiBuf.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/MultiBuf.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: BigTree.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/BigTree.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: Spine.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/Spine.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: GcShare.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/GcShare.ans
+    run-modes: [gibbon2]
+  - name: GcSafe.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/GcSafe.ans
+    run-modes: [gibbon2]
+  - name: MixedLayout.hs
+    dir: tests/factored_indirections
+    answer-file: tests/factored_indirections/MixedLayout.ans
+    run-modes: [gibbon2]
+
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA
     answer-file: examples/soa_examples/reduced_answers/PiecewiseFunctions.ans

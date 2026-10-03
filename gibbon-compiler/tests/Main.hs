@@ -51,6 +51,7 @@ import L2.Interp
 import InferLocations
 import HoistBoundsCheck
 import NonRecCursorReturns
+import FactoredIndirections
 
 main :: IO ()
 main = defaultMain allTests
@@ -87,6 +88,7 @@ main = defaultMain allTests
                    -- , specializeTests
                    , hoistBoundsCheckTests
                    , nonRecCursorReturnsTests
+                   , factoredIndirectionsTests
                    ]
 
 tests :: TestTree
