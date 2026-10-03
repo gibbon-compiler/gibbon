@@ -17,11 +17,13 @@ import Gibbon.DynFlags
 
 -- | Generate code for indirection and redirection pointer branches in the case expression.
 followPtrs :: Prog2 -> PassM Prog2
-followPtrs (Prog ddefs fundefs mainExp) = do
+followPtrs prg@(Prog ddefs fundefs mainExp) = do
     fds' <- mapM gofun (M.elems fundefs)
     let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
     pure $ Prog ddefs fundefs' mainExp
   where
+    factoredIndirs = writesFactoredIndirections isSoALoc prg
+
     gofun :: FunDef2 -> PassM FunDef2
     gofun f@FunDef{funName,funArgs,funBody,funTy} = do
       let in_tys = arrIns funTy
@@ -144,6 +146,23 @@ followPtrs (Prog ddefs fundefs mainExp) = do
               -- Make the new SoA location with the data con loc 
               -- Field locs will all be the same
               indir_br <- case scrt_loc of 
+                  SoA{} | factoredIndirs -> do
+                    -- Note [A factored indirection lives in the tag buffer]
+                    -- (RemoveCopies): a tag plus one cursor per buffer, in the
+                    -- tag buffer only.  The value after it starts 1 + 8N bytes
+                    -- on in the tag buffer and where it was in every field
+                    -- buffer.
+                    let aft_dcon_indir_size = 1 + 8 * locBufferCount scrt_loc
+                    let data_con_let = LetLocE (getDconLoc scrt_loc) (GetDataConLocSoA scrt_loc)
+                    let new_jump_dloc = LetLocE (getDconLoc jump) (AfterConstantLE aft_dcon_indir_size ((getDconLoc scrt_loc)))
+                    let unpack_fld_lets = foldr (\((dcon, idx), lc) acc ->  acc ++ [LetLocE lc (GetFieldLocSoA (dcon, idx) scrt_loc)]) [] (getAllFieldLocsSoA scrt_loc)
+                    let indir_bod = Ext $ LetLocE (jump) (GenSoALoc (getDconLoc jump) (getAllFieldLocsSoA scrt_loc)) $
+                                 (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
+                                 LetE (callv,endofs,out_ty,AppE funName UnknownTailType (in_locs ++ out_locs) args) $
+                                 Ext (RetE ret_endofs callv)
+                    let indir_bod' = foldr (\l b -> Ext $ l b) indir_bod ([data_con_let] ++ [new_jump_dloc] ++ unpack_fld_lets)
+                    let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
+                    return $ (indir_dcon,[(indir_ptrv,(indir_ptrloc))],indir_bod')
                   SoA _d flocs -> do
                     let arr_elems = 1 + length flocs
                     let aft_dcon_indir_size = if gc_off then (1 + 8 * arr_elems) else 9

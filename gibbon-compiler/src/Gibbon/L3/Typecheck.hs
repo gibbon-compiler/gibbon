@@ -403,6 +403,13 @@ tcExp isPacked ddfs env exp = do
           ensureEqualTyModCursor ddfs exp end_r2_ty CursorTy
           return (ProdTy [])
 
+        IndirectionRef (end_r1, end_r2) -> do
+          end_r1_ty  <- lookupVar env end_r1 exp
+          ensureEqualTyModCursor ddfs exp end_r1_ty CursorTy
+          end_r2_ty  <- lookupVar env end_r2 exp
+          ensureEqualTyModCursor ddfs exp end_r2_ty CursorTy
+          return (ProdTy [])
+
         BumpArenaRefCount{} ->
           throwError $ GenericTC ("BumpArenaRefCount not handled.") exp
 

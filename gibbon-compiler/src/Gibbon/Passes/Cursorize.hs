@@ -18,6 +18,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Maybe as Mb
 import Data.Maybe (fromJust)
+import qualified Control.Monad.Reader as R
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.L3.Syntax hiding
@@ -285,7 +286,14 @@ type OldTy2 = UrTy LocVar
 data WindowIntoCursor = AoSWin Var | SoAWin Var [((DataCon, Int), Var)]
 
 cursorize :: Prog2 -> PassM Prog3
-cursorize Prog {ddefs, fundefs = fundefs0, mainExp} = do
+cursorize prg
+  | L2.writesFactoredIndirections (isSoALoc . toLocVar) prg =
+      R.local (\cfg -> cfg { dynflags = gopt_set Opt_WritesFactoredIndirections (dynflags cfg) })
+            (cursorize' prg)
+  | otherwise = cursorize' prg
+
+cursorize' :: Prog2 -> PassM Prog3
+cursorize' Prog {ddefs, fundefs = fundefs0, mainExp} = do
   dflags <- getDynFlags
   let userRequestedMutableCursors = gopt Opt_UseMutableCursors dflags
   when (gopt Opt_MutableCursorsNonRec dflags && not userRequestedMutableCursors) $
@@ -1832,6 +1840,126 @@ cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
   where
     go insidetimeit gm1 gm2 fenv = cursorizeExp gm1 gm2 useMutableCursorsCall emitScalarCountBumps insidetimeit fenv lenv ddfs fundefs denv tenv senv
 
+-- | Lower a fully-factored indirection; see
+-- Note [A factored indirection lives in the tag buffer] (RemoveCopies).
+--
+-- The output's tag buffer and its direct scalar buffers are bounds-checked
+-- together, as at function entry, since an indirection may be written after
+-- earlier writes have used the entry check's room.  Each buffer's chunk end is
+-- read from the threaded region, or under the mutable-cursor convention from
+-- the location's own region array, which callees update in place; it is
+-- written back after the check.  Then: one region reference per target buffer
+-- (GC only), the tag, and the target's cursor array.  Returns (start, end).
+-- Under the mutable-cursor convention the output region's mutable location is
+-- also advanced to the end, as a constructor write would.
+cursorizeFactoredIndirection ::
+  DynFlags -> DDefs Ty2 -> TyEnv Var Ty2 -> M.Map FreeVarsTy Var -> MutableLocPtsToEnv ->
+  DataCon -> LocArg -> LocArg -> LocArg -> LocArg -> PassM Exp3
+cursorizeFactoredIndirection dflags ddfs tenv fenv m1 dcon from from_reg to to_reg = do
+  let out_loc = toLocVar from
+      n_bufs = locBufferCount out_loc
+      isMut v = case M.lookup v tenv of
+                  Just (MkTy2 MutCursorTy) -> True
+                  _ -> False
+      arrayOf arg = case M.lookup (fromLocArgToFreeVarsTy arg) fenv of
+        Just v -> v
+        Nothing -> error $ "cursorizeFactoredIndirection: no variable for " ++ sdoc arg
+      out_arr = arrayOf from
+      target_arr = arrayOf to
+      -- (bytes, buffer index): the tag buffer, then each direct scalar field.
+      positions = snd $ L.mapAccumL (\i (k, fl) -> (i + locBufferCount fl, (k, fl, i)))
+                                    1 (getAllFieldLocsSoA out_loc)
+      scalar_bufs = [ (sz + 9, i)
+                    | ((fdcon, fidx), Single{}, i) <- positions
+                    , let MkTy2 fty = lookupDataCon ddfs fdcon !! fidx
+                    , not (isPackedTy fty)
+                    , Just sz <- [sizeOfTyD dflags fty] ]
+      checked = (1 + 8 * n_bufs + 9, 0) : scalar_bufs
+      -- The region array to read chunk ends from.  Under the mutable-cursor
+      -- convention the location's own region ends are mutable cursors that
+      -- callees keep current, and the threaded region is not bound; otherwise
+      -- the threaded region holds the current ends.
+      regionArray threaded own =
+        let ownIsMutable = case linearizeRegVar own of
+              (r0 : _) | Just v <- M.lookup (fromRegVarToFreeVarsTy r0) fenv -> isMut v
+              _ -> False
+            pick r = case M.lookup (fromRegVarToFreeVarsTy r) fenv of
+                       Just arr -> arr
+                       Nothing -> error $ "cursorizeFactoredIndirection: no variable for region " ++ sdoc r
+        in if ownIsMutable then pick own else pick threaded
+      ownEnds arg = toEndVRegVar (toRegVar arg)
+      out_regs = regionArray (toEndRegVar from_reg) (ownEnds from)
+      target_regs = regionArray (toEndRegVar to_reg) (ownEnds to)
+      -- The current cursor of output buffer i, and a mutable cursor to write
+      -- it back through if it has one.  Otherwise it is read from the
+      -- location's array: if the function-entry check has since grown the
+      -- region, that start holds a redirection and the check below grows again.
+      cursorOf :: Int -> PassM (Var, [(Var, [()], Ty3, Exp3)], Maybe Var)
+      cursorOf i = do
+        c <- gensym "indr_cur"
+        case M.lookup (fromLocVarToFreeVarsTy (linearizeLocVar out_loc !! i)) fenv of
+          Just v | isMut v -> pure (c, [(c, [], CursorTy, Ext $ DerefMutCursor v)], Just v)
+          _ -> pure (c, [(c, [], CursorTy, Ext $ IndexCursorArray out_arr i)], Nothing)
+      endOf :: Var -> Int -> PassM (Var, Var, [(Var, [()], Ty3, Exp3)])
+      endOf arr i = do
+        p <- gensym "indr_end_ptr"
+        e <- gensym "indr_end"
+        pure (e, p, [ (p, [], MutCursorTy, Ext $ AddrOfCursor (Ext $ IndexCursorArray arr i))
+                    , (e, [], CursorTy, Ext $ DerefMutCursor p) ])
+  curs <- mapM cursorOf [0 .. n_bufs - 1]
+  let cur i = let (c, _, _) = curs !! i in c
+  ends <- mapM (\(_, i) -> endOf out_regs i) checked
+  let check = [ (bytes, e, cur i, (e, cur i)) | ((bytes, i), (e, _, _)) <- zip checked ends ]
+      writeBackEnds = [ ("_", [], ProdTy [], Ext $ WriteCursorMutable p (VarE e)) | (e, p, _) <- ends ]
+      writeBackCurs = [ ("_", [], ProdTy [], Ext $ WriteCursorMutable mv (VarE c)) | (c, _, Just mv) <- curs ]
+      tag_end = case ends of
+                  ((e, _, _) : _) -> e
+                  [] -> error "cursorizeFactoredIndirection: no tag buffer"
+  refs <- if gopt Opt_DisableGC dflags
+          then pure []
+          else concat <$> mapM (\i -> do
+                                  t <- gensym "indr_target_end"
+                                  pure [ (t, [], CursorTy, Ext $ IndexCursorArray target_regs i)
+                                       , ("_", [], ProdTy [], Ext $ IndirectionRef (tag_end, t)) ])
+                               [0 .. n_bufs - 1]
+  wtag <- gensym "writetag"
+  after_tag <- gensym "after_tag"
+  end_tag <- gensym "end_indirection"
+  start_arr <- gensym "indirection_start"
+  end_arr <- gensym "indirection_end"
+  let arr_ty = CursorArrayTy n_bufs
+      write =
+        [ (wtag, [], CursorTy, Ext $ WriteTag dcon (cur 0))
+        , (after_tag, [], CursorTy, Ext $ AddCursor (cur 0) (L3.mkLitE64 1))
+        , ("_", [], ProdTy [], Ext $ MemCpy after_tag target_arr arr_ty)
+        , (end_tag, [], CursorTy, Ext $ AddCursor after_tag (L3.mkLitE64 (fromIntegral (8 * n_bufs))))
+        , (start_arr, [], arr_ty, mkMakeCursorArrayDbg start_arr (map cur [0 .. n_bufs - 1]))
+        , (end_arr, [], arr_ty, mkMakeCursorArrayDbg end_arr (end_tag : map cur [1 .. n_bufs - 1]))
+        ]
+  -- The mutable output location in the output's region, if any: the SoA
+  -- location tracked in that region whose every buffer is a mutable cursor,
+  -- excluding the region's end-of-region entries.
+  let out_region = toRegVar from
+      end_forms = [toEndRegVar from_reg, toEndVRegVar out_region]
+      mutComponents k = [ M.lookup (fromLocVarToFreeVarsTy c) fenv | c <- linearizeLocVar k ]
+      candidates = L.sortOn (fromVar . unwrapLocVar . getDconLoc)
+                     [ k | (k@SoA{}, entries) <- M.toList m1
+                         , any (\(_, _, rr, _) -> rr == Just out_region) entries
+                         , fromLocVarToRegVar k `notElem` end_forms
+                         , length (linearizeLocVar k) == n_bufs
+                         , all (maybe False isMut) (mutComponents k) ]
+  advance <- case candidates of
+    [] -> pure []
+    [k] -> pure [ ("_", [], ProdTy [], Ext $ WriteCursorMutable mv (VarE val))
+                | (Just mv, val) <- zip (mutComponents k) (end_tag : map cur [1 .. n_bufs - 1]) ]
+    ks -> error $ "cursorizeFactoredIndirection: several mutable output locations for "
+                  ++ sdoc out_region ++ ": " ++ sdoc ks
+  pure $ mkLets (concatMap (\(_, b, _) -> b) curs
+                 ++ concatMap (\(_, _, b) -> b) ends
+                 ++ [("_", [], IntTy W64, Ext $ L3.BoundsCheckVector check)]
+                 ++ writeBackEnds ++ writeBackCurs ++ refs ++ write ++ advance)
+                (MkProdE [VarE start_arr, VarE end_arr])
+
 insertRegInVarEnv :: RegVar -> M.Map FreeVarsTy Var -> PassM (M.Map FreeVarsTy Var)
 insertRegInVarEnv reg_var env = do
   case reg_var of
@@ -2968,22 +3096,25 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           
           -- Vidush 
           -- Check the index logic might not be robust here.
+          -- A field location not yet bound is read out of the SoA cursor
+          -- array at its position in the linearization: a single field is one
+          -- cursor, a nested SoA field a sub-array of 'locBufferCount' cursors.
           (additional_bnds', freeVarToVarEnv'', _) <-
             foldlM
               ( \(b, env, idx') ((_, _), loc) -> do
-                  (var_for_loc, present', env', bnds) <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of
-                    Just v -> return $ (v, True, env, [])
+                  (b', env') <- case (M.lookup (fromLocVarToFreeVarsTy loc) env) of
+                    Just _ -> return (b, env)
                     Nothing -> case loc of
-                      Single l -> return $ (l, False, env, [])
+                      Single l -> return (b ++ [(l, [], CursorTy, Ext $ IndexCursorArray sloc idx')], env)
                       SoA {} -> do
                         new_name <- gensym "field_cursor"
-                        let env'' = M.insert (fromLocVarToFreeVarsTy loc) new_name env
-                        return $ (new_name, False, env'', [])
-                  let b' =
-                        if present'
-                          then b
-                          else b ++ [(var_for_loc, [], getCursorizeTyFromLocVar Nothing useMutableCursorsCall sloc_loc, Ext $ IndexCursorArray sloc idx')]
-                  pure (b', env', idx' + 1)
+                        let n = locBufferCount loc
+                        parts <- mapM (\_ -> gensym "field_cursor_part") [1 .. n]
+                        let part_bnds = [ (pv, [], CursorTy, Ext $ IndexCursorArray sloc (idx' + i))
+                                        | (pv, i) <- zip parts [0 ..] ]
+                            env'' = M.insert (fromLocVarToFreeVarsTy loc) new_name env
+                        return (b ++ part_bnds ++ [(new_name, [], CursorArrayTy n, mkMakeCursorArrayDbg new_name parts)], env'')
+                  pure (b', env', idx' + locBufferCount loc)
               )
               (additional_bnds, freeVarToVarEnv', 1)
               field_locs
@@ -3380,6 +3511,11 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
         BoundsCheck i bound cur -> return (dl <$> 
                                              Ext $ L3.BoundsCheck i (((unwrapLocVar . toLocVar)) bound) (((unwrapLocVar . toLocVar)) cur) Nothing Output
                                             , freeVarToVarEnv, m1, m2)
+        IndirectionE _ dcon (from, from_reg) (to, to_reg) _
+          | isSoALoc (toLocVar from) -> do
+              dflags <- getDynFlags
+              e <- cursorizeFactoredIndirection dflags ddfs tenv freeVarToVarEnv m1 dcon from from_reg to to_reg
+              return (Di e, freeVarToVarEnv, m1, m2)
         IndirectionE tycon dcon (from, from_reg) (to, to_reg) cpy -> do
           dflags <- getDynFlags
           if gopt Opt_DisableGC dflags
@@ -3475,104 +3611,8 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                           (MkProdE [VarE start, VarE end])
                       ), 
                       freeVarToVarEnv, m1, m2)
-                SoA dcloc flds -> do
-                  -- can this be refactored into a helper function?
-                  let from_loc_var = case M.lookup (fromLocArgToFreeVarsTy from) freeVarToVarEnv of 
-                                          Nothing -> error "Did not find variable for location!"
-                                          Just var -> var
-                  let from_locs = linearizeLocVar (SoA dcloc flds) --[Single dcloc] ++ map (\(_, floc) -> floc) flds
-                  let to_locs = case (toLocVar to) of
-                                    Single{} -> error "Expected a SoA location!\n"
-                                    SoA dc_loc flocs -> linearizeLocVar (SoA dc_loc flocs) --[Single dc_loc] ++ map (\(_, floc) -> floc) flocs
-                  let to_loc_var = case M.lookup (fromLocArgToFreeVarsTy to) freeVarToVarEnv of
-                        Nothing -> error "Did not find variable for location!"
-                        Just var -> var
-                  let reg_from_reg = fromLocVarToRegVar (toLocVar from_reg)
-                  let from_reg_vars = case reg_from_reg of 
-                                              SingleR{} -> error "expected an SoA region!\n"
-                                              SoARv dc_reg fieldRegs -> linearizeRegVar (SoARv dc_reg fieldRegs) --[dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
+                SoA{} -> error "cursorizePackedExp: factored indirection handled above"
 
-                  let from_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_from_reg) freeVarToVarEnv of 
-                                                      Nothing -> error "Did not find region!"
-                                                      Just var -> var
-
-                  let reg_to_reg = fromLocVarToRegVar (toLocVar to_reg)
-                  let to_reg_vars = case reg_to_reg of 
-                                              SingleR{} -> error "expected an SoA region!\n"
-                                              SoARv dc_reg fieldRegs ->  linearizeRegVar (SoARv dc_reg fieldRegs) -- [dc_reg] ++ map (\(_, floc) -> floc) fieldRegs
-                  
-                  let to_reg_var = case M.lookup (fromRegVarToFreeVarsTy reg_to_reg) freeVarToVarEnv of 
-                                                      Nothing -> error "Did not find region!"
-                                                      Just var -> var
-                                              
-                  let barrier_args = L.zip4 from_locs to_locs from_reg_vars to_reg_vars
-
-                  let handle_indrs_rec = (\(lets, range, p@(flp, tp, rp, trp), b_args) r@(fl, to_loc, from_reg, to_reg) -> do
-                                          case fl of 
-                                            Single{} -> do
-                                              start <- gensym "start"
-                                              end <- gensym "end"
-                                              (from_var, fvl) <- case M.lookup (fromLocVarToFreeVarsTy fl) freeVarToVarEnv of
-                                                                Nothing -> case fl of 
-                                                                              Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray flp (fromJust (L.elemIndex r b_args)))])
-                                                                Just var -> return $ (var, [])
-                                              (to_var, tvl) <- do 
-                                                               case M.lookup (fromLocVarToFreeVarsTy to_loc) freeVarToVarEnv of
-                                                                Nothing -> case to_loc of 
-                                                                            Single l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray tp (fromJust (L.elemIndex r b_args)))])
-                                                                            SoA{} -> do 
-                                                                                    field_name <- gensym "field_cursor"
-                                                                                    return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray tp (fromJust (L.elemIndex r b_args)))])
-                                                                Just var -> return $ (var, [])
-
-                                              (from_reg_var, frl) <- case M.lookup (fromRegVarToFreeVarsTy from_reg) freeVarToVarEnv of
-                                                                          Nothing -> case from_reg of 
-                                                                                          SingleR l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray rp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoARv{} -> do 
-                                                                                                    field_name <- gensym "field_cursor"
-                                                                                                    return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray rp (fromJust (L.elemIndex r b_args)))]) 
-                                                                          Just var -> return $ (var, [])
-                                              (to_reg_var, trl) <- case M.lookup (fromRegVarToFreeVarsTy to_reg) freeVarToVarEnv of
-                                                                        Nothing -> case to_reg of 
-                                                                                          SingleR l -> return $ (l, [(l, [], CursorTy, Ext $ IndexCursorArray trp (fromJust (L.elemIndex r b_args)))])
-                                                                                          SoARv{} -> do
-                                                                                                      field_name <- gensym "field_cursor"
-                                                                                                      return $ (field_name, [(field_name, [], CursorTy, Ext $ IndexCursorArray trp (fromJust (L.elemIndex r b_args)))]) 
-
-                                                                        Just var -> return $ (var, [])
-                                              -- VS : [09/20/2025 -- For SoA case, indirection with gc need a bit more thinking]
-                                              -- One way could be to call indirection barrier seperately on every buffer/region
-                                              -- Then follow them seperately for every region in the case.
-                                              -- For now i'm erroring out but this needs more thought.
-                                              (need_deref, new_vars) <- foldlM (\(ls, nvs) v -> case M.lookup v tenv of 
-                                                                                    Just (MkTy2 MutCursorTy) -> do 
-                                                                                                  new_deref <- gensym "new_deref"
-                                                                                                  return (ls ++ [(new_deref, [], CursorTy, Ext $ DerefMutCursor v)], nvs ++ [new_deref]) 
-                                                                                    _ -> return (ls, nvs ++ [v])
-                                                                               ) ([], []) [from_var, to_var, from_reg_var, to_reg_var]
-                                              -- We need to make sure to get the right tycon for the the nested SoA field 
-                                              -- This may be important for the GC to work properly.
-                                              -- Vidush: TODO
-                                              let new_let = [ ("_", [], ProdTy [], Ext (IndirectionBarrier tycon ((new_vars !! 0), (new_vars !! 2), (new_vars !! 1), (new_vars !! 3)))),
-                                                              (start, [], CursorTy, VarE (from_var)),
-                                                              (end, [], CursorTy, Ext $ AddCursor (from_var) (L3.mkLitE64 9))
-                                                            ]
-                                              return (lets ++ fvl ++ tvl ++ frl ++ trl ++ need_deref ++ new_let, range ++ [(start, end)], p, b_args)
-                                        )
-
-                  (let_exprs, range_s, _, _) <- foldlM handle_indrs_rec ([], [], (from_loc_var, to_loc_var, from_reg_var, to_reg_var), barrier_args) barrier_args
-                  start_soa <- gensym "start_soa"
-                  end_soa <- gensym "end_soa"
-                  let start_vars = map fst range_s
-                  let end_vars = map snd range_s
-                  -- TODO change cursor array ty size
-                  -- TODO Fix , the size of CursorArrayTy needs to change here.
-                  let let_start_soa = (start_soa, [], CursorArrayTy (L.length start_vars), mkMakeCursorArrayDbg start_soa start_vars)
-                  let let_end_soa = (end_soa, [], CursorArrayTy (L.length end_vars), mkMakeCursorArrayDbg end_soa end_vars)
-                  let end_prod = MkProdE [VarE start_soa, VarE end_soa]
-                  let ret_let = mkLets (let_exprs ++ [let_start_soa, let_end_soa]) end_prod
-                  return (Di ret_let, freeVarToVarEnv, m1, m2)
-                  
         AddFixed {} -> error "cursorizePackedExp: AddFixed not handled."
         GetCilkWorkerNum -> pure (Di (Ext L3.GetCilkWorkerNum), freeVarToVarEnv, m1, m2)
         LetAvail vs bod -> do
@@ -4740,6 +4780,15 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                 CursorTy -> do
                                   addr <- gensym "address"
                                   pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
+                                -- A factored value is a cursor array, which a
+                                -- mutable-cursor callee advances in place: it
+                                -- gets a copy.
+                                PackedTy _ ploc | isSoALoc ploc -> do
+                                  arr <- gensym "arg_copy"
+                                  let arr_ty = CursorArrayTy (locBufferCount ploc)
+                                  pure $ mkLets [ (arr, [], arr_ty, Ext $ InitCursor arr_ty)
+                                                , ("_", [], ProdTy [], Ext $ MemCpy arr varname arr_ty) ]
+                                                (VarE arr)
                                 PackedTy {} -> do
                                   addr <- gensym "address"
                                   pure $ mkLets [(addr, [], MutCursorTy, Ext $ AddrOfCursor (VarE varname))] (VarE addr)
@@ -7501,7 +7550,10 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall emitScalarCountBumps insi
                               if isIndirectionTag dcon
                                 then do
                                    dflags <- getDynFlags
-                                   if gopt Opt_DisableGC dflags
+                                   -- See Note [A factored indirection lives in the tag buffer]
+                                   -- (RemoveCopies): a program that writes one reads the
+                                   -- cursor array with and without GC.
+                                   if gopt Opt_DisableGC dflags || gopt Opt_WritesFactoredIndirections dflags
                                    then do 
                                     tmp <- gensym "readcursor_indir"
                                     loc_var <- lookupVariable loc fenv
@@ -7528,7 +7580,12 @@ unpackDataCon aliveBuffers m1 m2 useMutableCursorsCall emitScalarCountBumps insi
                                           if isIndirectionTag dcon || isRedirectionTag dcon
                                             then Ext (ReadTaggedCursor var_dcon_next)
                                             else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                                        mut_loc_pointing_to_dcur = findMutableLocationInSameRegion reg m1
+                                        -- With factored indirections the pointee goes to a fresh
+                                        -- array: the scrutinee's own array is advanced past the
+                                        -- indirection, and the callee advances the copy.
+                                        mut_loc_pointing_to_dcur = if gopt Opt_WritesFactoredIndirections dflags
+                                                                   then Nothing
+                                                                   else findMutableLocationInSameRegion reg m1
                                         (binds, m1d) = case mut_loc_pointing_to_dcur of 
                                                               Nothing -> ([ (var_dcon_next, [], CursorTy, Ext (AddCursor dcur (mkLitE64 1))),
                                                                             --(tmp, [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),

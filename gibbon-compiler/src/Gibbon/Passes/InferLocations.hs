@@ -1248,6 +1248,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                           afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
                             Just $ AfterCopyL loc1 v v' loc2 f lvs
                           afterVar _ = Nothing
+                          -- A copy into a field buffer is made just before the
+                          -- constructor (see below), directly at the field's
+                          -- location: the field's buffers are its own.
+                          afterVarField ((ArgCopy _ _ _ _), (Just loc1), (Just loc2)) =
+                            Just $ AssignL loc1 loc2
+                          afterVarField x = afterVar x
                           -- dbgTrace minChatLvl "Print DataConE SoA case argsLs: " dbgTrace minChatLvl (sdoc (d, argLs, newLocs)) dbgTrace minChatLvl "End DataConE SoA case argLs.\n"
                       let _dataBufferLoc = Single dataBufferVar
                           -- VS: September 24th, 2025
@@ -1292,7 +1298,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                            Just location -> Just location
                                                                            Nothing -> error $ "inferExp: fieldLocVars did not expect Nothing! Datacon: " ++ show (k', idx + numRanNodes) ++ " ," ++ show idxsFields' ++ ", fieldLocs: " ++ show fieldLocs
                                                ) idxsFields'
-                          fieldConstraints = (mapMaybe afterVar $ zip3 
+                          fieldConstraints = (mapMaybe afterVarField $ zip3 
                                                 dcArgFields
                                                 ((map Just locsFields))
                                                 (fieldLocVars)
@@ -1322,8 +1328,14 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                       ) idxsFields'
                                                                         dflags <- getDynFlags
                                                                         argLsAfterSoALoc <- mapM (argSizeForDataCon dflags env) (map fst3 argsLsFields)
+                                                                        -- A field copied into this constructor is made once, before
+                                                                        -- the constructor; what follows it is after that copy.
+                                                                        let argLsAfterSoALoc' = zipWith (\after arg -> case (after, arg) of
+                                                                                                            (ArgCopy{}, ArgCopy _ v' _ _) -> ArgVar v'
+                                                                                                            _ -> after)
+                                                                                                         argLsAfterSoALoc dcArgFields
                                                                         let fieldConstraints' = (mapMaybe afterVar $ zip3 
-                                                                                                  argLsAfterSoALoc
+                                                                                                  argLsAfterSoALoc'
                                                                                                   ((fieldLocVarsAfter))
                                                                                                   (map Just locsFields)
                                                                                                 )
@@ -1384,8 +1396,14 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                           ) idxsFields'
                                                                             dflags <- getDynFlags
                                                                             argLsAfterSoALoc <- mapM (argSizeForDataCon dflags env) (map fst3 argsLsFields)
+                                                                            -- A field copied into this constructor is made once, before
+                                                                            -- the constructor; what follows it is after that copy.
+                                                                            let argLsAfterSoALoc' = zipWith (\after arg -> case (after, arg) of
+                                                                                                                (ArgCopy{}, ArgCopy _ v' _ _) -> ArgVar v'
+                                                                                                                _ -> after)
+                                                                                                             argLsAfterSoALoc dcArgFields
                                                                             let fieldConstraints' = (mapMaybe afterVar $ zip3 
-                                                                                                      argLsAfterSoALoc
+                                                                                                      argLsAfterSoALoc'
                                                                                                       ((fieldLocVarsAfter))
                                                                                                      (map Just locsFields)
                                                                                                    )
@@ -1408,7 +1426,11 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                                                                        ((map Just rstlocs) ++ [Nothing])
                                                                                                        (map Just locsDconBuf')
                                                                                          )
-                                                                            let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed ++ afvarc) d
+                                                                            -- A copy is discharged from 'afvarc' once its source is in scope.
+                                                                            let isCopyC c = case c of
+                                                                                              AfterCopyL{} -> True
+                                                                                              _ -> False
+                                                                            let soac = AfterSoAL hloc tagc (fieldConstraints ++ fieldConstraints' ++ fieldConstraints_unsed ++ filter (not . isCopyC) afvarc) d
                                                                             -- , locsFields, fieldLocVarsAfter
                                                                             -- dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (argLsAfterSoALoc, locsFields, fieldLocVarsAfter, fieldConstraints')) dbgTrace minChatLvl "End line 1171\n"
                                                                             dbgTrace minChatLvl "Print tuple line: 1171" dbgTrace minChatLvl (sdoc (soac, fieldLocVarsAfter, idxsFields', afvarc, fieldConstraints', fieldConstraints, fieldConstraints_unsed)) dbgTrace minChatLvl "End line 1171\n" return ([tagc], [tagc_shortcut_first_c] ++ constratints_short_cut_rst ++ [soac], afvarc)
@@ -1451,7 +1473,24 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                                     _ -> undefined
                               _ -> return (e,ty,cs)
                       -- bod <- return $ DataConE d k [ e' | (e',_,_)  <- ls'']
-                      bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
+                      -- Copies into field buffers, then (as for AoS) a copy as the
+                      -- last argument, are made just before the constructor.
+                      let copyBind idx =
+                            case (argLs !! idx, ls' !! idx) of
+                              (ArgCopy _ v' _ copy_locs, (AppE f cty lvs e, _, _)) ->
+                                let arrty = arrOut $ lookupFEnv f env
+                                    copyRetTy = case arrty of
+                                      PackedTy _ loc -> substLoc (M.singleton loc (last copy_locs)) arrty
+                                      _ -> error "inferExp: Not a packed type"
+                                in [(v', [], copyRetTy, AppE f cty lvs e)]
+                              _ -> []
+                          lastIdx = length ls - 1
+                          fieldCopyIdxs = [ idx | Just idx <- idxsFields', not (null (copyBind idx)) ]
+                          lastCopyIdxs = [ lastIdx | length ls > 0, isCpyCall (fst3 (last ls'))
+                                                   , lastIdx `notElem` fieldCopyIdxs ]
+                          copyBinds = concatMap copyBind (fieldCopyIdxs ++ lastCopyIdxs)
+                      bod <- if null fieldCopyIdxs
+                             then if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
                              then case last [e | (e,_,_) <- ls'] of
                                 (AppE f cty lvs e) ->
                                     let (ArgCopy _ v' _ copy_locs) = last argLs
@@ -1466,6 +1505,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                                        DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                              else return $ DataConE d k [ e' | (e',_,_)  <- ls'']
+                             else return $ mkLets copyBinds (DataConE d k [ e' | (e',_,_) <- ls''])
                       -- dbgTrace minChatLvl "Print contrs'" dbgTrace minChatLvl (sdoc (k, constrs')) dbgTrace minChatLvl "End constrs'\n"
                       dbgTrace minChatLvl "Print contrs'" dbgTrace minChatLvl (sdoc (k, constrs')) dbgTrace minChatLvl "End constrs'\n" return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
@@ -2722,6 +2762,19 @@ emptyEnv = FullEnv { dataDefs = emptyDD
 
 --------------------------------------------------------------------------------
 
+-- | Insert a let binding immediately after the binding of the given variable,
+-- searching down the spine of lets; Nothing if it is not bound on the spine.
+bindAfter :: Var -> (Var, [LocVar], Ty2, Exp2) -> Exp2 -> Maybe Exp2
+bindAfter w bnd ex =
+  case ex of
+    LetE b@(x,_,_,_) bod
+      | x == w    -> Just (LetE b (LetE bnd bod))
+      | otherwise -> LetE b <$> bindAfter w bnd bod
+    Ext (LetLocE loc rhs bod) -> Ext . LetLocE loc rhs <$> bindAfter w bnd bod
+    Ext (LetRegionE r sz endmut ty bod) -> Ext . LetRegionE r sz endmut ty <$> bindAfter w bnd bod
+    Ext (LetParRegionE r sz ty bod) -> Ext . LetParRegionE r sz ty <$> bindAfter w bnd bod
+    _ -> Nothing
+
 fixRANs :: Prog2 -> PassM Prog2
 fixRANs prg@(Prog defs funs main) = do
     main' <-
@@ -2769,7 +2822,15 @@ fixRANs prg@(Prog defs funs main) = do
                      needRANsExp = L.reverse $ L.take n (reverse ls)
                      ran_pairs = M.fromList $ fragileZip rans needRANsExp
                      VarE w' = ran_pairs M.! VarE v
-                 return (bnd2, LetE (v,locs,t,Ext (L2.StartOfPkdCursor w')) bod')
+                     ranBind = (v,locs,t,Ext (L2.StartOfPkdCursor w'))
+                 -- A factored field re-placed by a copy is bound after the
+                 -- random-access pointer to it; the pointer moves to just
+                 -- after the copy.
+                 case t of
+                   CursorArrayTy{} | not (M.member w' (vEnv env2))
+                                   , Just bod'' <- bindAfter w' ranBind bod' ->
+                     return (bnd2, bod'')
+                   _ -> return (bnd2, LetE ranBind bod')
 
         LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
                                       (bnd2,bod') <- exp ddfs (L1.extendVEnv v t env2) bod

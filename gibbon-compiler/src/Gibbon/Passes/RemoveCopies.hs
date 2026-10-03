@@ -22,12 +22,30 @@ type OffEnv = M.Map LocVar (LocVar, Int)
 
 learnOffset :: LocVar -> PreLocExp LocVar -> OffEnv -> OffEnv
 learnOffset loc rhs oenv =
+  learnTagOffset loc rhs $
   case rhs of
     AfterConstantLE k base ->
       let (root, off) = resolveOffset base oenv
        in M.insert loc (root, off + k) oenv
     AssignLE base -> M.insert loc (resolveOffset base oenv) oenv
     _ -> oenv
+  where
+    -- Offsets of a fully-factored location are tracked on its tag cursor
+    -- ('getDconLoc'); @AfterConstantLE k@ on an SoA location offsets the tag
+    -- buffer only.
+    learnTagOffset l r env
+      | not (isSoALoc l), GetDataConLocSoA src <- r =
+          M.insert l (resolveOffset (getDconLoc src) env) env
+      | isSoALoc l =
+          case r of
+            AfterConstantLE k base ->
+              let (root, off) = resolveOffset (getDconLoc base) env
+               in M.insert (getDconLoc l) (root, off + k) env
+            AssignLE base -> M.insert (getDconLoc l) (resolveOffset (getDconLoc base) env) env
+            GenSoALoc d _ | d /= getDconLoc l ->
+              M.insert (getDconLoc l) (resolveOffset d env) env
+            _ -> env
+      | otherwise = env
 
 resolveOffset :: LocVar -> OffEnv -> (LocVar, Int)
 resolveOffset loc oenv = M.findWithDefault (loc, 0) loc oenv
@@ -38,15 +56,28 @@ resolveOffset loc oenv = M.findWithDefault (loc, 0) loc oenv
 indirectionBytes :: Int
 indirectionBytes = 9
 
+-- | Bytes a factored indirection occupies in the TAG buffer: one tag plus one
+-- cursor per buffer of the type.  It writes nothing into any other buffer.
+-- See Note [A factored indirection lives in the tag buffer].
+soaIndirectionTagBytes :: LocVar -> Int
+soaIndirectionTagBytes loc = 1 + 8 * locBufferCount loc
+
 -- | Does re-placing a value at @lout@ that currently lives at @lin@ write over
 -- the value itself?  See Note [A value cannot be re-placed onto itself].
 replacementOverlaps :: OffEnv -> LocVar -> LocVar -> Bool
-replacementOverlaps oenv lin lout =
+replacementOverlaps oenv lin lout = overlapsBy indirectionBytes oenv lin lout
+
+overlapsBy :: Int -> OffEnv -> LocVar -> LocVar -> Bool
+overlapsBy nodeBytes oenv lin lout =
   case (resolveOffset lin oenv, resolveOffset lout oenv) of
     ((rootIn, offIn), (rootOut, offOut))
       | rootIn == rootOut -> let gap = offIn - offOut
-                              in gap >= 0 && gap < indirectionBytes
+                              in gap >= 0 && gap < nodeBytes
     _ -> False
+
+tagGap :: OffEnv -> LocVar -> LocVar -> Int
+tagGap oenv lin lout =
+  snd (resolveOffset (getDconLoc lin) oenv) - snd (resolveOffset (getDconLoc lout) oenv)
 
 removeCopies :: Prog2 -> PassM Prog2
 removeCopies Prog{ddefs,fundefs,mainExp} = do
@@ -71,7 +102,14 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
                 Nothing -> return Nothing
                 Just (mn, ty) -> Just . (,ty) <$>
                   removeCopiesExp keepCopiesForMutableGC ddefs' fundefs M.empty M.empty env2 mn
-  return $ Prog ddefs' fundefs' mainExp'
+  let prg' = Prog ddefs' fundefs' mainExp'
+  -- See Note [A factored indirection lives in the tag buffer].
+  if gopt Opt_GenGc dflags && not (gopt Opt_DisableGC dflags)
+       && writesFactoredIndirections isSoALoc prg'
+    then error $ "\nGibbon cannot share a fully-factored (SoA) value under --gen-gc: the"
+                 ++ " generational collector has no write barrier for a factored indirection."
+                 ++ " Use the default collector or --no-gc.\n"
+    else return prg'
 
 removeCopiesFn :: Bool -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
 removeCopiesFn keepCopiesForMutableGC ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
@@ -102,35 +140,28 @@ removeCopiesFn keepCopiesForMutableGC ddefs fundefs f@FunDef{funArgs,funTy,funBo
 -- response is to refuse before code generation.  A non-overlapping re-placement
 -- is untouched and still becomes an indirection.
 --
--- Fully-factored (SoA) values are refused whenever the two locations differ at
--- all: an SoA value's start is one cursor per buffer, different constructors
--- advance different buffers, and the per-buffer distances are exactly the
--- overlapping kind above.  Cursorize's SoA indirection lowering is also
--- incomplete, and with mutable cursors the SoA copy call fails the L3
--- typechecker (@CursorArrayTy n <> CursorTy@).  No program under
--- examples/soa_examples/programs/SOA produces an SoA copy today.
+-- Fully-factored (SoA) values follow the same rule, applied to the tag buffer
+-- only; see Note [A factored indirection lives in the tag buffer].
 
--- | Note [A fully-factored value cannot be re-placed]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- An SoA value's start is one cursor PER BUFFER, and different constructors
--- advance different field buffers: a tail built as @A@'s field begins with
--- @A@'s buffer advanced and @B@'s not, which is not where @B@ needs it.  So
--- location inference's copy repair tactic fires with two genuinely different
--- SoA locations, and no copy-free placement exists.
+-- | Note [A factored indirection lives in the tag buffer]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- An SoA value's start is one cursor per buffer.  Its indirection is written
+-- into the TAG buffer only: tag 'indirectionTag' followed by the target's N
+-- cursors (N = 'locBufferCount', nested factored fields included), 8 bytes
+-- each, untagged, in 'linearizeLocVar' order.  Every field buffer is left
+-- untouched, so the indirection's end witness is the tag cursor advanced by
+-- 1 + 8N and every field cursor unchanged.  GC on and off use the same bytes;
+-- with GC on, Cursorize also records one region reference per target buffer.
 --
--- Gibbon cannot lower that copy today, on either path:
---
---   * without @--use-mutable-cursors@ it is rewritten to an SoA indirection
---     node, whose Cursorize lowering is incomplete (see the "indirection with
---     gc need a bit more thinking" note there); the value it produces faults
---     when traversed;
---   * with @--use-mutable-cursors@ the copy call is kept and the L3
---     typechecker rejects its ABI, @CursorArrayTy n <> CursorTy@.
---
--- Emitting either was a silent miscompilation.  Refuse instead, before code
--- generation, and say what to do about it.  Measured before adding this: none
--- of the 109 SoA programs under examples/soa_examples/programs/SOA produces an
--- SoA copy, so nothing that compiles today starts failing.
+-- Only the tag buffer is written, so only the tag-buffer distance can make the
+-- node overwrite the value it points at.  That happens for a shared tail
+-- consumed by two constructor alternatives: each alternative writes one tag
+-- before it, so the two tag cursors coincide while the field cursors differ,
+-- and no in-place node can say "same tag, other fields".  Such a re-placement
+-- is refused.  Any other SoA re-placement becomes an indirection, also under
+-- @--use-mutable-cursors@, where AoS keeps the copy: the kept SoA copy's ABI
+-- does not typecheck (@CursorArrayTy n <> CursorTy@).
+
 replaceUnsupported :: String -> Exp2 -> LocVar -> LocVar -> a
 replaceUnsupported why arg lin lout =
   error $
@@ -150,7 +181,11 @@ replaceUnsupported why arg lin lout =
     ++ "    if p then A x (mkT (n - 1)) else B y (mkT (n - 1))\n\n"
     ++ "For an array-of-structs type ({-# ANN type T \"Linear\" #-}) the alternatives\n"
     ++ "must also agree on where the packed field starts, or be far enough apart that\n"
-    ++ "an indirection fits between them.\n"
+    ++ "an indirection fits between them.  For a fully-factored type\n"
+    ++ "({-# ANN type T \"Factored\" #-}) the indirection is written into the tag\n"
+    ++ "buffer only, so it is the alternatives' tag-buffer positions that must be far\n"
+    ++ "enough apart; when each alternative writes one tag before the shared value\n"
+    ++ "they coincide.\n"
 
 -- | Why, if at all, this re-placement cannot be expressed.
 --
@@ -176,9 +211,15 @@ replaceUnsupported why arg lin lout =
 -- programs under @--packed@ there is no SoA copy.
 unsupportedReplacement :: Bool -> OffEnv -> LocVar -> LocVar -> Maybe String
 unsupportedReplacement keepCopies oenv lin lout
-  | isSoALoc lin || isSoALoc lout =
-      Just ("it is fully factored (SoA), so its start is one cursor per buffer"
-            ++ " and the buffers do not line up")
+  | isSoALoc lin /= isSoALoc lout =
+      Just "one location is fully factored (SoA) and the other is not"
+  | isSoALoc lin
+  , overlapsBy (soaIndirectionTagBytes lin) oenv (getDconLoc lin) (getDconLoc lout) =
+      Just ("it is fully factored (SoA), and its tag-buffer start is only "
+            ++ show (tagGap oenv lin lout)
+            ++ " bytes after the destination's, while a factored indirection needs "
+            ++ show (soaIndirectionTagBytes lin) ++ " bytes of the tag buffer")
+  | isSoALoc lin = Nothing
   | replacementOverlaps oenv lin lout =
       Just ("the destination is only "
             ++ show (snd (resolveOffset lin oenv) - snd (resolveOffset lout oenv))
@@ -197,7 +238,7 @@ sameRegion oenv lin lout =
 removeCopiesExp :: Bool -> DDefs Ty2 -> FunDefs2 -> LocEnv -> OffEnv -> Env2 Var Ty2 -> Exp2 -> PassM Exp2
 removeCopiesExp keepCopiesForMutableGC ddefs fundefs lenv oenv env2 ex =
   case ex of
-    -- See Note [A fully-factored value cannot be re-placed].  This must come
+    -- See Note [A factored indirection lives in the tag buffer].  This must come
     -- before every other copy case, including the ones that keep copies for
     -- mutable-cursor GC, so that the refusal is what the user sees rather than
     -- a downstream type error or a fault at run time.
@@ -211,10 +252,11 @@ removeCopiesExp keepCopiesForMutableGC ddefs fundefs lenv oenv env2 ex =
       , Just why <- unsupportedReplacement keepCopiesForMutableGC oenv lin lout ->
       replaceUnsupported why arg lin lout
 
-    AppE f _cty [_,_] [_] | isCopyFunName f && keepCopiesForMutableGC ->
+    AppE f _cty [lin,_] [_] | isCopyFunName f && keepCopiesForMutableGC && not (isSoALoc lin) ->
       pure ex
 
-    LetE (v,locs,ty, rhs@(AppE f _cty [_,_] [_])) bod | isCopyFunName f && keepCopiesForMutableGC ->
+    LetE (v,locs,ty, rhs@(AppE f _cty [lin,_] [_])) bod
+      | isCopyFunName f && keepCopiesForMutableGC && not (isSoALoc lin) ->
       LetE (v,locs,ty, rhs) <$>
         removeCopiesExp keepCopiesForMutableGC ddefs fundefs lenv oenv (extendVEnv v ty env2) bod
 

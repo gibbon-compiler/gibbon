@@ -74,6 +74,7 @@ extExps ext =
     BoundsCheck{} -> []
     BoundsCheckVector{} -> []
     IndirectionBarrier{} -> []
+    IndirectionRef{} -> []
     BumpArenaRefCount{} -> []
     NullCursor -> []
     InitCursor{} -> []
@@ -158,6 +159,7 @@ traverseExtExps f ext =
     BoundsCheck{} -> pure ext
     BoundsCheckVector{} -> pure ext
     IndirectionBarrier{} -> pure ext
+    IndirectionRef{} -> pure ext
     BumpArenaRefCount{} -> pure ext
     NullCursor -> pure ext
     InitCursor{} -> pure ext

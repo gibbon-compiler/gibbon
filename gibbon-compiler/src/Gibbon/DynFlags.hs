@@ -40,6 +40,10 @@ data GeneralFlag
   | Opt_RtsDebug           -- ^ Compile the RTS in debugging mode.
   | Opt_PrintGcStats       -- ^ Record and print GC statistics.
   | Opt_GenGc              -- ^ Use the new generational GC.
+  | Opt_WritesFactoredIndirections
+  -- ^ Internal, never set from the command line: the program writes a
+  -- fully-factored indirection, so readers use the factored INDIRECTION arm.
+  -- Set by 'Gibbon.Passes.Cursorize' for its own run.
   | Opt_ReclaimIterateRegions
   -- ^ Reclaim the region chunks an @iterate@ benchmark iteration grew.  Each
   -- iteration rewinds to the output region's first chunk and re-grows it, and

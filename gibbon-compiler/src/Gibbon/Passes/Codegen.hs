@@ -2731,6 +2731,10 @@ codegenTail venv mutEndEnv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sy
                        tycon_t = (C.Id (tycon ++ "_T") noLoc)
                    in pure [ C.BlockStm [cstm| gib_indirection_barrier($id:from_loc, $id:end_from_reg, $id:to_loc, $id:end_to_reg, $id:tycon_t); |] ]
 
+                 IndirectionRef ->
+                   let [(VarTriv end_from_reg), (VarTriv end_to_reg)] = rnds
+                   in pure [ C.BlockStm [cstm| gib_indirection_ref($id:end_from_reg, $id:end_to_reg); |] ]
+
                  BoundsCheck mode -> do
                    _new_chunk   <- gensym "new_chunk"
                    _chunk_start <- gensym "chunk_start"

@@ -1768,6 +1768,25 @@ void gib_add_old_to_old_indirection(
     char *to_footer
 );
 
+// A fully-factored indirection is a tag plus raw cursors in the tag buffer;
+// this records one target buffer's region as referenced by the region holding
+// the indirection.  Any chunk footer of either region will do: only its
+// reg_info is read.  A reference from a region to itself is not recorded.
+INLINE_HEADER void gib_indirection_ref(GibCursor from_footer, GibCursor to_footer)
+{
+#if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
+    if (((GibOldgenChunkFooter *) from_footer)->reg_info !=
+        ((GibOldgenChunkFooter *) to_footer)->reg_info) {
+        gib_add_old_to_old_indirection(from_footer, to_footer);
+    }
+#else
+    IGNORE(from_footer);
+    IGNORE(to_footer);
+    fprintf(stderr, "gib_indirection_ref: factored indirections are not supported by the generational GC.\n");
+    exit(1);
+#endif
+}
+
 INLINE_HEADER void gib_indirection_barrier(
     // Address where the indirection tag is written.
     GibCursor from,

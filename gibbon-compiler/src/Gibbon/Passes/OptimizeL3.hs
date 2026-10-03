@@ -156,6 +156,7 @@ removeReDefsExp env ex =
       pure $ Ext (BoundsCheck i a b c d)
     Ext (BoundsCheckVector{}) -> pure ex
     Ext (IndirectionBarrier _ (_, _, _, _)) -> pure ex
+    Ext (IndirectionRef _) -> pure ex
     Ext (BumpArenaRefCount _ _) -> pure ex
     Ext NullCursor -> pure ex
     Ext InitCursor{} -> pure ex

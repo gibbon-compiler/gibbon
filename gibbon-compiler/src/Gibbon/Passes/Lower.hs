@@ -660,6 +660,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               MemCpy{} -> syms
               ReadTaggedCursor{} -> syms
               IndirectionBarrier{} -> syms
+              IndirectionRef{} -> syms
               NullCursor         -> syms
               InitCursor{}       -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
@@ -1260,6 +1261,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (_, _, _,  (Ext (IndirectionBarrier tycon (l1, end_r1, l2, end_r2)))) bod ->
       T.LetPrimCallT [] (T.IndirectionBarrier tycon) [T.VarTriv l1, T.VarTriv end_r1, T.VarTriv l2, T.VarTriv end_r2] <$>
+        tail free_reg sym_tbl bod
+
+    LetE (_, _, _,  (Ext (IndirectionRef (end_r1, end_r2)))) bod ->
+      T.LetPrimCallT [] T.IndirectionRef [T.VarTriv end_r1, T.VarTriv end_r2] <$>
         tail free_reg sym_tbl bod
 
     LetE (_, _, _,  (Ext (BumpArenaRefCount ar end_r))) bod ->

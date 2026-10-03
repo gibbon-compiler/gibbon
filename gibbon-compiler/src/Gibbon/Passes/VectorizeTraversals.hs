@@ -769,6 +769,7 @@ extVars ext =
     L3.BoundsCheck _ a b mb _ -> S.fromList (a:b:maybe [] (\(x,y) -> [x,y]) mb)
     L3.BoundsCheckVector xs -> S.fromList (concatMap (\(_, a, b, (c,d)) -> [a,b,c,d]) xs)
     L3.IndirectionBarrier _ (a,b,c,d) -> S.fromList [a,b,c,d]
+    L3.IndirectionRef (a,b) -> S.fromList [a,b]
     L3.BumpArenaRefCount a b -> S.fromList [a,b]
     L3.NullCursor -> S.empty
     L3.InitCursor{} -> S.empty

@@ -15,6 +15,7 @@
 module Gibbon.L2.Syntax
     -- * Extended language L2 with location types.
   ( E2Ext(..)
+  , writesFactoredIndirections
   , Prog2
   , DDefs2
   , DDef2
@@ -1389,3 +1390,39 @@ fromLocVarToRegVar :: LocVar -> RegVar
 fromLocVarToRegVar loc = case loc of 
   Single v -> SingleR v
   SoA dcon fieldLocs -> SoARv (SingleR dcon) (L.map (\(k, floc) -> (k, fromLocVarToRegVar floc)) fieldLocs)
+
+
+-- | Does the program write a fully-factored indirection?  The first argument
+-- says whether a location is fully factored.  Readers of a program that never
+-- writes one keep their original INDIRECTION arms; see
+-- Note [A factored indirection lives in the tag buffer] (RemoveCopies).
+writesFactoredIndirections :: (loc -> Bool) -> Prog v (PreExp E2Ext loc dec) -> Bool
+writesFactoredIndirections isFactored Prog{fundefs, mainExp} =
+  any (go . funBody) (M.elems fundefs) || maybe False (go . fst) mainExp
+  where
+    go ex =
+      case ex of
+        Ext ext ->
+          case ext of
+            IndirectionE _ _ (from, _) _ e -> isFactored from || go e
+            LetRegionE _ _ _ _ bod -> go bod
+            LetParRegionE _ _ _ bod -> go bod
+            LetLocE _ _ bod -> go bod
+            LetRegE _ _ bod -> go bod
+            LetAvail _ bod -> go bod
+            SelectiveBufferShareE _ _ bod -> go bod
+            _ -> False
+        AppE _ _ _ args -> any go args
+        PrimAppE _ args -> any go args
+        LetE (_, _, _, rhs) bod -> go rhs || go bod
+        IfE a b c -> any go [a, b, c]
+        MkProdE ls -> any go ls
+        ProjE _ e -> go e
+        CaseE scrt brs -> go scrt || any (\(_, _, rhs) -> go rhs) brs
+        DataConE _ _ args -> any go args
+        TimeIt e _ _ -> go e
+        WithArenaE _ e -> go e
+        SpawnE _ _ args -> any go args
+        MapE (_, _, e1) e2 -> go e1 || go e2
+        FoldE (_, _, e1) (_, _, e2) e3 -> any go [e1, e2, e3]
+        _ -> False

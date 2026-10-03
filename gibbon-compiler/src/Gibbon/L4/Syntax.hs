@@ -447,6 +447,8 @@ data Prim
 
     | IndirectionBarrier TyCon
 
+    | IndirectionRef
+
     | BumpArenaRefCount
 
     | FreeBuffer

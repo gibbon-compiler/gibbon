@@ -151,6 +151,10 @@ data E3Ext loc dec =
     -- ^ Do one of the following:
     -- (1) If it's a old-to-young indirection, record it in the remembered set.
     -- (2) Otherwise, bump the refcount and update the outset.
+  | IndirectionRef (Var,Var)
+    -- ^ Record that the region whose chunk footer is the first cursor holds a
+    --   reference to the region whose chunk footer is the second; writes
+    --   nothing.  One per target buffer of a factored indirection.
   | BumpArenaRefCount Var Var -- ^ Given an arena and end-of-region ptr, add a
                                     --   reference from the arena to the region
   | NullCursor                      -- ^ Constant null cursor value (hack?).
@@ -299,6 +303,7 @@ instance FreeVars (E3Ext l d) where
       SizeOfScalar v     -> S.singleton v
       BoundsCheck{}      -> S.empty
       IndirectionBarrier _tycon (l1,r1,l2,r2) -> S.fromList [l1,r1,l2,r2]
+      IndirectionRef (r1,r2) -> S.fromList [r1,r2]
       NullCursor         -> S.empty
       InitCursor{} -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
@@ -528,6 +533,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       BoundsCheck i a b mb bmod  -> BoundsCheck i (go a) (go b) mb bmod
       IndirectionBarrier tycon (a,b,c,d) ->
         IndirectionBarrier tycon (go a, go b, go c, go d)
+      IndirectionRef (a,b) -> IndirectionRef (go a, go b)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
       InitCursor{} -> ext

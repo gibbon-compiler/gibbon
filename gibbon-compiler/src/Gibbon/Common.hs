@@ -34,7 +34,7 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
+       , internalError, dumpIfSet, unwrapLocVar, singleLocVar, getDconLoc, locBufferCount, getFieldLoc, freshCommonLoc, getAllFieldLocsSoA
        , varsInLocVar, varsInRegVar, getAllFieldRegsSoA
        , appendNameToLocVar, locsInLocVar, regsInRegVar
 
@@ -638,6 +638,15 @@ varsInRegVar :: RegVar -> [Var]
 varsInRegVar reg = case reg of 
                         SingleR v -> [v]
                         SoARv dcon fieldLocs -> varsInRegVar dcon ++ L.concatMap (\(_, floc) -> varsInRegVar floc) fieldLocs
+
+-- | Number of buffers a location addresses: one for a single location; for an
+-- SoA location its tag buffer plus every field buffer, nested SoA fields
+-- included (the length of its linearization).
+locBufferCount :: LocVar -> Int
+locBufferCount loc =
+  case loc of
+    Single{}     -> 1
+    SoA _ fields -> 1 + sum (Prelude.map (locBufferCount . snd) fields)
 
 -- | get the data constructor location from an SoA loc
 -- | Ideally we should not need this

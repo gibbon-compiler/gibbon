@@ -1160,6 +1160,7 @@ writesIndirection ex =
   case ex of
     Ext WriteCursorIndirection{} -> True
     Ext IndirectionBarrier{} -> True
+    Ext IndirectionRef{} -> True
     Ext WriteCursorSelectiveIndirection{} -> True
     Ext (WriteTag dcon _) | isIndirectionTag dcon -> True
     DataConE _ dcon args -> isIndirectionTag dcon || any writesIndirection args
@@ -1260,6 +1261,7 @@ collectExtVars ext =
         | (_, endVar, curVar, (endVar', curVar')) <- checks
         ]
     IndirectionBarrier _ (l1, r1, l2, r2) -> S.fromList [l1, r1, l2, r2]
+    IndirectionRef (r1, r2) -> S.fromList [r1, r2]
     BumpArenaRefCount arena end -> S.fromList [arena, end]
     NullCursor -> S.empty
     InitCursor{} -> S.empty
@@ -3088,6 +3090,7 @@ collectMentionedDataCons ex =
         BoundsCheck{} -> []
         BoundsCheckVector{} -> []
         IndirectionBarrier{} -> []
+        IndirectionRef{} -> []
         BumpArenaRefCount{} -> []
         NullCursor -> []
         InitCursor{} -> []
