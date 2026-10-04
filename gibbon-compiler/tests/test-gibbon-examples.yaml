@@ -667,7 +667,7 @@ tests:
 
   - name: packedList.hs
     dir: examples/soa_examples/programs_not_using
-    failing: [gibbon3, loopify, selective, vectorize]
+    failing: [gibbon3]
     answer-file: examples/soa_examples/test_packed_list.ans
 
   - name: packedTree.hs
