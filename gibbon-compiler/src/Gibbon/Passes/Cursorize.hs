@@ -3611,10 +3611,14 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
                                                                           return (ls ++ [(new_deref, [], CursorTy, Ext $ DerefMutCursor v)], nvs ++ [new_deref])
                                                             _ -> return (ls, nvs ++ [v])
                                                        ) ([], []) [from_var, to_var, from_reg_var, to_reg_var]
+                  -- The node (a tag and a tagged pointer) and a redirection's
+                  -- worth: it may be written after earlier writes have used
+                  -- the function-entry check's room.
+                  let room_check = [ ("_", [], IntTy W64, Ext $ L3.BoundsCheck 18 (new_vars !! 2) (new_vars !! 0) Nothing Output) ]
                   return (
                     Di $
                       ( mkLets
-                          (need_deref ++
+                          (need_deref ++ room_check ++
                           [ ("_", [], ProdTy [], Ext (IndirectionBarrier tycon ((new_vars !! 0), (new_vars !! 2), (new_vars !! 1), (new_vars !! 3)))),
                             (start, [], CursorTy, VarE (new_vars !! 0)),
                             (end, [], CursorTy, Ext $ AddCursor (new_vars !! 0) (L3.mkLitE64 9))

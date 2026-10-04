@@ -44,6 +44,8 @@ LinearShareInList|--no-ran $MUT
 LinearShareInList|$NONREC
 LinearShareChunks|--no-ran
 LinearShareChunks|--no-gc --no-ran
+LinearShareRoom|--no-ran
+LinearShareRoom|--no-gc --no-ran
 EOC
 )
 
