@@ -4975,7 +4975,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                                                                                                                                      else do return $ (bnds, args ++ [VarE loc_name])
                                                                                                                         MutCursorTy -> return $ (bnds, args ++ [VarE loc_name]) -- [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc))]
                                                                                                                         _ -> return $ (bnds, args ++ [VarE loc_name])
-                                                                                Just mutl' -> return $ (bnds, args ++ [VarE (getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy mutl'))])
+                                                                                Just mutl' -> return $ (bnds, args ++ [VarE (Mb.fromMaybe loc_name (M.lookup (fromLocVarToFreeVarsTy mutl') freeVarToVarEnv'))]) -- a region-end key has no variable
                                                         
                                                         
                                   Just mutl' -> case (isRegionLocArg loc) of 
