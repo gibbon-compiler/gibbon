@@ -733,10 +733,27 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
       let env2' = extendVEnvLocVar (fromVarToFreeVarsTy v) ty env2
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
           wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (NewL2.locsInTy ty)
-      LetE
+      -- An inline Linear constructor written into a packed field buffer of the
+      -- function's factored output.  The entry check reserves the tag and
+      -- scalar buffers only, on the assumption that a callee writes packed
+      -- fields and checks for itself; written inline, the field needs its own.
+      fieldCheck <- case rhs of
+        DataConE (Loc lrem) dcon _
+          | Single{} <- lremLoc lrem
+          , lremMode lrem `elem` [Output, OutputMutable]
+          , lremReg lrem `elem` factoredFieldRegions -> do
+              dflags <- getDynFlags
+              let bc = boundsCheck dflags ddefs (getTyOfDataCon ddefs dcon)
+              let r = renv # lremLoc lrem
+                  regarg = NewL2.EndOfReg r (lremMode lrem) (toEndVRegVar r)
+                  locarg = Loc (lrem { lremReg = r, lremEndReg = toEndVRegVar r })
+              pure (LetE ("_", [], MkTy2 (IntTy W64), Ext $ BoundsCheck bc regarg locarg))
+        _ -> pure id
+      fieldCheck <$>
+       (LetE
         <$> (v,locs,ty,)
         <$> go rhs
-        <*> threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' pkd_env1 region_locs ran_env indirs redirs bod
+        <*> threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' pkd_env1 region_locs ran_env indirs redirs bod)
     LetE (v, locs, ty@(MkTy2 (PackedTy _ loc)), (Ext (IndirectionE tcon dcon (a, _b) (c, _d) cpy))) bod -> do
       factored <- gopt Opt_WritesFactoredIndirections <$> getDynFlags
       let fn x mode =
@@ -1015,6 +1032,10 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         pure $ gopt Opt_GenGc dflags && not (gopt Opt_DisableGC dflags)
 
     go = threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd_env region_locs ran_env indirs redirs
+    -- Single regions of packed fields of the function's factored outputs.
+    factoredFieldRegions =
+      [ fr | lr <- fnLocArgs, lremMode lr `elem` [Output, OutputMutable]
+           , SoARv _ fregs <- [lremReg lr], (_, fr@SingleR{}) <- fregs ]
 
     docase reg renv1 env21 lfenv1 rlocs_env1 wlocs_env1 pkd_env1 region_locs1 ran_env1 indirs1 redirs1 (dcon, vlocargs, bod) = do
       -- Update the envs with bindings for pattern matched variables and locations.

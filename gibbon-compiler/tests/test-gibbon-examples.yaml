@@ -1528,6 +1528,10 @@ tests:
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/LinearFieldRead.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: LinearFieldGrows.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/LinearFieldGrows.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA

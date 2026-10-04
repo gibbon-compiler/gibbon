@@ -24,6 +24,12 @@ LinearFieldRead|$MUT
 LinearFieldRead|--no-ran $MUT
 LinearFieldRead|$NONREC
 LinearFieldRead|--no-ran $NONREC
+LinearFieldGrows|
+LinearFieldGrows|--no-ran
+LinearFieldGrows|--no-gc
+LinearFieldGrows|$MUT
+LinearFieldGrows|--no-ran $MUT
+LinearFieldGrows|$NONREC
 EOC
 )
 
