@@ -14,6 +14,7 @@
 # PARALLEL
 # BUMPALLOC
 # PAPI
+# KPERF
 # REGIONRESET               = 0 | 1
 # SCALARCOUNTDIFF           = 0 | 1
 #
@@ -70,6 +71,12 @@ endif
 
 ifeq ($(PAPI), 1)
 	CFLAGS += -D_GIBBON_ENABLE_PAPI
+endif
+
+# Opt-in hardware counters through Apple's kperf (macOS only, run as root).
+# See Note [kperf counters] in rts-c/gibbon_rts.c.
+ifeq ($(KPERF), 1)
+	CFLAGS += -D_GIBBON_ENABLE_KPERF
 endif
 
 ifeq ($(PARALLEL), 1)

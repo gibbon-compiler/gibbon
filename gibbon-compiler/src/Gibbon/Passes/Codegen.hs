@@ -1942,6 +1942,13 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
        papi_before <- gensym "papi_before"
        papi_after <- gensym "papi_after"
        papi_samples <- gensym "papi_samples"
+       -- kperf (--enable-kperf, macOS): names are made only when it is on, so
+       -- a build without it gets byte-identical C (gensym numbers every name).
+       kperf <- gopt Opt_KperfInstrumentation <$> getDynFlags
+       let kperfName n = if kperf then gensym (toVar n) else pure (toVar n)
+       kperf_before <- kperfName "kperf_before"
+       kperf_after <- kperfName "kperf_after"
+       kperf_samples <- kperfName "kperf_samples"
        let timedResetVars = timedStateVars venv rhs
            -- Deduplicated by name rather than through a 'S.Set Var', for the
            -- reason given at 'timedStateVars'.
@@ -2013,6 +2020,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
                                 -- TODO: Find a better way to get a name for the region id.
+                                -- See Note [kperf counters] in the RTS: read immediately
+                                -- around the iteration, keep each iteration's delta, print
+                                -- them after the loop exactly as the PAPI path does.
+                                kperfReadBefore =
+                                  if kperf
+                                  then [ C.BlockStm [cstm| gib_kperf_read($id:kperf_before); |] ]
+                                  else []
+                                kperfReadAfter =
+                                  if kperf
+                                  then [ C.BlockStm [cstm| gib_kperf_read($id:kperf_after); |]
+                                       , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                             $id:kperf_samples[kperf_i][$id:iters] =
+                                                               $id:kperf_after[kperf_i] - $id:kperf_before[kperf_i];
+                                                           } |]
+                                       ]
+                                  else []
                                 ifdef_papi = "#ifdef _GIBBON_ENABLE_PAPI"
                                 ifdef_papi_native = "#ifdef _GIBBON_ENABLE_PAPI_NATIVE"
                                 ifndef_papi_native = "#ifndef _GIBBON_ENABLE_PAPI_NATIVE"
@@ -2035,7 +2058,9 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                         ] ++ 
+                                        kperfReadBefore ++
                                         body ++ 
+                                        kperfReadAfter ++
                                         [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_after);|]
@@ -2076,7 +2101,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                   } |]
                                 , C.BlockStm [cstm| $escstm:endif |]
                                 , C.BlockStm [cstm| $escstm:endif |]
-                                , C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                               ] ++
+                               (if kperf
+                                then [ C.BlockStm [cstm| gib_kperf_init_or_die(); |]
+                                     , C.BlockDecl [cdecl| typename uint64_t $id:kperf_before[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockDecl [cdecl| typename uint64_t $id:kperf_after[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockDecl [cdecl| typename uint64_t *$id:kperf_samples[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                           $id:kperf_samples[kperf_i] = (typename uint64_t *) malloc(sizeof(typename uint64_t) * gib_get_iters_param());
+                                                           if ($id:kperf_samples[kperf_i] == NULL) {
+                                                               fprintf(stderr, "malloc failed for kperf samples\n");
+                                                               exit(1);
+                                                           }
+                                                       } |]
+                                     ]
+                                else []) ++
+                               [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                 , C.BlockStm [cstm| $id:papi_retval = PAPI_stop(gibbon_native_papi_eventset, $id:papi_after);|]
@@ -2097,7 +2137,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                   } |]
                                 , C.BlockStm [cstm| $escstm:endif |]
                                 , C.BlockStm [cstm| $escstm:endif |]
-                                , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
+                               ] ++
+                               (if kperf
+                                then [ C.BlockStm [cstm| for (long long iter_i = 0; iter_i < gib_get_iters_param(); iter_i++) {
+                                                           for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                               printf("KPERF_NATIVE %s[%s]=%llu\n",
+                                                                      gib_kperf_metric_label(kperf_i),
+                                                                      gib_kperf_event_name(kperf_i),
+                                                                      (unsigned long long) $id:kperf_samples[kperf_i][iter_i]);
+                                                           }
+                                                       } |]
+                                     , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                           free($id:kperf_samples[kperf_i]);
+                                                       } |]
+                                     ]
+                                else []) ++
+                               [ C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
                                 , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
                                 , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
                                 , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]

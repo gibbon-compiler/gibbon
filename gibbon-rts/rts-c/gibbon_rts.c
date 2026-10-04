@@ -3088,3 +3088,195 @@ int gib_exit(void)
 
     return 0;
 }
+
+#ifdef _GIBBON_ENABLE_KPERF
+/*
+ * Note [kperf counters]
+ * ~~~~~~~~~~~~~~~~~~~~~
+ * PAPI has no macOS support, so on Apple silicon the per-pass hardware
+ * counters come from Apple's private kperf/kperfdata frameworks -- the same
+ * interface Instruments uses.  They are loaded with dlopen at run time, so
+ * nothing links against a private framework.
+ *
+ *  - Root only: configuring the PMU (kpc_force_all_ctrs_set) is refused
+ *    otherwise, and initialisation exits with a message saying so.
+ *  - Per thread: counts come from kpc_get_thread_counters, so they follow
+ *    this thread and ignore every other process.
+ *  - No core pinning on macOS: the thread asks for the user-interactive QoS
+ *    class, which steers it to the performance cores, but cannot forbid an
+ *    efficiency core.
+ *  - Events come from the CPU's own kpep database (/usr/share/kpep).  Each
+ *    metric lists alternatives; the first that this CPU knows is used, and
+ *    its name is reported beside the count.
+ *
+ * Output mirrors the PAPI path: the generated code prints
+ *   KPERF_NATIVE <METRIC>[<EVENT>]=<VALUE>
+ * once per metric per iteration, which the benchmark driver parses.
+ */
+#ifndef __APPLE__
+#error "kperf counters (--enable-kperf) are macOS-only"
+#endif
+
+#include <dlfcn.h>
+#include <pthread.h>
+#include <sys/qos.h>
+
+typedef uint64_t gib_kpc_config_t;
+typedef struct gib_kpep_db gib_kpep_db;
+typedef struct gib_kpep_config gib_kpep_config;
+typedef struct gib_kpep_event gib_kpep_event;
+
+#define GIB_KPC_CLASS_FIXED_MASK        (1u << 0)
+#define GIB_KPC_CLASS_CONFIGURABLE_MASK (1u << 1)
+#define GIB_KPC_MAX_COUNTERS            32
+
+static int (*gib_kpc_set_counting)(uint32_t classes);
+static int (*gib_kpc_set_thread_counting)(uint32_t classes);
+static int (*gib_kpc_set_config)(uint32_t classes, gib_kpc_config_t *config);
+static int (*gib_kpc_get_thread_counters)(uint32_t tid, uint32_t buf_count, uint64_t *buf);
+static int (*gib_kpc_force_all_ctrs_set)(int val);
+static int (*gib_kpc_force_all_ctrs_get)(int *val_out);
+
+static int (*gib_kpep_db_create)(const char *name, gib_kpep_db **db_ptr);
+static int (*gib_kpep_db_event)(gib_kpep_db *db, const char *name, gib_kpep_event **ev_ptr);
+static int (*gib_kpep_config_create)(gib_kpep_db *db, gib_kpep_config **cfg_ptr);
+static int (*gib_kpep_config_force_counters)(gib_kpep_config *cfg);
+static int (*gib_kpep_config_add_event)(gib_kpep_config *cfg, gib_kpep_event **ev_ptr,
+                                        uint32_t flag, uint32_t *err);
+static int (*gib_kpep_config_kpc_classes)(gib_kpep_config *cfg, uint32_t *classes_ptr);
+static int (*gib_kpep_config_kpc_count)(gib_kpep_config *cfg, size_t *count_ptr);
+static int (*gib_kpep_config_kpc_map)(gib_kpep_config *cfg, size_t *buf, size_t buf_size);
+static int (*gib_kpep_config_kpc)(gib_kpep_config *cfg, gib_kpc_config_t *buf, size_t buf_size);
+
+// Metric labels match the PAPI path's, so the driver files both under the
+// same names; NULL ends each list of alternative event names.
+static const char *gib_kperf_metric_labels[GIB_KPERF_EVENT_COUNT] = {
+    "CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES", "L1I_LOAD_MISSES",
+};
+static const char *gib_kperf_event_candidates[GIB_KPERF_EVENT_COUNT][3] = {
+    {"FIXED_CYCLES", "CPU_CYCLES", NULL},
+    {"FIXED_INSTRUCTIONS", "INST_ALL", NULL},
+    {"L1D_CACHE_MISS_LD", "L1D_CACHE_MISS_LD_NONSPEC", NULL},
+    {"L1I_CACHE_MISS_DEMAND", NULL, NULL},
+};
+static const char *gib_kperf_selected[GIB_KPERF_EVENT_COUNT];
+static size_t gib_kperf_counter_map[GIB_KPC_MAX_COUNTERS];
+static bool gib_kperf_ready = false;
+
+static void gib_kperf_die(const char *what)
+{
+    fprintf(stderr, "[gibbon kperf] %s\n", what);
+    exit(1);
+}
+
+#define GIB_KPERF_LOAD(lib, sym, field) do {                              \
+        *(void **) &(field) = dlsym((lib), (sym));                        \
+        if ((field) == NULL) gib_kperf_die("missing symbol " sym);        \
+    } while (0)
+
+static void gib_kperf_cleanup(void)
+{
+    if (!gib_kperf_ready) return;
+    gib_kpc_set_thread_counting(0);
+    gib_kpc_set_counting(0);
+    gib_kpc_force_all_ctrs_set(0);
+}
+
+void gib_kperf_init_or_die(void)
+{
+    if (gib_kperf_ready) return;
+    void *kperf = dlopen("/System/Library/PrivateFrameworks/kperf.framework/kperf", RTLD_LAZY);
+    void *kpdata = dlopen("/System/Library/PrivateFrameworks/kperfdata.framework/kperfdata", RTLD_LAZY);
+    if (kperf == NULL || kpdata == NULL) {
+        gib_kperf_die("cannot load kperf.framework/kperfdata.framework");
+    }
+    GIB_KPERF_LOAD(kperf, "kpc_set_counting", gib_kpc_set_counting);
+    GIB_KPERF_LOAD(kperf, "kpc_set_thread_counting", gib_kpc_set_thread_counting);
+    GIB_KPERF_LOAD(kperf, "kpc_set_config", gib_kpc_set_config);
+    GIB_KPERF_LOAD(kperf, "kpc_get_thread_counters", gib_kpc_get_thread_counters);
+    GIB_KPERF_LOAD(kperf, "kpc_force_all_ctrs_set", gib_kpc_force_all_ctrs_set);
+    GIB_KPERF_LOAD(kperf, "kpc_force_all_ctrs_get", gib_kpc_force_all_ctrs_get);
+    GIB_KPERF_LOAD(kpdata, "kpep_db_create", gib_kpep_db_create);
+    GIB_KPERF_LOAD(kpdata, "kpep_db_event", gib_kpep_db_event);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_create", gib_kpep_config_create);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_force_counters", gib_kpep_config_force_counters);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_add_event", gib_kpep_config_add_event);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_kpc_classes", gib_kpep_config_kpc_classes);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_kpc_count", gib_kpep_config_kpc_count);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_kpc_map", gib_kpep_config_kpc_map);
+    GIB_KPERF_LOAD(kpdata, "kpep_config_kpc", gib_kpep_config_kpc);
+
+    int forced = 0;
+    if (gib_kpc_force_all_ctrs_get(&forced) != 0) {
+        gib_kperf_die("cannot access the performance counters: kperf requires "
+                      "root (run the benchmark with sudo)");
+    }
+
+    gib_kpep_db *db = NULL;
+    gib_kpep_config *cfg = NULL;
+    if (gib_kpep_db_create(NULL, &db) != 0 || db == NULL) {
+        gib_kperf_die("no kpep event database for this CPU (/usr/share/kpep)");
+    }
+    if (gib_kpep_config_create(db, &cfg) != 0 || gib_kpep_config_force_counters(cfg) != 0) {
+        gib_kperf_die("cannot create a kpep configuration");
+    }
+    for (int i = 0; i < GIB_KPERF_EVENT_COUNT; i++) {
+        gib_kpep_event *ev = NULL;
+        for (int j = 0; j < 3 && gib_kperf_event_candidates[i][j] != NULL; j++) {
+            if (gib_kpep_db_event(db, gib_kperf_event_candidates[i][j], &ev) == 0 && ev != NULL) {
+                gib_kperf_selected[i] = gib_kperf_event_candidates[i][j];
+                break;
+            }
+            ev = NULL;
+        }
+        if (ev == NULL) {
+            fprintf(stderr, "[gibbon kperf] no event for %s on this CPU\n",
+                    gib_kperf_metric_labels[i]);
+            exit(1);
+        }
+        if (gib_kpep_config_add_event(cfg, &ev, 0, NULL) != 0) {
+            fprintf(stderr, "[gibbon kperf] cannot add event %s\n", gib_kperf_selected[i]);
+            exit(1);
+        }
+    }
+
+    uint32_t classes = 0;
+    size_t reg_count = 0;
+    gib_kpc_config_t regs[GIB_KPC_MAX_COUNTERS] = {0};
+    if (gib_kpep_config_kpc_classes(cfg, &classes) != 0
+        || gib_kpep_config_kpc_count(cfg, &reg_count) != 0
+        || gib_kpep_config_kpc_map(cfg, gib_kperf_counter_map, sizeof(gib_kperf_counter_map)) != 0
+        || gib_kpep_config_kpc(cfg, regs, sizeof(regs)) != 0) {
+        gib_kperf_die("cannot translate the events into a counter configuration");
+    }
+    if (gib_kpc_force_all_ctrs_set(1) != 0) {
+        gib_kperf_die("cannot take the performance counters: kperf requires "
+                      "root (run the benchmark with sudo)");
+    }
+    if ((classes & GIB_KPC_CLASS_CONFIGURABLE_MASK) && reg_count > 0
+        && gib_kpc_set_config(classes, regs) != 0) {
+        gib_kperf_die("kpc_set_config failed");
+    }
+    if (gib_kpc_set_counting(classes) != 0 || gib_kpc_set_thread_counting(classes) != 0) {
+        gib_kperf_die("cannot start counting");
+    }
+    // Steer this thread to the performance cores; macOS offers no pinning.
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    gib_kperf_ready = true;
+    atexit(gib_kperf_cleanup);
+}
+
+void gib_kperf_read(uint64_t out[GIB_KPERF_EVENT_COUNT])
+{
+    uint64_t counters[GIB_KPC_MAX_COUNTERS] = {0};
+    if (gib_kpc_get_thread_counters(0, GIB_KPC_MAX_COUNTERS, counters) != 0) {
+        gib_kperf_die("kpc_get_thread_counters failed");
+    }
+    for (int i = 0; i < GIB_KPERF_EVENT_COUNT; i++) {
+        out[i] = counters[gib_kperf_counter_map[i]];
+    }
+}
+
+const char *gib_kperf_metric_label(int i) { return gib_kperf_metric_labels[i]; }
+const char *gib_kperf_event_name(int i) { return gib_kperf_selected[i]; }
+#endif // _GIBBON_ENABLE_KPERF
