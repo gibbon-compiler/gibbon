@@ -34,7 +34,7 @@
 % Provenance: repo.head = 9dbfcb2001092d3d370125a014a35bc54b46b2e8
 % Provenance: repo.describe = v0.3-446-g9dbfcb20-dirty
 % Provenance: repo.branch = fix/audit-2026-09-12
-% Provenance: repo.dirty_tracked_files = 307
+% Provenance: repo.dirty_tracked_files = 308
 % Provenance: cc.cc = gcc-16
 % Provenance: cc.path = /usr/bin/gcc-16
 % Provenance: cc.version = gcc-16 (GCC) 16.2.0
@@ -47,7 +47,7 @@
 % Provenance: timing.size_param = 0
 % Provenance: timing.pin_cpu = 2
 % Provenance: timing.pass_rounds = 3
-% Provenance: timing.measure_rounds = 9
+% Provenance: timing.measure_rounds = 21
 % Provenance: timing.campaign_phase.warmup_runs = 1
 % Provenance: timing.campaign_phase.warmup_iterations = 1
 % Provenance: timing.campaign_phase.cooldown_seconds = 3.0
@@ -68,7 +68,7 @@
 % Provenance: codegen.loop_fusion = False
 % Provenance: codegen.selective_buffer_sharing = False
 % Provenance: codegen.vectorization = False
-% Provenance: driver_argv = gibbon_benchmark.py --generate-paper --pldi-submission --add1tree-widths --arithintensity-widths --benchmark-immutable --pin-cpu auto --pass-rounds 3 --reclaim-iterate-regions --iterations 51 --c-arithmetic unsafe --roofline --roofline-overlay --roofline-cpu 4
+% Provenance: driver_argv = gibbon_benchmark.py --generate-paper --pldi-submission --add1tree-widths --arithintensity-widths --benchmark-immutable --pin-cpu auto --pass-rounds 3 --reclaim-iterate-regions --iterations 51 --c-arithmetic unsafe --roofline --roofline-overlay --roofline-cpu 4 --measure-rounds 21 --pldi-cache-counters
 
 % -- Table: benchmark characteristics --
 \begin{table}[t]
@@ -114,22 +114,22 @@ Benchmark & ADT & Fields & Buffers & Folds & Maps & Uses & Dead \\
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
  & fields & bufs & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{\ell}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ \\
 \midrule
-OctTree & 16 & 9 & 1.079 & 0.6499 & \textbf{1.66$\times$} & 0.4570 & 0.3917 & \textbf{1.17$\times$} & 0.6222 & 0.2582 & \textbf{2.41$\times$} \\
-Compiler & 9 & 8 & 0.3230 & 0.0619 & \textbf{5.22$\times$} & 0.1658 & 0.0412 & \textbf{4.02$\times$} & 0.1573 & 0.0206 & \textbf{7.63$\times$} \\
-DBQuery & 15 & 13 & 0.2572 & 0.1112 & \textbf{2.31$\times$} & 0.1243 & 0.0849 & \textbf{1.46$\times$} & 0.1329 & 0.0262 & \textbf{5.07$\times$} \\
-DecisionTree & 7 & 6 & 0.1335 & 0.0641 & \textbf{2.08$\times$} & 0.1335 & 0.0641 & \textbf{2.08$\times$} & -- & -- & -- \\
-DecisionTreeClassify & 7 & 6 & 0.1782 & 0.1903 & 0.94$\times$ & 0.1782 & 0.1903 & 0.94$\times$ & -- & -- & -- \\
-DomTree & 15 & 14 & 0.2193 & 0.1184 & \textbf{1.85$\times$} & 0.1612 & 0.0614 & \textbf{2.63$\times$} & 0.0581 & 0.0570 & 1.02$\times$ \\
-KDTree & 17 & 16 & 0.1927 & 0.1626 & \textbf{1.19$\times$} & 0.1927 & 0.1626 & \textbf{1.19$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 0.7184 & 0.2819 & \textbf{2.55$\times$} & 0.1381 & 0.0416 & \textbf{3.32$\times$} & 0.5802 & 0.2402 & \textbf{2.42$\times$} \\
-reduceNestedList & 3 & 3 & 1.437 & 0.9546 & \textbf{1.51$\times$} & 1.437 & 0.9546 & \textbf{1.51$\times$} & -- & -- & -- \\
-List & 2 & 2 & 0.4083 & 0.3101 & \textbf{1.32$\times$} & 0.1539 & 0.1201 & \textbf{1.28$\times$} & 0.2544 & 0.1900 & \textbf{1.34$\times$} \\
-MonoTree & 3 & 2 & 0.0542 & 0.0380 & \textbf{1.43$\times$} & 0.0258 & 0.0225 & \textbf{1.14$\times$} & 0.0284 & 0.0154 & \textbf{1.84$\times$} \\
-ObjectGraph & 5 & 4 & 0.2530 & 0.1488 & \textbf{1.70$\times$} & 0.1314 & 0.0809 & \textbf{1.62$\times$} & 0.1216 & 0.0679 & \textbf{1.79$\times$} \\
-TernaryTree & 5 & 3 & 0.0924 & 0.0710 & \textbf{1.30$\times$} & 0.0298 & 0.0290 & 1.03$\times$ & 0.0626 & 0.0420 & \textbf{1.49$\times$} \\
-Trie & 10 & 9 & 0.2116 & 0.0734 & \textbf{2.88$\times$} & 0.0728 & 0.0323 & \textbf{2.25$\times$} & 0.1387 & 0.0411 & \textbf{3.38$\times$} \\
-PiecewiseFunctions & 8 & 7 & 0.3733 & 0.1471 & \textbf{2.54$\times$} & 0.1554 & 0.0979 & \textbf{1.59$\times$} & 0.2179 & 0.0492 & \textbf{4.43$\times$} \\
-ColorOctree & 25 & 18 & 0.5348 & 0.3505 & \textbf{1.53$\times$} & 0.1723 & 0.1437 & \textbf{1.20$\times$} & 0.3625 & 0.2068 & \textbf{1.75$\times$} \\
+OctTree & 16 & 9 & 1.075 & 0.6483 & \textbf{1.66$\times$} & 0.4585 & 0.3913 & \textbf{1.17$\times$} & 0.6163 & 0.2570 & \textbf{2.40$\times$} \\
+Compiler & 9 & 8 & 0.3251 & 0.0623 & \textbf{5.22$\times$} & 0.1671 & 0.0415 & \textbf{4.02$\times$} & 0.1580 & 0.0208 & \textbf{7.60$\times$} \\
+DBQuery & 15 & 13 & 0.2584 & 0.1120 & \textbf{2.31$\times$} & 0.1252 & 0.0855 & \textbf{1.46$\times$} & 0.1331 & 0.0265 & \textbf{5.02$\times$} \\
+DecisionTree & 7 & 6 & 0.1354 & 0.0645 & \textbf{2.10$\times$} & 0.1354 & 0.0645 & \textbf{2.10$\times$} & -- & -- & -- \\
+DecisionTreeClassify & 7 & 6 & 0.1797 & 0.1946 & 0.92$\times$ & 0.1797 & 0.1946 & 0.92$\times$ & -- & -- & -- \\
+DomTree & 15 & 14 & 0.2209 & 0.1199 & \textbf{1.84$\times$} & 0.1625 & 0.0621 & \textbf{2.62$\times$} & 0.0585 & 0.0578 & 1.01$\times$ \\
+KDTree & 17 & 16 & 0.1944 & 0.1631 & \textbf{1.19$\times$} & 0.1944 & 0.1631 & \textbf{1.19$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 0.7345 & 0.2830 & \textbf{2.60$\times$} & 0.1387 & 0.0420 & \textbf{3.30$\times$} & 0.5958 & 0.2410 & \textbf{2.47$\times$} \\
+reduceNestedList & 3 & 3 & 1.447 & 0.9591 & \textbf{1.51$\times$} & 1.447 & 0.9591 & \textbf{1.51$\times$} & -- & -- & -- \\
+List & 2 & 2 & 0.4127 & 0.3159 & \textbf{1.31$\times$} & 0.1570 & 0.1223 & \textbf{1.28$\times$} & 0.2557 & 0.1936 & \textbf{1.32$\times$} \\
+MonoTree & 3 & 2 & 0.0544 & 0.0383 & \textbf{1.42$\times$} & 0.0259 & 0.0227 & \textbf{1.14$\times$} & 0.0285 & 0.0155 & \textbf{1.84$\times$} \\
+ObjectGraph & 5 & 4 & 0.2546 & 0.1496 & \textbf{1.70$\times$} & 0.1325 & 0.0813 & \textbf{1.63$\times$} & 0.1221 & 0.0683 & \textbf{1.79$\times$} \\
+TernaryTree & 5 & 3 & 0.0925 & 0.0712 & \textbf{1.30$\times$} & 0.0301 & 0.0291 & 1.04$\times$ & 0.0624 & 0.0421 & \textbf{1.48$\times$} \\
+Trie & 10 & 9 & 0.2147 & 0.0746 & \textbf{2.88$\times$} & 0.0738 & 0.0330 & \textbf{2.23$\times$} & 0.1410 & 0.0416 & \textbf{3.39$\times$} \\
+PiecewiseFunctions & 8 & 7 & 0.3777 & 0.1463 & \textbf{2.58$\times$} & 0.1545 & 0.0967 & \textbf{1.60$\times$} & 0.2232 & 0.0496 & \textbf{4.50$\times$} \\
+ColorOctree & 25 & 18 & 0.5281 & 0.3471 & \textbf{1.52$\times$} & 0.1723 & 0.1418 & \textbf{1.22$\times$} & 0.3558 & 0.2053 & \textbf{1.73$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -148,22 +148,22 @@ ColorOctree & 25 & 18 & 0.5348 & 0.3505 & \textbf{1.53$\times$} & 0.1723 & 0.143
 \cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
  & fields & bufs & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ & $A_{ri}^{\scriptscriptstyle +av}$ (s) & $S_{\ell bv}^{\scriptscriptstyle +av}$ (s) & $A_{ri}^{\scriptscriptstyle +av}$/$S_{\ell bv}^{\scriptscriptstyle +av}$ \\
 \midrule
-OctTree & 16 & 9 & 1.269 & 0.6499 & \textbf{1.95$\times$} & 0.5585 & 0.3917 & \textbf{1.43$\times$} & 0.7108 & 0.2582 & \textbf{2.75$\times$} \\
-Compiler & 9 & 8 & 1.204 & 0.0619 & \textbf{19.47$\times$} & 0.7467 & 0.0412 & \textbf{18.10$\times$} & 0.4574 & 0.0206 & \textbf{22.19$\times$} \\
-DBQuery & 15 & 13 & 0.3433 & 0.1112 & \textbf{3.09$\times$} & 0.1781 & 0.0849 & \textbf{2.10$\times$} & 0.1651 & 0.0262 & \textbf{6.30$\times$} \\
-DecisionTree & 7 & 6 & 0.3019 & 0.0641 & \textbf{4.71$\times$} & 0.3019 & 0.0641 & \textbf{4.71$\times$} & -- & -- & -- \\
-DecisionTreeClassify & 7 & 6 & 0.1864 & 0.1903 & 0.98$\times$ & 0.1864 & 0.1903 & 0.98$\times$ & -- & -- & -- \\
-DomTree & 15 & 14 & 0.3594 & 0.1184 & \textbf{3.04$\times$} & 0.2969 & 0.0614 & \textbf{4.84$\times$} & 0.0625 & 0.0570 & 1.10$\times$ \\
-KDTree & 17 & 16 & 0.2635 & 0.1626 & \textbf{1.62$\times$} & 0.2635 & 0.1626 & \textbf{1.62$\times$} & -- & -- & -- \\
-LinearListReduction & 11 & 11 & 1.667 & 0.2819 & \textbf{5.92$\times$} & 0.4143 & 0.0416 & \textbf{9.95$\times$} & 1.253 & 0.2402 & \textbf{5.22$\times$} \\
-reduceNestedList & 3 & 3 & -- & 0.9546 & -- & -- & 0.9546 & -- & -- & -- & -- \\
-List & 2 & 2 & -- & 0.3101 & -- & -- & 0.1201 & -- & -- & 0.1900 & -- \\
-MonoTree & 3 & 2 & 0.1341 & 0.0380 & \textbf{3.53$\times$} & 0.0801 & 0.0225 & \textbf{3.56$\times$} & 0.0540 & 0.0154 & \textbf{3.49$\times$} \\
-ObjectGraph & 5 & 4 & 0.4756 & 0.1488 & \textbf{3.20$\times$} & 0.3089 & 0.0809 & \textbf{3.82$\times$} & 0.1667 & 0.0679 & \textbf{2.45$\times$} \\
-TernaryTree & 5 & 3 & 0.1318 & 0.0710 & \textbf{1.86$\times$} & 0.0503 & 0.0290 & \textbf{1.73$\times$} & 0.0815 & 0.0420 & \textbf{1.94$\times$} \\
-Trie & 10 & 9 & 0.3029 & 0.0734 & \textbf{4.13$\times$} & 0.1403 & 0.0323 & \textbf{4.34$\times$} & 0.1626 & 0.0411 & \textbf{3.96$\times$} \\
-PiecewiseFunctions & 8 & 7 & 0.5746 & 0.1471 & \textbf{3.91$\times$} & 0.3156 & 0.0979 & \textbf{3.22$\times$} & 0.2590 & 0.0492 & \textbf{5.26$\times$} \\
-ColorOctree & 25 & 18 & 0.6318 & 0.3505 & \textbf{1.80$\times$} & 0.2232 & 0.1437 & \textbf{1.55$\times$} & 0.4087 & 0.2068 & \textbf{1.98$\times$} \\
+OctTree & 16 & 9 & 1.268 & 0.6483 & \textbf{1.96$\times$} & 0.5613 & 0.3913 & \textbf{1.43$\times$} & 0.7070 & 0.2570 & \textbf{2.75$\times$} \\
+Compiler & 9 & 8 & 1.195 & 0.0623 & \textbf{19.17$\times$} & 0.7650 & 0.0415 & \textbf{18.42$\times$} & 0.4298 & 0.0208 & \textbf{20.68$\times$} \\
+DBQuery & 15 & 13 & 0.3441 & 0.1120 & \textbf{3.07$\times$} & 0.1794 & 0.0855 & \textbf{2.10$\times$} & 0.1647 & 0.0265 & \textbf{6.21$\times$} \\
+DecisionTree & 7 & 6 & 0.3050 & 0.0645 & \textbf{4.73$\times$} & 0.3050 & 0.0645 & \textbf{4.73$\times$} & -- & -- & -- \\
+DecisionTreeClassify & 7 & 6 & 0.1886 & 0.1946 & 0.97$\times$ & 0.1886 & 0.1946 & 0.97$\times$ & -- & -- & -- \\
+DomTree & 15 & 14 & 0.3621 & 0.1199 & \textbf{3.02$\times$} & 0.2993 & 0.0621 & \textbf{4.82$\times$} & 0.0628 & 0.0578 & 1.09$\times$ \\
+KDTree & 17 & 16 & 0.2654 & 0.1631 & \textbf{1.63$\times$} & 0.2654 & 0.1631 & \textbf{1.63$\times$} & -- & -- & -- \\
+LinearListReduction & 11 & 11 & 1.692 & 0.2830 & \textbf{5.98$\times$} & 0.4157 & 0.0420 & \textbf{9.90$\times$} & 1.277 & 0.2410 & \textbf{5.30$\times$} \\
+reduceNestedList & 3 & 3 & -- & 0.9591 & -- & -- & 0.9591 & -- & -- & -- & -- \\
+List & 2 & 2 & -- & 0.3159 & -- & -- & 0.1223 & -- & -- & 0.1936 & -- \\
+MonoTree & 3 & 2 & 0.1345 & 0.0383 & \textbf{3.51$\times$} & 0.0805 & 0.0227 & \textbf{3.54$\times$} & 0.0540 & 0.0155 & \textbf{3.48$\times$} \\
+ObjectGraph & 5 & 4 & 0.4762 & 0.1496 & \textbf{3.18$\times$} & 0.3106 & 0.0813 & \textbf{3.82$\times$} & 0.1656 & 0.0683 & \textbf{2.43$\times$} \\
+TernaryTree & 5 & 3 & 0.1336 & 0.0712 & \textbf{1.88$\times$} & 0.0506 & 0.0291 & \textbf{1.74$\times$} & 0.0830 & 0.0421 & \textbf{1.97$\times$} \\
+Trie & 10 & 9 & 0.3022 & 0.0746 & \textbf{4.05$\times$} & 0.1390 & 0.0330 & \textbf{4.21$\times$} & 0.1632 & 0.0416 & \textbf{3.93$\times$} \\
+PiecewiseFunctions & 8 & 7 & 0.5765 & 0.1463 & \textbf{3.94$\times$} & 0.3132 & 0.0967 & \textbf{3.24$\times$} & 0.2633 & 0.0496 & \textbf{5.31$\times$} \\
+ColorOctree & 25 & 18 & 0.6269 & 0.3471 & \textbf{1.81$\times$} & 0.2234 & 0.1418 & \textbf{1.58$\times$} & 0.4035 & 0.2053 & \textbf{1.96$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -185,29 +185,29 @@ ColorOctree & 25 & 18 & 0.6318 & 0.3505 & \textbf{1.80$\times$} & 0.2232 & 0.143
 \toprule
 \textbf{Program} & \textbf{Am} & \textbf{Ai} & \textbf{Sm} & \textbf{Si} \\
 \midrule
-Compiler & 18.63 & 68.26 & \textbf{14.78} & -- \\
-DBQuery & \textbf{14.84} & 16.76 & 15.03 & 64.66 \\
-DecisionTree & 6.972 & 8.268 & \textbf{3.341} & 64.66 \\
-DecisionTreeClassify & \textbf{78.28} & 121.1 & 138.4 & -- \\
-DomTree & 12.16 & 13.12 & \textbf{8.313} & 60.98 \\
-KDTree & 9.933 & 10.13 & \textbf{7.117} & 31.14 \\
-LinearListReduction & \textbf{45.88} & 92.63 & 49.35 & -- \\
-reduceNestedList & 80.87 & -- & \textbf{56.16} & -- \\
-List & \textbf{25.40} & -- & 26.07 & -- \\
-MonoTree & 3.623 & 4.669 & \textbf{3.545} & 13.70 \\
-ObjectGraph & 15.17 & 17.60 & \textbf{13.09} & 54.09 \\
-OctTree & 34.88 & \textbf{34.73} & 38.80 & -- \\
-PiecewiseFunctions\_norm2Estimate & 1.510 & 1.612 & \textbf{1.178} & 17.40 \\
-PiecewiseFunctions\_truncateTolViolations & 1.311 & 1.676 & \textbf{0.7432} & 13.50 \\
-PiecewiseFunctions\_compressMass & 1.392 & 1.687 & \textbf{0.7436} & 13.88 \\
-PiecewiseFunctions\_autorefineMaxLevel & 1.521 & 1.572 & \textbf{1.131} & 15.46 \\
-PiecewiseFunctions\_pmapCutHistogram & 1.428 & 2.112 & \textbf{0.7726} & 14.97 \\
-PiecewiseFunctions\_lbDeuxLoadProxy & 1.479 & 1.606 & \textbf{1.003} & 16.18 \\
-PiecewiseFunctions\_addConstPW & \textbf{7.438} & 7.698 & 7.934 & 32.32 \\
-PiecewiseFunctions\_diffPW & \textbf{7.606} & 7.830 & 8.414 & 29.58 \\
-TernaryTree & 5.847 & 6.167 & \textbf{5.805} & 32.20 \\
-Trie & 12.81 & 13.84 & \textbf{12.16} & 56.45 \\
-ColorOctree & 34.48 & \textbf{34.28} & 51.14 & -- \\
+Compiler & 35.04 & 69.75 & \textbf{14.66} & -- \\
+DBQuery & \textbf{15.22} & 17.47 & 15.31 & 65.93 \\
+DecisionTree & 7.176 & 8.467 & \textbf{3.412} & 65.12 \\
+DecisionTreeClassify & \textbf{79.67} & 122.4 & 139.2 & -- \\
+DomTree & 12.45 & 13.25 & \textbf{8.369} & 61.54 \\
+KDTree & 10.11 & 10.22 & \textbf{7.198} & 31.21 \\
+LinearListReduction & \textbf{46.54} & 94.89 & 49.88 & -- \\
+reduceNestedList & 81.52 & -- & \textbf{56.59} & -- \\
+List & \textbf{25.79} & -- & 26.36 & -- \\
+MonoTree & 3.728 & 4.710 & \textbf{3.569} & 13.78 \\
+ObjectGraph & 15.39 & 17.79 & \textbf{13.22} & 54.16 \\
+OctTree & 35.37 & \textbf{35.14} & 39.20 & -- \\
+PiecewiseFunctions\_norm2Estimate & 1.535 & 1.644 & \textbf{1.116} & 17.85 \\
+PiecewiseFunctions\_truncateTolViolations & 1.338 & 1.687 & \textbf{0.7475} & 14.03 \\
+PiecewiseFunctions\_compressMass & 1.397 & 1.702 & \textbf{0.7501} & 14.66 \\
+PiecewiseFunctions\_autorefineMaxLevel & 1.536 & 1.587 & \textbf{1.125} & 14.89 \\
+PiecewiseFunctions\_pmapCutHistogram & 1.453 & 2.138 & \textbf{0.7819} & 15.36 \\
+PiecewiseFunctions\_lbDeuxLoadProxy & 1.489 & 1.626 & \textbf{1.007} & 16.42 \\
+PiecewiseFunctions\_addConstPW & \textbf{7.571} & 7.741 & 8.327 & 30.88 \\
+PiecewiseFunctions\_diffPW & \textbf{7.708} & 7.908 & 8.395 & 29.72 \\
+TernaryTree & 5.933 & 6.228 & \textbf{5.927} & 32.42 \\
+Trie & 13.07 & 14.19 & \textbf{12.24} & 56.52 \\
+ColorOctree & \textbf{33.91} & 34.51 & 51.54 & -- \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -222,29 +222,29 @@ ColorOctree & 34.48 & \textbf{34.28} & 51.14 & -- \\
 \toprule
 \textbf{Program} & \textbf{Am/Sm} & \textbf{Ai/Am} & \textbf{Ai/Sm} & \textbf{Ai/Si} \\
 \midrule
-Compiler & \textbf{1.26$\times$} & \textbf{3.66$\times$} & \textbf{4.62$\times$} & -- \\
-DBQuery & 0.99$\times$ & \textbf{1.13$\times$} & \textbf{1.12$\times$} & 0.26$\times$ \\
-DecisionTree & \textbf{2.09$\times$} & \textbf{1.19$\times$} & \textbf{2.48$\times$} & 0.13$\times$ \\
-DecisionTreeClassify & 0.57$\times$ & \textbf{1.55$\times$} & 0.88$\times$ & -- \\
-DomTree & \textbf{1.46$\times$} & 1.08$\times$ & \textbf{1.58$\times$} & 0.22$\times$ \\
-KDTree & \textbf{1.40$\times$} & 1.02$\times$ & \textbf{1.42$\times$} & 0.33$\times$ \\
-LinearListReduction & 0.93$\times$ & \textbf{2.02$\times$} & \textbf{1.88$\times$} & -- \\
+Compiler & \textbf{2.39$\times$} & \textbf{1.99$\times$} & \textbf{4.76$\times$} & -- \\
+DBQuery & 0.99$\times$ & \textbf{1.15$\times$} & \textbf{1.14$\times$} & 0.26$\times$ \\
+DecisionTree & \textbf{2.10$\times$} & \textbf{1.18$\times$} & \textbf{2.48$\times$} & 0.13$\times$ \\
+DecisionTreeClassify & 0.57$\times$ & \textbf{1.54$\times$} & 0.88$\times$ & -- \\
+DomTree & \textbf{1.49$\times$} & 1.06$\times$ & \textbf{1.58$\times$} & 0.22$\times$ \\
+KDTree & \textbf{1.41$\times$} & 1.01$\times$ & \textbf{1.42$\times$} & 0.33$\times$ \\
+LinearListReduction & 0.93$\times$ & \textbf{2.04$\times$} & \textbf{1.90$\times$} & -- \\
 reduceNestedList & \textbf{1.44$\times$} & -- & -- & -- \\
-List & 0.97$\times$ & -- & -- & -- \\
-MonoTree & 1.02$\times$ & \textbf{1.29$\times$} & \textbf{1.32$\times$} & 0.34$\times$ \\
-ObjectGraph & \textbf{1.16$\times$} & \textbf{1.16$\times$} & \textbf{1.34$\times$} & 0.33$\times$ \\
-OctTree & 0.90$\times$ & 1.00$\times$ & 0.90$\times$ & -- \\
-PiecewiseFunctions\_norm2Estimate & \textbf{1.28$\times$} & 1.07$\times$ & \textbf{1.37$\times$} & 0.09$\times$ \\
-PiecewiseFunctions\_truncateTolViolations & \textbf{1.76$\times$} & \textbf{1.28$\times$} & \textbf{2.25$\times$} & 0.12$\times$ \\
-PiecewiseFunctions\_compressMass & \textbf{1.87$\times$} & \textbf{1.21$\times$} & \textbf{2.27$\times$} & 0.12$\times$ \\
-PiecewiseFunctions\_autorefineMaxLevel & \textbf{1.34$\times$} & 1.03$\times$ & \textbf{1.39$\times$} & 0.10$\times$ \\
-PiecewiseFunctions\_pmapCutHistogram & \textbf{1.85$\times$} & \textbf{1.48$\times$} & \textbf{2.73$\times$} & 0.14$\times$ \\
-PiecewiseFunctions\_lbDeuxLoadProxy & \textbf{1.47$\times$} & 1.09$\times$ & \textbf{1.60$\times$} & 0.10$\times$ \\
-PiecewiseFunctions\_addConstPW & 0.94$\times$ & 1.03$\times$ & 0.97$\times$ & 0.24$\times$ \\
-PiecewiseFunctions\_diffPW & 0.90$\times$ & 1.03$\times$ & 0.93$\times$ & 0.26$\times$ \\
-TernaryTree & 1.01$\times$ & 1.05$\times$ & 1.06$\times$ & 0.19$\times$ \\
-Trie & 1.05$\times$ & 1.08$\times$ & \textbf{1.14$\times$} & 0.25$\times$ \\
-ColorOctree & 0.67$\times$ & 0.99$\times$ & 0.67$\times$ & -- \\
+List & 0.98$\times$ & -- & -- & -- \\
+MonoTree & 1.04$\times$ & \textbf{1.26$\times$} & \textbf{1.32$\times$} & 0.34$\times$ \\
+ObjectGraph & \textbf{1.16$\times$} & \textbf{1.16$\times$} & \textbf{1.35$\times$} & 0.33$\times$ \\
+OctTree & 0.90$\times$ & 0.99$\times$ & 0.90$\times$ & -- \\
+PiecewiseFunctions\_norm2Estimate & \textbf{1.37$\times$} & 1.07$\times$ & \textbf{1.47$\times$} & 0.09$\times$ \\
+PiecewiseFunctions\_truncateTolViolations & \textbf{1.79$\times$} & \textbf{1.26$\times$} & \textbf{2.26$\times$} & 0.12$\times$ \\
+PiecewiseFunctions\_compressMass & \textbf{1.86$\times$} & \textbf{1.22$\times$} & \textbf{2.27$\times$} & 0.12$\times$ \\
+PiecewiseFunctions\_autorefineMaxLevel & \textbf{1.37$\times$} & 1.03$\times$ & \textbf{1.41$\times$} & 0.11$\times$ \\
+PiecewiseFunctions\_pmapCutHistogram & \textbf{1.86$\times$} & \textbf{1.47$\times$} & \textbf{2.73$\times$} & 0.14$\times$ \\
+PiecewiseFunctions\_lbDeuxLoadProxy & \textbf{1.48$\times$} & 1.09$\times$ & \textbf{1.61$\times$} & 0.10$\times$ \\
+PiecewiseFunctions\_addConstPW & 0.91$\times$ & 1.02$\times$ & 0.93$\times$ & 0.25$\times$ \\
+PiecewiseFunctions\_diffPW & 0.92$\times$ & 1.03$\times$ & 0.94$\times$ & 0.27$\times$ \\
+TernaryTree & 1.00$\times$ & 1.05$\times$ & 1.05$\times$ & 0.19$\times$ \\
+Trie & 1.07$\times$ & 1.09$\times$ & \textbf{1.16$\times$} & 0.25$\times$ \\
+ColorOctree & 0.66$\times$ & 1.02$\times$ & 0.67$\times$ & -- \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -339,15 +339,15 @@ $\Delta^{S}_{av|\ell bv}$ & What the C auto-vectorizer added to SoA, loopified, 
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-verifyIR & 9/9 & 0\% & 0.08113 & \textcolor{gibbonslow}{0.09513} & 0.08111 & 0.06215 & 0.0137 & 0.01372 & $\ddagger$ & $\ddagger$ & 0.04432 & \textcolor{gibbonfast}{0.003413} & 0.003505 & \textbf{4.02$\times$} \\
-instCountPass & 2/9 & 78\% & 0.08228 & \textcolor{gibbonslow}{0.09569} & 0.08242 & 0.06199 & 0.01345 & 0.01345 & $\ddagger$ & $\ddagger$ & 0.04284 & \textcolor{gibbonfast}{0.00192} & 0.001923 & \textbf{7.00$\times$} \\
-blockCountPass & 2/9 & 78\% & 0.08117 & \textcolor{gibbonslow}{0.09603} & 0.08116 & 0.06203 & 0.01344 & 0.01342 & $\ddagger$ & $\ddagger$ & 0.04276 & \textcolor{gibbonfast}{0.001917} & 0.001918 & \textbf{7.00$\times$} \\
-memoryOpStatsPass & 3/9 & 67\% & 0.08167 & \textcolor{gibbonslow}{0.09569} & 0.08165 & 0.06456 & 0.01354 & 0.01354 & $\ddagger$ & $\ddagger$ & 0.04634 & \textcolor{gibbonfast}{0.003819} & 0.003826 & \textbf{3.54$\times$} \\
-castInstCountPass & 3/9 & 67\% & 0.08107 & \textcolor{gibbonslow}{0.09517} & 0.08113 & 0.06333 & 0.01333 & 0.01334 & $\ddagger$ & $\ddagger$ & 0.045 & 0.003407 & \textcolor{gibbonfast}{0.003402} & \textbf{3.92$\times$} \\
-branchStatsPass & 2/9 & 78\% & 0.08109 & \textcolor{gibbonslow}{0.09573} & 0.08117 & 0.06342 & 0.01332 & 0.01332 & $\ddagger$ & $\ddagger$ & 0.04498 & \textcolor{gibbonfast}{0.003438} & 0.003449 & \textbf{3.87$\times$} \\
-latencyModelPass & 3/9 & 67\% & 0.08108 & \textcolor{gibbonslow}{0.09399} & 0.08109 & 0.06221 & 0.0134 & 0.0134 & $\ddagger$ & $\ddagger$ & 0.04415 & \textcolor{gibbonfast}{0.002988} & 0.00299 & \textbf{4.48$\times$} \\
-has cycle & 4/9 & 56\% & 0.0952 & \textcolor{gibbonslow}{0.09595} & 0.09522 & 0.06321 & 0.05589 & 0.05817 & $\ddagger$ & $\ddagger$ & 0.0453 & 0.01732 & \textcolor{gibbonfast}{0.01731} & \textbf{3.23$\times$} \\
-throughputModelPass & 3/9 & 67\% & 0.08179 & \textcolor{gibbonslow}{0.09511} & 0.08181 & 0.06221 & 0.01344 & 0.01344 & $\ddagger$ & $\ddagger$ & 0.04399 & \textcolor{gibbonfast}{0.003002} & 0.003007 & \textbf{4.48$\times$} \\
+verifyIR & 9/9 & 0\% & 0.08213 & \textcolor{gibbonslow}{0.09629} & 0.08219 & 0.06277 & 0.0138 & 0.01381 & $\ddagger$ & $\ddagger$ & 0.04459 & \textcolor{gibbonfast}{0.003423} & 0.003516 & \textbf{4.03$\times$} \\
+instCountPass & 2/9 & 78\% & 0.0834 & \textcolor{gibbonslow}{0.09695} & 0.08222 & 0.06265 & 0.01351 & 0.0135 & $\ddagger$ & $\ddagger$ & 0.04317 & \textcolor{gibbonfast}{0.001924} & 0.001931 & \textbf{7.02$\times$} \\
+blockCountPass & 2/9 & 78\% & 0.08335 & \textcolor{gibbonslow}{0.09726} & 0.08597 & 0.06265 & 0.0135 & 0.01349 & $\ddagger$ & $\ddagger$ & 0.04305 & \textcolor{gibbonfast}{0.001921} & 0.001927 & \textbf{7.02$\times$} \\
+memoryOpStatsPass & 3/9 & 67\% & 0.08385 & \textcolor{gibbonslow}{0.09691} & 0.08388 & 0.06511 & 0.01362 & 0.01365 & $\ddagger$ & $\ddagger$ & 0.04669 & \textcolor{gibbonfast}{0.003838} & 0.003847 & \textbf{3.55$\times$} \\
+castInstCountPass & 3/9 & 67\% & 0.08216 & \textcolor{gibbonslow}{0.09631} & 0.08371 & 0.06395 & 0.01343 & 0.01341 & $\ddagger$ & $\ddagger$ & 0.04537 & 0.003443 & \textcolor{gibbonfast}{0.003441} & \textbf{3.90$\times$} \\
+branchStatsPass & 2/9 & 78\% & 0.08211 & \textcolor{gibbonslow}{0.09692} & 0.0844 & 0.06398 & 0.01343 & 0.0134 & $\ddagger$ & $\ddagger$ & 0.04534 & 0.003467 & \textcolor{gibbonfast}{0.003462} & \textbf{3.87$\times$} \\
+latencyModelPass & 3/9 & 67\% & 0.08219 & \textcolor{gibbonslow}{0.09518} & 0.08229 & 0.06283 & 0.01351 & 0.01349 & $\ddagger$ & $\ddagger$ & 0.04476 & 0.003011 & \textcolor{gibbonfast}{0.003008} & \textbf{4.49$\times$} \\
+has cycle & 4/9 & 56\% & 0.0964 & \textcolor{gibbonslow}{0.09704} & 0.09643 & 0.06385 & 0.05651 & 0.05864 & $\ddagger$ & $\ddagger$ & 0.04561 & \textcolor{gibbonfast}{0.01747} & 0.01749 & \textbf{3.23$\times$} \\
+throughputModelPass & 3/9 & 67\% & 0.08274 & \textcolor{gibbonslow}{0.09634} & 0.08396 & 0.06279 & 0.01355 & 0.01352 & $\ddagger$ & $\ddagger$ & 0.04466 & \textcolor{gibbonfast}{0.003016} & 0.003027 & \textbf{4.48$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -365,15 +365,15 @@ throughputModelPass & 3/9 & 67\% & 0.08179 & \textcolor{gibbonslow}{0.09511} & 0
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-verifyIR & +30.54\% & +353.1\% & $-$0.09477\% & -- & +1164\% & $-$2.625\% \\
-instCountPass & +32.74\% & +360.8\% & $-$0.05947\% & -- & +2128\% & $-$0.156\% \\
-blockCountPass & +30.86\% & +362.2\% & +0.1043\% & -- & +2130\% & $-$0.05214\% \\
-memoryOpStatsPass & +26.5\% & +376.9\% & +0.01477\% & -- & +1111\% & $-$0.183\% \\
-castInstCountPass & +28\% & +374.7\% & $-$0.1049\% & -- & +1223\% & +0.147\% \\
-branchStatsPass & +27.85\% & +376.2\% & $-$0.007508\% & -- & +1204\% & $-$0.3189\% \\
-latencyModelPass & +30.33\% & +364.3\% & +0.02239\% & -- & +1377\% & $-$0.06689\% \\
-has cycle & +50.6\% & +8.669\% & $-$3.928\% & -- & +161.6\% & +0.05198\% \\
-throughputModelPass & +31.46\% & +363\% & +0.007442\% & -- & +1363\% & $-$0.1663\% \\
+verifyIR & +30.83\% & +354.4\% & $-$0.1231\% & -- & +1168\% & $-$2.645\% \\
+instCountPass & +33.12\% & +364.2\% & +0.09632\% & -- & +2136\% & $-$0.3625\% \\
+blockCountPass & +33.04\% & +364.5\% & +0.126\% & -- & +2134\% & $-$0.3114\% \\
+memoryOpStatsPass & +28.79\% & +376.9\% & $-$0.2637\% & -- & +1114\% & $-$0.2339\% \\
+castInstCountPass & +28.46\% & +376.8\% & +0.1193\% & -- & +1219\% & +0.05812\% \\
+branchStatsPass & +28.34\% & +377.3\% & +0.1641\% & -- & +1210\% & +0.1444\% \\
+latencyModelPass & +30.81\% & +365.6\% & +0.126\% & -- & +1388\% & +0.09973\% \\
+has cycle & +50.97\% & +8.888\% & $-$3.631\% & -- & +160.8\% & $-$0.08578\% \\
+throughputModelPass & +31.78\% & +364.4\% & +0.2293\% & -- & +1375\% & $-$0.3634\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -392,8 +392,8 @@ throughputModelPass & +31.46\% & +363\% & +0.007442\% & -- & +1363\% & $-$0.1663
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-targetReturnPass & 7/8 & 88\% & 0.2263 & 0.2149 & \textcolor{gibbonslow}{0.2263} & 0.2226 & 0.08428 & 0.08258 & 0.08022 & 0.0794 & $\ddagger$ & $\ddagger$ & 0.2023 & 0.1046 & 0.09529 & 0.1047 & 0.1038 & 0.011 & \textcolor{gibbonfast}{0.0104} & 0.01102 & 0.01042 & \textbf{7.63$\times$} \\
-stripSideEffectsPass & 7/8 & 88\% & \textcolor{gibbonslow}{0.2313} & 0.2112 & 0.2311 & 0.1817 & 0.08033 & 0.08014 & 0.07813 & 0.07787 & $\ddagger$ & $\ddagger$ & 0.2027 & 0.101 & 0.09333 & 0.1045 & 0.1042 & 0.01021 & \textcolor{gibbonfast}{0.01018} & 0.0102 & 0.01019 & \textbf{7.65$\times$} \\
+targetReturnPass & 7/8 & 88\% & \textcolor{gibbonslow}{0.2284} & 0.2186 & 0.2118 & 0.2247 & 0.08448 & 0.08278 & 0.08039 & 0.07974 & $\ddagger$ & $\ddagger$ & 0.2169 & 0.1051 & 0.09606 & 0.1043 & 0.1034 & 0.01106 & 0.0105 & 0.01108 & \textcolor{gibbonfast}{0.0105} & \textbf{7.60$\times$} \\
+stripSideEffectsPass & 7/8 & 88\% & \textcolor{gibbonslow}{0.2331} & 0.2162 & 0.218 & 0.1835 & 0.08086 & 0.08081 & 0.07855 & 0.0783 & $\ddagger$ & $\ddagger$ & 0.2129 & 0.1025 & 0.09771 & 0.1037 & 0.1037 & 0.01029 & 0.01031 & \textcolor{gibbonfast}{0.01026} & 0.01029 & \textbf{7.63$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -412,8 +412,8 @@ stripSideEffectsPass & 7/8 & 88\% & \textcolor{gibbonslow}{0.2313} & 0.2112 & 0.
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-targetReturnPass & +1.641\% & +169.5\% & +2.05\% & +5.063\% & +1.026\% & -- & +112.3\% & +9.722\% & $-$0.169\% & +0.8931\% & +852\% & +5.759\% & $-$0.1543\% & +5.739\% \\
-stripSideEffectsPass & +27.29\% & +126.7\% & +0.2296\% & +2.817\% & +0.3339\% & -- & +117.1\% & +8.212\% & $-$3.398\% & +0.3388\% & +924.1\% & +0.2357\% & +0.08824\% & +0.0785\% \\
+targetReturnPass & +1.656\% & +171.4\% & +2.05\% & +5.088\% & +0.8114\% & -- & +125.8\% & +9.413\% & +0.7341\% & +0.8749\% & +843.8\% & +5.256\% & $-$0.1986\% & +5.535\% \\
+stripSideEffectsPass & +27.03\% & +127.1\% & +0.06311\% & +2.932\% & +0.3193\% & -- & +117.9\% & +4.917\% & $-$1.162\% & +0.027\% & +908.3\% & $-$0.1844\% & +0.2729\% & $-$0.2722\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -432,12 +432,12 @@ stripSideEffectsPass & +27.29\% & +126.7\% & +0.2296\% & +2.817\% & +0.3339\% & 
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sumCost & 6/15 & 60\% & 0.0286 & 0.02368 & 0.02861 & 0.02009 & 0.01959 & 0.01956 & 0.09097 & \textcolor{gibbonslow}{0.09217} & 0.01662 & 0.01433 & \textcolor{gibbonfast}{0.01424} & \textbf{1.37$\times$} \\
-sumRows & 6/15 & 60\% & 0.03027 & 0.02644 & 0.03035 & 0.02342 & 0.02591 & 0.02585 & 0.09025 & \textcolor{gibbonslow}{0.09159} & \textcolor{gibbonfast}{0.01995} & 0.02089 & 0.02056 & \textbf{1.17$\times$} \\
-countJoins & 3/15 & 80\% & 0.02906 & 0.02407 & 0.02898 & 0.02146 & 0.01979 & 0.01983 & 0.08791 & \textcolor{gibbonslow}{0.08918} & 0.01369 & 0.01097 & \textcolor{gibbonfast}{0.01093} & \textbf{1.81$\times$} \\
-sumMemory & 6/15 & 60\% & 0.02853 & 0.02302 & 0.02856 & 0.02001 & 0.01951 & 0.01931 & 0.09106 & \textcolor{gibbonslow}{0.09225} & 0.01651 & \textcolor{gibbonfast}{0.01428} & 0.01431 & \textbf{1.35$\times$} \\
-hashJoinPressure & 5/15 & 67\% & 0.03292 & 0.02754 & 0.0329 & 0.0208 & 0.0201 & 0.02013 & 0.08838 & \textcolor{gibbonslow}{0.08962} & 0.01461 & \textcolor{gibbonfast}{0.01243} & 0.01265 & \textbf{1.62$\times$} \\
-filterSelectivitySkew & 5/15 & 67\% & 0.02869 & 0.02432 & 0.0287 & 0.02068 & 0.01882 & 0.01889 & 0.0919 & \textcolor{gibbonslow}{0.09221} & 0.01577 & 0.01243 & \textcolor{gibbonfast}{0.01238} & \textbf{1.52$\times$} \\
+sumCost & 6/15 & 60\% & 0.02876 & 0.0239 & 0.02882 & 0.02018 & 0.01974 & 0.01967 & \textcolor{gibbonslow}{0.09184} & 0.09126 & 0.01672 & 0.01446 & \textcolor{gibbonfast}{0.01444} & \textbf{1.36$\times$} \\
+sumRows & 6/15 & 60\% & 0.03055 & 0.02693 & 0.03057 & 0.02366 & 0.02608 & 0.02605 & \textcolor{gibbonslow}{0.09118} & 0.09047 & \textcolor{gibbonfast}{0.02004} & 0.02099 & 0.02082 & \textbf{1.18$\times$} \\
+countJoins & 3/15 & 80\% & 0.02921 & 0.02426 & 0.02919 & 0.02159 & 0.01993 & 0.01998 & \textcolor{gibbonslow}{0.08881} & 0.08819 & 0.01372 & 0.01101 & \textcolor{gibbonfast}{0.01098} & \textbf{1.82$\times$} \\
+sumMemory & 6/15 & 60\% & 0.0288 & 0.02331 & 0.02878 & 0.02016 & 0.01964 & 0.01946 & \textcolor{gibbonslow}{0.09217} & 0.09149 & 0.01659 & \textcolor{gibbonfast}{0.01436} & 0.01441 & \textbf{1.36$\times$} \\
+hashJoinPressure & 5/15 & 67\% & 0.03316 & 0.02776 & 0.03312 & 0.02093 & 0.0202 & 0.02024 & \textcolor{gibbonslow}{0.08962} & 0.08878 & 0.01476 & \textcolor{gibbonfast}{0.01262} & 0.01275 & \textbf{1.60$\times$} \\
+filterSelectivitySkew & 5/15 & 67\% & 0.02896 & 0.02449 & 0.02891 & 0.02079 & 0.01896 & 0.01905 & \textcolor{gibbonslow}{0.09258} & 0.09219 & 0.01589 & 0.01249 & \textcolor{gibbonfast}{0.01247} & \textbf{1.52$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -455,12 +455,12 @@ filterSelectivitySkew & 5/15 & 67\% & 0.02869 & 0.02432 & 0.0287 & 0.02068 & 0.0
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sumCost & +42.33\% & +2.709\% & +0.138\% & +447.2\% & +16.76\% & +0.6813\% \\
-sumRows & +29.24\% & $-$9.397\% & +0.236\% & +352.4\% & $-$2.991\% & +1.59\% \\
-countJoins & +35.41\% & +8.241\% & $-$0.1916\% & +542.2\% & +25.29\% & +0.4119\% \\
-sumMemory & +42.57\% & +3.603\% & +0.9992\% & +451.5\% & +15.43\% & $-$0.1957\% \\
-hashJoinPressure & +58.26\% & +3.333\% & $-$0.1689\% & +505.1\% & +15.48\% & $-$1.716\% \\
-filterSelectivitySkew & +38.72\% & +9.514\% & $-$0.3336\% & +482.6\% & +27.37\% & +0.4037\% \\
+sumCost & +42.55\% & +2.557\% & +0.3253\% & +449.3\% & +15.77\% & +0.1316\% \\
+sumRows & +29.13\% & $-$9.176\% & +0.1075\% & +354.9\% & $-$3.732\% & +0.8165\% \\
+countJoins & +35.25\% & +8.072\% & $-$0.2452\% & +547.2\% & +24.95\% & +0.2368\% \\
+sumMemory & +42.85\% & +3.587\% & +0.9301\% & +455.5\% & +15.15\% & $-$0.3747\% \\
+hashJoinPressure & +58.45\% & +3.384\% & $-$0.2174\% & +507.2\% & +15.76\% & $-$1.051\% \\
+filterSelectivitySkew & +39.26\% & +9.161\% & $-$0.4515\% & +482.5\% & +27.5\% & +0.1845\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -479,8 +479,8 @@ filterSelectivitySkew & +38.72\% & +9.514\% & $-$0.3336\% & +482.6\% & +27.37\% 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-scaleCosts & 10/13 & 77\% & 0.0829 & 0.07658 & 0.0832 & 0.07563 & 0.07155 & 0.06935 & 0.06629 & 0.06694 & \textcolor{gibbonslow}{0.3205} & 0.3204 & 0.09584 & 0.08739 & 0.09 & 0.08094 & 0.08116 & 0.01822 & 0.01815 & 0.01839 & \textcolor{gibbonfast}{0.01803} & \textbf{3.68$\times$} \\
-clearQueryFlags & 12/13 & 92\% & 0.0817 & 0.0763 & 0.08195 & 0.07615 & 0.07093 & 0.0694 & 0.06556 & 0.06595 & \textcolor{gibbonslow}{0.3211} & 0.3203 & 0.09561 & 0.08613 & 0.08955 & 0.08106 & 0.08191 & 0.008212 & \textcolor{gibbonfast}{0.008165} & 0.008408 & 0.008195 & \textbf{8.03$\times$} \\
+scaleCosts & 10/13 & 77\% & 0.08314 & 0.07704 & 0.08322 & 0.0761 & 0.07117 & 0.06955 & 0.06655 & 0.06718 & \textcolor{gibbonslow}{0.3239} & 0.3231 & 0.09616 & 0.08761 & 0.09048 & 0.08034 & 0.08049 & 0.01825 & 0.01861 & 0.01823 & \textcolor{gibbonfast}{0.01817} & \textbf{3.66$\times$} \\
+clearQueryFlags & 12/13 & 92\% & 0.08142 & 0.07682 & 0.0815 & 0.07661 & 0.06992 & 0.06952 & 0.06588 & 0.06596 & 0.3214 & \textcolor{gibbonslow}{0.3224} & 0.09596 & 0.08649 & 0.08994 & 0.08006 & 0.08035 & \textcolor{gibbonfast}{0.008297} & 0.008632 & 0.008321 & 0.008363 & \textbf{7.94$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -499,8 +499,8 @@ clearQueryFlags & 12/13 & 92\% & 0.0817 & 0.0763 & 0.08195 & 0.07615 & 0.07093 &
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-scaleCosts & +9.607\% & +9.064\% & +3.177\% & +7.941\% & $-$0.977\% & +234.4\% & +6.487\% & $-$2.898\% & +7.971\% & $-$0.2735\% & +344.3\% & +0.3636\% & $-$0.9407\% & +2.014\% \\
-clearQueryFlags & +7.289\% & +9.725\% & +2.205\% & +8.196\% & $-$0.602\% & +235.9\% & +6.76\% & $-$3.818\% & +6.254\% & $-$1.03\% & +887.1\% & +0.5756\% & $-$2.331\% & +2.599\% \\
+scaleCosts & +9.258\% & +9.41\% & +2.321\% & +6.93\% & $-$0.9348\% & +236.9\% & +6.277\% & $-$3.173\% & +9.055\% & $-$0.1901\% & +340.3\% & $-$1.951\% & +0.09325\% & +0.3468\% \\
+clearQueryFlags & +6.28\% & +10.2\% & +0.5811\% & +6.134\% & $-$0.1167\% & +234.9\% & +6.697\% & $-$3.831\% & +8.033\% & $-$0.3634\% & +864.9\% & $-$3.881\% & $-$0.2884\% & $-$0.5022\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -519,15 +519,15 @@ clearQueryFlags & +7.289\% & +9.725\% & +2.205\% & +8.196\% & $-$0.602\% & +235.
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-countNodes & 2/7 & 71\% & 0.0341 & 0.01784 & 0.034 & 0.01705 & 0.01454 & 0.01481 & \textcolor{gibbonslow}{0.1371} & 0.1363 & 0.01004 & \textcolor{gibbonfast}{0.005661} & 0.005694 & \textbf{2.57$\times$} \\
-countLeaves & 2/7 & 71\% & 0.03404 & 0.01726 & 0.03393 & 0.01689 & 0.0144 & 0.01455 & \textcolor{gibbonslow}{0.1371} & 0.1363 & 0.01071 & \textcolor{gibbonfast}{0.005405} & 0.005564 & \textbf{2.66$\times$} \\
-treeDepth & 2/7 & 71\% & 0.03378 & 0.01731 & 0.03363 & 0.01711 & 0.01806 & 0.01723 & \textcolor{gibbonslow}{0.137} & 0.1362 & 0.01346 & 0.006925 & \textcolor{gibbonfast}{0.006486} & \textbf{2.64$\times$} \\
-sumImpurity & 3/7 & 57\% & 0.03368 & 0.01731 & 0.03356 & 0.01542 & 0.01419 & 0.01423 & \textcolor{gibbonslow}{0.1414} & 0.1405 & 0.01372 & 0.007733 & \textcolor{gibbonfast}{0.00764} & \textbf{1.86$\times$} \\
-sumSamples & 3/7 & 57\% & 0.03256 & 0.01789 & 0.03248 & 0.01717 & 0.01417 & 0.01415 & \textcolor{gibbonslow}{0.136} & 0.1353 & 0.01008 & \textcolor{gibbonfast}{0.007664} & 0.007673 & \textbf{1.85$\times$} \\
-countFeatureUses & 3/7 & 57\% & 0.0342 & 0.01801 & 0.03411 & 0.01566 & 0.01429 & 0.01427 & \textcolor{gibbonslow}{0.1437} & 0.1429 & 0.01386 & 0.007835 & \textcolor{gibbonfast}{0.007598} & \textbf{1.88$\times$} \\
-countSmallLeaves & 3/7 & 57\% & 0.03298 & 0.01885 & 0.03288 & 0.01654 & 0.01387 & 0.01386 & \textcolor{gibbonslow}{0.1417} & 0.141 & 0.01011 & 0.007757 & \textcolor{gibbonfast}{0.007707} & \textbf{1.80$\times$} \\
-inferenceCost & 2/7 & 71\% & 0.03386 & 0.01801 & 0.03368 & 0.01787 & 0.0174 & 0.01569 & \textcolor{gibbonslow}{0.137} & 0.1362 & 0.01367 & \textcolor{gibbonfast}{0.006751} & 0.00751 & \textbf{2.32$\times$} \\
-sumPathLengths & 3/7 & 57\% & 0.03361 & 0.01808 & 0.03361 & 0.01705 & 0.0146 & 0.01467 & \textcolor{gibbonslow}{0.1384} & 0.1377 & 0.0136 & 0.008231 & \textcolor{gibbonfast}{0.00815} & \textbf{1.79$\times$} \\
+countNodes & 2/7 & 71\% & 0.03426 & 0.01799 & 0.03434 & 0.01717 & 0.0146 & 0.01492 & 0.1371 & \textcolor{gibbonslow}{0.1378} & 0.01011 & \textcolor{gibbonfast}{0.0057} & 0.005738 & \textbf{2.56$\times$} \\
+countLeaves & 2/7 & 71\% & 0.03414 & 0.0174 & 0.03424 & 0.01702 & 0.01457 & 0.01467 & 0.1372 & \textcolor{gibbonslow}{0.1378} & 0.01078 & \textcolor{gibbonfast}{0.005439} & 0.005591 & \textbf{2.68$\times$} \\
+treeDepth & 2/7 & 71\% & 0.03387 & 0.01741 & 0.034 & 0.01687 & 0.01821 & 0.01749 & 0.1371 & \textcolor{gibbonslow}{0.1376} & 0.0137 & 0.006975 & \textcolor{gibbonfast}{0.006519} & \textbf{2.59$\times$} \\
+sumImpurity & 3/7 & 57\% & 0.03383 & 0.01755 & 0.0339 & 0.01555 & 0.01432 & 0.01437 & 0.1415 & \textcolor{gibbonslow}{0.1421} & 0.01382 & 0.007733 & \textcolor{gibbonfast}{0.007689} & \textbf{1.86$\times$} \\
+sumSamples & 3/7 & 57\% & 0.03273 & 0.01797 & 0.03281 & 0.01733 & 0.0143 & 0.01427 & 0.1362 & \textcolor{gibbonslow}{0.1367} & 0.01013 & \textcolor{gibbonfast}{0.007694} & 0.007724 & \textbf{1.85$\times$} \\
+countFeatureUses & 3/7 & 57\% & 0.03437 & 0.01794 & 0.03455 & 0.0158 & 0.01437 & 0.01446 & 0.1438 & \textcolor{gibbonslow}{0.1442} & 0.01392 & 0.007777 & \textcolor{gibbonfast}{0.007666} & \textbf{1.87$\times$} \\
+countSmallLeaves & 3/7 & 57\% & 0.03313 & 0.01906 & 0.03324 & 0.01672 & 0.01401 & 0.01401 & 0.1417 & \textcolor{gibbonslow}{0.1424} & 0.01017 & \textcolor{gibbonfast}{0.007781} & 0.007816 & \textbf{1.80$\times$} \\
+inferenceCost & 2/7 & 71\% & 0.03389 & 0.01816 & 0.03406 & 0.018 & 0.01752 & 0.01612 & 0.137 & \textcolor{gibbonslow}{0.1376} & 0.01392 & \textcolor{gibbonfast}{0.006797} & 0.007532 & \textbf{2.37$\times$} \\
+sumPathLengths & 3/7 & 57\% & 0.03386 & 0.01839 & 0.03382 & 0.01723 & 0.01485 & 0.01492 & 0.1386 & \textcolor{gibbonslow}{0.1394} & 0.01368 & 0.008234 & \textcolor{gibbonfast}{0.008208} & \textbf{1.81$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -545,15 +545,15 @@ sumPathLengths & 3/7 & 57\% & 0.03361 & 0.01808 & 0.03361 & 0.01705 & 0.0146 & 0
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-countNodes & +100\% & +15.11\% & $-$1.843\% & +1266\% & +76.27\% & $-$0.5796\% \\
-countLeaves & +101.5\% & +16.08\% & $-$1.051\% & +1180\% & +92.47\% & $-$2.858\% \\
-treeDepth & +97.47\% & $-$0.6909\% & +4.819\% & +918\% & +107.5\% & +6.768\% \\
-sumImpurity & +118.4\% & +8.385\% & $-$0.2882\% & +931.1\% & +79.53\% & +1.217\% \\
-sumSamples & +89.57\% & +21.36\% & +0.1131\% & +1249\% & +31.38\% & $-$0.1173\% \\
-countFeatureUses & +118.3\% & +9.731\% & +0.1261\% & +936.8\% & +82.47\% & +3.119\% \\
-countSmallLeaves & +99.4\% & +19.3\% & +0.05771\% & +1301\% & +31.22\% & +0.6488\% \\
-inferenceCost & +89.48\% & +13.92\% & +10.91\% & +902\% & +82.06\% & $-$10.11\% \\
-sumPathLengths & +97.16\% & +16.2\% & $-$0.4771\% & +917.9\% & +66.83\% & +0.9939\% \\
+countNodes & +99.52\% & +15.09\% & $-$2.172\% & +1256\% & +76.21\% & $-$0.6623\% \\
+countLeaves & +100.5\% & +16.01\% & $-$0.7224\% & +1173\% & +92.81\% & $-$2.719\% \\
+treeDepth & +100.7\% & $-$3.5\% & +4.14\% & +900.4\% & +110.2\% & +6.995\% \\
+sumImpurity & +117.5\% & +8.212\% & $-$0.3271\% & +923.7\% & +79.71\% & +0.5722\% \\
+sumSamples & +88.81\% & +21.45\% & +0.1752\% & +1244\% & +31.19\% & $-$0.3884\% \\
+countFeatureUses & +117.6\% & +9.254\% & $-$0.6017\% & +932.7\% & +81.63\% & +1.448\% \\
+countSmallLeaves & +98.17\% & +19.3\% & $-$0.007137\% & +1294\% & +30.08\% & $-$0.4478\% \\
+inferenceCost & +88.28\% & +11.65\% & +8.697\% & +884.1\% & +84.81\% & $-$9.758\% \\
+sumPathLengths & +96.51\% & +15.51\% & $-$0.4827\% & +913.4\% & +66.65\% & +0.3168\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -572,8 +572,8 @@ sumPathLengths & +97.16\% & +16.2\% & $-$0.4771\% & +917.9\% & +66.83\% & +0.993
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-classify Depth & 4/7 & 43\% & 0.04101 & 0.03802 & 0.03784 & 0.04161 & \textcolor{gibbonfast}{0.03583} & 0.03632 & \textcolor{gibbonslow}{0.06213} & 0.05621 & 0.04781 & 0.03745 & 0.03933 & 0.96$\times$ \\
-classify Batch & 5/7 & 29\% & 0.1608 & 0.1473 & 0.1486 & 0.1641 & \textcolor{gibbonfast}{0.1405} & 0.1421 & \textcolor{gibbonslow}{0.2455} & 0.2202 & 0.1889 & 0.1455 & 0.1522 & 0.97$\times$ \\
+classify Depth & 4/7 & 43\% & 0.04201 & 0.03846 & 0.03835 & 0.04258 & \textcolor{gibbonfast}{0.03611} & 0.03653 & \textcolor{gibbonslow}{0.0626} & 0.05812 & 0.04921 & 0.03773 & 0.0393 & 0.96$\times$ \\
+classify Batch & 5/7 & 29\% & 0.165 & 0.1486 & 0.1503 & 0.1686 & \textcolor{gibbonfast}{0.1416} & 0.143 & \textcolor{gibbonslow}{0.2467} & 0.2278 & 0.1927 & 0.1464 & 0.1523 & 0.97$\times$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -591,8 +591,8 @@ classify Batch & 5/7 & 29\% & 0.1608 & 0.1473 & 0.1486 & 0.1641 & \textcolor{gib
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-classify Depth & $-$1.456\% & +14.59\% & $-$1.347\% & +29.95\% & +21.56\% & $-$4.78\% \\
-classify Batch & $-$2.011\% & +15.46\% & $-$1.119\% & +29.96\% & +24.11\% & $-$4.406\% \\
+classify Depth & $-$1.341\% & +16.55\% & $-$1.161\% & +27.21\% & +25.24\% & $-$3.98\% \\
+classify Batch & $-$2.109\% & +17.88\% & $-$1.017\% & +28.05\% & +26.55\% & $-$3.839\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -611,10 +611,10 @@ classify Batch & $-$2.011\% & +15.46\% & $-$1.119\% & +29.96\% & +24.11\% & $-$4
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-SumArea & 6/15 & 60\% & 0.07424 & 0.04417 & 0.07432 & 0.04015 & 0.04083 & 0.04084 & \textcolor{gibbonslow}{0.2765} & 0.276 & 0.01936 & \textcolor{gibbonfast}{0.01767} & 0.01887 & \textbf{2.27$\times$} \\
-find max Bottom & 5/15 & 67\% & 0.07383 & 0.04551 & 0.07377 & 0.04017 & 0.04047 & 0.04047 & \textcolor{gibbonslow}{0.2184} & 0.2178 & 0.02262 & \textcolor{gibbonfast}{0.01786} & 0.01829 & \textbf{2.25$\times$} \\
-count styled & 3/15 & 80\% & 0.07406 & 0.04431 & 0.07413 & 0.0396 & 0.03978 & 0.03972 & \textcolor{gibbonslow}{0.2036} & 0.2031 & 0.01645 & \textcolor{gibbonfast}{0.01159} & 0.01162 & \textbf{3.42$\times$} \\
-sumTextWidth & 3/15 & 80\% & 0.07472 & 0.04294 & 0.07465 & 0.03914 & 0.03886 & 0.03924 & \textcolor{gibbonslow}{0.2156} & 0.2153 & 0.01525 & 0.01155 & \textcolor{gibbonfast}{0.01143} & \textbf{3.40$\times$} \\
+SumArea & 6/15 & 60\% & 0.07481 & 0.04465 & 0.07488 & 0.04048 & 0.04119 & 0.04119 & \textcolor{gibbonslow}{0.278} & 0.2779 & 0.01958 & \textcolor{gibbonfast}{0.01795} & 0.01907 & \textbf{2.25$\times$} \\
+find max Bottom & 5/15 & 67\% & 0.07444 & 0.0458 & 0.07446 & 0.04054 & 0.04085 & 0.04078 & 0.2191 & \textcolor{gibbonslow}{0.2193} & 0.02278 & \textcolor{gibbonfast}{0.01781} & 0.01859 & \textbf{2.28$\times$} \\
+count styled & 3/15 & 80\% & 0.07462 & 0.04467 & 0.07464 & 0.03988 & 0.04007 & 0.04012 & \textcolor{gibbonslow}{0.205} & 0.2045 & 0.01657 & \textcolor{gibbonfast}{0.01174} & 0.01179 & \textbf{3.40$\times$} \\
+sumTextWidth & 3/15 & 80\% & 0.07521 & 0.04321 & 0.07529 & 0.03944 & 0.03916 & 0.03956 & \textcolor{gibbonslow}{0.2173} & 0.2166 & 0.01545 & 0.01152 & \textcolor{gibbonfast}{0.01151} & \textbf{3.40$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -632,10 +632,10 @@ sumTextWidth & 3/15 & 80\% & 0.07472 & 0.04294 & 0.07465 & 0.03914 & 0.03886 & 0
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-SumArea & +84.91\% & $-$1.69\% & $-$0.02938\% & +1328\% & +2.596\% & $-$6.385\% \\
-find max Bottom & +83.78\% & $-$0.7265\% & +0.01236\% & +865.8\% & +23.65\% & $-$2.351\% \\
-count styled & +87.03\% & $-$0.2996\% & +0.1511\% & +1138\% & +41.57\% & $-$0.2496\% \\
-sumTextWidth & +90.91\% & $-$0.2498\% & $-$0.9481\% & +1314\% & +33.43\% & +1.05\% \\
+SumArea & +84.82\% & $-$1.741\% & $-$0.002428\% & +1320\% & +2.67\% & $-$5.848\% \\
+find max Bottom & +83.64\% & $-$0.5983\% & +0.1692\% & +862\% & +22.5\% & $-$4.227\% \\
+count styled & +87.11\% & $-$0.5908\% & $-$0.1271\% & +1137\% & +40.6\% & $-$0.4072\% \\
+sumTextWidth & +90.7\% & $-$0.3008\% & $-$1.004\% & +1307\% & +34.23\% & +0.07819\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -654,8 +654,8 @@ sumTextWidth & +90.91\% & $-$0.2498\% & $-$0.9481\% & +1314\% & +33.43\% & +1.05
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-computeWidths & 13/14 & 93\% & 0.03223 & 0.03225 & 0.03237 & 0.03107 & 0.03154 & 0.03132 & 0.03148 & \textcolor{gibbonfast}{0.03081} & 0.1057 & \textcolor{gibbonslow}{0.1069} & 0.0425 & 0.04685 & 0.04561 & 0.04806 & 0.04605 & 0.04735 & 0.04588 & 0.04717 & 0.04543 & 0.73$\times$ \\
-scaleLayout & 8/14 & 57\% & 0.03016 & 0.03075 & 0.03012 & 0.02966 & 0.02987 & 0.02912 & 0.02777 & 0.02733 & \textcolor{gibbonslow}{0.08828} & 0.08799 & 0.03703 & 0.03961 & 0.03812 & 0.03591 & 0.0357 & 0.01228 & \textcolor{gibbonfast}{0.01156} & 0.01225 & 0.01157 & \textbf{2.36$\times$} \\
+computeWidths & 13/14 & 93\% & 0.03248 & 0.03231 & 0.03243 & 0.031 & 0.03184 & \textcolor{gibbonfast}{0.03093} & 0.03163 & 0.03101 & 0.1065 & \textcolor{gibbonslow}{0.109} & 0.04228 & 0.04708 & 0.04586 & 0.04787 & 0.04627 & 0.04726 & 0.04602 & 0.04729 & 0.04613 & 0.73$\times$ \\
+scaleLayout & 8/14 & 57\% & 0.03061 & 0.03073 & 0.03035 & 0.0298 & 0.0302 & 0.02924 & 0.02781 & 0.02745 & \textcolor{gibbonslow}{0.08994} & 0.08704 & 0.0373 & 0.03968 & 0.03842 & 0.03538 & 0.03511 & 0.01232 & \textcolor{gibbonfast}{0.01166} & 0.0123 & 0.01167 & \textbf{2.35$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -674,8 +674,8 @@ scaleLayout & 8/14 & 57\% & 0.03016 & 0.03075 & 0.03012 & 0.02966 & 0.02987 & 0.
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-computeWidths & +3.711\% & $-$0.776\% & +0.7249\% & +0.2097\% & +2.152\% & +148.6\% & $-$6.812\% & +2.732\% & $-$2.513\% & +4.362\% & +1.495\% & +3.204\% & +0.3901\% & +3.823\% \\
-scaleLayout & +1.686\% & +1.848\% & +2.593\% & +7.561\% & +1.617\% & +138.4\% & $-$2.857\% & +3.903\% & +10.3\% & +0.5967\% & +192.5\% & +6.194\% & +0.2368\% & +5.815\% \\
+computeWidths & +4.78\% & +0.2263\% & +2.916\% & +0.6418\% & +1.996\% & +152\% & $-$7.794\% & +2.665\% & $-$1.657\% & +3.46\% & +1.289\% & +2.71\% & $-$0.06766\% & +2.519\% \\
+scaleLayout & +2.732\% & +1.922\% & +3.287\% & +8.564\% & +1.344\% & +141.1\% & $-$2.902\% & +3.269\% & +12.16\% & +0.7662\% & +187\% & +5.703\% & +0.2195\% & +5.381\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -694,12 +694,12 @@ scaleLayout & +1.686\% & +1.848\% & +2.593\% & +7.561\% & +1.617\% & +138.4\% & 
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-Find nearest Neighbour & 13/17 & 24\% & 0.04225 & 0.02974 & 0.04228 & 0.02998 & 0.02994 & 0.02996 & 0.1035 & \textcolor{gibbonslow}{0.1041} & 0.02417 & \textcolor{gibbonfast}{0.02149} & 0.02364 & \textbf{1.38$\times$} \\
-countInRange tight\_box & 13/17 & 24\% & 0.04292 & 0.0295 & 0.04288 & 0.0297 & 0.02963 & 0.02962 & \textcolor{gibbonslow}{0.08454} & 0.08121 & 0.02323 & \textcolor{gibbonfast}{0.01879} & 0.02307 & \textbf{1.57$\times$} \\
-sumMassInRange & 14/17 & 18\% & 0.04264 & 0.02976 & 0.04263 & 0.02951 & 0.02935 & 0.02936 & \textcolor{gibbonslow}{0.0779} & 0.07788 & 0.02472 & \textcolor{gibbonfast}{0.02057} & 0.02235 & \textbf{1.43$\times$} \\
-twoPointCorrelation bin\_8\_16 & 11/17 & 35\% & 0.04386 & 0.03226 & 0.04383 & 0.0325 & 0.03156 & 0.03233 & \textcolor{gibbonslow}{0.1048} & 0.1028 & 0.02891 & \textcolor{gibbonfast}{0.01971} & 0.02889 & \textbf{1.60$\times$} \\
-pointCloudNeighborhood & 11/17 & 35\% & 0.04242 & 0.02837 & 0.04243 & 0.02848 & 0.0283 & 0.02849 & \textcolor{gibbonslow}{0.1036} & 0.1033 & 0.02136 & \textcolor{gibbonfast}{0.01667} & 0.0214 & \textbf{1.70$\times$} \\
-photonMappingBenchmark & 12/17 & 29\% & 0.04964 & 0.04533 & 0.04944 & 0.04295 & 0.04299 & 0.04298 & 0.08677 & \textcolor{gibbonslow}{0.0893} & 0.04248 & \textcolor{gibbonfast}{0.0386} & 0.04239 & \textbf{1.11$\times$} \\
+Find nearest Neighbour & 13/17 & 24\% & 0.04251 & 0.02997 & 0.04251 & 0.03025 & 0.03017 & 0.0302 & \textcolor{gibbonslow}{0.1042} & 0.1041 & 0.02425 & \textcolor{gibbonfast}{0.02164} & 0.02375 & \textbf{1.38$\times$} \\
+countInRange tight\_box & 13/17 & 24\% & 0.04314 & 0.0299 & 0.04321 & 0.02988 & 0.02993 & 0.02987 & \textcolor{gibbonslow}{0.08534} & 0.08491 & 0.02337 & \textcolor{gibbonfast}{0.01893} & 0.02336 & \textbf{1.58$\times$} \\
+sumMassInRange & 14/17 & 18\% & 0.04289 & 0.03001 & 0.04293 & 0.02975 & 0.02966 & 0.02963 & \textcolor{gibbonslow}{0.07848} & 0.07834 & 0.02503 & \textcolor{gibbonfast}{0.02072} & 0.02248 & \textbf{1.43$\times$} \\
+twoPointCorrelation bin\_8\_16 & 11/17 & 35\% & 0.04407 & 0.03247 & 0.04415 & 0.03275 & 0.03186 & 0.03255 & \textcolor{gibbonslow}{0.1054} & 0.1052 & 0.02959 & \textcolor{gibbonfast}{0.01986} & 0.02899 & \textbf{1.60$\times$} \\
+pointCloudNeighborhood & 11/17 & 35\% & 0.04263 & 0.0287 & 0.04273 & 0.02871 & 0.02853 & 0.02869 & \textcolor{gibbonslow}{0.1043} & 0.1039 & 0.02182 & \textcolor{gibbonfast}{0.01684} & 0.02147 & \textbf{1.69$\times$} \\
+photonMappingBenchmark & 12/17 & 29\% & 0.04967 & 0.04567 & 0.04983 & 0.04335 & 0.04332 & 0.04331 & \textcolor{gibbonslow}{0.08731} & 0.08728 & 0.04279 & \textcolor{gibbonfast}{0.03884} & 0.04274 & \textbf{1.12$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -717,12 +717,12 @@ photonMappingBenchmark & 12/17 & 29\% & 0.04964 & 0.04533 & 0.04944 & 0.04295 & 
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-Find nearest Neighbour & +40.93\% & +0.0701\% & $-$0.06343\% & +328.2\% & +2.276\% & $-$9.071\% \\
-countInRange tight\_box & +44.53\% & +0.243\% & +0.02025\% & +263.9\% & +0.7021\% & $-$18.55\% \\
-sumMassInRange & +44.51\% & +0.487\% & $-$0.05108\% & +215.2\% & +10.57\% & $-$7.981\% \\
-twoPointCorrelation bin\_8\_16 & +34.94\% & +0.5537\% & $-$2.379\% & +262.4\% & +0.06577\% & $-$31.79\% \\
-pointCloudNeighborhood & +48.93\% & $-$0.01404\% & $-$0.6564\% & +384.8\% & $-$0.1496\% & $-$22.11\% \\
-photonMappingBenchmark & +15.56\% & $-$0.06747\% & +0.00698\% & +104.3\% & +0.2194\% & $-$8.927\% \\
+Find nearest Neighbour & +40.53\% & +0.1523\% & $-$0.09271\% & +329.8\% & +2.088\% & $-$8.872\% \\
+countInRange tight\_box & +44.38\% & +0.04018\% & +0.2243\% & +265.2\% & +0.03425\% & $-$18.97\% \\
+sumMassInRange & +44.19\% & +0.3746\% & +0.1012\% & +213.6\% & +11.35\% & $-$7.834\% \\
+twoPointCorrelation bin\_8\_16 & +34.56\% & +0.6113\% & $-$2.117\% & +256.1\% & +2.087\% & $-$31.48\% \\
+pointCloudNeighborhood & +48.48\% & +0.05227\% & $-$0.5646\% & +378.2\% & +1.63\% & $-$21.56\% \\
+photonMappingBenchmark & +14.58\% & +0.09004\% & +0.0254\% & +104\% & +0.1334\% & $-$9.119\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -741,9 +741,9 @@ photonMappingBenchmark & +15.56\% & $-$0.06747\% & +0.00698\% & +104.3\% & +0.21
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-reduction & 2/11 & 82\% & 0.1433 & \textcolor{gibbonslow}{0.1461} & 0.1412 & 0.07465 & 0.03163 & 0.03086 & $\ddagger$ & $\ddagger$ & 0.07095 & 0.005024 & \textcolor{gibbonfast}{0.005019} & \textbf{6.15$\times$} \\
-maxField & 2/11 & 82\% & 0.1367 & 0.1371 & \textcolor{gibbonslow}{0.1374} & 0.07588 & 0.07577 & 0.07557 & $\ddagger$ & $\ddagger$ & 0.08781 & 0.03159 & \textcolor{gibbonfast}{0.03069} & \textbf{2.46$\times$} \\
-countHeavy & 2/11 & 82\% & 0.1352 & 0.1352 & \textcolor{gibbonslow}{0.1357} & 0.07505 & 0.03259 & 0.03172 & $\ddagger$ & $\ddagger$ & 0.0714 & 0.005903 & \textcolor{gibbonfast}{0.005878} & \textbf{5.40$\times$} \\
+reduction & 2/11 & 82\% & \textcolor{gibbonslow}{0.1452} & 0.1395 & 0.1407 & 0.07547 & 0.03191 & 0.031 & $\ddagger$ & $\ddagger$ & 0.07156 & 0.005079 & \textcolor{gibbonfast}{0.005056} & \textbf{6.13$\times$} \\
+maxField & 2/11 & 82\% & \textcolor{gibbonslow}{0.1389} & 0.1386 & 0.1384 & 0.07653 & 0.07643 & 0.07622 & $\ddagger$ & $\ddagger$ & 0.08849 & 0.03184 & \textcolor{gibbonfast}{0.03182} & \textbf{2.40$\times$} \\
+countHeavy & 2/11 & 82\% & \textcolor{gibbonslow}{0.137} & 0.1365 & 0.1367 & 0.07558 & 0.03281 & 0.03185 & $\ddagger$ & $\ddagger$ & 0.07213 & 0.005908 & \textcolor{gibbonfast}{0.005905} & \textbf{5.39$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -761,9 +761,9 @@ countHeavy & 2/11 & 82\% & 0.1352 & 0.1352 & \textcolor{gibbonslow}{0.1357} & 0.
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-reduction & +91.93\% & +141.9\% & +2.495\% & -- & +1314\% & +0.09962\% \\
-maxField & +80.15\% & +0.4169\% & +0.2753\% & -- & +186.2\% & +2.952\% \\
-countHeavy & +80.18\% & +136.6\% & +2.756\% & -- & +1115\% & +0.4253\% \\
+reduction & +92.37\% & +143.4\% & +2.922\% & -- & +1315\% & +0.4549\% \\
+maxField & +81.44\% & +0.4041\% & +0.2716\% & -- & +178.1\% & +0.066\% \\
+countHeavy & +81.31\% & +137.3\% & +3.005\% & -- & +1121\% & +0.0508\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -782,9 +782,9 @@ countHeavy & +80.18\% & +136.6\% & +2.756\% & -- & +1115\% & +0.4253\% \\
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-bumpFirst & 11/11 & 100\% & 0.4387 & 0.408 & 0.4181 & 0.4292 & 0.2054 & 0.2035 & 0.2053 & 0.2006 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4793} & 0.2596 & 0.2407 & 0.2629 & 0.2632 & 0.0193 & 0.01857 & 0.01852 & \textcolor{gibbonfast}{0.0185} & \textbf{10.84$\times$} \\
-shiftTriple & 9/11 & 82\% & 0.4477 & 0.4018 & 0.4228 & 0.3696 & 0.1932 & 0.1923 & 0.1945 & 0.1909 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4739} & 0.2631 & 0.2419 & 0.2579 & 0.2571 & 0.05872 & \textcolor{gibbonfast}{0.05634} & 0.06048 & 0.06051 & \textbf{3.39$\times$} \\
-touchMost & 4/11 & 36\% & 0.4342 & 0.4272 & 0.4123 & 0.4231 & 0.2022 & 0.1982 & 0.2009 & 0.1888 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4806} & 0.2508 & 0.2328 & 0.255 & 0.2567 & 0.1992 & 0.1976 & 0.1621 & \textcolor{gibbonfast}{0.1612} & \textbf{1.17$\times$} \\
+bumpFirst & 11/11 & 100\% & 0.44 & 0.4106 & 0.4253 & 0.4318 & 0.2071 & 0.2059 & 0.2054 & 0.2076 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4827} & 0.2617 & 0.2416 & 0.2586 & 0.2604 & 0.01942 & 0.01878 & \textcolor{gibbonfast}{0.01865} & 0.01869 & \textbf{11.01$\times$} \\
+shiftTriple & 9/11 & 82\% & 0.4505 & 0.4039 & 0.4304 & 0.3805 & 0.1945 & 0.1939 & 0.1926 & 0.1955 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4771} & 0.264 & 0.2452 & 0.2536 & 0.2534 & 0.05897 & \textcolor{gibbonfast}{0.05645} & 0.06071 & 0.06087 & \textbf{3.41$\times$} \\
+touchMost & 4/11 & 36\% & 0.4364 & 0.429 & 0.4208 & 0.4262 & 0.2031 & 0.1987 & 0.198 & 0.1928 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.4831} & 0.2513 & 0.2325 & 0.2505 & 0.2522 & 0.1968 & 0.1931 & 0.1631 & \textcolor{gibbonfast}{0.1615} & \textbf{1.19$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -803,9 +803,9 @@ touchMost & 4/11 & 36\% & 0.4342 & 0.4272 & 0.4123 & 0.4231 & 0.2022 & 0.1982 & 
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-bumpFirst & +2.202\% & +110.9\% & +0.949\% & +0.06284\% & +2.341\% & -- & +99.12\% & +7.824\% & $-$1.27\% & $-$0.1326\% & +1262\% & +3.909\% & +4.195\% & +0.1027\% \\
-shiftTriple & +21.14\% & +92.15\% & +0.4679\% & $-$0.6504\% & +1.889\% & -- & +95.92\% & +8.787\% & +2.019\% & +0.3201\% & +339.2\% & +4.233\% & $-$2.912\% & $-$0.04132\% \\
-touchMost & +2.62\% & +113.5\% & +2.023\% & +0.6716\% & +6.409\% & -- & +106.4\% & +7.715\% & $-$1.644\% & $-$0.6759\% & +27.97\% & +0.8397\% & +22.89\% & +0.5552\% \\
+bumpFirst & +1.902\% & +109.7\% & +0.6028\% & +0.8198\% & $-$1.025\% & -- & +99.81\% & +8.331\% & +1.21\% & $-$0.6767\% & +1232\% & +3.408\% & +4.117\% & $-$0.2086\% \\
+shiftTriple & +18.41\% & +96.24\% & +0.3048\% & +0.9678\% & $-$1.466\% & -- & +94.6\% & +7.684\% & +4.119\% & +0.05761\% & +330\% & +4.475\% & $-$2.868\% & $-$0.2497\% \\
+touchMost & +2.408\% & +114.5\% & +2.227\% & +2.598\% & +2.681\% & -- & +107.8\% & +8.062\% & +0.2874\% & $-$0.6669\% & +27.33\% & +1.891\% & +20.67\% & +0.9922\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -824,7 +824,7 @@ touchMost & +2.62\% & +113.5\% & +2.023\% & +0.6716\% & +6.409\% & -- & +106.4\%
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-reduction & 2/3 & 33\% & - & - & - & \textcolor{gibbonslow}{9.782} & 1.437 & 1.439 & - & - & 9.352 & \textcolor{gibbonfast}{0.9525} & 0.955 & \textbf{1.51$\times$} \\
+reduction & 2/3 & 33\% & - & - & - & \textcolor{gibbonslow}{9.856} & 1.448 & 1.449 & - & - & 9.384 & \textcolor{gibbonfast}{0.9575} & 0.9594 & \textbf{1.51$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -842,7 +842,7 @@ reduction & 2/3 & 33\% & - & - & - & \textcolor{gibbonslow}{9.782} & 1.437 & 1.4
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-reduction & -- & +579.7\% & $-$0.1518\% & -- & +879.3\% & $-$0.2536\% \\
+reduction & -- & +580\% & $-$0.07334\% & -- & +878.1\% & $-$0.1992\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -861,9 +861,9 @@ reduction & -- & +579.7\% & $-$0.1518\% & -- & +879.3\% & $-$0.2536\% \\
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-length List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05181} & 0.05172 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.02168 & \textcolor{gibbonfast}{0.02166} & \textbf{2.39$\times$} \\
-sumList & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05142} & 0.05108 & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.04947} & 0.04969 & 1.03$\times$ \\
-sumList tail recursive & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05147} & 0.05124 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.04939 & \textcolor{gibbonfast}{0.04912} & 1.04$\times$ \\
+length List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05243} & 0.05243 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.0218 & \textcolor{gibbonfast}{0.02179} & \textbf{2.41$\times$} \\
+sumList & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.05225} & 0.05219 & $\ddagger$ & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.05051} & 0.05082 & 1.03$\times$ \\
+sumList tail recursive & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.05231 & \textcolor{gibbonslow}{0.05248} & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.05035 & \textcolor{gibbonfast}{0.0502} & 1.04$\times$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -881,9 +881,9 @@ sumList tail recursive & 2/2 & 0\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\dd
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-length List & -- & -- & +0.1837\% & -- & -- & +0.07848\% \\
-sumList & -- & -- & +0.6734\% & -- & -- & $-$0.4387\% \\
-sumList tail recursive & -- & -- & +0.4469\% & -- & -- & +0.5374\% \\
+length List & -- & -- & +0.007629\% & -- & -- & +0.04588\% \\
+sumList & -- & -- & +0.1092\% & -- & -- & $-$0.6041\% \\
+sumList tail recursive & -- & -- & $-$0.3296\% & -- & -- & +0.2968\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -902,7 +902,7 @@ sumList tail recursive & -- & -- & +0.4469\% & -- & -- & +0.5374\% \\
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1 List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.2886 & 0.2768 & 0.2553 & 0.2544 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.2966 & \textcolor{gibbonslow}{0.3488} & 0.2464 & 0.2293 & 0.1973 & 0.1907 & 0.1905 & \textcolor{gibbonfast}{0.19} & \textbf{1.34$\times$} \\
+add1 List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.285 & 0.2784 & 0.2563 & 0.2557 & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.3007 & \textcolor{gibbonslow}{0.3525} & 0.2502 & 0.2338 & 0.2003 & 0.194 & 0.194 & \textcolor{gibbonfast}{0.1936} & \textbf{1.32$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -921,7 +921,7 @@ add1 List & 1/2 & 50\% & $\ddagger$ & $\ddagger$ & $\ddagger$ & $\ddagger$ & 0.2
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1 List & -- & -- & +4.262\% & +13.05\% & +0.366\% & -- & -- & $-$14.97\% & +20.37\% & +7.466\% & +24.85\% & +3.468\% & +3.612\% & +0.2358\% \\
+add1 List & -- & -- & +2.346\% & +11.19\% & +0.2182\% & -- & -- & $-$14.7\% & +20.18\% & +7.026\% & +24.9\% & +3.258\% & +3.244\% & +0.1988\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -940,8 +940,8 @@ add1 List & -- & -- & +4.262\% & +13.05\% & +0.366\% & -- & -- & $-$14.97\% & +2
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sumTree & 3/3 & 0\% & 0.03997 & 0.01911 & 0.04001 & 0.01882 & 0.01449 & 0.01448 & 0.05325 & \textcolor{gibbonslow}{0.05326} & 0.01502 & 0.01135 & \textcolor{gibbonfast}{0.0113} & \textbf{1.28$\times$} \\
-sumTree TailRec & 3/3 & 0\% & 0.0401 & 0.01889 & 0.04013 & 0.01755 & 0.01238 & 0.01241 & 0.05155 & \textcolor{gibbonslow}{0.05156} & 0.01806 & 0.01115 & \textcolor{gibbonfast}{0.01114} & \textbf{1.11$\times$} \\
+sumTree & 3/3 & 0\% & 0.04011 & 0.01921 & 0.04019 & 0.01892 & 0.01453 & 0.01455 & \textcolor{gibbonslow}{0.05357} & 0.05355 & 0.01529 & 0.01148 & \textcolor{gibbonfast}{0.01144} & \textbf{1.27$\times$} \\
+sumTree TailRec & 3/3 & 0\% & 0.04033 & 0.01907 & 0.04033 & 0.01767 & 0.01257 & 0.01259 & 0.05184 & \textcolor{gibbonslow}{0.05186} & 0.01815 & 0.01123 & \textcolor{gibbonfast}{0.01122} & \textbf{1.12$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -959,8 +959,8 @@ sumTree TailRec & 3/3 & 0\% & 0.0401 & 0.01889 & 0.04013 & 0.01755 & 0.01238 & 0
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sumTree & +112.3\% & +30\% & +0.06907\% & +254.6\% & +32.93\% & +0.5046\% \\
-sumTree TailRec & +128.5\% & +41.45\% & $-$0.2015\% & +185.5\% & +62.14\% & +0.1257\% \\
+sumTree & +112\% & +30.09\% & $-$0.07563\% & +250.3\% & +33.72\% & +0.3585\% \\
+sumTree TailRec & +128.2\% & +40.33\% & $-$0.1747\% & +185.6\% & +61.8\% & +0.1337\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -979,7 +979,7 @@ sumTree TailRec & +128.5\% & +41.45\% & $-$0.2015\% & +185.5\% & +62.14\% & +0.1
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1Tree & 1/2 & 50\% & 0.05216 & 0.04993 & 0.05397 & 0.04355 & 0.04093 & 0.04122 & 0.02986 & 0.02839 & \textcolor{gibbonslow}{0.1067} & 0.1066 & 0.04204 & 0.0439 & 0.04401 & 0.02269 & 0.02026 & 0.01611 & \textcolor{gibbonfast}{0.01543} & 0.01547 & 0.01545 & \textbf{1.84$\times$} \\
+add1Tree & 1/2 & 50\% & 0.05373 & 0.05034 & 0.05403 & 0.04399 & 0.04092 & 0.04163 & 0.02996 & 0.02853 & 0.1073 & \textcolor{gibbonslow}{0.1074} & 0.04256 & 0.04413 & 0.04425 & 0.02281 & 0.02036 & 0.01614 & 0.01553 & \textcolor{gibbonfast}{0.01553} & 0.01554 & \textbf{1.84$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -998,7 +998,7 @@ add1Tree & 1/2 & 50\% & 0.05216 & 0.04993 & 0.05397 & 0.04355 & 0.04093 & 0.0412
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1Tree & +19.77\% & +5.645\% & $-$0.7011\% & +37.08\% & +5.193\% & +153.8\% & $-$4.481\% & $-$0.2567\% & +93.46\% & +11.99\% & +40.88\% & +4.415\% & +4.111\% & +0.1489\% \\
+add1Tree & +22.16\% & +5.652\% & $-$1.71\% & +36.6\% & +5.002\% & +152.1\% & $-$3.833\% & $-$0.2712\% & +93.44\% & +12.08\% & +41.38\% & +3.922\% & +3.929\% & $-$0.09651\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1017,13 +1017,13 @@ add1Tree & +19.77\% & +5.645\% & $-$0.7011\% & +37.08\% & +5.193\% & +153.8\% & 
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-totalHeapSize & 3/5 & 40\% & 0.04345 & 0.02202 & 0.04347 & 0.02119 & 0.01918 & 0.0199 & \textcolor{gibbonslow}{0.06992} & 0.06991 & 0.01531 & \textcolor{gibbonfast}{0.01024} & 0.0105 & \textbf{1.87$\times$} \\
-countMarked & 3/5 & 40\% & 0.04502 & 0.0222 & 0.04506 & 0.01856 & 0.01761 & 0.01753 & \textcolor{gibbonslow}{0.07777} & 0.07777 & 0.01684 & 0.01033 & \textcolor{gibbonfast}{0.01022} & \textbf{1.71$\times$} \\
-countLargeItems & 3/5 & 40\% & 0.0449 & 0.02278 & 0.04491 & 0.02128 & 0.0183 & 0.01858 & \textcolor{gibbonslow}{0.07855} & 0.07854 & 0.01549 & \textcolor{gibbonfast}{0.01033} & 0.0107 & \textbf{1.77$\times$} \\
-liveBytes & 4/5 & 20\% & 0.04373 & 0.0272 & 0.04369 & 0.02168 & 0.01816 & 0.01861 & \textcolor{gibbonslow}{0.0786} & 0.07858 & 0.0206 & \textcolor{gibbonfast}{0.01202} & 0.01287 & \textbf{1.51$\times$} \\
-deadBytes & 4/5 & 20\% & 0.04437 & 0.02357 & 0.04438 & 0.02161 & 0.01896 & 0.01719 & \textcolor{gibbonslow}{0.07857} & 0.07853 & 0.0215 & \textcolor{gibbonfast}{0.01199} & 0.01284 & \textbf{1.43$\times$} \\
-countSurvivors & 4/5 & 20\% & 0.04386 & 0.02241 & 0.04392 & 0.02233 & 0.01892 & 0.01879 & 0.07794 & \textcolor{gibbonslow}{0.07867} & 0.02206 & \textcolor{gibbonfast}{0.0128} & 0.01341 & \textbf{1.47$\times$} \\
-sumObjIds & 3/5 & 40\% & 0.04345 & 0.02212 & 0.0435 & 0.01976 & 0.0176 & 0.0178 & 0.0785 & \textcolor{gibbonslow}{0.07852} & 0.01896 & \textcolor{gibbonfast}{0.01002} & 0.01017 & \textbf{1.76$\times$} \\
+totalHeapSize & 3/5 & 40\% & 0.04401 & 0.02211 & 0.04371 & 0.0214 & 0.01937 & 0.01995 & \textcolor{gibbonslow}{0.07036} & 0.07031 & 0.01548 & \textcolor{gibbonfast}{0.01032} & 0.0105 & \textbf{1.88$\times$} \\
+countMarked & 3/5 & 40\% & 0.04543 & 0.02227 & 0.04519 & 0.01884 & 0.01779 & 0.01764 & \textcolor{gibbonslow}{0.07821} & 0.0782 & 0.01703 & 0.0105 & \textcolor{gibbonfast}{0.01034} & \textbf{1.71$\times$} \\
+countLargeItems & 3/5 & 40\% & 0.0453 & 0.02302 & 0.04513 & 0.02139 & 0.01848 & 0.01877 & 0.079 & \textcolor{gibbonslow}{0.07905} & 0.01562 & \textcolor{gibbonfast}{0.01045} & 0.01071 & \textbf{1.77$\times$} \\
+liveBytes & 4/5 & 20\% & 0.04404 & 0.02742 & 0.0439 & 0.02188 & 0.01843 & 0.01886 & 0.07901 & \textcolor{gibbonslow}{0.07902} & 0.02063 & \textcolor{gibbonfast}{0.01213} & 0.01295 & \textbf{1.52$\times$} \\
+deadBytes & 4/5 & 20\% & 0.04486 & 0.02369 & 0.04463 & 0.02187 & 0.01913 & 0.01744 & 0.07901 & \textcolor{gibbonslow}{0.07903} & 0.02179 & \textcolor{gibbonfast}{0.01209} & 0.0129 & \textbf{1.44$\times$} \\
+countSurvivors & 4/5 & 20\% & 0.0444 & 0.02261 & 0.04434 & 0.0226 & 0.01905 & 0.01905 & \textcolor{gibbonslow}{0.07908} & 0.07844 & 0.02212 & \textcolor{gibbonfast}{0.0129} & 0.01351 & \textbf{1.48$\times$} \\
+sumObjIds & 3/5 & 40\% & 0.04403 & 0.02232 & 0.04374 & 0.0201 & 0.01772 & 0.01792 & \textcolor{gibbonslow}{0.07902} & 0.07896 & 0.019 & \textcolor{gibbonfast}{0.01006} & 0.01026 & \textbf{1.76$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1041,13 +1041,13 @@ sumObjIds & 3/5 & 40\% & 0.04345 & 0.02212 & 0.0435 & 0.01976 & 0.0176 & 0.0178 
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-totalHeapSize & +105\% & +6.497\% & $-$3.643\% & +356.7\% & +45.85\% & $-$2.429\% \\
-countMarked & +142.6\% & +5.864\% & +0.4564\% & +361.8\% & +64.71\% & +0.9878\% \\
-countLargeItems & +110.9\% & +14.58\% & $-$1.486\% & +407.2\% & +44.68\% & $-$3.504\% \\
-liveBytes & +101.7\% & +16.48\% & $-$2.418\% & +281.5\% & +60.08\% & $-$6.558\% \\
-deadBytes & +105.4\% & +25.66\% & +10.28\% & +265.5\% & +67.48\% & $-$6.575\% \\
-countSurvivors & +96.41\% & +18.83\% & +0.6758\% & +253.4\% & +64.41\% & $-$4.57\% \\
-sumObjIds & +119.9\% & +10.99\% & $-$1.135\% & +314.1\% & +86.42\% & $-$1.455\% \\
+totalHeapSize & +105.7\% & +7.269\% & $-$2.888\% & +354.6\% & +47.4\% & $-$1.705\% \\
+countMarked & +141.2\% & +6.821\% & +0.8732\% & +359.3\% & +64.66\% & +1.499\% \\
+countLargeItems & +111.8\% & +13.97\% & $-$1.513\% & +405.7\% & +45.87\% & $-$2.391\% \\
+liveBytes & +101.3\% & +16.02\% & $-$2.259\% & +283\% & +59.35\% & $-$6.264\% \\
+deadBytes & +105.2\% & +25.38\% & +9.695\% & +262.6\% & +68.85\% & $-$6.331\% \\
+countSurvivors & +96.49\% & +18.59\% & $-$0.0105\% & +257.4\% & +63.8\% & $-$4.531\% \\
+sumObjIds & +119.1\% & +12.15\% & $-$1.105\% & +315.8\% & +85.26\% & $-$1.95\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1066,8 +1066,8 @@ sumObjIds & +119.9\% & +10.99\% & $-$1.135\% & +314.1\% & +86.42\% & $-$1.455\% 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sweepUnmarked & 2/4 & 50\% & 0.08436 & 0.07821 & 0.08433 & 0.07245 & 0.07276 & 0.07169 & 0.06094 & 0.06066 & 0.165 & \textcolor{gibbonslow}{0.1662} & 0.09436 & 0.07764 & 0.09362 & 0.05756 & 0.05277 & 0.0342 & \textcolor{gibbonfast}{0.03229} & 0.0324 & 0.03241 & \textbf{1.88$\times$} \\
-touchHotObjects & 2/4 & 50\% & 0.08233 & 0.07939 & 0.08234 & 0.07543 & 0.07278 & 0.07396 & 0.06246 & 0.06097 & 0.171 & \textcolor{gibbonslow}{0.1712} & 0.09556 & 0.07887 & 0.09517 & 0.06019 & 0.0557 & 0.0368 & \textcolor{gibbonfast}{0.03499} & 0.03762 & 0.03553 & \textbf{1.74$\times$} \\
+sweepUnmarked & 2/4 & 50\% & 0.08302 & 0.07854 & 0.08295 & 0.07273 & 0.07286 & 0.0715 & 0.06091 & 0.06098 & \textcolor{gibbonslow}{0.1673} & 0.1663 & 0.09476 & 0.07815 & 0.09399 & 0.05777 & 0.05309 & 0.03438 & \textcolor{gibbonfast}{0.03247} & 0.0326 & 0.03252 & \textbf{1.88$\times$} \\
+touchHotObjects & 2/4 & 50\% & 0.08254 & 0.07971 & 0.08264 & 0.07572 & 0.0733 & 0.07378 & 0.06191 & 0.06107 & \textcolor{gibbonslow}{0.1721} & 0.172 & 0.09613 & 0.07928 & 0.09577 & 0.06047 & 0.056 & 0.03701 & \textcolor{gibbonfast}{0.0352} & 0.03792 & 0.03576 & \textbf{1.74$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1086,8 +1086,8 @@ touchHotObjects & 2/4 & 50\% & 0.08233 & 0.07939 & 0.08234 & 0.07543 & 0.07278 &
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-sweepUnmarked & +16.45\% & +1.052\% & +1.495\% & +19.4\% & +0.4682\% & +74.85\% & +0.7872\% & $-$17.07\% & +34.88\% & +9.076\% & +68.33\% & +5.909\% & +5.553\% & $-$0.03394\% \\
-touchHotObjects & +9.147\% & +1.993\% & $-$1.601\% & +16.51\% & +2.449\% & +78.91\% & +0.4014\% & $-$17.13\% & +31.04\% & +8.063\% & +63.54\% & +5.193\% & $-$2.161\% & +5.877\% \\
+sweepUnmarked & +14.15\% & +1.719\% & +1.912\% & +19.63\% & $-$0.1148\% & +76.54\% & +0.8225\% & $-$16.85\% & +35.28\% & +8.821\% & +68.05\% & +5.873\% & +5.457\% & +0.2491\% \\
+touchHotObjects & +9.019\% & +2.624\% & $-$0.6519\% & +18.39\% & +1.37\% & +79.01\% & +0.3801\% & $-$17.22\% & +31.11\% & +7.978\% & +63.38\% & +5.16\% & $-$2.384\% & +6.026\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1106,7 +1106,7 @@ touchHotObjects & +9.147\% & +1.993\% & $-$1.601\% & +16.51\% & +2.449\% & +78.9
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sum tree & 5/5 & 0\% & 0.05026 & 0.03282 & 0.0503 & 0.02795 & 0.02767 & 0.028 & \textcolor{gibbonslow}{0.2665} & 0.2662 & 0.0287 & \textcolor{gibbonfast}{0.02634} & 0.02864 & 1.05$\times$ \\
+sum tree & 5/5 & 0\% & 0.05049 & 0.03297 & 0.0506 & 0.02804 & 0.02793 & 0.02862 & \textcolor{gibbonslow}{0.2787} & 0.2659 & 0.0288 & \textcolor{gibbonfast}{0.0267} & 0.02884 & 1.05$\times$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1124,7 +1124,7 @@ sum tree & 5/5 & 0\% & 0.05026 & 0.03282 & 0.0503 & 0.02795 & 0.02767 & 0.028 & 
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sum tree & +79.85\% & $-$0.2035\% & $-$1.189\% & +828.6\% & +0.22\% & $-$8.001\% \\
+sum tree & +80.06\% & $-$2.016\% & $-$2.404\% & +867.6\% & $-$0.1387\% & $-$7.437\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1143,7 +1143,7 @@ sum tree & +79.85\% & $-$0.2035\% & $-$1.189\% & +828.6\% & +0.22\% & $-$8.001\%
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add 1 tree & 1/3 & 33\% & 0.08127 & 0.07941 & 0.08146 & 0.07146 & 0.07867 & 0.07837 & 0.0586 & 0.06258 & 0.3728 & \textcolor{gibbonslow}{0.373} & 0.08111 & 0.07846 & 0.07811 & 0.05234 & 0.04872 & 0.04359 & 0.04203 & \textcolor{gibbonfast}{0.04197} & 0.04197 & \textbf{1.40$\times$} \\
+add 1 tree & 1/3 & 33\% & 0.08172 & 0.07964 & 0.08297 & 0.07156 & 0.07826 & 0.07843 & 0.05847 & 0.06241 & 0.3733 & \textcolor{gibbonslow}{0.3752} & 0.0811 & 0.07855 & 0.07912 & 0.0524 & 0.04858 & 0.04363 & 0.04211 & \textcolor{gibbonfast}{0.04203} & 0.04206 & \textbf{1.39$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1162,7 +1162,7 @@ add 1 tree & 1/3 & 33\% & 0.08127 & 0.07941 & 0.08146 & 0.07146 & 0.07867 & 0.07
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add 1 tree & +13.72\% & $-$8.817\% & +0.3815\% & +34.25\% & $-$6.364\% & +359.6\% & +3.846\% & +0.4481\% & +49.9\% & +7.439\% & +20.07\% & +3.714\% & +3.86\% & $-$0.00953\% \\
+add 1 tree & +14.2\% & $-$8.76\% & $-$0.2193\% & +33.84\% & $-$6.316\% & +360.3\% & +2.504\% & $-$0.7179\% & +49.91\% & +7.872\% & +20.09\% & +3.622\% & +3.812\% & $-$0.06895\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1181,11 +1181,11 @@ add 1 tree & +13.72\% & $-$8.817\% & +0.3815\% & +34.25\% & $-$6.364\% & +359.6\
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sumPrefixFreq & 3/10 & 70\% & 0.02726 & 0.01622 & 0.02739 & 0.01449 & 0.01424 & 0.01412 & 0.1024 & \textcolor{gibbonslow}{0.1025} & 0.008073 & \textcolor{gibbonfast}{0.005829} & 0.00587 & \textbf{2.42$\times$} \\
-countTerminals & 3/10 & 70\% & 0.02682 & 0.01629 & 0.02727 & 0.01432 & 0.01366 & 0.01377 & \textcolor{gibbonslow}{0.1013} & 0.1011 & 0.01106 & \textcolor{gibbonfast}{0.00585} & 0.005907 & \textbf{2.34$\times$} \\
-sumSubtreeHints & 3/10 & 70\% & 0.02732 & 0.01627 & 0.02772 & 0.01473 & 0.01442 & 0.01433 & \textcolor{gibbonslow}{0.1008} & 0.1006 & 0.01035 & \textcolor{gibbonfast}{0.005849} & 0.00588 & \textbf{2.45$\times$} \\
-autocompleteTopKProxy & 5/10 & 50\% & 0.02828 & 0.01918 & 0.02882 & 0.01654 & 0.01492 & 0.01493 & \textcolor{gibbonslow}{0.1072} & 0.1065 & 0.01281 & \textcolor{gibbonfast}{0.008783} & 0.009103 & \textbf{1.70$\times$} \\
-countLazyNodes & 4/10 & 60\% & 0.02882 & 0.01727 & 0.02911 & 0.01554 & 0.01473 & 0.01471 & 0.1013 & \textcolor{gibbonslow}{0.1019} & 0.00992 & \textcolor{gibbonfast}{0.006516} & 0.006634 & \textbf{2.26$\times$} \\
+sumPrefixFreq & 3/10 & 70\% & 0.02799 & 0.01633 & 0.02736 & 0.01452 & 0.01423 & 0.0146 & \textcolor{gibbonslow}{0.1029} & 0.1026 & 0.008087 & 0.005861 & \textcolor{gibbonfast}{0.005847} & \textbf{2.43$\times$} \\
+countTerminals & 3/10 & 70\% & 0.02756 & 0.01626 & 0.02691 & 0.0144 & 0.01378 & 0.01422 & \textcolor{gibbonslow}{0.1024} & 0.1014 & 0.01093 & 0.005925 & \textcolor{gibbonfast}{0.005914} & \textbf{2.33$\times$} \\
+sumSubtreeHints & 3/10 & 70\% & 0.02778 & 0.01641 & 0.02736 & 0.01484 & 0.01448 & 0.01483 & \textcolor{gibbonslow}{0.1028} & 0.1011 & 0.01047 & 0.005954 & \textcolor{gibbonfast}{0.005876} & \textbf{2.46$\times$} \\
+autocompleteTopKProxy & 5/10 & 50\% & 0.02896 & 0.01917 & 0.02846 & 0.01672 & 0.01494 & 0.01568 & \textcolor{gibbonslow}{0.109} & 0.1067 & 0.0128 & \textcolor{gibbonfast}{0.008776} & 0.009035 & \textbf{1.70$\times$} \\
+countLazyNodes & 4/10 & 60\% & 0.0294 & 0.0173 & 0.0289 & 0.01566 & 0.01476 & 0.01508 & \textcolor{gibbonslow}{0.1017} & 0.1007 & 0.009958 & 0.006658 & \textcolor{gibbonfast}{0.006599} & \textbf{2.24$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1203,11 +1203,11 @@ countLazyNodes & 4/10 & 60\% & 0.02882 & 0.01727 & 0.02911 & 0.01554 & 0.01473 &
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sumPrefixFreq & +88.14\% & +2.606\% & +0.8215\% & +1169\% & +37.53\% & $-$0.6985\% \\
-countTerminals & +87.34\% & +3.942\% & $-$0.8132\% & +816.2\% & +87.17\% & $-$0.965\% \\
-sumSubtreeHints & +85.56\% & +2.764\% & +0.6211\% & +873.8\% & +76.07\% & $-$0.5272\% \\
-autocompleteTopKProxy & +70.94\% & +10.78\% & $-$0.06028\% & +737.1\% & +40.7\% & $-$3.515\% \\
-countLazyNodes & +85.37\% & +5.691\% & +0.1496\% & +921.7\% & +49.53\% & $-$1.779\% \\
+sumPrefixFreq & +92.78\% & $-$0.5684\% & $-$2.534\% & +1173\% & +38.31\% & +0.2394\% \\
+countTerminals & +91.37\% & +1.223\% & $-$3.128\% & +836.5\% & +84.8\% & +0.186\% \\
+sumSubtreeHints & +87.18\% & +0.05393\% & $-$2.407\% & +882.4\% & +78.1\% & +1.327\% \\
+autocompleteTopKProxy & +73.17\% & +6.638\% & $-$4.769\% & +751.1\% & +41.69\% & $-$2.867\% \\
+countLazyNodes & +87.79\% & +3.819\% & $-$2.122\% & +920.9\% & +50.9\% & +0.8941\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1226,8 +1226,8 @@ countLazyNodes & +85.37\% & +5.691\% & +0.1496\% & +921.7\% & +49.53\% & $-$1.77
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-decayTrieStats & 6/9 & 67\% & 0.08173 & 0.08169 & 0.08353 & 0.0796 & 0.0782 & 0.07588 & 0.07059 & 0.07078 & 0.2448 & \textcolor{gibbonslow}{0.2569} & 0.09329 & 0.08933 & 0.09152 & 0.0896 & 0.0903 & 0.02595 & \textcolor{gibbonfast}{0.02554} & 0.02647 & 0.0256 & \textbf{2.76$\times$} \\
-resetTraversalState & 7/9 & 78\% & 0.07853 & 0.08117 & 0.07907 & 0.07698 & 0.07596 & 0.0759 & 0.06753 & 0.06795 & \textcolor{gibbonslow}{0.2453} & 0.2426 & 0.09273 & 0.08901 & 0.09208 & 0.08972 & 0.08929 & 0.01547 & \textcolor{gibbonfast}{0.0154} & 0.01569 & 0.01547 & \textbf{4.39$\times$} \\
+decayTrieStats & 6/9 & 67\% & 0.0831 & 0.08179 & 0.0822 & 0.078 & 0.07809 & 0.07776 & 0.07336 & 0.0713 & 0.2465 & \textcolor{gibbonslow}{0.2504} & 0.09382 & 0.09123 & 0.0914 & 0.09101 & 0.09072 & 0.02606 & 0.02622 & 0.02621 & \textcolor{gibbonfast}{0.02592} & \textbf{2.75$\times$} \\
+resetTraversalState & 7/9 & 78\% & 0.07988 & 0.07879 & 0.08104 & 0.07687 & 0.07996 & 0.07793 & 0.06984 & 0.06967 & \textcolor{gibbonslow}{0.2431} & 0.2428 & 0.0946 & 0.08951 & 0.09121 & 0.0916 & 0.09036 & 0.01605 & 0.01584 & 0.01581 & \textcolor{gibbonfast}{0.01566} & \textbf{4.45$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1246,8 +1246,8 @@ resetTraversalState & 7/9 & 78\% & 0.07853 & 0.08117 & 0.07907 & 0.07698 & 0.075
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-decayTrieStats & +2.671\% & +4.902\% & +3.055\% & +10.77\% & $-$0.2614\% & +162.4\% & +1.939\% & $-$2.394\% & $-$0.3025\% & $-$0.7741\% & +245.3\% & +1.586\% & $-$1.979\% & +3.418\% \\
-resetTraversalState & +2.011\% & +1.415\% & +0.07641\% & +12.49\% & $-$0.6225\% & +164.5\% & +0.7092\% & $-$3.341\% & $-$0.7991\% & +0.4849\% & +479.8\% & +0.5066\% & $-$1.339\% & +1.357\% \\
+decayTrieStats & +6.532\% & +0.3125\% & +0.4218\% & +6.438\% & +2.893\% & +162.7\% & +2.65\% & $-$0.1849\% & +0.2406\% & +0.3186\% & +249.2\% & $-$0.6178\% & $-$0.5609\% & +1.119\% \\
+resetTraversalState & +3.906\% & $-$1.359\% & +2.597\% & +14.49\% & +0.2454\% & +157\% & +3.721\% & $-$1.867\% & $-$2.286\% & +1.376\% & +470.9\% & +1.326\% & +1.486\% & +0.9513\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1266,10 +1266,10 @@ resetTraversalState & +2.011\% & +1.415\% & +0.07641\% & +12.49\% & $-$0.6225\% 
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-paletteEntriesQuantized & 13/25 & 48\% & 0.05123 & 0.04139 & \textcolor{gibbonslow}{0.05172} & 0.04117 & 0.04152 & 0.04178 & - & - & 0.03651 & \textcolor{gibbonfast}{0.02868} & 0.03621 & \textbf{1.44$\times$} \\
-quantizationErrorProxy & 10/25 & 60\% & \textcolor{gibbonslow}{0.06489} & 0.04706 & 0.06481 & 0.04604 & 0.04695 & 0.04723 & - & - & 0.04723 & \textcolor{gibbonfast}{0.04049} & 0.04862 & \textbf{1.14$\times$} \\
-reduceColorCount & 2/25 & 92\% & 0.0514 & 0.04214 & \textcolor{gibbonslow}{0.05154} & 0.04084 & 0.04173 & 0.04245 & - & - & \textcolor{gibbonfast}{0.02744} & 0.028 & 0.02809 & \textbf{1.49$\times$} \\
-closestColor & 3/25 & 88\% & \textcolor{gibbonslow}{0.05555} & 0.04451 & 0.05508 & 0.04272 & 0.04382 & 0.04389 & - & - & 0.03311 & 0.03234 & \textcolor{gibbonfast}{0.03078} & \textbf{1.39$\times$} \\
+paletteEntriesQuantized & 13/25 & 48\% & 0.05156 & 0.04139 & \textcolor{gibbonslow}{0.05204} & 0.04134 & 0.04138 & 0.04115 & - & - & 0.03522 & \textcolor{gibbonfast}{0.0277} & 0.03581 & \textbf{1.49$\times$} \\
+quantizationErrorProxy & 10/25 & 60\% & 0.0646 & 0.04733 & \textcolor{gibbonslow}{0.06471} & 0.04625 & 0.04632 & 0.04616 & - & - & 0.04535 & \textcolor{gibbonfast}{0.03938} & 0.04808 & \textbf{1.17$\times$} \\
+reduceColorCount & 2/25 & 92\% & \textcolor{gibbonslow}{0.0514} & 0.04211 & 0.05136 & 0.04065 & 0.04201 & 0.04133 & - & - & \textcolor{gibbonfast}{0.02667} & 0.02745 & 0.0276 & \textbf{1.52$\times$} \\
+closestColor & 3/25 & 88\% & 0.05523 & 0.0443 & \textcolor{gibbonslow}{0.05529} & 0.04266 & 0.04365 & 0.04315 & - & - & 0.03227 & 0.03152 & \textcolor{gibbonfast}{0.03038} & \textbf{1.40$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1287,10 +1287,10 @@ closestColor & 3/25 & 88\% & \textcolor{gibbonslow}{0.05555} & 0.04451 & 0.05508
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-paletteEntriesQuantized & +24.44\% & $-$1.462\% & $-$0.6199\% & -- & +0.8368\% & $-$20.79\% \\
-quantizationErrorProxy & +40.94\% & $-$2.511\% & $-$0.5802\% & -- & $-$2.859\% & $-$16.71\% \\
-reduceColorCount & +25.86\% & $-$3.783\% & $-$1.703\% & -- & $-$2.303\% & $-$0.3204\% \\
-closestColor & +30.03\% & $-$2.663\% & $-$0.1686\% & -- & +7.559\% & +5.045\% \\
+paletteEntriesQuantized & +24.71\% & +0.4544\% & +0.5395\% & -- & $-$1.656\% & $-$22.66\% \\
+quantizationErrorProxy & +39.67\% & +0.2015\% & +0.3401\% & -- & $-$5.67\% & $-$18.1\% \\
+reduceColorCount & +26.44\% & $-$1.648\% & +1.638\% & -- & $-$3.381\% & $-$0.5435\% \\
+closestColor & +29.47\% & $-$1.14\% & +1.159\% & -- & +6.252\% & +3.779\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1309,8 +1309,8 @@ closestColor & +30.03\% & $-$2.663\% & $-$0.1686\% & -- & +7.559\% & +5.045\% \\
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-toYCoCg & 6/18 & 33\% & 0.2141 & 0.2158 & 0.2105 & 0.201 & 0.2054 & 0.2105 & 0.1872 & \textcolor{gibbonfast}{0.1865} & - & - & 0.2955 & \textcolor{gibbonslow}{0.3689} & 0.3463 & 0.285 & 0.2854 & 0.2166 & 0.2135 & 0.2009 & 0.1988 & 0.94$\times$ \\
-markPaletteLeaves & 17/18 & 94\% & 0.1975 & 0.207 & 0.1981 & 0.1988 & 0.2033 & 0.205 & 0.18 & 0.176 & - & - & 0.2966 & \textcolor{gibbonslow}{0.3545} & 0.3289 & 0.2636 & 0.2684 & 0.009246 & 0.008162 & 0.009051 & \textcolor{gibbonfast}{0.007954} & \textbf{22.12$\times$} \\
+toYCoCg & 6/18 & 33\% & 0.2085 & 0.2072 & 0.2087 & 0.2014 & 0.1997 & 0.2021 & 0.1826 & \textcolor{gibbonfast}{0.1823} & - & - & 0.2921 & \textcolor{gibbonslow}{0.3534} & 0.3442 & 0.2813 & 0.273 & 0.2112 & 0.2114 & 0.1986 & 0.1975 & 0.92$\times$ \\
+markPaletteLeaves & 17/18 & 94\% & 0.1947 & 0.2026 & 0.1948 & 0.1982 & 0.1982 & 0.1973 & 0.178 & 0.1735 & - & - & 0.2874 & \textcolor{gibbonslow}{0.3409} & 0.3257 & 0.2597 & 0.2595 & 0.008958 & 0.007888 & 0.008997 & \textcolor{gibbonfast}{0.007853} & \textbf{22.09$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1329,8 +1329,8 @@ markPaletteLeaves & 17/18 & 94\% & 0.1975 & 0.207 & 0.1981 & 0.1988 & 0.2033 & 0
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-toYCoCg & +6.521\% & $-$4.5\% & $-$2.387\% & +9.752\% & +0.3571\% & -- & $-$14.65\% & +6.537\% & +29.42\% & $-$0.1272\% & +31.61\% & +1.421\% & +7.819\% & +1.028\% \\
-markPaletteLeaves & $-$0.6498\% & $-$3.033\% & $-$0.873\% & +12.94\% & +2.272\% & -- & $-$9.82\% & +7.763\% & +34.47\% & $-$1.797\% & +2751\% & +13.28\% & +2.154\% & +13.79\% \\
+toYCoCg & +3.531\% & $-$0.3395\% & $-$1.157\% & +9.346\% & +0.1887\% & -- & $-$15.14\% & +2.662\% & +25.62\% & +3.034\% & +33.18\% & $-$0.1007\% & +6.333\% & +0.5874\% \\
+markPaletteLeaves & $-$1.763\% & +0.4525\% & +0.4165\% & +11.35\% & +2.592\% & -- & $-$11.76\% & +4.651\% & +31.28\% & +0.06165\% & +2799\% & +13.56\% & $-$0.4335\% & +14.57\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1349,7 +1349,7 @@ markPaletteLeaves & $-$0.6498\% & $-$3.033\% & $-$0.873\% & +12.94\% & +2.272\% 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1Tree & 1/2 & 50\% & 0.04521 & 0.04264 & 0.04559 & 0.0359 & 0.03774 & 0.04025 & 0.02084 & 0.02315 & \textcolor{gibbonslow}{0.1072} & 0.1072 & 0.03427 & 0.0361 & 0.0357 & 0.01072 & 0.00708 & 0.003735 & 0.002239 & 0.002177 & \textcolor{gibbonfast}{0.002156} & \textbf{9.66$\times$} \\
+add1Tree & 1/2 & 50\% & 0.04276 & 0.04003 & 0.04262 & 0.03375 & 0.0355 & 0.03795 & 0.01948 & 0.02158 & \textcolor{gibbonslow}{0.1013} & 0.1012 & 0.03217 & 0.03381 & 0.03341 & 0.009751 & 0.006392 & 0.003403 & 0.001885 & \textcolor{gibbonfast}{0.001881} & 0.001897 & \textbf{10.36$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1368,7 +1368,7 @@ add1Tree & 1/2 & 50\% & 0.04521 & 0.04264 & 0.04559 & 0.0359 & 0.03774 & 0.04025
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1Tree & +25.96\% & $-$10.81\% & $-$6.237\% & +81.1\% & $-$9.98\% & +212.7\% & $-$3.989\% & +1.143\% & +236.8\% & +51.43\% & +187\% & +66.82\% & +71.57\% & +0.974\% \\
+add1Tree & +26.69\% & $-$11.08\% & $-$6.458\% & +82.23\% & $-$9.739\% & +214.9\% & $-$3.709\% & +1.188\% & +246.7\% & +52.55\% & +186.5\% & +80.53\% & +80.91\% & $-$0.8434\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1387,7 +1387,7 @@ add1Tree & +25.96\% & $-$10.81\% & $-$6.237\% & +81.1\% & $-$9.98\% & +212.7\% &
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1Tree & 1/2 & 50\% & 0.0458 & 0.04391 & 0.04598 & 0.03313 & 0.03354 & 0.03407 & 0.02287 & 0.02451 & \textcolor{gibbonslow}{0.1055} & 0.105 & 0.03474 & 0.03648 & 0.03621 & 0.01209 & 0.008768 & 0.005236 & \textcolor{gibbonfast}{0.004109} & 0.004219 & 0.004152 & \textbf{5.57$\times$} \\
+add1Tree & 1/2 & 50\% & 0.04469 & 0.04213 & 0.04603 & 0.03317 & 0.03335 & 0.03401 & 0.02131 & 0.02292 & \textcolor{gibbonslow}{0.103} & 0.1029 & 0.03404 & 0.03538 & 0.03525 & 0.01149 & 0.008332 & 0.005191 & \textcolor{gibbonfast}{0.003914} & 0.003922 & 0.00394 & \textbf{5.44$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1406,7 +1406,7 @@ add1Tree & 1/2 & 50\% & 0.0458 & 0.04391 & 0.04598 & 0.03313 & 0.03354 & 0.03407
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1Tree & +38.22\% & $-$2.739\% & $-$1.529\% & +46.65\% & $-$6.671\% & +203.8\% & $-$4.054\% & +0.7623\% & +201.7\% & +37.9\% & +130.9\% & +27.43\% & +24.11\% & +1.614\% \\
+add1Tree & +34.74\% & $-$2.473\% & $-$1.958\% & +56.48\% & $-$7.012\% & +202.5\% & $-$3.427\% & +0.366\% & +207.9\% & +37.88\% & +121.3\% & +32.63\% & +32.36\% & $-$0.4569\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1425,7 +1425,7 @@ add1Tree & +38.22\% & $-$2.739\% & $-$1.529\% & +46.65\% & $-$6.671\% & +203.8\%
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1Tree & 1/2 & 50\% & 0.04994 & 0.04436 & 0.05008 & 0.03576 & 0.0378 & 0.0408 & 0.02488 & 0.02406 & 0.1081 & \textcolor{gibbonslow}{0.1082} & 0.03818 & 0.03918 & 0.039 & 0.01616 & 0.01322 & 0.00934 & 0.008397 & 0.0084 & \textcolor{gibbonfast}{0.00837} & \textbf{2.87$\times$} \\
+add1Tree & 1/2 & 50\% & 0.05007 & 0.04452 & 0.0487 & 0.03609 & 0.03765 & 0.04095 & 0.02498 & 0.02402 & \textcolor{gibbonslow}{0.1085} & 0.1084 & 0.0383 & 0.03925 & 0.0392 & 0.01612 & 0.01322 & 0.009352 & \textcolor{gibbonfast}{0.008395} & 0.008401 & 0.008403 & \textbf{2.86$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1444,7 +1444,7 @@ add1Tree & 1/2 & 50\% & 0.04994 & 0.04436 & 0.05008 & 0.03576 & 0.0378 & 0.0408 
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1Tree & +39.66\% & $-$12.34\% & $-$7.336\% & +51.96\% & +3.391\% & +183.3\% & $-$2.095\% & +0.4769\% & +142.5\% & +22.26\% & +73\% & +11.23\% & +11.19\% & +0.3584\% \\
+add1Tree & +38.76\% & $-$11.89\% & $-$8.077\% & +50.71\% & +4.005\% & +183.3\% & $-$2.271\% & +0.1429\% & +143.5\% & +21.88\% & +72.34\% & +11.4\% & +11.32\% & $-$0.0238\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1463,7 +1463,7 @@ add1Tree & +39.66\% & $-$12.34\% & $-$7.336\% & +51.96\% & +3.391\% & +183.3\% &
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-add1Tree & 1/2 & 50\% & 0.05734 & 0.05437 & 0.05606 & 0.04452 & 0.04748 & 0.04531 & 0.03422 & 0.03416 & 0.1172 & \textcolor{gibbonslow}{0.1172} & 0.04638 & 0.04706 & 0.04691 & 0.02505 & 0.02243 & 0.0178 & 0.01713 & \textcolor{gibbonfast}{0.01711} & 0.01712 & \textbf{2.00$\times$} \\
+add1Tree & 1/2 & 50\% & 0.05636 & 0.05441 & 0.0562 & 0.04454 & 0.04747 & 0.04514 & 0.03433 & 0.0342 & 0.1173 & \textcolor{gibbonslow}{0.1174} & 0.04662 & 0.04712 & 0.04698 & 0.02515 & 0.02247 & 0.01784 & \textcolor{gibbonfast}{0.01717} & 0.01719 & 0.01725 & \textbf{1.99$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1482,7 +1482,7 @@ add1Tree & 1/2 & 50\% & 0.05734 & 0.05437 & 0.05606 & 0.04452 & 0.04748 & 0.0453
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-add1Tree & +28.79\% & $-$1.746\% & +4.793\% & +38.74\% & +0.1903\% & +152.6\% & $-$1.136\% & +0.324\% & +87.87\% & +11.67\% & +40.74\% & +3.917\% & +4.014\% & $-$0.0584\% \\
+add1Tree & +26.54\% & $-$1.334\% & +5.16\% & +38.25\% & +0.4094\% & +151.7\% & $-$0.7684\% & +0.3065\% & +87.41\% & +11.89\% & +40.96\% & +3.914\% & +3.751\% & $-$0.3131\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1501,7 +1501,7 @@ add1Tree & +28.79\% & $-$1.746\% & +4.793\% & +38.74\% & +0.1903\% & +152.6\% & 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-arithKernel & 1/2 & 50\% & 0.395 & 0.4866 & 0.3956 & 0.3749 & 0.4837 & 0.3707 & 0.4746 & 0.3585 & \textcolor{gibbonslow}{0.5529} & 0.5528 & 0.3807 & 0.4764 & 0.3784 & 0.4442 & 0.08113 & 0.4274 & \textcolor{gibbonfast}{0.07017} & 0.0729 & 0.07231 & \textbf{5.11$\times$} \\
+arithKernel & 1/2 & 50\% & 0.3961 & 0.4877 & 0.3958 & 0.3754 & 0.4847 & 0.3715 & 0.4764 & 0.3594 & 0.5539 & \textcolor{gibbonslow}{0.554} & 0.3816 & 0.4774 & 0.3793 & 0.4449 & 0.08142 & 0.4282 & \textcolor{gibbonfast}{0.07038} & 0.07296 & 0.07238 & \textbf{5.11$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1520,7 +1520,7 @@ arithKernel & 1/2 & 50\% & 0.395 & 0.4866 & 0.3956 & 0.3749 & 0.4837 & 0.3707 & 
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-arithKernel & +5.376\% & +1.115\% & +30.48\% & +1.923\% & +32.38\% & +45.25\% & +0.5933\% & +25.91\% & +7.256\% & +447.5\% & +3.925\% & +509.1\% & +486.3\% & +0.8229\% \\
+arithKernel & +5.526\% & +1.035\% & +30.47\% & +1.758\% & +32.53\% & +45.15\% & +0.6024\% & +25.87\% & +7.314\% & +446.4\% & +3.902\% & +508.4\% & +486.9\% & +0.7999\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1539,7 +1539,7 @@ arithKernel & +5.376\% & +1.115\% & +30.48\% & +1.923\% & +32.38\% & +45.25\% & 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-arithKernel & 1/2 & 50\% & 0.2015 & \textcolor{gibbonslow}{0.4898} & 0.2018 & 0.1836 & 0.4784 & 0.1791 & 0.483 & 0.161 & 0.4048 & 0.405 & 0.19 & 0.484 & 0.1791 & 0.4523 & 0.0645 & 0.4351 & 0.05297 & 0.05344 & \textcolor{gibbonfast}{0.05293} & \textbf{3.04$\times$} \\
+arithKernel & 1/2 & 50\% & 0.202 & \textcolor{gibbonslow}{0.4911} & 0.2019 & 0.1839 & 0.4794 & 0.1793 & 0.484 & 0.1613 & 0.4058 & 0.4059 & 0.1906 & 0.4855 & 0.1795 & 0.4526 & 0.06452 & 0.4361 & \textcolor{gibbonfast}{0.0531} & 0.05358 & 0.05325 & \textbf{3.04$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1558,7 +1558,7 @@ arithKernel & 1/2 & 50\% & 0.2015 & \textcolor{gibbonslow}{0.4898} & 0.2018 & 0.
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-arithKernel & +9.779\% & +2.503\% & +167.2\% & $-$0.94\% & +199.9\% & +113\% & +6.082\% & +170.2\% & +7.019\% & +601.2\% & +3.955\% & +721.4\% & +714.1\% & +0.9597\% \\
+arithKernel & +9.844\% & +2.57\% & +167.4\% & $-$0.9492\% & +200.1\% & +112.9\% & +6.205\% & +170.5\% & +7.276\% & +601.4\% & +3.763\% & +721.4\% & +714.1\% & +0.6141\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1577,7 +1577,7 @@ arithKernel & +9.779\% & +2.503\% & +167.2\% & $-$0.94\% & +199.9\% & +113\% & +
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-arithKernel & 1/2 & 50\% & 0.3698 & \textcolor{gibbonslow}{0.5193} & 0.3697 & 0.3523 & 0.5173 & 0.3423 & 0.4937 & 0.3138 & 0.5062 & 0.5066 & 0.3436 & 0.4979 & 0.3326 & 0.4617 & 0.153 & 0.4441 & 0.1417 & 0.1378 & \textcolor{gibbonfast}{0.1367} & \textbf{2.30$\times$} \\
+arithKernel & 1/2 & 50\% & 0.3601 & 0.5037 & 0.3602 & 0.3416 & 0.5031 & 0.3329 & 0.497 & 0.3159 & 0.509 & \textcolor{gibbonslow}{0.5091} & 0.3454 & 0.5011 & 0.3351 & 0.4646 & 0.154 & 0.4462 & 0.1427 & 0.1394 & \textcolor{gibbonfast}{0.1376} & \textbf{2.30$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1596,7 +1596,7 @@ arithKernel & 1/2 & 50\% & 0.3698 & \textcolor{gibbonslow}{0.5193} & 0.3697 & 0.
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-arithKernel & +4.979\% & +2.918\% & +51.11\% & +4.769\% & +57.36\% & +47.34\% & +3.311\% & +49.71\% & +7.83\% & +201.7\% & +3.969\% & +213.3\% & +222.2\% & +0.8628\% \\
+arithKernel & +5.406\% & +2.613\% & +51.12\% & +1.239\% & +57.34\% & +47.36\% & +3.081\% & +49.53\% & +7.847\% & +201.7\% & +4.129\% & +212.7\% & +220.2\% & +1.297\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1615,7 +1615,7 @@ arithKernel & +4.979\% & +2.918\% & +51.11\% & +4.769\% & +57.36\% & +47.34\% & 
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-arithKernel & 1/2 & 50\% & 0.5448 & 0.5169 & 0.5432 & 0.5171 & 0.5081 & 0.5069 & 0.5051 & 0.5058 & \textcolor{gibbonslow}{0.5951} & 0.5948 & 0.5056 & 0.5085 & 0.5078 & 0.5001 & 0.4955 & 0.4802 & \textcolor{gibbonfast}{0.4786} & 0.4793 & 0.4803 & 1.06$\times$ \\
+arithKernel & 1/2 & 50\% & 0.5261 & 0.5009 & 0.5267 & 0.5 & 0.4921 & 0.4921 & 0.4906 & 0.4929 & \textcolor{gibbonslow}{0.5785} & 0.5783 & 0.4906 & 0.493 & 0.4916 & 0.4857 & 0.4807 & 0.4663 & 0.466 & 0.4661 & \textcolor{gibbonfast}{0.4658} & 1.05$\times$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1634,7 +1634,7 @@ arithKernel & 1/2 & 50\% & 0.5448 & 0.5169 & 0.5432 & 0.5171 & 0.5081 & 0.5069 &
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-arithKernel & +5.341\% & +2.015\% & +0.2241\% & +0.5974\% & $-$0.1376\% & +17.7\% & $-$0.433\% & +0.1371\% & +1.678\% & +0.9377\% & +4.155\% & +0.3331\% & +0.1899\% & $-$0.2184\% \\
+arithKernel & +5.237\% & +1.594\% & +0.002438\% & +0.3135\% & $-$0.4711\% & +17.93\% & $-$0.2053\% & +0.2931\% & +1.514\% & +1.029\% & +4.154\% & +0.06803\% & +0.04355\% & +0.06333\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1653,12 +1653,12 @@ arithKernel & +5.341\% & +2.015\% & +0.2241\% & +0.5974\% & $-$0.1376\% & +17.7\
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-sumMass & 10/16 & 38\% & \textcolor{gibbonslow}{0.04422} & 0.03536 & 0.04359 & 0.03306 & 0.03492 & 0.03488 & $\ddagger$ & $\ddagger$ & 0.02681 & \textcolor{gibbonfast}{0.02592} & 0.02599 & \textbf{1.28$\times$} \\
-sumEnergy & 12/16 & 25\% & 0.04842 & 0.03896 & \textcolor{gibbonslow}{0.04842} & 0.03636 & 0.03747 & 0.03748 & $\ddagger$ & $\ddagger$ & 0.03259 & \textcolor{gibbonfast}{0.0284} & 0.02974 & \textbf{1.28$\times$} \\
-countActive & 10/16 & 38\% & \textcolor{gibbonslow}{0.04285} & 0.03562 & \textcolor{gibbonslow}{0.04285} & 0.03481 & 0.03543 & 0.03546 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.02711} & 0.02719 & 0.02727 & \textbf{1.28$\times$} \\
-countParticles & 8/16 & 50\% & \textcolor{gibbonslow}{0.04275} & 0.0332 & 0.04267 & 0.03411 & 0.03436 & 0.03439 & $\ddagger$ & $\ddagger$ & 0.02665 & \textcolor{gibbonfast}{0.02611} & 0.02627 & \textbf{1.27$\times$} \\
-barnesHutPotential & 11/16 & 31\% & \textcolor{gibbonslow}{0.05869} & 0.0435 & 0.05868 & 0.04325 & 0.04352 & 0.04351 & $\ddagger$ & $\ddagger$ & 0.04142 & \textcolor{gibbonfast}{0.04061} & 0.04455 & 1.06$\times$ \\
-fmmPotential & 12/16 & 25\% & \textcolor{gibbonslow}{0.1015} & 0.09905 & 0.09912 & 0.09909 & 0.09905 & 0.09901 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.09553} & 0.09581 & 0.09585 & 1.04$\times$ \\
+sumMass & 10/16 & 38\% & 0.04452 & 0.03564 & \textcolor{gibbonslow}{0.04454} & 0.03351 & 0.0351 & 0.03504 & $\ddagger$ & $\ddagger$ & 0.027 & \textcolor{gibbonfast}{0.0261} & 0.02616 & \textbf{1.28$\times$} \\
+sumEnergy & 12/16 & 25\% & \textcolor{gibbonslow}{0.04912} & 0.03929 & 0.0488 & 0.03668 & 0.0377 & 0.03775 & $\ddagger$ & $\ddagger$ & 0.03269 & \textcolor{gibbonfast}{0.0286} & 0.02998 & \textbf{1.28$\times$} \\
+countActive & 10/16 & 38\% & \textcolor{gibbonslow}{0.04312} & 0.03586 & 0.043 & 0.03508 & 0.03566 & 0.03566 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.02723} & 0.02734 & 0.02741 & \textbf{1.29$\times$} \\
+countParticles & 8/16 & 50\% & 0.043 & 0.03365 & \textcolor{gibbonslow}{0.04304} & 0.03438 & 0.0346 & 0.03458 & $\ddagger$ & $\ddagger$ & 0.02692 & \textcolor{gibbonfast}{0.02631} & 0.02658 & \textbf{1.28$\times$} \\
+barnesHutPotential & 11/16 & 31\% & 0.05905 & 0.04372 & \textcolor{gibbonslow}{0.05908} & 0.04361 & 0.04382 & 0.04373 & $\ddagger$ & $\ddagger$ & 0.04159 & \textcolor{gibbonfast}{0.04087} & 0.04476 & 1.07$\times$ \\
+fmmPotential & 12/16 & 25\% & \textcolor{gibbonslow}{0.1021} & 0.09932 & 0.09947 & 0.09929 & 0.09922 & 0.09927 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonfast}{0.09608} & 0.0965 & 0.09622 & 1.03$\times$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1676,12 +1676,12 @@ fmmPotential & 12/16 & 25\% & \textcolor{gibbonslow}{0.1015} & 0.09905 & 0.09912
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-sumMass & +33.75\% & $-$5.217\% & +0.09173\% & -- & +3.151\% & $-$0.3001\% \\
-sumEnergy & +33.17\% & $-$3.001\% & $-$0.02134\% & -- & +9.59\% & $-$4.509\% \\
-countActive & +23.09\% & $-$1.811\% & $-$0.07051\% & -- & $-$0.616\% & $-$0.3263\% \\
-countParticles & +25.31\% & $-$0.8228\% & $-$0.08722\% & -- & +1.443\% & $-$0.59\% \\
-barnesHutPotential & +35.71\% & $-$0.5884\% & +0.04137\% & -- & $-$7.026\% & $-$8.833\% \\
-fmmPotential & +2.414\% & +0.08787\% & +0.04444\% & -- & $-$0.3359\% & $-$0.04069\% \\
+sumMass & +32.88\% & $-$4.372\% & +0.1855\% & -- & +3.192\% & $-$0.2255\% \\
+sumEnergy & +33.91\% & $-$2.819\% & $-$0.1325\% & -- & +9.035\% & $-$4.613\% \\
+countActive & +22.94\% & $-$1.638\% & +0\% & -- & $-$0.6348\% & $-$0.27\% \\
+countParticles & +25.05\% & $-$0.5726\% & +0.06362\% & -- & +1.256\% & $-$1.016\% \\
+barnesHutPotential & +35.41\% & $-$0.2858\% & +0.2035\% & -- & $-$7.08\% & $-$8.686\% \\
+fmmPotential & +2.788\% & +0.0141\% & $-$0.05641\% & -- & $-$0.1486\% & +0.292\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1700,8 +1700,8 @@ fmmPotential & +2.414\% & +0.08787\% & +0.04444\% & -- & $-$0.3359\% & $-$0.0406
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-scaleEnergy & 7/9 & 78\% & 0.1502 & 0.154 & 0.1503 & 0.149 & 0.1541 & 0.1487 & 0.1316 & 0.1296 & $\ddagger$ & $\ddagger$ & 0.1856 & 0.186 & \textcolor{gibbonslow}{0.1882} & 0.1482 & 0.1426 & 0.04549 & 0.04548 & \textcolor{gibbonfast}{0.04543} & 0.04546 & \textbf{2.85$\times$} \\
-clearFlags & 8/9 & 89\% & 0.1522 & 0.1514 & 0.1518 & 0.152 & 0.1568 & 0.1618 & 0.1315 & 0.1302 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.1904} & 0.183 & 0.1843 & 0.1417 & 0.1359 & \textcolor{gibbonfast}{0.005922} & 0.006038 & 0.006008 & 0.005954 & \textbf{21.98$\times$} \\
+scaleEnergy & 7/9 & 78\% & 0.151 & 0.1546 & 0.1522 & 0.15 & 0.1555 & 0.1497 & 0.1319 & 0.1302 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.1923} & 0.1872 & 0.184 & 0.1492 & 0.1432 & 0.04571 & 0.04586 & \textcolor{gibbonfast}{0.04569} & 0.04578 & \textbf{2.85$\times$} \\
+clearFlags & 8/9 & 89\% & 0.1519 & 0.1522 & 0.1514 & 0.1512 & 0.1564 & 0.1553 & 0.1298 & 0.1304 & $\ddagger$ & $\ddagger$ & \textcolor{gibbonslow}{0.1912} & 0.1844 & 0.185 & 0.1422 & 0.1352 & \textcolor{gibbonfast}{0.005797} & 0.005817 & 0.005826 & 0.005849 & \textbf{22.39$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1720,8 +1720,8 @@ clearFlags & 8/9 & 89\% & 0.1522 & 0.1514 & 0.1518 & 0.152 & 0.1568 & 0.1618 & 0
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-scaleEnergy & +0.7515\% & +0.2394\% & +3.651\% & +17.13\% & +1.522\% & -- & $-$1.416\% & $-$1.168\% & +25.51\% & +3.978\% & +225.9\% & +0.01539\% & +0.1343\% & $-$0.06819\% \\
-clearFlags & +0.1744\% & $-$6.07\% & $-$3.105\% & +19.22\% & +1.019\% & -- & +3.286\% & $-$0.6809\% & +29.19\% & +4.227\% & +2293\% & $-$1.921\% & $-$1.431\% & +0.907\% \\
+scaleEnergy & +0.6954\% & +0.1837\% & +3.852\% & +17.84\% & +1.358\% & -- & +4.547\% & +1.772\% & +25.49\% & +4.194\% & +226.4\% & $-$0.3314\% & +0.04815\% & $-$0.2119\% \\
+clearFlags & +0.4225\% & $-$2.6\% & +0.7245\% & +20.52\% & $-$0.4403\% & -- & +3.34\% & $-$0.353\% & +29.64\% & +5.145\% & +2353\% & $-$0.3438\% & $-$0.4978\% & $-$0.3932\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1740,12 +1740,12 @@ clearFlags & +0.1744\% & $-$6.07\% & $-$3.105\% & +19.22\% & +1.019\% & -- & +3.
 \cmidrule(lr){4-9}\cmidrule(lr){10-14}
  & \textbf{Uses} & \textbf{Dead\%} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-norm2Estimate & 5/8 & 38\% & 0.06555 & 0.03008 & 0.06545 & 0.02726 & 0.02793 & 0.028 & 0.3173 & \textcolor{gibbonslow}{0.332} & 0.03941 & \textcolor{gibbonfast}{0.02088} & 0.02273 & \textbf{1.31$\times$} \\
-truncateTolViolations & 3/8 & 62\% & 0.04858 & 0.03069 & 0.04834 & 0.02634 & 0.02395 & 0.0237 & 0.2735 & \textcolor{gibbonslow}{0.2737} & 0.01888 & \textcolor{gibbonfast}{0.01195} & 0.01199 & \textbf{1.98$\times$} \\
-compressMass & 3/8 & 62\% & 0.04685 & 0.03088 & 0.04703 & 0.02681 & 0.02595 & 0.02515 & 0.2731 & \textcolor{gibbonslow}{0.2751} & 0.0149 & 0.01194 & \textcolor{gibbonfast}{0.01181} & \textbf{2.13$\times$} \\
-autorefineMaxLevel & 4/8 & 50\% & 0.04711 & 0.02844 & 0.04824 & 0.02815 & 0.02739 & 0.02728 & 0.2922 & \textcolor{gibbonslow}{0.2949} & 0.0209 & \textcolor{gibbonfast}{0.0193} & 0.02031 & \textbf{1.41$\times$} \\
-pmapCutHistogram & 4/8 & 50\% & 0.05824 & 0.03888 & 0.05794 & 0.0262 & 0.02548 & 0.02532 & \textcolor{gibbonslow}{0.2805} & 0.2657 & 0.01977 & \textcolor{gibbonfast}{0.01223} & 0.01326 & \textbf{2.07$\times$} \\
-lbDeuxLoadProxy & 5/8 & 38\% & 0.04858 & 0.02905 & 0.04857 & 0.02711 & 0.02615 & 0.02628 & 0.2801 & \textcolor{gibbonslow}{0.2933} & 0.02089 & \textcolor{gibbonfast}{0.01677} & 0.01738 & \textbf{1.56$\times$} \\
+norm2Estimate & 5/8 & 38\% & 0.06332 & 0.0292 & 0.06429 & 0.02684 & 0.02706 & 0.02715 & \textcolor{gibbonslow}{0.3186} & 0.3117 & 0.03841 & \textcolor{gibbonfast}{0.02093} & 0.02201 & \textbf{1.28$\times$} \\
+truncateTolViolations & 3/8 & 62\% & 0.04807 & 0.03061 & 0.04818 & 0.02635 & 0.02339 & 0.0233 & 0.2604 & \textcolor{gibbonslow}{0.2612} & 0.01848 & 0.01175 & \textcolor{gibbonfast}{0.01172} & \textbf{1.99$\times$} \\
+compressMass & 3/8 & 62\% & 0.04713 & 0.03141 & 0.04707 & 0.02679 & 0.02486 & 0.0247 & \textcolor{gibbonslow}{0.2843} & 0.2794 & 0.0149 & 0.01196 & \textcolor{gibbonfast}{0.01185} & \textbf{2.08$\times$} \\
+autorefineMaxLevel & 4/8 & 50\% & 0.04781 & 0.02839 & 0.04661 & 0.0274 & 0.02719 & 0.02701 & 0.2951 & \textcolor{gibbonslow}{0.2953} & 0.02073 & \textcolor{gibbonfast}{0.019} & 0.02008 & \textbf{1.42$\times$} \\
+pmapCutHistogram & 4/8 & 50\% & 0.05818 & 0.03907 & 0.05828 & 0.02645 & 0.02558 & 0.02547 & 0.2663 & \textcolor{gibbonslow}{0.2759} & 0.01982 & \textcolor{gibbonfast}{0.01229} & 0.01331 & \textbf{2.07$\times$} \\
+lbDeuxLoadProxy & 5/8 & 38\% & 0.04881 & 0.02909 & 0.0488 & 0.02736 & 0.02623 & 0.02634 & 0.2906 & \textcolor{gibbonslow}{0.2946} & 0.02109 & \textcolor{gibbonfast}{0.01683} & 0.01752 & \textbf{1.56$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1763,12 +1763,12 @@ lbDeuxLoadProxy & 5/8 & 38\% & 0.04858 & 0.02905 & 0.04857 & 0.02711 & 0.02615 &
 \cmidrule(lr){2-4}\cmidrule(lr){5-7}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ \\
 \midrule
-norm2Estimate & +140.4\% & $-$2.643\% & $-$0.2464\% & +705.1\% & +73.4\% & $-$8.143\% \\
-truncateTolViolations & +84.42\% & +11.13\% & +1.051\% & +1349\% & +57.49\% & $-$0.2837\% \\
-compressMass & +74.76\% & +6.614\% & +3.213\% & +1733\% & +26.16\% & +1.135\% \\
-autorefineMaxLevel & +67.32\% & +3.208\% & +0.4216\% & +1298\% & +2.91\% & $-$4.988\% \\
-pmapCutHistogram & +122.2\% & +3.487\% & +0.624\% & +1319\% & +49.12\% & $-$7.717\% \\
-lbDeuxLoadProxy & +79.19\% & +3.166\% & $-$0.5023\% & +1241\% & +20.18\% & $-$3.532\% \\
+norm2Estimate & +136\% & $-$1.153\% & $-$0.3315\% & +729.5\% & +74.53\% & $-$4.871\% \\
+truncateTolViolations & +82.48\% & +13.07\% & +0.4077\% & +1309\% & +57.73\% & +0.2475\% \\
+compressMass & +75.91\% & +8.488\% & +0.6803\% & +1809\% & +25.7\% & +0.8776\% \\
+autorefineMaxLevel & +74.51\% & +1.414\% & +0.633\% & +1324\% & +3.233\% & $-$5.38\% \\
+pmapCutHistogram & +120\% & +3.864\% & +0.4515\% & +1244\% & +48.91\% & $-$7.648\% \\
+lbDeuxLoadProxy & +78.43\% & +3.861\% & $-$0.41\% & +1278\% & +20.4\% & $-$3.933\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1787,8 +1787,8 @@ lbDeuxLoadProxy & +79.19\% & +3.166\% & $-$0.5023\% & +1241\% & +20.18\% & $-$3.
 \cmidrule(lr){4-11}\cmidrule(lr){12-22}
  & \textbf{$\Sigma_b$} & \textbf{$\Sigma_b\%$} & $A_{ri}^{\scriptscriptstyle -t}$ & $A_{ri}^{\scriptscriptstyle -av}$ & $A_{ri}^{\scriptscriptstyle +av}$ & $A_{rm}^{\scriptscriptstyle -t}$ & $A_{rm}^{\scriptscriptstyle -av}$ & $A_{rm}^{\scriptscriptstyle +av}$ & $A_{\ell}^{\scriptscriptstyle -av}$ & $A_{\ell}^{\scriptscriptstyle +av}$ & $S_{ri}^{\scriptscriptstyle -t}$ & $S_{ri}$ & $S_{rm}^{\scriptscriptstyle -t}$ & $S_{rm}^{\scriptscriptstyle -av}$ & $S_{rm}^{\scriptscriptstyle +av}$ & $S_{\ell}^{\scriptscriptstyle -av}$ & $S_{\ell}^{\scriptscriptstyle +av}$ & $S_{\ell b}^{\scriptscriptstyle -av}$ & $S_{\ell b}^{\scriptscriptstyle +av}$ & $S_{\ell bv}^{\scriptscriptstyle -av}$ & $S_{\ell bv}^{\scriptscriptstyle +av}$ & $A^{\min}$/$S^{\min}$ \\
 \midrule
-addConstPW & 6/7 & 86\% & 0.1305 & 0.1282 & 0.13 & 0.1225 & 0.1251 & 0.1231 & 0.1083 & 0.1092 & \textcolor{gibbonslow}{0.4994} & 0.4972 & 0.1401 & 0.1396 & 0.1345 & 0.1037 & 0.09928 & 0.01618 & 0.01553 & 0.01555 & \textcolor{gibbonfast}{0.01552} & \textbf{6.97$\times$} \\
-diffPW & 5/7 & 71\% & 0.1288 & 0.1274 & 0.1291 & 0.125 & 0.1233 & 0.1221 & 0.1105 & 0.1087 & \textcolor{gibbonslow}{0.5509} & 0.5319 & 0.1389 & 0.1375 & 0.1342 & 0.1021 & 0.09919 & 0.03467 & \textcolor{gibbonfast}{0.03357} & 0.0338 & 0.0337 & \textbf{3.24$\times$} \\
+addConstPW & 6/7 & 86\% & 0.1309 & 0.1298 & 0.1311 & 0.1244 & 0.1266 & 0.1246 & 0.1107 & 0.111 & \textcolor{gibbonslow}{0.5145} & 0.5045 & 0.1434 & 0.1402 & 0.1355 & 0.1053 & 0.09992 & 0.01625 & \textcolor{gibbonfast}{0.01557} & 0.01557 & 0.01557 & \textbf{7.11$\times$} \\
+diffPW & 5/7 & 71\% & 0.1323 & 0.1312 & 0.1322 & 0.1289 & 0.1271 & 0.1267 & 0.1148 & 0.1121 & \textcolor{gibbonslow}{0.5378} & 0.5341 & 0.1447 & 0.1411 & 0.1391 & 0.1055 & 0.1021 & 0.03491 & \textcolor{gibbonfast}{0.03392} & 0.0342 & 0.034 & \textbf{3.31$\times$} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1807,11 +1807,640 @@ diffPW & 5/7 & 71\% & 0.1288 & 0.1274 & 0.1291 & 0.125 & 0.1233 & 0.1221 & 0.110
 \cmidrule(lr){2-6}\cmidrule(lr){7-15}
  & $\Delta^{A}_{m}$ & $\Delta^{A}_{t}$ & $\Delta^{A}_{av|rm}$ & $\Delta^{A}_{\ell}$ & $\Delta^{A}_{av|\ell}$ & $\Delta^{S}_{m}$ & $\Delta^{S}_{t}$ & $\Delta^{S}_{av|rm}$ & $\Delta^{S}_{\ell}$ & $\Delta^{S}_{av|\ell}$ & $\Delta^{S}_{b}$ & $\Delta^{S}_{av|\ell b}$ & $\Delta^{S}_{v}$ & $\Delta^{S}_{av|\ell bv}$ \\
 \midrule
-addConstPW & +6.56\% & $-$0.5271\% & +1.603\% & +15.54\% & $-$0.858\% & +256.5\% & +4.185\% & +3.801\% & +34.61\% & +4.427\% & +540.9\% & +4.159\% & +4.046\% & +0.1611\% \\
-diffPW & +3.003\% & +2.397\% & +1.036\% & +11.63\% & +1.61\% & +296.7\% & +3.468\% & +2.459\% & +34.74\% & +2.918\% & +194.5\% & +3.268\% & +2.568\% & +0.3027\% \\
+addConstPW & +5.21\% & $-$0.1573\% & +1.646\% & +14.39\% & $-$0.3017\% & +258.9\% & +5.771\% & +3.465\% & +33.24\% & +5.335\% & +547.9\% & +4.348\% & +4.315\% & +0.01927\% \\
+diffPW & +2.645\% & +1.773\% & +0.379\% & +10.74\% & +2.368\% & +271.8\% & +4.016\% & +1.47\% & +33.81\% & +3.271\% & +202.1\% & +2.907\% & +2.076\% & +0.5942\% \\
 \bottomrule
 \end{tabular}}
 \end{table}
+
+% -- Counter tables: shared notes --
+\paragraph{Hardware counters.}
+Counts come from PAPI, read by the runtime around each pass inside the iteration loop, and each entry is the median over the iterations of that pass. They were measured in a \emph{separate} campaign phase from every time reported above: those binaries carry the counter reads and link against libpapi, so a time and a count in this report never come from the same executable.
+The layout comparison is \texttt{aos\_mut\_navec} versus \texttt{soa\_mut\_navec}, the one chain step that changes the layout and nothing else.
+Events: L1D load misses $=$ \texttt{perf::L1-DCACHE-LOAD-MISSES}, L2 data misses $=$ \texttt{L2\_RQSTS:DEMAND\_DATA\_RD\_MISS}, LLC misses $=$ \texttt{ix86arch::LLC\_MISSES}, L1I load misses $=$ \texttt{perf::L1-ICACHE-LOAD-MISSES}, L2 code misses $=$ \texttt{L2\_RQSTS:CODE\_RD\_MISS}, Instructions $=$ \texttt{perf::PERF\_COUNT\_HW\_INSTRUCTIONS}, Cycles $=$ \texttt{perf::PERF\_COUNT\_HW\_CPU\_CYCLES}. PAPI exposes no preset events on this hybrid CPU, so these are native names; runs are pinned to a performance core, where alone they count.
+
+
+% -- Table: counter totals, AoS vs SoA --
+\begin{table}[t]
+\centering
+\caption{Hardware-counter totals over every timed pass, AoS versus SoA. Each cell is (AoS/SoA); a ratio above $1\times$ means the SoA layout caused fewer of that event. A program is absent where any pass of either configuration reported no count.}
+\label{tab:pldi_counters_totals}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Program} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+Compiler & 1.0e+07/5.1e+06 & \textbf{2.04$\times$} & 1.0e+06/1.1e+05 & \textbf{9.48$\times$} & 5.5e+07/8.7e+06 & \textbf{6.29$\times$} \\
+DBQuery & 3.2e+06/3.7e+06 & 0.85$\times$ & 7.9e+05/1.2e+05 & \textbf{6.36$\times$} & 2.2e+07/3.8e+06 & \textbf{5.77$\times$} \\
+DecisionTree & 7.5e+06/3.8e+05 & \textbf{19.83$\times$} & 2.7e+04/2.4e+04 & \textbf{1.14$\times$} & 2.8e+07/2.2e+06 & \textbf{12.94$\times$} \\
+DecisionTreeClassify & 4.0e+05/1.0e+06 & 0.39$\times$ & 4.6e+03/6.1e+03 & 0.75$\times$ & 3.2e+03/3.9e+03 & 0.83$\times$ \\
+DomTree & 1.9e+07/7.5e+06 & \textbf{2.46$\times$} & 5.8e+05/6.4e+04 & \textbf{9.06$\times$} & 5.5e+07/5.8e+06 & \textbf{9.49$\times$} \\
+KDTree & 1.5e+07/1.1e+07 & \textbf{1.42$\times$} & 2.6e+04/1.1e+05 & 0.25$\times$ & 4.4e+07/1.1e+07 & \textbf{4.18$\times$} \\
+LinearListReduction & 2.7e+07/2.2e+07 & \textbf{1.21$\times$} & 2.1e+06/3.2e+05 & \textbf{6.59$\times$} & 7.1e+07/1.8e+07 & \textbf{4.05$\times$} \\
+reduceNestedList & 2.3e+06/2.7e+05 & \textbf{8.82$\times$} & 9.1e+04/2.9e+04 & \textbf{3.10$\times$} & 3.8e+08/1.5e+06 & \textbf{244.21$\times$} \\
+List & 9.7e+06/5.6e+06 & \textbf{1.73$\times$} & 3.9e+04/2.1e+05 & 0.19$\times$ & 4.7e+07/3.0e+07 & \textbf{1.58$\times$} \\
+MonoTree & 4.4e+05/5.2e+05 & 0.85$\times$ & 5.1e+03/1.5e+04 & 0.34$\times$ & 2.1e+06/1.8e+06 & \textbf{1.14$\times$} \\
+ObjectGraph & 3.6e+06/3.6e+06 & 0.99$\times$ & 3.8e+04/6.8e+04 & 0.55$\times$ & 2.1e+07/8.9e+06 & \textbf{2.39$\times$} \\
+TernaryTree & 7.1e+05/1.5e+06 & 0.47$\times$ & 8.4e+03/2.6e+04 & 0.32$\times$ & 3.4e+06/2.5e+06 & \textbf{1.39$\times$} \\
+Trie & 1.2e+07/3.4e+06 & \textbf{3.57$\times$} & 1.8e+05/6.8e+04 & \textbf{2.65$\times$} & 2.6e+07/4.6e+06 & \textbf{5.57$\times$} \\
+ColorOctree & 1.6e+07/1.9e+07 & 0.86$\times$ & 1.6e+05/4.4e+05 & 0.38$\times$ & 5.2e+07/1.6e+07 & \textbf{3.24$\times$} \\
+Add1TreeInt8 & 2.6e+05/3.6e+05 & 0.73$\times$ & 3.7e+03/5.4e+03 & 0.69$\times$ & 1.1e+05/1.2e+05 & 0.99$\times$ \\
+Add1TreeInt16 & 3.1e+05/4.8e+05 & 0.64$\times$ & 5.1e+03/7.5e+03 & 0.68$\times$ & 1.7e+05/1.6e+05 & 1.06$\times$ \\
+Add1TreeInt32 & 2.0e+05/4.8e+05 & 0.41$\times$ & 2.8e+03/5.7e+03 & 0.50$\times$ & 2.8e+05/2.6e+05 & 1.08$\times$ \\
+Add1TreeInt64 & 2.9e+05/5.4e+05 & 0.53$\times$ & 3.9e+03/7.6e+03 & 0.51$\times$ & 6.4e+05/5.7e+05 & \textbf{1.13$\times$} \\
+ArithmeticIntensityInt8 & 8.7e+05/1.1e+06 & 0.81$\times$ & 8.4e+03/2.1e+04 & 0.39$\times$ & 3.5e+05/3.4e+05 & 1.02$\times$ \\
+ArithmeticIntensityInt16 & 1.2e+06/1.5e+06 & 0.81$\times$ & 1.8e+04/2.8e+04 & 0.65$\times$ & 4.4e+05/4.4e+05 & 0.98$\times$ \\
+ArithmeticIntensityInt32 & 2.0e+06/2.2e+06 & 0.88$\times$ & 3.2e+04/4.4e+04 & 0.73$\times$ & 6.4e+05/7.0e+05 & 0.91$\times$ \\
+ArithmeticIntensityInt64 & 3.0e+06/3.7e+06 & 0.82$\times$ & 5.6e+04/7.1e+04 & 0.78$\times$ & 1.2e+06/1.2e+06 & 0.97$\times$ \\
+OctTree & 4.1e+06/9.2e+06 & 0.45$\times$ & 5.9e+04/2.4e+05 & 0.24$\times$ & 4.7e+07/1.5e+07 & \textbf{3.12$\times$} \\
+PiecewiseFunctions & 1.3e+07/7.5e+06 & \textbf{1.80$\times$} & 8.8e+04/1.2e+05 & 0.75$\times$ & 4.5e+07/1.1e+07 & \textbf{4.18$\times$} \\
+\midrule
+\textbf{Geomean} &  & \textbf{1.17$\times$} &  & 0.90$\times$ &  & \textbf{2.71$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: misses per thousand instructions --
+\begin{table}[t]
+\centering
+\caption{Misses per thousand instructions (MPKI), AoS versus SoA, over every timed pass. Normalizing by retired instructions rather than by elements makes programs of different sizes comparable; it also divides out part of the effect, since the two layouts do not execute the same number of instructions, so Table~\ref{tab:pldi_counters_totals} is where the traffic itself is read. The implied DRAM traffic of an LLC miss is 64 bytes, one cache line.}
+\label{tab:pldi_counters_mpki}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Program} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS & SoA & AoS & SoA & AoS & SoA \\
+\midrule
+Compiler & 8.70 & 2.61 & 0.85 & 0.05 & 46.20 & 4.48 \\
+DBQuery & 2.77 & 1.73 & 0.69 & 0.06 & 18.97 & 1.74 \\
+DecisionTree & 3.88 & 0.25 & 0.01 & 0.02 & 14.53 & 1.42 \\
+DecisionTreeClassify & 0.19 & 0.43 & 0.00 & 0.00 & 0.00 & 0.00 \\
+DomTree & 11.91 & 3.59 & 0.37 & 0.03 & 35.39 & 2.76 \\
+KDTree & 5.04 & 2.79 & 0.01 & 0.03 & 14.64 & 2.75 \\
+LinearListReduction & 15.65 & 4.44 & 1.23 & 0.06 & 41.80 & 3.56 \\
+reduceNestedList & 0.07 & 0.01 & 0.00 & 0.00 & 11.98 & 0.05 \\
+List & 1.81 & 1.02 & 0.01 & 0.04 & 8.83 & 5.45 \\
+MonoTree & 0.44 & 0.49 & 0.01 & 0.01 & 2.05 & 1.72 \\
+ObjectGraph & 0.98 & 0.94 & 0.01 & 0.02 & 5.85 & 2.33 \\
+TernaryTree & 0.57 & 1.00 & 0.01 & 0.02 & 2.74 & 1.64 \\
+Trie & 8.63 & 1.60 & 0.13 & 0.03 & 18.02 & 2.14 \\
+ColorOctree & 3.74 & 1.83 & 0.04 & 0.04 & 12.03 & 1.57 \\
+Add1TreeInt8 & 0.48 & 0.56 & 0.01 & 0.01 & 0.21 & 0.18 \\
+Add1TreeInt16 & 0.56 & 0.75 & 0.01 & 0.01 & 0.31 & 0.25 \\
+Add1TreeInt32 & 0.36 & 0.75 & 0.01 & 0.01 & 0.52 & 0.40 \\
+Add1TreeInt64 & 0.52 & 0.84 & 0.01 & 0.01 & 1.18 & 0.88 \\
+ArithmeticIntensityInt8 & 0.07 & 0.09 & 0.00 & 0.00 & 0.03 & 0.03 \\
+ArithmeticIntensityInt16 & 0.11 & 0.14 & 0.00 & 0.00 & 0.04 & 0.04 \\
+ArithmeticIntensityInt32 & 0.18 & 0.21 & 0.00 & 0.00 & 0.06 & 0.07 \\
+ArithmeticIntensityInt64 & 0.28 & 0.34 & 0.01 & 0.01 & 0.11 & 0.12 \\
+OctTree & 0.70 & 1.16 & 0.01 & 0.03 & 7.85 & 1.88 \\
+PiecewiseFunctions & 3.95 & 1.62 & 0.03 & 0.03 & 13.26 & 2.33 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Compiler per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Compiler}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Compiler_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{verifyIR} & 9.3e+05/1.7e+04 & \textbf{53.14$\times$} & 1.1e+05/3.4e+03 & \textbf{31.00$\times$} & 4.9e+06/6.2e+05 & \textbf{7.88$\times$} \\
+\texttt{instCountPass} & 1.1e+06/1.4e+04 & \textbf{79.87$\times$} & 1.9e+05/1.1e+03 & \textbf{166.22$\times$} & 4.8e+06/7.4e+03 & \textbf{653.68$\times$} \\
+\texttt{blockCountPass} & 1.1e+06/6.5e+03 & \textbf{170.50$\times$} & 1.9e+05/1.1e+03 & \textbf{172.91$\times$} & 4.8e+06/4.3e+03 & \textbf{1114.61$\times$} \\
+\texttt{memoryOpStatsPass} & 5.1e+05/3.8e+04 & \textbf{13.46$\times$} & 3.1e+04/3.0e+03 & \textbf{10.22$\times$} & 4.9e+06/5.7e+05 & \textbf{8.60$\times$} \\
+\texttt{castInstCountPass} & 6.3e+05/2.3e+04 & \textbf{27.71$\times$} & 4.0e+04/2.9e+03 & \textbf{13.87$\times$} & 4.9e+06/5.7e+05 & \textbf{8.62$\times$} \\
+\texttt{branchStatsPass} & 6.3e+05/2.4e+04 & \textbf{25.86$\times$} & 4.3e+04/3.1e+03 & \textbf{13.70$\times$} & 4.9e+06/5.9e+05 & \textbf{8.28$\times$} \\
+\texttt{latencyModelPass} & 1.0e+06/3.2e+04 & \textbf{31.65$\times$} & 1.5e+05/3.6e+03 & \textbf{41.98$\times$} & 4.9e+06/6.6e+05 & \textbf{7.42$\times$} \\
+\texttt{has cycle} & 1.4e+06/2.6e+05 & \textbf{5.46$\times$} & 8.4e+04/2.3e+04 & \textbf{3.68$\times$} & 8.0e+06/2.3e+06 & \textbf{3.57$\times$} \\
+\texttt{throughputModelPass} & 1.0e+06/2.9e+04 & \textbf{34.89$\times$} & 1.6e+05/3.8e+03 & \textbf{41.21$\times$} & 4.9e+06/6.8e+05 & \textbf{7.18$\times$} \\
+\texttt{targetReturnPass} & 1.1e+06/3.3e+06 & 0.34$\times$ & 1.1e+04/3.1e+04 & 0.36$\times$ & 3.9e+06/1.5e+06 & \textbf{2.61$\times$} \\
+\texttt{stripSideEffectsPass} & 8.8e+05/1.4e+06 & 0.63$\times$ & 1.2e+04/3.0e+04 & 0.39$\times$ & 4.0e+06/1.3e+06 & \textbf{3.13$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: DBQuery per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{DBQuery}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:DBQuery_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{sumCost} & 4.5e+05/7.7e+04 & \textbf{5.87$\times$} & 1.6e+05/1.1e+04 & \textbf{13.62$\times$} & 2.9e+06/4.0e+05 & \textbf{7.28$\times$} \\
+\texttt{sumRows} & 3.8e+05/8.5e+04 & \textbf{4.52$\times$} & 3.4e+04/8.2e+03 & \textbf{4.13$\times$} & 2.5e+06/3.3e+05 & \textbf{7.60$\times$} \\
+\texttt{countJoins} & 5.9e+05/2.5e+04 & \textbf{23.23$\times$} & 1.8e+05/2.2e+03 & \textbf{83.09$\times$} & 2.9e+06/7.2e+03 & \textbf{401.55$\times$} \\
+\texttt{sumMemory} & 2.1e+05/8.4e+04 & \textbf{2.56$\times$} & 8.5e+04/1.1e+04 & \textbf{7.53$\times$} & 2.8e+06/3.8e+05 & \textbf{7.36$\times$} \\
+\texttt{hashJoinPressure} & 6.7e+05/8.1e+04 & \textbf{8.31$\times$} & 1.7e+05/7.1e+03 & \textbf{24.44$\times$} & 2.8e+06/1.2e+05 & \textbf{23.82$\times$} \\
+\texttt{filterSelectivitySkew} & 2.0e+05/7.4e+04 & \textbf{2.78$\times$} & 9.8e+04/6.4e+03 & \textbf{15.37$\times$} & 2.8e+06/3.1e+05 & \textbf{8.98$\times$} \\
+\texttt{scaleCosts} & 3.5e+05/1.8e+06 & 0.20$\times$ & 3.6e+04/4.0e+04 & 0.89$\times$ & 2.5e+06/1.2e+06 & \textbf{2.05$\times$} \\
+\texttt{clearQueryFlags} & 3.0e+05/1.5e+06 & 0.20$\times$ & 2.7e+04/3.8e+04 & 0.71$\times$ & 2.4e+06/1.0e+06 & \textbf{2.44$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: DecisionTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{DecisionTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:DecisionTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{countNodes} & 4.8e+05/2.6e+04 & \textbf{18.51$\times$} & 2.3e+03/2.0e+03 & \textbf{1.14$\times$} & 3.0e+06/3.0e+04 & \textbf{101.96$\times$} \\
+\texttt{countLeaves} & 7.8e+05/2.7e+04 & \textbf{29.34$\times$} & 3.3e+03/2.0e+03 & \textbf{1.63$\times$} & 3.0e+06/1.4e+04 & \textbf{224.89$\times$} \\
+\texttt{treeDepth} & 3.1e+05/2.8e+04 & \textbf{11.07$\times$} & 1.4e+03/2.0e+03 & 0.70$\times$ & 2.8e+06/2.1e+04 & \textbf{138.74$\times$} \\
+\texttt{sumImpurity} & 1.3e+06/5.0e+04 & \textbf{25.78$\times$} & 3.2e+03/3.0e+03 & 1.05$\times$ & 3.4e+06/4.2e+05 & \textbf{8.19$\times$} \\
+\texttt{sumSamples} & 5.8e+05/3.7e+04 & \textbf{15.41$\times$} & 1.9e+03/3.4e+03 & 0.57$\times$ & 3.0e+06/4.2e+05 & \textbf{7.21$\times$} \\
+\texttt{countFeatureUses} & 2.1e+06/4.3e+04 & \textbf{47.91$\times$} & 6.2e+03/3.2e+03 & \textbf{1.96$\times$} & 3.3e+06/4.3e+05 & \textbf{7.71$\times$} \\
+\texttt{countSmallLeaves} & 1.4e+06/2.4e+04 & \textbf{59.44$\times$} & 5.7e+03/3.2e+03 & \textbf{1.80$\times$} & 3.6e+06/4.3e+05 & \textbf{8.35$\times$} \\
+\texttt{inferenceCost} & 2.6e+05/2.9e+04 & \textbf{8.72$\times$} & 1.5e+03/2.0e+03 & 0.73$\times$ & 2.8e+06/1.3e+04 & \textbf{216.56$\times$} \\
+\texttt{sumPathLengths} & 2.8e+05/1.1e+05 & \textbf{2.49$\times$} & 2.0e+03/3.2e+03 & 0.62$\times$ & 3.0e+06/3.9e+05 & \textbf{7.61$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: DecisionTreeClassify per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{DecisionTreeClassify}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:DecisionTreeClassify_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{classify Depth} & 7.8e+04/1.9e+05 & 0.41$\times$ & 8.5e+02/1.1e+03 & 0.77$\times$ & 7.7e+02/1.2e+03 & 0.65$\times$ \\
+\texttt{classify Batch} & 3.3e+05/8.6e+05 & 0.38$\times$ & 3.7e+03/5.0e+03 & 0.74$\times$ & 2.4e+03/2.7e+03 & 0.91$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: DomTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{DomTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:DomTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{SumArea} & 4.5e+06/2.2e+06 & \textbf{2.03$\times$} & 9.5e+04/1.6e+04 & \textbf{6.11$\times$} & 1.3e+07/1.9e+06 & \textbf{6.98$\times$} \\
+\texttt{find max Bottom} & 5.3e+06/2.2e+06 & \textbf{2.39$\times$} & 2.6e+04/1.0e+04 & \textbf{2.55$\times$} & 1.3e+07/1.5e+06 & \textbf{8.31$\times$} \\
+\texttt{count styled} & 3.5e+06/3.5e+04 & \textbf{102.48$\times$} & 1.7e+05/4.9e+03 & \textbf{33.66$\times$} & 1.3e+07/7.1e+05 & \textbf{18.81$\times$} \\
+\texttt{sumTextWidth} & 2.8e+06/2.1e+04 & \textbf{134.46$\times$} & 2.7e+05/4.2e+03 & \textbf{64.90$\times$} & 1.3e+07/7.3e+05 & \textbf{18.54$\times$} \\
+\texttt{computeWidths} & 1.3e+06/1.7e+06 & 0.73$\times$ & 6.6e+03/1.6e+04 & 0.42$\times$ & 1.3e+06/4.8e+05 & \textbf{2.63$\times$} \\
+\texttt{scaleLayout} & 1.1e+06/1.3e+06 & 0.80$\times$ & 1.5e+04/1.4e+04 & \textbf{1.13$\times$} & 1.4e+06/5.0e+05 & \textbf{2.69$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: KDTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{KDTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:KDTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{Find nearest Neighbour} & 2.8e+06/1.8e+06 & \textbf{1.54$\times$} & 4.4e+03/2.0e+04 & 0.22$\times$ & 7.7e+06/1.9e+06 & \textbf{4.10$\times$} \\
+\texttt{countInRange tight\_box} & 2.8e+06/1.8e+06 & \textbf{1.54$\times$} & 4.8e+03/1.9e+04 & 0.25$\times$ & 7.7e+06/2.0e+06 & \textbf{3.84$\times$} \\
+\texttt{sumMassInRange} & 2.7e+06/2.7e+06 & 1.01$\times$ & 4.1e+03/2.3e+04 & 0.18$\times$ & 7.8e+06/2.2e+06 & \textbf{3.53$\times$} \\
+\texttt{twoPointCorrelation bin\_8\_16} & 1.9e+06/8.7e+05 & \textbf{2.21$\times$} & 6.3e+03/1.3e+04 & 0.49$\times$ & 7.5e+06/1.4e+06 & \textbf{5.18$\times$} \\
+\texttt{pointCloudNeighborhood} & 2.2e+06/1.5e+06 & \textbf{1.51$\times$} & 4.3e+03/1.6e+04 & 0.27$\times$ & 7.8e+06/1.6e+06 & \textbf{4.96$\times$} \\
+\texttt{photonMappingBenchmark} & 2.8e+06/2.1e+06 & \textbf{1.33$\times$} & 2.4e+03/1.5e+04 & 0.16$\times$ & 5.8e+06/1.5e+06 & \textbf{3.90$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: LinearListReduction per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{LinearListReduction}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:LinearListReduction_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{reduction} & 3.5e+06/4.8e+04 & \textbf{73.60$\times$} & 1.1e+06/6.9e+03 & \textbf{161.07$\times$} & 1.2e+07/1.2e+06 & \textbf{10.16$\times$} \\
+\texttt{maxField} & 4.5e+06/3.2e+05 & \textbf{14.11$\times$} & 5.1e+05/3.8e+04 & \textbf{13.52$\times$} & 1.6e+07/3.6e+06 & \textbf{4.41$\times$} \\
+\texttt{countHeavy} & 2.4e+06/2.6e+04 & \textbf{94.83$\times$} & 3.5e+05/5.8e+03 & \textbf{60.88$\times$} & 1.2e+07/1.2e+06 & \textbf{10.55$\times$} \\
+\texttt{bumpFirst} & 4.9e+06/4.3e+06 & \textbf{1.13$\times$} & 3.5e+04/8.9e+04 & 0.39$\times$ & 9.9e+06/3.7e+06 & \textbf{2.69$\times$} \\
+\texttt{shiftTriple} & 6.0e+06/1.3e+07 & 0.47$\times$ & 3.2e+04/8.6e+04 & 0.37$\times$ & 9.4e+06/4.1e+06 & \textbf{2.26$\times$} \\
+\texttt{touchMost} & 5.2e+06/4.4e+06 & \textbf{1.18$\times$} & 3.2e+04/9.0e+04 & 0.35$\times$ & 1.1e+07/3.7e+06 & \textbf{2.98$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: reduceNestedList per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{reduceNestedList}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:reduceNestedList_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{reduction} & 2.3e+06/2.7e+05 & \textbf{8.82$\times$} & 9.1e+04/2.9e+04 & \textbf{3.10$\times$} & 3.8e+08/1.5e+06 & \textbf{244.21$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: List per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{List}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:List_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{length List} & 2.8e+05/9.9e+04 & \textbf{2.79$\times$} & 3.2e+03/1.4e+04 & 0.23$\times$ & 1.2e+07/1.1e+06 & \textbf{10.97$\times$} \\
+\texttt{sumList} & 6.3e+05/5.4e+05 & \textbf{1.16$\times$} & 3.4e+03/5.8e+04 & 0.06$\times$ & 1.3e+07/1.2e+07 & 1.04$\times$ \\
+\texttt{sumList tail recursive} & 6.1e+05/7.4e+05 & 0.83$\times$ & 3.4e+03/5.0e+04 & 0.07$\times$ & 1.3e+07/8.0e+06 & \textbf{1.61$\times$} \\
+\texttt{add1 List} & 8.2e+06/4.2e+06 & \textbf{1.94$\times$} & 2.9e+04/8.5e+04 & 0.34$\times$ & 9.5e+06/8.7e+06 & 1.09$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: MonoTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{MonoTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:MonoTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{sumTree} & 1.9e+04/3.5e+04 & 0.54$\times$ & 7.5e+02/4.0e+03 & 0.19$\times$ & 7.3e+05/6.6e+05 & \textbf{1.11$\times$} \\
+\texttt{sumTree TailRec} & 1.2e+04/1.5e+04 & 0.84$\times$ & 5.7e+02/3.8e+03 & 0.15$\times$ & 7.5e+05/6.5e+05 & \textbf{1.15$\times$} \\
+\texttt{add1Tree} & 4.1e+05/4.7e+05 & 0.87$\times$ & 3.7e+03/7.2e+03 & 0.52$\times$ & 5.9e+05/5.1e+05 & \textbf{1.16$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ObjectGraph per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ObjectGraph}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ObjectGraph_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{totalHeapSize} & 2.7e+05/7.2e+04 & \textbf{3.80$\times$} & 2.9e+03/4.2e+03 & 0.69$\times$ & 2.5e+06/7.3e+05 & \textbf{3.46$\times$} \\
+\texttt{countMarked} & 8.6e+04/7.0e+04 & \textbf{1.23$\times$} & 2.6e+03/4.4e+03 & 0.58$\times$ & 2.5e+06/7.3e+05 & \textbf{3.45$\times$} \\
+\texttt{countLargeItems} & 1.5e+05/6.5e+04 & \textbf{2.39$\times$} & 2.8e+03/4.1e+03 & 0.67$\times$ & 2.5e+06/7.1e+05 & \textbf{3.44$\times$} \\
+\texttt{liveBytes} & 2.6e+05/4.4e+05 & 0.60$\times$ & 3.0e+03/6.5e+03 & 0.45$\times$ & 2.5e+06/1.3e+06 & \textbf{1.93$\times$} \\
+\texttt{deadBytes} & 2.2e+05/4.7e+05 & 0.46$\times$ & 3.0e+03/6.5e+03 & 0.47$\times$ & 2.6e+06/1.3e+06 & \textbf{1.97$\times$} \\
+\texttt{countSurvivors} & 3.3e+05/4.4e+05 & 0.74$\times$ & 2.8e+03/6.3e+03 & 0.45$\times$ & 2.5e+06/1.3e+06 & \textbf{1.95$\times$} \\
+\texttt{sumObjIds} & 2.6e+05/9.9e+04 & \textbf{2.64$\times$} & 3.6e+03/4.0e+03 & 0.90$\times$ & 2.5e+06/7.0e+05 & \textbf{3.54$\times$} \\
+\texttt{sweepUnmarked} & 1.2e+06/9.5e+05 & \textbf{1.27$\times$} & 8.2e+03/1.6e+04 & 0.50$\times$ & 1.9e+06/1.2e+06 & \textbf{1.62$\times$} \\
+\texttt{touchHotObjects} & 7.7e+05/9.8e+05 & 0.79$\times$ & 8.8e+03/1.6e+04 & 0.56$\times$ & 2.0e+06/1.1e+06 & \textbf{1.90$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: TernaryTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{TernaryTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:TernaryTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{sum tree} & 7.9e+04/2.8e+05 & 0.28$\times$ & 8.6e+02/9.1e+03 & 0.09$\times$ & 1.8e+06/1.3e+06 & \textbf{1.40$\times$} \\
+\texttt{add 1 tree} & 6.3e+05/1.2e+06 & 0.51$\times$ & 7.5e+03/1.7e+04 & 0.44$\times$ & 1.6e+06/1.2e+06 & \textbf{1.36$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Trie per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Trie}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Trie_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{sumPrefixFreq} & 2.1e+06/2.0e+04 & \textbf{103.48$\times$} & 4.6e+04/2.6e+03 & \textbf{17.74$\times$} & 3.8e+06/3.2e+05 & \textbf{11.78$\times$} \\
+\texttt{countTerminals} & 1.9e+06/1.3e+04 & \textbf{144.59$\times$} & 3.1e+04/2.3e+03 & \textbf{13.29$\times$} & 3.9e+06/3.2e+05 & \textbf{12.16$\times$} \\
+\texttt{sumSubtreeHints} & 2.1e+06/1.8e+04 & \textbf{117.03$\times$} & 3.6e+04/2.6e+03 & \textbf{13.87$\times$} & 3.7e+06/3.3e+05 & \textbf{11.28$\times$} \\
+\texttt{autocompleteTopKProxy} & 1.9e+06/5.8e+05 & \textbf{3.25$\times$} & 2.1e+04/5.0e+03 & \textbf{4.27$\times$} & 4.0e+06/7.8e+05 & \textbf{5.09$\times$} \\
+\texttt{countLazyNodes} & 1.9e+06/3.2e+04 & \textbf{61.10$\times$} & 2.0e+04/3.4e+03 & \textbf{6.08$\times$} & 3.9e+06/6.2e+05 & \textbf{6.33$\times$} \\
+\texttt{decayTrieStats} & 1.4e+06/1.6e+06 & 0.85$\times$ & 1.2e+04/3.0e+04 & 0.40$\times$ & 3.2e+06/1.2e+06 & \textbf{2.59$\times$} \\
+\texttt{resetTraversalState} & 1.0e+06/1.2e+06 & 0.89$\times$ & 1.4e+04/2.2e+04 & 0.62$\times$ & 3.0e+06/9.6e+05 & \textbf{3.09$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ColorOctree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ColorOctree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ColorOctree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{paletteEntriesQuantized} & 2.1e+06/1.4e+06 & \textbf{1.52$\times$} & 4.8e+03/4.3e+04 & 0.11$\times$ & 9.2e+06/1.4e+06 & \textbf{6.72$\times$} \\
+\texttt{quantizationErrorProxy} & 8.3e+05/1.2e+06 & 0.67$\times$ & 2.1e+04/3.5e+04 & 0.61$\times$ & 1.0e+07/3.6e+06 & \textbf{2.80$\times$} \\
+\texttt{reduceColorCount} & 2.9e+06/5.6e+05 & \textbf{5.14$\times$} & 1.9e+04/1.9e+04 & 0.96$\times$ & 8.9e+06/3.8e+05 & \textbf{23.20$\times$} \\
+\texttt{closestColor} & 9.7e+05/7.4e+05 & \textbf{1.30$\times$} & 5.7e+04/1.8e+04 & \textbf{3.16$\times$} & 1.0e+07/3.7e+06 & \textbf{2.70$\times$} \\
+\texttt{toYCoCg} & 4.8e+06/6.6e+06 & 0.73$\times$ & 3.0e+04/1.5e+05 & 0.19$\times$ & 7.2e+06/3.6e+06 & \textbf{1.98$\times$} \\
+\texttt{markPaletteLeaves} & 4.7e+06/8.4e+06 & 0.56$\times$ & 3.2e+04/1.7e+05 & 0.19$\times$ & 7.3e+06/3.6e+06 & \textbf{2.05$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Add1TreeInt8 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Add1TreeInt8}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Add1TreeInt8_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{add1Tree} & 2.6e+05/3.6e+05 & 0.73$\times$ & 3.7e+03/5.4e+03 & 0.69$\times$ & 1.1e+05/1.2e+05 & 0.99$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Add1TreeInt16 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Add1TreeInt16}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Add1TreeInt16_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{add1Tree} & 3.1e+05/4.8e+05 & 0.64$\times$ & 5.1e+03/7.5e+03 & 0.68$\times$ & 1.7e+05/1.6e+05 & 1.06$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Add1TreeInt32 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Add1TreeInt32}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Add1TreeInt32_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{add1Tree} & 2.0e+05/4.8e+05 & 0.41$\times$ & 2.8e+03/5.7e+03 & 0.50$\times$ & 2.8e+05/2.6e+05 & 1.08$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: Add1TreeInt64 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{Add1TreeInt64}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:Add1TreeInt64_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{add1Tree} & 2.9e+05/5.4e+05 & 0.53$\times$ & 3.9e+03/7.6e+03 & 0.51$\times$ & 6.4e+05/5.7e+05 & \textbf{1.13$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ArithmeticIntensityInt8 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ArithmeticIntensityInt8}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ArithmeticIntensityInt8_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{arithKernel} & 8.7e+05/1.1e+06 & 0.81$\times$ & 8.4e+03/2.1e+04 & 0.39$\times$ & 3.5e+05/3.4e+05 & 1.02$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ArithmeticIntensityInt16 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ArithmeticIntensityInt16}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ArithmeticIntensityInt16_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{arithKernel} & 1.2e+06/1.5e+06 & 0.81$\times$ & 1.8e+04/2.8e+04 & 0.65$\times$ & 4.4e+05/4.4e+05 & 0.98$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ArithmeticIntensityInt32 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ArithmeticIntensityInt32}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ArithmeticIntensityInt32_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{arithKernel} & 2.0e+06/2.2e+06 & 0.88$\times$ & 3.2e+04/4.4e+04 & 0.73$\times$ & 6.4e+05/7.0e+05 & 0.91$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: ArithmeticIntensityInt64 per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{ArithmeticIntensityInt64}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:ArithmeticIntensityInt64_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{arithKernel} & 3.0e+06/3.7e+06 & 0.82$\times$ & 5.6e+04/7.1e+04 & 0.78$\times$ & 1.2e+06/1.2e+06 & 0.97$\times$ \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: OctTree per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{OctTree}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:OctTree_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{sumMass} & 7.4e+05/1.5e+05 & \textbf{5.07$\times$} & 3.2e+03/8.5e+03 & 0.38$\times$ & 6.1e+06/1.3e+06 & \textbf{4.58$\times$} \\
+\texttt{sumEnergy} & 1.3e+05/5.9e+05 & 0.21$\times$ & 2.4e+03/2.4e+04 & 0.10$\times$ & 6.4e+06/3.0e+06 & \textbf{2.10$\times$} \\
+\texttt{countActive} & 7.6e+05/2.0e+05 & \textbf{3.79$\times$} & 4.2e+03/1.1e+04 & 0.37$\times$ & 6.2e+06/3.8e+05 & \textbf{16.20$\times$} \\
+\texttt{countParticles} & 9.9e+05/2.1e+05 & \textbf{4.77$\times$} & 4.4e+03/8.6e+03 & 0.50$\times$ & 6.4e+06/1.3e+05 & \textbf{48.84$\times$} \\
+\texttt{barnesHutPotential} & 2.6e+04/6.6e+05 & 0.04$\times$ & 2.1e+03/3.4e+04 & 0.06$\times$ & 6.2e+06/2.5e+06 & \textbf{2.52$\times$} \\
+\texttt{fmmPotential} & 2.4e+04/8.8e+05 & 0.03$\times$ & 1.8e+03/2.6e+04 & 0.07$\times$ & 4.5e+06/2.2e+06 & \textbf{2.00$\times$} \\
+\texttt{scaleEnergy} & 7.6e+05/3.3e+06 & 0.23$\times$ & 1.9e+04/6.3e+04 & 0.31$\times$ & 5.3e+06/2.8e+06 & \textbf{1.88$\times$} \\
+\texttt{clearFlags} & 6.9e+05/3.2e+06 & 0.21$\times$ & 2.1e+04/6.8e+04 & 0.32$\times$ & 5.4e+06/2.5e+06 & \textbf{2.15$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+% -- Table: PiecewiseFunctions per-pass counters --
+\begin{table}[t]
+\centering
+\caption{Per-pass hardware counters for \texttt{PiecewiseFunctions}, AoS versus SoA. Each cell is (AoS/SoA) with their ratio; above $1\times$ means SoA caused fewer.}
+\label{tab:PiecewiseFunctions_pldi_counters}
+\small
+\gibbonfit{%
+\begin{tabular}{l r r r r r r}
+\toprule
+\textbf{Pass} & \multicolumn{2}{c}{\textbf{L1D load misses}} & \multicolumn{2}{c}{\textbf{L2 data misses}} & \multicolumn{2}{c}{\textbf{LLC misses}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & AoS/SoA & Ratio & AoS/SoA & Ratio & AoS/SoA & Ratio \\
+\midrule
+\texttt{norm2Estimate} & 5.2e+05/4.0e+05 & \textbf{1.30$\times$} & 8.5e+03/9.0e+03 & 0.95$\times$ & 6.2e+06/1.6e+06 & \textbf{3.99$\times$} \\
+\texttt{truncateTolViolations} & 2.4e+06/2.8e+04 & \textbf{86.39$\times$} & 1.2e+04/4.5e+03 & \textbf{2.59$\times$} & 6.3e+06/7.1e+05 & \textbf{8.90$\times$} \\
+\texttt{compressMass} & 2.0e+06/2.8e+04 & \textbf{69.69$\times$} & 8.7e+03/4.8e+03 & \textbf{1.83$\times$} & 6.3e+06/6.9e+05 & \textbf{9.04$\times$} \\
+\texttt{autorefineMaxLevel} & 9.7e+05/2.3e+05 & \textbf{4.21$\times$} & 2.3e+03/6.6e+03 & 0.35$\times$ & 5.4e+06/1.1e+06 & \textbf{4.80$\times$} \\
+\texttt{pmapCutHistogram} & 2.9e+06/3.4e+05 & \textbf{8.42$\times$} & 1.1e+04/7.0e+03 & \textbf{1.53$\times$} & 5.9e+06/1.3e+06 & \textbf{4.57$\times$} \\
+\texttt{lbDeuxLoadProxy} & 2.4e+06/1.3e+06 & \textbf{1.82$\times$} & 1.0e+04/9.7e+03 & 1.03$\times$ & 6.0e+06/1.6e+06 & \textbf{3.74$\times$} \\
+\texttt{addConstPW} & 1.6e+06/2.3e+06 & 0.69$\times$ & 1.9e+04/3.8e+04 & 0.49$\times$ & 4.5e+06/1.9e+06 & \textbf{2.35$\times$} \\
+\texttt{diffPW} & 7.6e+05/2.9e+06 & 0.27$\times$ & 1.8e+04/3.8e+04 & 0.46$\times$ & 4.5e+06/1.9e+06 & \textbf{2.39$\times$} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
 
 % Integer-width add1Tree vectorization
 \begin{table}[h]
@@ -1824,10 +2453,10 @@ diffPW & +3.003\% & +2.397\% & +1.036\% & +11.63\% & +1.61\% & +296.7\% & +3.468
 \toprule
 Width & AoS raw & SoA raw & AoS/SoA & SoA loopify & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Qual. \\
 \midrule
-Int8 & 0.034806 & 0.033609 & 1.04$\times$ & 0.009621 & 0.008314 & \textbf{1.16$\times$} & \textbf{4.19$\times$} & OK \\
-Int16 & 0.032953 & 0.034875 & 0.94$\times$ & 0.011263 & 0.010235 & \textbf{1.10$\times$} & \textbf{3.22$\times$} & OK \\
-Int32 & 0.037522 & 0.038797 & 0.97$\times$ & 0.016008 & 0.014991 & 1.07$\times$ & \textbf{2.50$\times$} & OK \\
-Int64 & 0.047491 & 0.046930 & 1.01$\times$ & 0.024976 & 0.024346 & 1.03$\times$ & \textbf{1.95$\times$} & OK \\
+Int8 & 0.035374 & 0.033766 & 1.05$\times$ & 0.009871 & 0.008449 & \textbf{1.17$\times$} & \textbf{4.19$\times$} & OK \\
+Int16 & 0.032835 & 0.035253 & 0.93$\times$ & 0.011344 & 0.010263 & \textbf{1.11$\times$} & \textbf{3.20$\times$} & OK \\
+Int32 & 0.037639 & 0.039063 & 0.96$\times$ & 0.016125 & 0.015269 & 1.06$\times$ & \textbf{2.47$\times$} & OK \\
+Int64 & 0.047980 & 0.047132 & 1.02$\times$ & 0.025259 & 0.024602 & 1.03$\times$ & \textbf{1.95$\times$} & OK \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -1843,10 +2472,10 @@ Int64 & 0.047491 & 0.046930 & 1.01$\times$ & 0.024976 & 0.024346 & 1.03$\times$ 
 \toprule
 Width & Ops/elem & Bytes ld/elem & Bytes st/elem & Ops/byte & AoS raw & SoA raw & SoA loopify & SoA loopify shared & SoA SIMD & SIMD spd. & AoS-vs-SIMD & Status & Qual. \\
 \midrule
-Int8 & 415 & 1 & 1 & 207.50 & 0.481370 & 0.473759 & 0.443244 & 0.425760 & 0.072345 & \textbf{5.89$\times$} & \textbf{6.65$\times$} & SIMD & OK \\
-Int16 & 415 & 2 & 2 & 103.75 & 0.476647 & 0.481458 & 0.451213 & 0.433232 & 0.053201 & \textbf{8.14$\times$} & \textbf{8.96$\times$} & SIMD & OK \\
-Int32 & 415 & 4 & 4 & 51.88 & 0.498036 & 0.495553 & 0.460476 & 0.441634 & 0.137355 & \textbf{3.22$\times$} & \textbf{3.63$\times$} & SIMD & OK \\
-Int64 & 415 & 8 & 8 & 25.94 & 0.487155 & 0.487397 & 0.481373 & 0.460452 & 0.534107 & 0.86$\times$ & 0.91$\times$ & SIMD (emulated multiply) & OK \\
+Int8 & 415 & 1 & 1 & 207.50 & 0.484659 & 0.477886 & 0.446315 & 0.428373 & 0.073176 & \textbf{5.85$\times$} & \textbf{6.62$\times$} & SIMD & OK \\
+Int16 & 415 & 2 & 2 & 103.75 & 0.479756 & 0.484787 & 0.453851 & 0.436093 & 0.053954 & \textbf{8.08$\times$} & \textbf{8.89$\times$} & SIMD & OK \\
+Int32 & 415 & 4 & 4 & 51.88 & 0.502031 & 0.498863 & 0.463381 & 0.444439 & 0.137082 & \textbf{3.24$\times$} & \textbf{3.66$\times$} & SIMD & OK \\
+Int64 & 415 & 8 & 8 & 25.94 & 0.490873 & 0.490720 & 0.483479 & 0.464105 & 0.538342 & 0.86$\times$ & 0.91$\times$ & SIMD (emulated multiply) & OK \\
 \bottomrule
 \end{tabular}}
 \end{table}

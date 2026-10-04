@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  20 SEP 2026 14:08
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2024.12.8)  21 SEP 2026 16:47
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1616,8 +1616,9 @@ misspelled it (e.g., `\hobx'), type `I' and the correct
 spelling (e.g., `I\hbox'). Otherwise just continue,
 and I'll forget about whatever was undefined.
 
+[12] [13] [14]
 GIBBON-TABLE-SCALED: 851.14812pt into 772.77686pt
-) [12] (figures/table_preview.aux)
+[15]) [16] (figures/table_preview.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
@@ -1629,10 +1630,10 @@ LaTeX Font Warning: Size substitutions with differences
 
  ) 
 Here is how much of TeX's memory you used:
- 2567 strings out of 474222
- 41198 string characters out of 5748733
+ 2593 strings out of 474222
+ 42043 string characters out of 5748733
  2014975 words of memory out of 5000000
- 24824 multiletter control sequences out of 15000+600000
+ 24850 multiletter control sequences out of 15000+600000
  563946 words of font info for 56 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  57i,12n,65p,2826b,314s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -1658,10 +1659,10 @@ onts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
 /cmsy9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10
 .pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb><
 /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb>
-Output written on figures/table_preview.pdf (12 pages, 381747 bytes).
+Output written on figures/table_preview.pdf (16 pages, 402951 bytes).
 PDF statistics:
- 163 PDF objects out of 1000 (max. 8388607)
- 100 compressed objects within 1 object stream
+ 177 PDF objects out of 1000 (max. 8388607)
+ 109 compressed objects within 2 object streams
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 
