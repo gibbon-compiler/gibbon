@@ -134,8 +134,7 @@ class TestAosSoaSelectedDepthAgreement(unittest.TestCase):
     # error text, no mechanism. It does not reproduce: sixteen configurations,
     # including the real program with a second tree bound in the same
     # gibbon_main under the full optimisation stack, all give correct and
-    # unchanged values. See TWO-TREES in llm-notes BUGS.md for the evidence and a
-    # reproduction recipe. Constraining the corpus shape against an
+    # unchanged values. Constraining the corpus shape against an
     # uncharacterised defect costs freedom and returns no evidence; if it comes
     # back, it should come back as a reproducer.
 

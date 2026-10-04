@@ -4,18 +4,6 @@ Benchmarks **AoS** (Array of Structs) vs **SoA** (Struct of Arrays) Gibbon
 compiler programs and produces publication-quality figures and LaTeX tables for
 conference papers.
 
-> **Design / context / verification documents live outside this repository.**
-> Handoff notes, verification plans, defect and benchmark analyses for the
-> packed fully-factored layout work (loopification, selective buffer sharing,
-> SIMD vectorization, and the source-declared integer widths) are maintained in
-> `git@github.com:vidsinghal/llm-notes.git` under `gibbon-soa-layout/`.
-> Start with
-> `gibbon-soa-layout/current/variable_width_integer_implementation_progress.md`,
-> the canonical living ledger (the older `Context.md` is historical and its
-> `--int32` model is superseded).  Only user-facing documentation for
-> the shipped artifact — this file, `ANNOTATIONS.md`, `GETTING_STARTED.txt` —
-> stays here.
-
 ---
 
 ## Integer width is a source property

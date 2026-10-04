@@ -69,13 +69,7 @@ gibbon-compiler/examples/soa_examples/benchmark_output/
 gibbon-compiler/examples/soa_examples/figures/
 microbench/parallel/measurements/
 
-# Design / context / verification documents do NOT live in this repository.
-# They are maintained in the separate notes repo:
-#     git@github.com:vidsinghal/llm-notes.git   ->  gibbon-soa-layout/
-# The former /context-docs/ folder was moved there and deleted from this tree.
-# It was always .gitignore'd, so nothing was ever committed here and no history
-# rewrite was involved.  This rule stays so a stray local copy is never
-# committed by accident.
+# Local working documents; never committed.
 /context-docs/
 
 # ---------------------------------------------------------------------------
