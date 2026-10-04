@@ -1522,6 +1522,13 @@ tests:
     answer-file: tests/factored_indirections/MixedLayout.ans
     run-modes: [gibbon2]
 
+  # Programs that once compiled wrongly or not at all; also checked under the
+  # remaining flag sets by fi_fixes.sh.
+  - name: LinearFieldRead.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/LinearFieldRead.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA
     answer-file: examples/soa_examples/reduced_answers/PiecewiseFunctions.ans

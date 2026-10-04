@@ -2596,7 +2596,18 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           start_tag_alloc <- gensym "start_tag_alloc"
           end_tag_alloc <- gensym "end_tag_alloc"
           start_scalars_alloc <- gensym "start_scalars_alloc"
-          needs_bump <- mutLocNeedsBump freeVarToVarEnv m1_dcon m2 (Just sloc_loc) (Just sloc) (L3.mkLitE64 1)
+          needs_bump0 <- mutLocNeedsBump freeVarToVarEnv m1_dcon m2 (Just sloc_loc) (Just sloc) (L3.mkLitE64 1)
+          -- A Linear field of a factored value is tracked as pointing at its own
+          -- mutable cursor rather than at the value written through it; that
+          -- cursor is the one to advance.
+          needs_bump <- case needs_bump0 of
+            Nothing | isMutModality (fromJust modality_sloc)
+                    , Just pts <- M.lookup sloc_loc m1_dcon
+                    , let self = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy sloc_loc)
+                    , any (\(vpts, _, _, _) -> vpts == self) pts -> do
+                        void_val <- gensym "void"
+                        pure $ Just ((void_val, [], ProdTy [], Ext $ BumpCursorMutable self (L3.mkLitE64 1)), sloc_loc)
+            _ -> pure needs_bump0
           let (needs_bump_lts, m1') = dbgTrace (minChatLvl) "Print the bump let!!" dbgTrace (minChatLvl) (sdoc (m1_dcon, needs_bump)) dbgTrace (minChatLvl) "End printing in bump let!!" case needs_bump of 
                                         Just (b, mut_loc) -> let 
                                                     m1i = updateMutableLocPtsToEnv mut_loc m1_dcon (after_tag, Just mut_loc, Nothing, S.empty) False
