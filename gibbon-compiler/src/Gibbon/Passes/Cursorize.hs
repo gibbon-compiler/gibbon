@@ -2138,6 +2138,15 @@ cursorValueFromMaybeMut tenv var =
 isGeneratedSoAFieldVar :: Var -> Bool
 isGeneratedSoAFieldVar var = "soa_field_" `L.isPrefixOf` fromVar var
 
+-- | The arguments of the call a cursorized right-hand side makes, under any
+-- leading lets.
+calledWith :: Exp3 -> Maybe [Exp3]
+calledWith ex = case ex of
+  AppE _ _ _ args -> Just args
+  LetE (_, _, _, AppE _ _ _ args) _ -> Just args
+  LetE _ bod -> calledWith bod
+  _ -> Nothing
+
 cursorValueFromMaybeTrackedMut :: MutableLocPtsToEnv -> TyEnv Var Ty2 -> Var -> Exp3
 cursorValueFromMaybeTrackedMut m1 tenv var =
   case M.lookup var tenv of
@@ -5994,7 +6003,7 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                         Nothing -> case (tylocvar, M.lookup start_var tenv) of
                                                           (CursorTy, Just (MkTy2 MutCursorTy)) -> Ext $ DerefMutCursor start_var
                                                           _ -> VarE start_var
-                                      let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
+                                      let (locbnds0, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
                                                                                                               location_var = toLocVar loc
                                                                                                               cursor_ty = cursor_ty_locs' !! n
                                                                                                               loc_to_variable = case (M.lookup (loc_var) freeVarToVarEnv') of
@@ -6106,7 +6115,12 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                       Nothing -> let mut_loc_in_same_reg = findMutableLocationInSameRegion witness_reg m1 
                                                                                                                                                                   in case mut_loc_in_same_reg of 
                                                                                                                                                                               Nothing -> (lbndsi, m1i, m2i)
-                                                                                                                                                                              Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
+                                                                                                                                                                              Just (_pts_to_val, mut_loc) -> let mut_loc_name = dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, mut_loc_in_same_reg, witness_reg)) dbgTrace (minChatLvl) "End in Print case EndWitness Nothing AppE 2.\n" case M.lookup (fromLocVarToFreeVarsTy mut_loc) freeVarToVarEnv of
+                                                                                                                                                                                                                                  Just name -> name
+                                                                                                                                                                                                                                  -- A region-end key has no variable: the witness is the
+                                                                                                                                                                                                                                  -- argument the callee advanced in place.
+                                                                                                                                                                                                                                  Nothing | AppE _ _ rhsLocs _ <- rhs -> getVarNameFromFreeVar freeVarToVarEnv (fromLocArgToFreeVarsTy (rhsLocs !! n))
+                                                                                                                                                                                                                                          | otherwise -> getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy mut_loc)
                                                                                                                                                                                                               in case mut_loc of 
                                                                                                                                                                                                                         Single{} -> let locs_var = getVarNameFromFreeVar freeVarToVarEnv (fromLocVarToFreeVarsTy lv)
                                                                                                                                                                                                                                         bnd = [(locs_var, [], CursorTy, cursorValueFromMaybeTrackedMut m1 tenv mut_loc_name)]
@@ -6135,6 +6149,18 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                                                                               in dbgTrace (minChatLvl) "Print in Nothing case Endwitness AppE: " dbgTrace (minChatLvl) (sdoc (witness_loc, witness_var, m1i, l, locs_var, m1i')) dbgTrace (minChatLvl) "End in Print case SoA EndWitness Just case AppE 2.\n" (lbndsi ++ bnd, m1i', m2i)
                                                                                                                   _ -> (lbndsi, m1i, m2i)
                                                          ) ([], m1', m2') (zip locs [0 ..])
+                                      -- An input region end the mutable callee advanced in place, when nothing
+                                      -- above binds it: the array this call was passed.  Input region ends
+                                      -- lead both the locations and the call's arguments.
+                                      let loc_bnds0_vars = S.fromList [ x | (x, _, _, _) <- locbnds0 ]
+                                          loc_bnds = locbnds0 ++
+                                            [ (x, [], ty_x, VarE y)
+                                            | Just callArgs <- [calledWith rhs']
+                                            , (l@(EndOfReg r@SoARv{} m _), VarE y) <- zip locs callArgs
+                                            , m `elem` [Input, InputMutable]
+                                            , let x = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy l)
+                                            , let ty_x = getCursorizeTyFromRegVar Nothing useMutableCursorsCall r
+                                            , x /= y, not (S.member x loc_bnds0_vars) ]
                                       case start_loc of 
                                               Single{} -> do
                                                           let m1''' = updateMutableLocPtsToEnv l m1'' (toEndV v, Just l, Nothing, S.empty) True

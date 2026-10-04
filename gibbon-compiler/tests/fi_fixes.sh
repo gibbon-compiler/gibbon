@@ -53,6 +53,13 @@ TraverseThenRead|--no-ran $MUT
 TraverseThenRead|--no-gc --no-ran $MUT
 TraverseThenRead|$NONREC
 TraverseThenRead|--no-ran $NONREC
+SwapWriter|
+SwapWriter|--no-ran
+SwapWriter|$MUT
+SwapWriter|--no-ran $MUT
+SwapWriter|--no-gc --no-ran $MUT
+SwapWriter|$NONREC
+SwapWriter|--no-ran $NONREC
 EOC
 )
 

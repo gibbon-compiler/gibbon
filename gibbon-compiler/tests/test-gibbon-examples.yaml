@@ -1544,6 +1544,10 @@ tests:
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/TraverseThenRead.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: SwapWriter.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/SwapWriter.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA
