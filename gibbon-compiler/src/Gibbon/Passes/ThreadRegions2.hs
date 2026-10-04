@@ -87,11 +87,25 @@ type OrderedLocsEnv = M.Map RegVar [LocVar]
 type RanEnv = M.Map LocVar Var
 
 threadRegions2 :: NewL2.Prog2 -> PassM NewL2.Prog2
-threadRegions2 prg
-  | Old.writesFactoredIndirections (isSoALoc . toLocVar) prg =
-      R.local (\cfg -> cfg { dynflags = gopt_set Opt_WritesFactoredIndirections (dynflags cfg) })
-              (threadRegions2' prg)
-  | otherwise = threadRegions2' prg
+threadRegions2 prg =
+  R.local (\cfg -> cfg { dynflags = foldr gopt_set (dynflags cfg) flags })
+          (threadRegions2' prg)
+  where
+    flags = [ Opt_WritesFactoredIndirections
+            | Old.writesFactoredIndirections (isSoALoc . toLocVar) prg ] ++
+            [ Opt_WritesLinearIndirections
+            | Old.writesFactoredIndirections (not . isSoALoc . toLocVar) prg ]
+
+-- | The end-of-region of a location reached through a tagged pointer (an
+-- indirection, redirection or random-access pointer).  The pointer's tag is
+-- the offset to the end of the pointee's chunk.  A program that writes Linear
+-- indirections uses that end: its indirection barrier finds the pointee's
+-- chunk on the chunk list of the region the end belongs to.  Otherwise the
+-- pointer itself stands in for it.
+taggedEnd :: Bool -> LocVar -> LocArg
+taggedEnd linear x
+  | linear = EndOfReg_Tagged (toEndFromTaggedRegVar (fromLocVarToRegVar x))
+  | otherwise = EndOfReg_Tagged (fromLocVarToRegVar x)
 
 -- | A location whose end-of-region comes from a tagged pointer: a redirection
 -- or indirection pointer.  In a program that writes factored indirections, a
@@ -388,6 +402,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
   case ex of
     AppE f cty applocs args -> do
       factored <- gopt Opt_WritesFactoredIndirections <$> getDynFlags
+      linear <- gopt Opt_WritesLinearIndirections <$> getDynFlags
       let tagged = endFromTaggedPtr factored renv indirs redirs
       let ty = gRecoverTypeLoc ddefs env2 ex
           argtys = map (gRecoverTypeLoc ddefs env2) args
@@ -398,9 +413,9 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                   if tagged x
                     -- Since a region should always point to just one cursor
                     -- Unwraping a regions stored in LocVar should be fine.
-                    then (EndOfReg_Tagged (fromLocVarToRegVar x)) : acc
+                    then taggedEnd linear x : acc
                     else case ranPtrEnd factored renv ran_env x of
-                      Just ran -> (EndOfReg_Tagged (fromVarToSingleRegVar ran)) : acc
+                      Just ran -> taggedEnd linear (Single ran) : acc
                       Nothing -> case M.lookup x renv of
                         Just r -> (NewL2.EndOfReg r Input (toEndVRegVar r)) : acc
                         Nothing -> acc
@@ -432,6 +447,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           return $ AppE f cty newapplocs args
     LetE (v, locs, ty, (AppE f cty applocs args)) bod -> do
       factored <- gopt Opt_WritesFactoredIndirections <$> getDynFlags
+      linear <- gopt Opt_WritesLinearIndirections <$> getDynFlags
       let tagged = endFromTaggedPtr factored renv indirs redirs
       let argtylocs =
             concatMap
@@ -451,9 +467,9 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
             foldr
               ( \x acc ->
                   if tagged x
-                    then (EndOfReg_Tagged (fromLocVarToRegVar x)) : acc
+                    then taggedEnd linear x : acc
                     else case ranPtrEnd factored renv ran_env x of
-                      Just ran -> (EndOfReg_Tagged (fromVarToSingleRegVar ran)) : acc
+                      Just ran -> taggedEnd linear (Single ran) : acc
                       Nothing ->
                         case M.lookup x renv of
                           Just r -> (NewL2.EndOfReg r Input (toEndVRegVar r)) : acc
@@ -756,11 +772,12 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         <*> threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' pkd_env1 region_locs ran_env indirs redirs bod)
     LetE (v, locs, ty@(MkTy2 (PackedTy _ loc)), (Ext (IndirectionE tcon dcon (a, _b) (c, _d) cpy))) bod -> do
       factored <- gopt Opt_WritesFactoredIndirections <$> getDynFlags
+      linear <- gopt Opt_WritesLinearIndirections <$> getDynFlags
       let fn x mode =
             if endFromTaggedPtr factored renv indirs redirs x
-              then (EndOfReg_Tagged (fromLocVarToRegVar x))
+              then taggedEnd linear x
               else case ranPtrEnd factored renv ran_env x of
-                Just ran -> (EndOfReg_Tagged (fromVarToSingleRegVar ran {-VS: Might need an SoA ran in the futre??-}))
+                Just ran -> taggedEnd linear (Single ran)
                 Nothing -> case M.lookup x renv of
                   Just r -> (NewL2.EndOfReg r mode (toEndVRegVar r))
                   Nothing -> error $ "threadRegionsExp: unbound loc " ++ sdoc x
@@ -779,16 +796,6 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
           wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (NewL2.locsInTy ty)
       bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env' region_locs ran_env indirs redirs bod
-      -- VS: 09/20/2025
-      -- Removing bounds check for now since assuming that the function should do this and may not need this. 
-      -- TODO: this might not be true though
-      --let boundscheck =
-      --      let locarg = a'
-      --          regarg = b'
-      --          -- bc = boundsCheck ddefs tcon
-      --          bc = 18
-      --       in LetE ("_", [], MkTy2 IntTy, Ext $ BoundsCheck bc regarg locarg)
-      --pure $ boundscheck $ LetE (v, locs, ty, (Ext (IndirectionE tcon dcon (a', b') (c', d') cpy))) bod'
       pure $ LetE (v, locs, ty, (Ext (IndirectionE tcon dcon (a', b') (c', d') cpy))) bod'
     Ext (StartOfPkdCursor cur) -> do
       let (PackedTy _ loc) = unTy2 (lookupVEnvLocVar (fromVarToFreeVarsTy cur) env2)

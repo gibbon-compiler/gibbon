@@ -44,6 +44,11 @@ data GeneralFlag
   -- ^ Internal, never set from the command line: the program writes a
   -- fully-factored indirection, so readers use the factored INDIRECTION arm.
   -- Set by 'Gibbon.Passes.Cursorize' for its own run.
+  | Opt_WritesLinearIndirections
+  -- ^ Internal, never set from the command line: the program writes a Linear
+  -- indirection, so a value reached through a tagged pointer takes the end of
+  -- the pointee's chunk as its end-of-region.  Set by
+  -- 'Gibbon.Passes.ThreadRegions2' for its own run.
   | Opt_ReclaimIterateRegions
   -- ^ Reclaim the region chunks an @iterate@ benchmark iteration grew.  Each
   -- iteration rewinds to the output region's first chunk and re-grows it, and

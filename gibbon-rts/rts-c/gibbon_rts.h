@@ -1787,6 +1787,22 @@ INLINE_HEADER void gib_indirection_ref(GibCursor from_footer, GibCursor to_foote
 #endif
 }
 
+// The footer of the chunk that holds `ptr`, searched for on the chunk list of
+// the region `any_footer` belongs to; `any_footer` if no chunk of it does.
+INLINE_HEADER char *gib_footer_of_chunk_holding(char *ptr, char *any_footer)
+{
+    GibOldgenChunkFooter *f = (GibOldgenChunkFooter *)
+        ((GibOldgenChunkFooter *) any_footer)->reg_info->first_chunk_footer;
+    while (f != NULL) {
+        char *start = (char *) f - f->size;
+        if (start <= ptr && ptr < (char *) f) {
+            return (char *) f;
+        }
+        f = f->next;
+    }
+    return any_footer;
+}
+
 INLINE_HEADER void gib_indirection_barrier(
     // Address where the indirection tag is written.
     GibCursor from,
@@ -1823,6 +1839,12 @@ INLINE_HEADER void gib_indirection_barrier(
             after_pointed_to_tag = to + 1;
         }
     }
+#endif
+
+    // The tagged pointer carries the offset to the end of `to`'s own chunk;
+    // the caller's end-of-region may belong to another chunk of the region.
+#if defined _GIBBON_GENGC && _GIBBON_GENGC == 0
+    to_footer = gib_footer_of_chunk_holding(to, to_footer);
 #endif
 
     // Write the indirection.

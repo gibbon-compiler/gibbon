@@ -1536,6 +1536,10 @@ tests:
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/LinearFieldMap.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: LinearShareInList.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/LinearShareInList.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA

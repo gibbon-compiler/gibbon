@@ -36,6 +36,14 @@ LinearFieldMap|$MUT
 LinearFieldMap|--no-ran $MUT
 LinearFieldMap|$NONREC
 LinearFieldMap|--no-ran $NONREC
+LinearShareInList|
+LinearShareInList|--no-ran
+LinearShareInList|--no-gc
+LinearShareInList|--no-gc --no-ran
+LinearShareInList|--no-ran $MUT
+LinearShareInList|$NONREC
+LinearShareChunks|--no-ran
+LinearShareChunks|--no-gc --no-ran
 EOC
 )
 
