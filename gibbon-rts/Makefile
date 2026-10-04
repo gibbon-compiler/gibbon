@@ -141,7 +141,12 @@ RUST_RTS_DIR      := $(GIBBONDIR)/gibbon-rts
 C_RTS_DIR         := $(RUST_RTS_DIR)/rts-c
 BUILD_DIR         := $(RUST_RTS_DIR)/build
 NAME              := gibbon_rts
-RUST_RTS_SO       := libgibbon_rts_ng.so
+# cargo names shared libraries .dylib on macOS and .so elsewhere.
+ifeq ($(shell uname -s), Darwin)
+	RUST_RTS_SO   := libgibbon_rts_ng.dylib
+else
+	RUST_RTS_SO   := libgibbon_rts_ng.so
+endif
 RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
 RUST_SOURCES      := $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
 
@@ -165,9 +170,14 @@ t_rs_rts: $(RUST_SOURCES)
 	cd  $(RUST_RTS_DIR) && \
 	$(RSC) test -- --nocapture
 
+# On macOS cargo stamps the dylib with its absolute path under target/, which
+# goes stale once it is moved here; make it @rpath-relative like the .so is.
 $(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
 	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
+ifeq ($(shell uname -s), Darwin)
+	install_name_tool -id @rpath/$(RUST_RTS_SO) $@
+endif
 
 # The Rust sources are not specified as prerequisites and a FORCE
 # prerequisite is used to force unconditional recompilation.

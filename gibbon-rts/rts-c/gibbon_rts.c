@@ -14,7 +14,10 @@
 #include <time.h>
 #include <alloca.h>
 #include <sys/mman.h>
+// macOS has no <malloc.h>; its only use here (malloc_trim) is glibc-only anyway.
+#ifndef __APPLE__
 #include <malloc.h>
+#endif
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -2708,13 +2711,13 @@ GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
     snapshot->reg_info_addrs = gib_alloc(num_regions * sizeof(GibRegionInfo*));
     if (snapshot == NULL) {
         fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu",
-                num_regions * sizeof(GibRegionInfo *));
+                (size_t) (num_regions * sizeof(GibRegionInfo *)));
         exit(1);
     }
     snapshot->outsets = gib_alloc(num_regions * sizeof(char*));
     if (snapshot == NULL) {
         fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu",
-                num_regions * sizeof(void*));
+                (size_t) (num_regions * sizeof(void*)));
         exit(1);
     }
     return snapshot;
@@ -2833,8 +2836,8 @@ void gib_show_usage(char** argv)
 
     printf("\n");
     printf("Options:\n");
-    printf(" --biginf-buffer-size <bytes>   Set the buffer size (default %" PRId64 ").\n", gib_global_biginf_init_chunk_size);
-    printf(" --inf-buffer-size <bytes>      Set the buffer size (default %" PRId64 ").\n", gib_global_inf_init_chunk_size);
+    printf(" --biginf-buffer-size <bytes>   Set the buffer size (default %zu).\n", gib_global_biginf_init_chunk_size);
+    printf(" --inf-buffer-size <bytes>      Set the buffer size (default %zu).\n", gib_global_inf_init_chunk_size);
     printf(" --bench-input <path>           Set the input file read for benchmarking. Applies only\n");
     printf("                                If the program was *compiled* with --bench-fun. \n");
     printf("\n");
@@ -3040,7 +3043,7 @@ int gib_init(int argc, char **argv)
 #endif
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-    printf("Number of threads: %ld\n", gib_global_num_threads);
+    printf("Number of threads: %" PRIu64 "\n", gib_global_num_threads);
 #endif
 
 #ifndef _GIBBON_POINTER

@@ -42,6 +42,7 @@ import           System.Exit
 import           System.FilePath
 import           System.IO
 import           System.IO.Error (isDoesNotExistError, catchIOError)
+import           System.Info (arch)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
@@ -577,12 +578,18 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         compile_program = do
             compileRTS cfg
             lib_dir <- getRTSBuildDir
+            gibbon_dir <- getGibbonDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
+                -- gibbon_rts.h includes <uthash.h>; use the vendored copy the
+                -- RTS itself is built against rather than relying on a
+                -- system-wide install (macOS has none by default).
+                uthash_dir = gibbon_dir </> "deps/uthash"
                 compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
+                                   ++" -I" ++ uthash_dir
                                    ++" -L" ++ lib_dir
-                                   ++ " -Wl,-rpath=" ++ lib_dir ++ " "
+                                   ++ " -Wl,-rpath," ++ lib_dir ++ " "
                                    ++ outfile ++ " " ++ rts_o_path
                                    ++ links' ++ " -lgibbon_rts_ng"
 
@@ -621,6 +628,11 @@ chooseArchiver ccCmd = pick candidates
       case found of
         Just path -> pure path
         Nothing   -> pick rest
+
+-- | Whether this compiler is running on (and so, by default, its C compiler is
+-- targeting) an x86 machine, where the SSE/AVX flags and intrinsics exist.
+hostIsX86 :: Bool
+hostIsX86 = arch `elem` ["x86_64", "i386"]
 
 isClangCompiler :: String -> Bool
 isClangCompiler = ("clang" `isInfixOf`) . takeFileName
@@ -740,8 +752,10 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           -- @--sse4.1@ raises the selected ISA, and the ISA
                           -- carries its own C flags; a second -msse4.1 here
                           -- would let the two disagree about what was asked
-                          -- for.
-                          ++ simdIsaCcFlags (simdIsaOf dflags)
+                          -- for.  The flags are x86 ISA names, so a non-x86
+                          -- host (e.g. arm64 macOS) gets none; the 256-bit
+                          -- helpers are vector extensions and need no flag.
+                          ++ (if hostIsX86 then simdIsaCcFlags (simdIsaOf dflags) else "")
                           ++ (if noGccVec then noAutoVectorizeFlags (cc config) else "")
                           ++ (if noGccTailCalls then " -fno-optimize-sibling-calls " else "")
                           ++ (if cArithMode config == ArithWrapv then " -fwrapv " else "")

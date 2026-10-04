@@ -21,7 +21,7 @@ $CC -O1 -g -std=gnu11 -D_GIBBON_BOUNDSCHECK -D_GIBBON_VERBOSITY=1 \
     -D_GIBBON_GENGC=0 -D_GIBBON_EAGER_PROMOTION=1 -D_GIBBON_SIMPLE_WRITE_BARRIER=0 \
     -I "$ROOT/deps/uthash" -I "$ROOT/gibbon-rts/rts-c" -I "$ROOT/gibbon-rts/build" \
     -o "$BIN" "$ROOT/gibbon-rts/tests/vector_bounds_test.c" "$ROOT/gibbon-rts/rts-c/gibbon_rts.c" \
-    -L "$ROOT/gibbon-rts/build" -Wl,-rpath="$ROOT/gibbon-rts/build" -lgibbon_rts_ng -lm 2>"$TMP/cc.log"
+    -L "$ROOT/gibbon-rts/build" -Wl,-rpath,"$ROOT/gibbon-rts/build" -lgibbon_rts_ng -lm 2>"$TMP/cc.log"
 if [ ! -x "$BIN" ]; then
   echo "FAIL: the -D_GIBBON_BOUNDSCHECK configuration does not compile with $CC"
   tail -20 "$TMP/cc.log"; exit 1

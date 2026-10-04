@@ -457,10 +457,15 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <fcntl.h>\n\
         \#include <stdarg.h>\n\
         \#include <errno.h>\n\
+        \#include <uthash.h>\n\n\
+        \/* The 128-bit helpers below are SSE intrinsics, so they exist only on x86;\n\
+        \ * elsewhere (e.g. arm64 macOS) programs that use no 128-bit vector ops\n\
+        \ * still compile.  The 256-bit helpers further down are portable. */\n\
+        \#if defined(__x86_64__) || defined(__i386__)\n\
         \#include <xmmintrin.h>\n\
         \#include <emmintrin.h>\n\
         \" ++ (if simdIsaHasSse41 selectedIsa then "#include <smmintrin.h>\n" else "") ++ "\
-        \#include <uthash.h>\n\n\
+        \\n\
         \static inline __m128i gib_vec_broadcast_int64x2(GibInt x) {\n\
         \  return _mm_set1_epi64x((long long) x);\n\
         \}\n\
@@ -895,6 +900,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \static inline void gib_vec_store_float32x4(GibCursor *ref, __m128 v) {\n\
         \  _mm_storeu_ps((float *) (*ref), v);\n\
         \}\n\
+        \#endif /* x86 128-bit SIMD helpers */\n\
         \\n\
         \/* ---------------- 256-bit (AVX2) SIMD helpers ----------------------\n\
         \ *\n\
