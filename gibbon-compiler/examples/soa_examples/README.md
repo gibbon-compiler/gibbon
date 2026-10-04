@@ -266,6 +266,115 @@ over) and the one thing the skip hides.
 
 ---
 
+## Choosing PLDI configurations (`--pldi-config`)
+
+`--pldi-submission` compiles and runs a fixed matrix of configurations per
+program. To run only some of them, or to add an opt-in configuration, list them
+in a TOML file and pass it with `--pldi-config`:
+
+```toml
+[pldi]
+configs = ["aos_imm", "aos_mut", "soa_mut", "ptr"]
+```
+
+```bash
+./gibbon_benchmark.py --pldi-submission --pldi-config my_configs.toml --generate-paper
+```
+
+`pldi_configs.example.toml` lists every name with a one-line description; copy
+it and delete what you do not want. Without `--pldi-config` the default matrix
+runs, unchanged.
+
+- **Order** does not matter: columns keep the standard order.
+- **Delta columns** appear only when both configurations they compare are
+  selected. A summary table whose two configurations were not both selected is
+  replaced by a one-line note.
+- **The `-av` twins** (`*_navec`) are not named in the file. `--av-variants`
+  still adds them, for whichever of their bases are selected.
+- **Replotting** (`--figures-from-json`) takes the same `--pldi-config`, so
+  stored results render with the columns they were collected for.
+- Unknown names, duplicates, unknown keys and an empty list are errors, reported
+  before anything is compiled.
+
+### The pointer-based configuration (`ptr`)
+
+`ptr` is opt-in. It compiles the **AoS** source with `gibbon --pointer` instead
+of `--packed`: one heap object per node, allocated with `malloc` (the runtime
+links the Boehm GC but pointer mode does not use it, so `--no-gc` changes
+nothing), which is how an ordinary functional program represents a tree. It appears in its own
+**Pointer** column group ($P$), checked against the same oracle as every other
+configuration. It is not a packed layout, so it takes no part in the
+$A^{\min}/S^{\min}$ column. Its delta column $\Delta^{P}_{pk}$ compares it
+against vanilla Gibbon ($A_{ri}$), and is positive when packed is faster.
+
+### Input sizes (`--pldi-sizes`)
+
+Every sizable program fixes its input with one literal in `gibbon_main`
+(`mkList 100000000`, `mkTree 23 0`, ...). To run some programs at a different
+size, list them in a TOML file and pass it with `--pldi-sizes`:
+
+```toml
+[sizes]
+List = 10000000      # n, list elements
+MonoTree = 20        # depth
+```
+
+`pldi_sizes.example.toml` lists every sizable program and its shipped size.
+Programs you don't list keep their shipped size.
+
+- **The shipped sources are never edited.** The literal is rewritten in a copy
+  under `<output-dir>/resized_src/`, which is what gets compiled, and the same
+  rewrite applies to the build-timing copy.
+- **Results stay verified.** The expected answer is recomputed at the new size
+  by the program's independent model in `oracles/`, the same model the
+  committed oracle came from.
+- **Resized runs are labelled.** Every resized program's tables say so in
+  their caption, with the shipped size. The summary tables and reading notes
+  list all resized programs, and the results JSON records the sizes, which a
+  `--figures-from-json` replot restores.
+- **Sizable programs:** List, MonoTree, TernaryTree, Add1TreeInt{8,16,32,64}
+  and ArithmeticIntensityInt{8,16,32,64}. Naming any other program is an error.
+- **Not combinable with `--benchmark-ghc` or `--benchmark-mlton`,** since
+  their sources have their own size literals. Sizes are also not applied to
+  `--include-build-pass`'s build-only sources.
+
+**On macOS,** a configuration that recurses once per element can only go about
+8 MB deep. The C stack can't be raised at run time there the way the runtime
+does on Linux (4 GB). Such cells show `‡` at sizes Linux runs, and a smaller
+size is the way to get a number for them.
+
+### Hardware counters on macOS (`--pldi-kperf-counters`)
+
+`--pldi-cache-counters` reads counters through PAPI, which only exists on
+Linux. On Apple silicon, `--pldi-kperf-counters` runs the same counter phase
+but reads the counters through Apple's private kperf framework, the interface
+Instruments uses. It's opt-in: without it, no command, binary or table
+changes.
+
+- **Counters:** cycles, instructions, L1D load misses and L1I misses. The
+  M1's event database (`/usr/share/kpep/a14.plist`) has no L2 or last-level
+  cache miss events, so those columns are absent. Each count's event name
+  appears in the counter notes.
+- **Needs root.** The driver asks for your sudo password once at start, then
+  runs only the counter executables with `sudo -n`, keeping the sudo
+  timestamp fresh in the background. Everything else, including compiling and
+  the output files, runs as you.
+- **No core pinning:** macOS can't pin a thread to a core, so `--pin-cpu` is
+  not needed. The runtime asks for the performance cores (user-interactive QoS)
+  instead, and the notes say so.
+- **Under the hood:** it compiles with `gibbon --enable-kperf`, which emits the
+  counter reads only when given and builds the RTS with `KPERF=1`. See
+  Note [kperf counters] in `gibbon-rts/rts-c/gibbon_rts.c`.
+
+Both counter backends now also produce a **per-configuration counter table**
+for each program. It has one column per measured configuration, grouped
+AoS / SoA / Pointer like the timing tables, one block of rows per counter, and
+one row per timed pass. The existing AoS-versus-SoA counter tables are
+unchanged. They are produced only when both configurations of the layout step
+were measured.
+
+---
+
 ## Smart Recompilation
 
 The script compares the **modification timestamp** of each `.hs` source file
@@ -346,6 +455,9 @@ for accessibility.  Horizontal legend below the plots.
   --figures-dir  DIR    Figure output dir  (default: figures/)
   --report       FILE   Text report path   (default: benchmark_report.txt)
   --json         FILE   JSON results path  (default: benchmark_results.json)
+  --pldi-config  FILE   TOML file choosing --pldi-submission configurations
+  --pldi-sizes   FILE   TOML file overriding --pldi-submission input sizes
+  --pldi-kperf-counters  macOS: counter phase via Apple kperf (needs sudo)
 ```
 
 ---

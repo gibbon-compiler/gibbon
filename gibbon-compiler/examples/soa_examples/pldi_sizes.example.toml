@@ -1,0 +1,30 @@
+# Input sizes for a --pldi-submission run.
+#
+#   ./gibbon_benchmark.py --pldi-submission --pldi-sizes my_sizes.toml ...
+#
+# Each entry overrides ONE program's input size. Anything not listed keeps
+# the size its source ships with (shown in the comments below). The harness
+# rewrites the size literal in a copy of the source -- programs/ is never
+# edited -- and recomputes the expected answer at the new size with the
+# program's independent oracle model, so resized results are still verified.
+# Resized programs are named in the table captions and in the results JSON.
+#
+# Not combinable with --benchmark-ghc / --benchmark-mlton (their sources have
+# their own sizes) and not applied to --include-build-pass's build-only
+# sources.
+
+[sizes]
+# List = 100000000              # n, list elements
+# MonoTree = 23                 # depth (2^depth leaves)
+# TernaryTree = 15              # depth (3^depth leaves)
+# Add1TreeInt8 = 33             # depth (Fibonacci-shaped tree), likewise
+# Add1TreeInt16 = 33            #   for Int16 / Int32 / Int64
+# Add1TreeInt32 = 33
+# Add1TreeInt64 = 33
+# ArithmeticIntensityInt8 = 35  # depth, likewise for Int16 / Int32 / Int64
+# ArithmeticIntensityInt16 = 35
+# ArithmeticIntensityInt32 = 35
+# ArithmeticIntensityInt64 = 35
+
+# Example: a 10x smaller list.
+List = 10000000

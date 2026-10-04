@@ -1,0 +1,34 @@
+# Which --pldi-submission configurations to compile, run and tabulate.
+#
+#   ./gibbon_benchmark.py --pldi-submission --pldi-config my_configs.toml ...
+#
+# Copy this file and delete (or comment out) the configurations you do not
+# want. Without --pldi-config the default matrix runs: everything below
+# except the opt-in ones.
+#
+# Names are listed in table column order; the order you write them in does
+# not matter. A delta column appears only if both configurations it compares
+# are selected. The C auto-vectorizer "-av" twins (*_navec) are not named
+# here: --av-variants adds them for whichever of their bases are selected.
+
+[pldi]
+configs = [
+  # --- AoS (packed, programs/AOS) --------------------------------------------
+  "aos_imm_notco",        # recursive, immutable cursors, C tail calls off
+  "aos_imm",              # recursive, immutable cursors (vanilla Gibbon)
+  "aos_mut_notco",        # recursive, mutable cursors, C tail calls off
+  "aos_mut",              # recursive, mutable cursors
+  "aos_loop",             # loopified (map tables only)
+
+  # --- SoA (packed, programs/SOA) --------------------------------------------
+  "soa_imm_notco",        # recursive, immutable cursors, C tail calls off
+  "soa_imm",              # recursive, immutable cursors
+  "soa_mut_notco",        # recursive, mutable cursors, C tail calls off
+  "soa_mut",              # recursive, mutable cursors
+  "soa_loop",             # loopified, no selective buffer sharing (map only)
+  "soa_loop_sbs",         # loopified, selective buffer sharing (map only)
+  "soa_loop_sbs_gibvec",  # ... plus Gibbon SIMD vectorization (map only)
+
+  # --- Pointer (opt-in: gibbon --pointer on programs/AOS) --------------------
+  "ptr",                  # pointer-based representation, recursive
+]
