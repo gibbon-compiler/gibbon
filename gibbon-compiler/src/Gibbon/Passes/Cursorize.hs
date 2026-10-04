@@ -6428,6 +6428,26 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                       )
                       (zip3 locs rhsLocs [0..])
                   _ -> []
+          -- A cursor array reaches a mutable callee by reference, and the
+          -- callee advances it in place: afterwards the argument's array holds
+          -- the returned end.  An immutable caller tracks no mutable
+          -- locations, so it binds the call's returned locations this way.
+          let fallbackArrayLocBnds =
+                case rhs of
+                  AppE _ _ rhsLocs _ | useMutableForRhs && not useMutableCursorsCall ->
+                    Mb.mapMaybe
+                      ( \(loc, rhsLoc, n) ->
+                          let loc_to_variable = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
+                              rhs_var = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy rhsLoc)
+                              cursorTypeForLoc = case loc of
+                                EndOfReg r@SoARv{} _ _ -> getCursorizeTyFromRegVar Nothing useMutableCursorsCall r
+                                _ -> cursor_ty_locs' !! n
+                           in case cursorTypeForLoc of
+                                CursorArrayTy{} | loc_to_variable /= rhs_var -> Just (loc_to_variable, [], cursorTypeForLoc, VarE rhs_var)
+                                _ -> Nothing
+                      )
+                      (zip3 locs rhsLocs [0..])
+                  _ -> []
           (bnds, m1b, m2b) <- if useMutableForRhs
                               then do
                                    let (loc_bnds, m1'', m2'') = foldr (\(loc, n) (lbndsi, m1i, m2i) -> let loc_var = fromLocArgToFreeVarsTy loc
@@ -6573,7 +6593,9 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                                                                                                                   _ -> (lbndsi, m1i, m2i)
                                                          ) ([], m1', m2') (zip locs [0 ..])
                                    mutLetPayload <- mutableLocLetPayload (MkTy2 ty) rhs'
-                                   return ([(v, [], ty'', mutLetPayload)] ++ fallbackScalarLocBnds ++ loc_bnds
+                                   let boundByLocBnds = S.fromList [ x | (x, _, _, _) <- loc_bnds ]
+                                       arrayLocBnds = [ b | b@(x, _, _, _) <- fallbackArrayLocBnds, not (S.member x boundByLocBnds) ]
+                                   return ([(v, [], ty'', mutLetPayload)] ++ fallbackScalarLocBnds ++ arrayLocBnds ++ loc_bnds
                                      -- Vidush: TODO, we still need to handle the locs. 
                                      -- Instead of getting them from the projection, we need to dereference 
                                      -- the output mutable locations and regions in order to get them.

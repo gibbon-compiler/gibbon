@@ -46,6 +46,13 @@ LinearShareChunks|--no-ran
 LinearShareChunks|--no-gc --no-ran
 LinearShareRoom|--no-ran
 LinearShareRoom|--no-gc --no-ran
+TraverseThenRead|
+TraverseThenRead|--no-ran
+TraverseThenRead|$MUT
+TraverseThenRead|--no-ran $MUT
+TraverseThenRead|--no-gc --no-ran $MUT
+TraverseThenRead|$NONREC
+TraverseThenRead|--no-ran $NONREC
 EOC
 )
 

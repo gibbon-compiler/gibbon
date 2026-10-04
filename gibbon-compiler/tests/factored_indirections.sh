@@ -8,8 +8,6 @@
 # (each has a reproducer that shares nothing); they are pinned so that fixing
 # one shows up here.
 #
-#   M1  non-recursive function, --use-mutable-cursors without
-#       --opt-mutable-cursors-nonrec, traverses a field then reads the next
 #   M2  recursive writer that must traverse a field to reach the next, no RAN,
 #       mutable cursors
 #   M3  function that allocates a factored value in a local region, mutable
@@ -36,7 +34,6 @@ MODE_FLAGS=("" "--no-ran" "--no-ran --use-mutable-cursors" "--no-gc" "--no-gc --
 # $1 program, $2 mode -> "ok" or the known defect.
 expect () {
   case "$1/$2" in
-    RightTree/noran_mut) echo M1 ;;
     PassThru/noran_mut|MultiBuf/noran_mut|BigTree/noran_mut) echo M2 ;;
     GcShare/noran_mut|GcSafe/noran_mut) echo M2 ;;
     GcShare/mut_nonrec|GcSafe/mut_nonrec) echo M3 ;;
