@@ -30,6 +30,12 @@ LinearFieldGrows|--no-gc
 LinearFieldGrows|$MUT
 LinearFieldGrows|--no-ran $MUT
 LinearFieldGrows|$NONREC
+LinearFieldMap|
+LinearFieldMap|--no-ran
+LinearFieldMap|$MUT
+LinearFieldMap|--no-ran $MUT
+LinearFieldMap|$NONREC
+LinearFieldMap|--no-ran $NONREC
 EOC
 )
 

@@ -4823,18 +4823,22 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                         else pure argexp
                   )
                   (zip expectedStartParamTys starts0)
+      -- A callee with the immutable convention takes plain cursors; a mutable
+      -- one reaching it (an output location in a mutable caller) is read.  A
+      -- factored constructor's Linear field location is a mutable cursor that
+      -- is tracked as pointing at itself.
+      let isSelfTrackedMutLoc varname =
+            any (\(k, entries) -> M.lookup (fromLocVarToFreeVarsTy k) freeVarToVarEnv == Just varname
+                                  && any (\(pv, _, _, _) -> pv == varname) entries)
+                (M.toList m1)
       let coerceMutToCursorIfNeeded tenvForCall argexp =
             if useMutForCall || forceMutableCursorArgs
             then pure argexp
-            else if not useMutableCursorsCall
-            then pure argexp
             else case argexp of
                      VarE varname -> case M.lookup varname tenvForCall of
-                                       Just ty -> case (unTy2 ty) of
-                                                    MutCursorTy -> do
+                                       Just ty | unTy2 ty == MutCursorTy || isSelfTrackedMutLoc varname -> do
                                                       deref <- gensym "deref"
                                                       pure $ mkLets [(deref, [], CursorTy, Ext $ DerefMutCursor varname)] (VarE deref)
-                                                    _ -> pure argexp
                                        _ -> pure argexp
                      _ -> pure argexp
       starts' <- mapM (coerceMutToCursorIfNeeded tenv) starts
@@ -5619,7 +5623,37 @@ cursorizeLet m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
                 (zip locs rhsLocs)
             else []
 
-      (bnds, m11', m22') <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (ty', locs, m1', m2', start_loc, start_var, useMutableCursors)) dbgTrace (minChatLvl) "End cursorize Let 2\n" case locs of
+      -- A callee with the immutable convention writing to a mutable output
+      -- location (a Linear field of a factored value in a mutable caller): the
+      -- call returns its ends as usual, and the caller writes the value's end
+      -- back through the mutable cursor, and each returned output region end
+      -- back through the region pointer it passed.
+      let immutableIntoMutableOut =
+            not useMutableCursors && M.member start_loc m2' && isSingleLoc start_loc
+              && (case rhs of AppE{} -> True; _ -> False)
+          isSingleLoc lc = case lc of { Single{} -> True; _ -> False }
+          nLocs = length locs
+          immTy = ProdTy (cursor_ty_locs' ++ [ProdTy [CursorTy, CursorTy]])
+          immutableIntoMutableOutBnds = do
+            let valProj = mkProj nLocs (VarE fresh)
+                startMut = getVarNameFromFreeVar freeVarToVarEnv' (fromLocVarToFreeVarsTy start_loc)
+                locBnds = [ (getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc), [], cty, mkProj n (VarE fresh))
+                          | (loc, cty, n) <- zip3 locs cursor_ty_locs' [0 ..] ]
+                regionWriteBacks =
+                  [ ("_", [], ProdTy [], Ext $ WriteCursorMutable srcVar (VarE dstVar))
+                  | (loc, rhsLoc) <- zip locs rhsLocs
+                  , EndOfReg _ Output dstEnd <- [loc]
+                  , Just dstVar <- [M.lookup (fromRegVarToFreeVarsTy dstEnd) freeVarToVarEnv']
+                  , EndOfReg _ _ srcEnd <- [rhsLoc]
+                  , Just srcVar <- [M.lookup (fromRegVarToFreeVarsTy srcEnd) freeVarToVarEnv']
+                  , Just (MkTy2 MutCursorTy) <- [M.lookup srcVar tenv] ]
+            pure ( [ (fresh, [], immTy, rhs') ] ++ locBnds ++
+                   [ (v, [], CursorTy, mkProj 0 valProj)
+                   , (toEndV v, [], CursorTy, mkProj 1 valProj)
+                   , ("_", [], ProdTy [], Ext $ WriteCursorMutable startMut (VarE (toEndV v))) ]
+                   ++ regionWriteBacks
+                 , m1', m2' )
+      (bnds, m11', m22') <- dbgTrace (minChatLvl) "Print locs in cursorize Let " dbgTrace (minChatLvl) (sdoc (ty', locs, m1', m2', start_loc, start_var, useMutableCursors)) dbgTrace (minChatLvl) "End cursorize Let 2\n" if immutableIntoMutableOut then immutableIntoMutableOutBnds else case locs of
             [] -> if M.member start_loc m2'
                   -- If we have a packed type and its start location is an output mutable location.
                   -- Then, the start of the output location is where the old location points to.

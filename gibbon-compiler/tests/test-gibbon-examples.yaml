@@ -1483,7 +1483,7 @@ tests:
 
   # Fully-factored values shared through indirections; also checked under the
   # remaining flag sets by factored_indirections.sh.  Each runs in the modes it
-  # passes: GcShare, GcSafe and MixedLayout hit compile failures under mutable
+  # passes: GcShare and GcSafe hit compile failures under mutable
   # cursors that occur without any indirection (see the script).
   - name: IdTree.hs
     dir: tests/factored_indirections
@@ -1520,7 +1520,7 @@ tests:
   - name: MixedLayout.hs
     dir: tests/factored_indirections
     answer-file: tests/factored_indirections/MixedLayout.ans
-    run-modes: [gibbon2]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   # Programs that once compiled wrongly or not at all; also checked under the
   # remaining flag sets by fi_fixes.sh.
@@ -1531,6 +1531,10 @@ tests:
   - name: LinearFieldGrows.hs
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/LinearFieldGrows.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: LinearFieldMap.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/LinearFieldMap.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs

@@ -14,7 +14,6 @@
 #       mutable cursors
 #   M3  function that allocates a factored value in a local region, mutable
 #       cursors
-#   M4  factored type with a Linear packed field, mutable cursors
 #
 # Usage: factored_indirections.sh [gcc|clang]
 set -u
@@ -41,7 +40,6 @@ expect () {
     PassThru/noran_mut|MultiBuf/noran_mut|BigTree/noran_mut) echo M2 ;;
     GcShare/noran_mut|GcSafe/noran_mut) echo M2 ;;
     GcShare/mut_nonrec|GcSafe/mut_nonrec) echo M3 ;;
-    MixedLayout/noran_mut|MixedLayout/mut_nonrec) echo M4 ;;
     *) echo ok ;;
   esac
 }
