@@ -375,7 +375,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
              let nam' = if S.member nam sort_fns
                         then varAppend nam (toVar "_original")
                         else nam
-             body <- codegenTail init_venv M.empty init_fun_env sort_fns tal ty []
+             body <- codegenTail init_venv M.empty init_fun_env sort_fns (unitTailCalls ty tal) ty []
              let body' = (if gen_gc then ssDecls else []) ++ body
              let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
                               $items:body'
@@ -1379,6 +1379,89 @@ simdIsaGuard isa selectedBy =
           unwords (words (simdIsaCcFlags isa)) ++
           "), and this CPU does not support " ++ feature ++ ".\n" ++
           "Recompile with --simd-isa=sse2.\n"
+
+-- | Turn a unit-returning call in tail position into a real C tail call.
+--
+-- Under mutable cursors a call to a function returning unit is lowered as
+--
+-- > unsigned char void_call = f(...);
+-- > GibCursor deref_end = *end_r;      // unused read-backs of the cursors
+-- > GibCursor end_rst[2];             // (SoA: a fresh cursor array,
+-- > memcpy(end_rst, cur, ...);         //  filled and never read)
+-- > return 0;
+--
+-- which returns a constant rather than the call's result.  gcc will not
+-- turn that into a jump ("call and return value are different"), so a
+-- self-recursive builder such as @mkList@ recurses once per element and a
+-- 100M-element list exhausts the C stack; clang happens to see through it.
+-- Unit has exactly one value, which every function of that type returns, so
+-- when the enclosing function also returns unit, @return f(...)@ is the same
+-- program -- and one gcc can tail-call.
+--
+-- Only TRUE tail positions are rewritten: let-bodies, if branches and switch
+-- alternatives.  Join points (LetIfT), loop bodies and timed blocks are not
+-- tail positions and are left alone, as is any call that is async or is
+-- followed by anything other than unused cursor reads.
+unitTailCalls :: Ty -> Tail -> Tail
+unitTailCalls (ProdTy []) = go
+  where
+    go tl = case tl of
+      LetCallT { async = False, binds = [(res, ProdTy [])], rator, rands, bod }
+        | deadUntilUnitReturn (S.singleton res) S.empty bod -> TailCall rator rands
+      LetCallT{bod}        -> tl { bod = go bod }
+      LetPrimCallT{bod}    -> tl { bod = go bod }
+      LetTrivT{bod}        -> tl { bod = go bod }
+      LetIfT{bod}          -> tl { bod = go bod }
+      LetUnpackT{bod}      -> tl { bod = go bod }
+      LetAllocT{bod}       -> tl { bod = go bod }
+      LetAvailT{bod}       -> tl { bod = go bod }
+      LetArenaT{bod}       -> tl { bod = go bod }
+      IfT tst con els      -> IfT tst (go con) (go els)
+      Switch lbl trv alts def ->
+        Switch lbl trv (goAlts alts) (fmap go def)
+      _ -> tl
+
+    goAlts (TagAlts as) = TagAlts [ (t, go b) | (t, b) <- as ]
+    goAlts (IntAlts as) = IntAlts [ (i, go b) | (i, b) <- as ]
+
+    -- Everything between the call and @return 0@ must be dead:
+    --
+    --  * a read nobody uses: a cursor read-back (DerefMutCursor), a cursor
+    --    array copied out of memory (CastPtr), or a trivial binding;
+    --  * a MemCpy whose destination is one of those fresh locals (SoA declares
+    --    an uninitialised cursor array, then fills it with a separate MemCpy).
+    --
+    -- @bound@ holds every binder introduced since the call (none may be read)
+    -- and @locals@ the arrays declared since the call (the only memory a
+    -- MemCpy here may write).  None of these has an effect beyond those dead
+    -- locals, so dropping them -- which the tail call does -- is safe.
+    deadUntilUnitReturn :: S.Set Var -> S.Set Var -> Tail -> Bool
+    deadUntilUnitReturn bound locals t = case t of
+      RetValsT [] -> True
+      LetPrimCallT { binds = [(v, _)], prim, rands, bod }
+        | prim `elem` [DerefMutCursor, CastPtr] ->
+        notReading bound rands
+          && deadUntilUnitReturn (S.insert v bound) locals bod
+      LetPrimCallT { binds = [], prim = MemCpy, rands = VarTriv dst : rest, bod } ->
+        dst `S.member` locals
+          && notReading bound rest
+          && deadUntilUnitReturn bound locals bod
+      LetTrivT { bnd = (v, _, rhs), bod } ->
+        notReading bound [rhs]
+          && deadUntilUnitReturn (S.insert v bound) (S.insert v locals) bod
+      _ -> False
+
+    notReading :: S.Set Var -> [Triv] -> Bool
+    notReading bound = not . any (`S.member` bound) . concatMap trivVars
+
+    trivVars :: Triv -> [Var]
+    trivVars trv = case trv of
+      VarTriv v                 -> [v]
+      ProdTriv ts               -> concatMap trivVars ts
+      ProjTriv _ t              -> trivVars t
+      IndexCursorArrayTriv _ t  -> trivVars t
+      _                         -> []
+unitTailCalls _ = id
 
 builtinFieldTys :: [String]
 builtinFieldTys =
