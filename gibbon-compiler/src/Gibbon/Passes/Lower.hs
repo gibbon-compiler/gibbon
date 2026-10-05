@@ -785,15 +785,23 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
       let
         e_triv = triv sym_tbl "sum case scrutinee" e
+        T.VarTriv e_var = e_triv
 
+        -- Unpack from the node itself, tag included, as the product case
+        -- above does: the fields must be read through the same struct type
+        -- LetAllocT wrote them with.  Reading them through a tag-less struct
+        -- at `tail` is a strict-aliasing violation, and gcc deletes the
+        -- stores it then cannot see read (reduceNestedList under -flto).
         mk_alt :: (DataCon, [(Var,())], Exp3) -> PassM (Int64, T.Tail)
         mk_alt (con, bndrs, rhs) = do
+          alt_tag <- gensym $ toVar "tag"
           let
             con_tag = getTagOfDataCon ddefs con
-            bndr_tys = L.map typ (lookupDataCon ddefs con)
+            bndr_tys = T.IntTy W64 : L.map typ (lookupDataCon ddefs con)
             (bndrs',_) = unzip bndrs
           rhs' <- tail free_reg sym_tbl rhs
-          return ( fromIntegral con_tag, T.LetUnpackT (zip bndrs' bndr_tys) tail_bndr rhs' )
+          return ( fromIntegral con_tag
+                 , T.LetUnpackT (zip (alt_tag : bndrs') bndr_tys) e_var rhs' )
 
       alts' <- mapM mk_alt alts
       let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar tag_bndr
