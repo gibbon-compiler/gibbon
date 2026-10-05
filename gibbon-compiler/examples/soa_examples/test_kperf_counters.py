@@ -114,9 +114,11 @@ class TestKperfPlumbing(unittest.TestCase):
             seen["args"], seen["kwargs"] = args, kwargs
             return {}
 
-        with mock.patch.object(gb, "collect_pldi_variant_results", side_effect=fake):
+        with mock.patch.object(gb, "collect_pldi_variant_results", side_effect=fake), \
+             mock.patch.object(gb, "run_alignment_probe", return_value=None) as probe:
             gb.collect_pldi_counter_results(Path("programs"), Path("out"), "gcc", False,
                                             iterations=5, pin_cpu=None, backend="kperf")
+        probe.assert_called_once()
         self.assertTrue(seen["kwargs"]["enable_kperf"])
         self.assertFalse(seen["kwargs"].get("enable_papi_native", False))
         self.assertIsNone(seen["kwargs"]["pin_cpu"])
@@ -219,7 +221,8 @@ class TestPerConfigTable(unittest.TestCase):
     def setUp(self):
         self.addCleanup(importlib.reload, gb)
         gb.apply_config_selection(["aos_imm", "aos_mut", "soa_mut", "ptr"])
-        counts = {"aos_imm": 300, "aos_mut": 200, "soa_mut": 100, "ptr": 900}
+        # Above the noise floor, so the row's extremes are marked.
+        counts = {"aos_imm": 30000, "aos_mut": 20000, "soa_mut": 10000, "ptr": 90000}
         self.by_cfg = {cfg: _counted("P.hs", cfg, {
             "sumTree": ("fold", {"L1D_LOAD_MISSES": v, "CPU_CYCLES": 10 * v}),
             "add1Tree": ("map", {"L1D_LOAD_MISSES": v + 1})})
@@ -239,9 +242,10 @@ class TestPerConfigTable(unittest.TestCase):
         self.assertIn(" & $P$", table)
         self.assertIn("\\textit{L1D load misses}", table)
         # Fewest green (soa_mut), most red (ptr), in the sumTree row.
-        row = next(l for l in table.splitlines() if l.startswith("sumTree &"))
-        self.assertIn("\\textcolor{%s}{%s}" % (gb.COLOR_FASTEST, gb._fmt_counter(100)), row)
-        self.assertIn("\\textcolor{%s}{%s}" % (gb.COLOR_SLOWEST, gb._fmt_counter(900)), row)
+        l1d = table[table.index("\\textit{L1D load misses}"):]
+        row = next(l for l in l1d.splitlines() if l.startswith("sumTree &"))
+        self.assertIn("\\textcolor{%s}{%s}" % (gb.COLOR_FASTEST, gb._fmt_counter(10000)), row)
+        self.assertIn("\\textcolor{%s}{%s}" % (gb.COLOR_SLOWEST, gb._fmt_counter(90000)), row)
 
     def test_rendered_without_an_aos_soa_pair(self):
         only = {k: v for k, v in self.by_cfg.items() if k in ("aos_imm", "ptr")}
@@ -250,6 +254,104 @@ class TestPerConfigTable(unittest.TestCase):
         self.assertIn("per-configuration counters", tex)
         self.assertNotIn("counter totals, AoS vs SoA", tex)
         self.assertIn("\\paragraph{Hardware counters.}", tex)
+
+
+class TestKperfMemoryRows(unittest.TestCase):
+    """The M1 has no L2/LLC miss events. Its other memory events must appear
+    under their own names, in a fixed order, and never as L2/LLC rows."""
+
+    def setUp(self):
+        self.addCleanup(importlib.reload, gb)
+
+    def test_proxies_render_under_their_own_names(self):
+        gb.apply_config_selection(["aos_mut", "ptr"])
+        counts = {m: 10 for m in gb.KPERF_COUNTER_METRICS}
+        results = {"P.hs": {cfg: _counted("P.hs", cfg, {"p": ("fold", counts)})
+                            for cfg in ("aos_mut", "ptr")}}
+        buf = io.StringIO()
+        gb.write_pldi_counter_tables(buf, results)
+        table = buf.getvalue()[buf.getvalue().index("per-configuration counters"):]
+        rows = [l for l in table.splitlines() if l.startswith("\\multicolumn{3}{l}{\\textit{")]
+        labels = [r.split("\\textit{")[1].split("}")[0] for r in rows]
+        self.assertEqual(labels[-4:], ["L1D load misses (incl. speculative)",
+                                       "Dispatch-stall cycles", "Data page walks",
+                                       "64B-crossing loads/stores"])
+        # The shared ones come first, under their own heading.
+        self.assertEqual(labels[:5], [gb.counter_label(m) for m in gb.SHARED_COUNTER_METRICS])
+        self.assertLess(table.index("Counted the same way on the M1 and x86"),
+                        table.index("This machine only"))
+        self.assertNotIn("L2 data misses", labels)
+        self.assertNotIn("LLC misses", labels)
+
+    def test_kperf_metric_list_names_no_l2_or_llc_cache_event(self):
+        self.assertFalse({"L2D_MISSES", "LLC_LOAD_MISSES", "L2I_MISSES"}
+                         & set(gb.KPERF_COUNTER_METRICS))
+        self.assertEqual(len(gb.KPERF_COUNTER_METRICS), 9)
+
+
+PROBE = {"aligned": {"latency_ns": 1.26, "throughput_ns": 0.2},
+         "unaligned_in_64B": {"latency_ns": 1.255, "throughput_ns": 0.2},
+         "cross_64B": {"latency_ns": 1.258, "throughput_ns": 0.2},
+         "cross_128B_line": {"latency_ns": 1.33, "throughput_ns": 0.21}}
+
+
+class TestAlignmentTables(unittest.TestCase):
+    """The tables that let a reader check misalignment against measurements:
+    the probe's per-class cost and, per pass, crossings and a time bound."""
+
+    def setUp(self):
+        self.addCleanup(importlib.reload, gb)
+
+    def test_penalty_is_the_worst_extra_latency(self):
+        self.assertAlmostEqual(gb.alignment_penalty_ns(PROBE), 0.07)
+        self.assertIsNone(gb.alignment_penalty_ns(None))
+        flat = {k: {"latency_ns": 1.0, "throughput_ns": 0.2} for k in PROBE}
+        self.assertEqual(gb.alignment_penalty_ns(flat), 0.0)
+
+    def test_the_probe_compiles_and_reports_every_class(self):
+        with tempfile.TemporaryDirectory() as d:
+            probe = gb.run_alignment_probe(Path(d), "cc")
+        self.assertEqual(set(probe), {"aligned", "unaligned_in_64B", "cross_64B",
+                                      "cross_128B_line"})
+        for v in probe.values():
+            self.assertGreater(v["latency_ns"], 0)
+
+    def _tex(self):
+        gb.apply_config_selection(["aos_mut", "ptr"])
+        gb.COUNTER_BACKEND = "kperf"
+        gb.ALIGNMENT_PROBE = PROBE
+        counts = {"aos_mut": {"CROSS_64B_ACCESSES": 31000, "INSTRUCTIONS": 7500000},
+                  "ptr": {"CROSS_64B_ACCESSES": 10, "INSTRUCTIONS": 4000000}}
+        results = {"P.hs": {cfg: _counted("P.hs", cfg, {"sumTree": ("fold", c)})
+                            for cfg, c in counts.items()}}
+        buf = io.StringIO()
+        gb.write_pldi_counter_tables(buf, results)
+        return buf.getvalue()
+
+    def test_tables_carry_the_measured_cost_and_the_bound(self):
+        tex = self._tex()
+        self.assertIn("crossing a 128 B block & 1.330 & 0.210", tex)
+        table = tex[tex.index("misaligned accesses --"):]
+        row = [l for l in table.splitlines() if l.startswith("sumTree &")]
+        # 31000/7.5e6*1000 = 4.13; 31000 * 0.07 ns / 0.1 s = 0.00%(2e-3 %).
+        self.assertEqual(row[0], "sumTree & 4.13 & 0.00 \\\\")
+        self.assertEqual(row[1], "sumTree & 0.00\\% & 0.00\\% \\\\")
+
+    def test_no_alignment_tables_for_papi_runs(self):
+        tex = self._tex()
+        self.assertIn("misaligned accesses", tex)
+        gb.COUNTER_BACKEND = "papi"
+        buf = io.StringIO()
+        gb.write_pldi_alignment_tables(buf, {"P.hs": {}})
+        self.assertEqual(buf.getvalue(), "")
+
+    def test_replot_restores_the_probe(self):
+        f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump({"campaign": {"codegen": {"counter_backend": "kperf",
+                                            "alignment_probe": PROBE}}}, f)
+        f.close()
+        gb.adopt_stored_campaign_settings(Path(f.name))
+        self.assertEqual(gb.ALIGNMENT_PROBE, PROBE)
 
 
 class TestNotesAndReplot(unittest.TestCase):
@@ -312,6 +414,12 @@ class TestCommandLine(unittest.TestCase):
         r = self._run("--pldi-kperf-counters")
         self.assertEqual(r.returncode, 2)
         self.assertIn("pass --pldi-submission too", r.stderr)
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS-only message")
+    def test_papi_counters_on_macos_name_the_kperf_flag(self):
+        r = self._run("--pldi-submission", "--pldi-cache-counters", "--pin-cpu", "auto")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("on macOS use --pldi-kperf-counters", r.stderr)
 
     def test_one_backend_at_a_time(self):
         r = self._run("--pldi-submission", "--pldi-kperf-counters", "--pldi-cache-counters")

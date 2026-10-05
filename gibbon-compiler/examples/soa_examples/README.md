@@ -295,6 +295,15 @@ configuration. It is not a packed layout, so it takes no part in the
 $A^{\min}/S^{\min}$ column. Its delta column $\Delta^{P}_{pk}$ compares it
 against vanilla Gibbon ($A_{ri}$), and is positive when packed is faster.
 
+### Vanilla Gibbon is shaded
+
+Vanilla Gibbon, $A_{ri}^{+av}$ (AoS, immutable cursors, the C auto-vectorizer
+on, i.e. plain Gibbon at `-O3`), is shaded pale yellow in every table that shows
+it: its column in the per-pass, counter and alignment tables, its group columns in
+the summary-versus-vanilla table, and its row in the configuration key. Shading
+needs `\usepackage{colortbl}` in the document that `\input`s the tables; without
+it the tables compile unshaded. The preview PDF loads it.
+
 ### Input sizes (`--pldi-sizes`)
 
 Every sizable program fixes its input with one literal in `gibbon_main`
@@ -320,16 +329,23 @@ Programs you don't list keep their shipped size.
   their caption, with the shipped size. The summary tables and reading notes
   list all resized programs, and the results JSON records the sizes, which a
   `--figures-from-json` replot restores.
-- **Sizable programs:** List, MonoTree, TernaryTree, Add1TreeInt{8,16,32,64}
-  and ArithmeticIntensityInt{8,16,32,64}. Naming any other program is an error.
+- **Sizable programs:** List, MonoTree, TernaryTree, reduceNestedList,
+  Add1TreeInt{8,16,32,64} and ArithmeticIntensityInt{8,16,32,64}. Naming any
+  other program is an error.
 - **Not combinable with `--benchmark-ghc` or `--benchmark-mlton`,** since
   their sources have their own size literals. Sizes are also not applied to
   `--include-build-pass`'s build-only sources.
 
-**On macOS,** a configuration that recurses once per element can only go about
-8 MB deep. The C stack can't be raised at run time there the way the runtime
-does on Linux (4 GB). Such cells show `‡` at sizes Linux runs, and a smaller
-size is the way to get a number for them.
+**Stack depth.** A configuration that recurses once per element needs a deep C
+stack. On Linux the runtime raises the stack limit to 4 GB. macOS fixes the main
+thread's stack at 8 MB when the process starts, so there the generated `main`
+runs the program on a thread with the same 4 GB stack (reserved, not committed).
+Both machines therefore run the same sizes.
+
+**Memory.** `reduceNestedList` at its shipped size builds about 3×10⁹ list
+cells (~26 GB packed), and the pointer build keeps every build iteration's copy.
+`pldi_sizes.crossplatform.toml` sets it, MonoTree and Add1TreeInt* to sizes that
+fit a 16 GB machine; use the same file on every machine you compare.
 
 ### Hardware counters on macOS (`--pldi-kperf-counters`)
 
@@ -339,10 +355,11 @@ but reads the counters through Apple's private kperf framework, the interface
 Instruments uses. It's opt-in: without it, no command, binary or table
 changes.
 
-- **Counters:** cycles, instructions, L1D load misses and L1I misses. The
-  M1's event database (`/usr/share/kpep/a14.plist`) has no L2 or last-level
-  cache miss events, so those columns are absent. Each count's event name
-  appears in the counter notes.
+- **Counters:** see "What the counters count" below. The M1's event
+  database (`/usr/share/kpep/a14.plist`, 60 events) has **no L2 or last-level
+  cache miss event**: the L2 is shared by a core cluster and its counters are
+  outside the core PMU. Those rows are absent rather than filled with a
+  substitute.
 - **Needs root.** The driver asks for your sudo password once at start, then
   runs only the counter executables with `sudo -n`, keeping the sudo
   timestamp fresh in the background. Everything else, including compiling and
@@ -353,6 +370,51 @@ changes.
 - **Under the hood:** it compiles with `gibbon --enable-kperf`, which emits the
   counter reads only when given and builds the RTS with `KPERF=1`. See
   Note [kperf counters] in `gibbon-rts/rts-c/gibbon_rts.c`.
+
+**Misaligned accesses (kperf runs).** At the start of the kperf phase the driver
+compiles and runs `alignment_probe.c`, which measures what an 8-byte load costs on
+this machine when it is aligned, unaligned, crossing 64 bytes or crossing a 128-byte
+block. The report prints that as a calibration table. Each program then gets a table
+with, per pass and configuration, the counted 64-byte-crossing accesses per 1000
+instructions and an upper bound on the share of the pass's time they could cost: the
+crossings times the probe's largest extra latency, divided by the pass's time. The
+bound deliberately over-charges, treating every 64-byte crossing as a 128-byte-block
+crossing on the critical path.
+
+### What the counters count
+
+Both backends report five counters under the same names, so an M1 table and an
+x86 table line up row for row. Every counter table lists them first, under
+"Counted the same way on the M1 and x86":
+
+| Counter | M1 (kperf) | x86 (PAPI) |
+|---|---|---|
+| Cycles | `FIXED_CYCLES` | core cycles |
+| Instructions | `FIXED_INSTRUCTIONS` | instructions retired |
+| L1D load misses (retired) | `L1D_CACHE_MISS_LD_NONSPEC` | `MEM_LOAD_RETIRED:L1_MISS` |
+| L1I misses | `L1I_CACHE_MISS_DEMAND` (demand only) | `perf::L1-ICACHE-LOAD-MISSES` (includes prefetch) |
+| Data TLB misses | `L2_TLB_MISS_DATA` (loads and stores) | `DTLB_LOAD_MISSES:WALK_COMPLETED` (loads) |
+
+The last two are the closest each machine offers, not identical. Then, under
+"This machine only": on x86, L2 and LLC misses of retired loads
+(`MEM_LOAD_RETIRED:L2_MISS`, `:L3_MISS`); on the M1, L1D load misses including
+speculative ones, dispatch-stall cycles, data page walks and 64-byte-crossing
+accesses.
+
+- **Window.** The runtime reads the counters immediately around the timed
+  region of each iteration, so a count covers exactly what that iteration's
+  time covers, not the region save and reclaim around it.
+- **Two runs on x86.** A P-core of the i7-12700K counts four programmable
+  events beside cycles and instructions, one short of the x86 set. The counter
+  phase therefore runs each executable twice, once per event group
+  (`GIBBON_PAPI_GROUP=1`: L1D, L2, LLC; `=2`: L1I, DTLB), and merges them.
+- **Exact events.** The counter notes name the event behind every counter.
+  Each counter's alternative event names are spellings of the same event, never
+  a different one: a counter the CPU cannot count is listed as "Not counted",
+  and one read from more than one event is flagged.
+- **Noise.** A row whose largest count is under 1000 per iteration gets no
+  green/red marks and no AoS/SoA ratio, and a counter that is under that
+  everywhere is reduced to one line.
 
 Both counter backends now also produce a **per-configuration counter table**
 for each program. It has one column per measured configuration, grouped

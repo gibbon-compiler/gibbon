@@ -1998,15 +1998,7 @@ def select_preferred_papi_native_metrics() -> List[str]:
     """
     Logical native metrics emitted by --enable-papi-native output lines.
     """
-    return [
-        "CPU_CYCLES",
-        "INSTRUCTIONS",
-        "L1D_LOAD_MISSES",
-        "L1I_LOAD_MISSES",
-        "L2D_MISSES",
-        "L2I_MISSES",
-        "LLC_LOAD_MISSES",
-    ]
+    return list(PAPI_COUNTER_METRICS)
 
 
 def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> None:
@@ -2030,9 +2022,14 @@ def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> No
         r'^(?:PAPI|KPERF)_NATIVE\s+([A-Za-z0-9_]+)\[([^\]]+)\]=(-?\d+(?:\.\d+)?)$'
     )
 
+    # A metric this CPU has no event for is reported once per pass as
+    # `PAPI_NATIVE <METRIC>[unavailable]' (no value), never as a count.
+    unavailable_re = re.compile(r'^(?:PAPI|KPERF)_NATIVE\s+([A-Za-z0-9_]+)\[unavailable\]$')
+
     current: Optional[str] = None
     metric_values_by_pass: Dict[str, Dict[str, List[float]]] = {}
     metric_event_name: Dict[str, str] = {}
+    unavailable_by_pass: Dict[str, List[str]] = {}
 
     # Collect by pass block (Running pass ... End) so ordering inside a pass
     # does not matter (e.g. native metrics printed after the full loop).
@@ -2046,6 +2043,10 @@ def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> No
         if s == "End":
             current = None
             continue
+        m3 = unavailable_re.match(s)
+        if m3 and current is not None:
+            unavailable_by_pass.setdefault(current, []).append(m3.group(1))
+            continue
         m2 = native_re.match(s)
         if m2 and current is not None:
             metric = m2.group(1)
@@ -2056,6 +2057,10 @@ def attach_papi_native_to_passes(result: BenchmarkResult, raw_stdout: str) -> No
                 continue
             metric_event_name.setdefault(metric, event_name)
             metric_values_by_pass.setdefault(current, {}).setdefault(metric, []).append(value)
+
+    for pname, metrics in unavailable_by_pass.items():
+        if pname in result.passes:
+            result.passes[pname]["papi_unavailable"] = sorted(set(metrics))
 
     if not metric_values_by_pass:
         return
@@ -3956,6 +3961,11 @@ def _short_counter_label(counter: str) -> str:
     mapping = {
         "CPU_CYCLES": "CYC",
         "INSTRUCTIONS": "INS",
+        "L1D_LOAD_MISSES_RETIRED": "L1D",
+        "L1I_MISSES": "L1I",
+        "DTLB_MISSES": "DTLB",
+        "L2_LOAD_MISSES_RETIRED": "L2",
+        "LLC_LOAD_MISSES_RETIRED": "LLC",
         "L1D_LOAD_MISSES": "L1D",
         "L1I_LOAD_MISSES": "L1I",
         "L2D_MISSES": "L2D",
@@ -5260,6 +5270,12 @@ def _size_knobs() -> Dict[str, SizeKnob]:
             r"(\btree = mkTree )(\d+)([ \t]*)$", "depth",
             "oracles/batch_a_model.py:ternary_tree_sum",
             lambda d: _oracle_module("batch_a_model").ternary_tree_sum(d)),
+        # Each outer cell carries a 3000-element inner list, so memory grows
+        # with 3000 * n.
+        "reduceNestedList.hs": SizeKnob(
+            r"(\blst = mkList )(\d+)(\b)", "n (outer list elements)",
+            "oracles/batch_a_model.py:reduce_nested_list_sum",
+            lambda n: _oracle_module("batch_a_model").reduce_nested_list_sum(n)),
     }
     for width in (8, 16, 32, 64):
         knobs["Add1TreeInt%d.hs" % width] = SizeKnob(
@@ -6480,6 +6496,42 @@ def prepare_kperf_privileges() -> None:
     threading.Thread(target=keep_alive, name="sudo-keepalive", daemon=True).start()
 
 
+def run_alignment_probe(out_dir: Path, cc: str) -> Optional[Dict[str, Dict[str, float]]]:
+    """Compile and run alignment_probe.c; {class: {latency_ns, throughput_ns}}.
+
+    Runs as the driver's own user (it reads no counters). A failure is reported
+    and returns None, which only drops the alignment tables."""
+    src = Path(__file__).resolve().parent / "alignment_probe.c"
+    exe = Path(out_dir) / "alignment_probe"
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    built = subprocess.run([cc, "-O2", "-std=gnu11", str(src), "-o", str(exe)],
+                           capture_output=True, text=True)
+    if built.returncode != 0:
+        print("  !! alignment probe did not compile: %s" % built.stderr.strip()[-300:])
+        return None
+    ran = subprocess.run([str(exe)], capture_output=True, text=True)
+    if ran.returncode != 0:
+        print("  !! alignment probe failed: %s" % ran.stderr.strip()[-300:])
+        return None
+    probe: Dict[str, Dict[str, float]] = {}
+    for line in ran.stdout.splitlines()[1:]:
+        parts = line.strip().split(",")
+        if len(parts) == 3:
+            try:
+                probe[parts[0]] = {"latency_ns": float(parts[1]),
+                                   "throughput_ns": float(parts[2])}
+            except ValueError:
+                continue
+    needed = {"aligned", "unaligned_in_64B", "cross_64B", "cross_128B_line"}
+    if not needed <= set(probe):
+        print("  !! alignment probe printed an unexpected table")
+        return None
+    print("  Alignment probe: " + ", ".join(
+        "%s %.3f ns" % (k, probe[k]["latency_ns"]) for k in
+        ("aligned", "unaligned_in_64B", "cross_64B", "cross_128B_line")))
+    return probe
+
+
 def collect_pldi_counter_results(programs_dir: Path, out_dir: Path, cc: str,
                                  force: bool, iterations: int,
                                  c_arith_mode: str = DEFAULT_C_ARITH_MODE,
@@ -6507,6 +6559,8 @@ def collect_pldi_counter_results(programs_dir: Path, out_dir: Path, cc: str,
         # RTS). There is no pinning on macOS; the runtime asks for the
         # performance cores instead, which the counter notes say.
         COUNTER_BACKEND = "kperf"
+        global ALIGNMENT_PROBE
+        ALIGNMENT_PROBE = run_alignment_probe(out_dir / "counters_kperf", cc)
         _PAPI_COUNTER_ORDER = list(KPERF_COUNTER_METRICS)
         print("  Counter phase (kperf): %s" % ", ".join(_PAPI_COUNTER_ORDER))
         return collect_pldi_variant_results(
@@ -6522,11 +6576,68 @@ def collect_pldi_counter_results(programs_dir: Path, out_dir: Path, cc: str,
     COUNTER_BACKEND = "papi"
     _PAPI_COUNTER_ORDER = select_preferred_papi_native_metrics()
     print("  Counter phase: %s" % ", ".join(_PAPI_COUNTER_ORDER))
-    return collect_pldi_variant_results(
-        programs_dir, out_dir / "counters", cc, force, gibbon_exe=None,
-        iterations=iterations, c_arith_mode=c_arith_mode, simd_isa=simd_isa,
-        pin_cpu=pin_cpu, programs=programs, pass_rounds=pass_rounds,
-        enable_papi_native=True, measure_build=False)
+    # The core cannot count the whole set at once, so every executable runs
+    # once per group; the second pass reuses the first one's binaries.
+    groups = []
+    for i, (group, metrics) in enumerate(PAPI_COUNTER_GROUPS.items()):
+        print("  Counter group %d of %d: %s" % (i + 1, len(PAPI_COUNTER_GROUPS),
+                                                ", ".join(metrics)))
+        previous = os.environ.get("GIBBON_PAPI_GROUP")
+        os.environ["GIBBON_PAPI_GROUP"] = str(group)
+        try:
+            groups.append(collect_pldi_variant_results(
+                programs_dir, out_dir / "counters", cc, force and i == 0,
+                gibbon_exe=None, iterations=iterations,
+                c_arith_mode=c_arith_mode, simd_isa=simd_isa, pin_cpu=pin_cpu,
+                programs=programs, pass_rounds=pass_rounds,
+                enable_papi_native=True, measure_build=False))
+        finally:
+            if previous is None:
+                os.environ.pop("GIBBON_PAPI_GROUP", None)
+            else:
+                os.environ["GIBBON_PAPI_GROUP"] = previous
+    return merge_counter_groups(groups)
+
+
+def merge_counter_groups(groups: List[Dict[str, Dict[str, BenchmarkResult]]]
+                         ) -> Dict[str, Dict[str, BenchmarkResult]]:
+    """One counter result per program and configuration out of the runs of
+    each counter group.
+
+    The first group's result is kept -- its times, verification and the
+    cycles and instructions every group reads -- and each later group adds
+    the counters it alone read. A counter one group could not count but
+    another did is not reported as unavailable."""
+    if not groups:
+        return {}
+    merged = groups[0]
+    for later in groups[1:]:
+        for program, by_cfg in later.items():
+            for cfg, res in by_cfg.items():
+                base = merged.setdefault(program, {}).get(cfg)
+                if base is None:
+                    merged[program][cfg] = res
+                    continue
+                for pname, pdata in (res.passes or {}).items():
+                    bdata = (base.passes or {}).get(pname)
+                    if bdata is None:
+                        continue
+                    counters = bdata.setdefault("papi_counters", {})
+                    events = bdata.setdefault("papi_native_events", {})
+                    for metric, stats in (pdata.get("papi_counters") or {}).items():
+                        if metric not in counters:
+                            counters[metric] = stats
+                            events[metric] = (pdata.get("papi_native_events") or {}).get(metric, "")
+                    gone = set(bdata.get("papi_unavailable") or []) | set(pdata.get("papi_unavailable") or [])
+                    gone -= set(counters)
+                    if gone:
+                        bdata["papi_unavailable"] = sorted(gone)
+                    else:
+                        bdata.pop("papi_unavailable", None)
+                for metric in (getattr(res, "papi_counters", None) or []):
+                    if metric not in (base.papi_counters or []):
+                        base.papi_counters = list(base.papi_counters or []) + [metric]
+    return merged
 
 
 def _sig4(value: Optional[float]) -> str:
@@ -6638,6 +6749,16 @@ def _pldi_cell(res: Optional[BenchmarkResult],
 # only xcolor, no palette options.
 COLOR_FASTEST = "gibbonfast"   # forest green
 COLOR_SLOWEST = "gibbonslow"   # red
+COLOR_VANILLA = "gibbonvanilla"  # pale yellow cell background
+
+
+def _vanilla_shade(config: str, cell: str) -> str:
+    """`cell' shaded as Vanilla Gibbon's when `config' is that configuration.
+
+    Vanilla Gibbon is the AoS, immutable-cursor build with the C
+    auto-vectorizer on -- what plain Gibbon gives at gcc -O3 -- so the
+    reader can find the baseline in every table that shows it."""
+    return ("\\gibbonvanilla " + cell) if config == SUMMARY_VANILLA_AOS else cell
 
 
 def _highlight_row_extremes(cells: List[Tuple[str, Optional[float]]]) -> List[str]:
@@ -6697,8 +6818,9 @@ def _table_pldi_legend(f) -> None:
         if i:
             f.write("\\addlinespace\n")
         for key in keys:
-            f.write("%s & %s \\\\\n" % (PLDI_COL_SYMBOLS.get(key, _tex_escape(key)),
-                                        _tex_escape(PLDI_ROW_LABELS.get(key, key))))
+            f.write("%s & %s \\\\\n"
+                    % (_vanilla_shade(key, PLDI_COL_SYMBOLS.get(key, _tex_escape(key))),
+                       _vanilla_shade(key, _tex_escape(PLDI_ROW_LABELS.get(key, key)))))
     f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
 
@@ -6866,7 +6988,8 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
     _hdr = ("\\textbf{$\\Sigma_b$} & \\textbf{$\\Sigma_b\\%$}" if _is_map
             else "\\textbf{Uses} & \\textbf{Dead\\%}")
     f.write(" & " + _hdr
-            + "".join(" & %s" % PLDI_COL_SYMBOLS.get(k, _tex_escape(k)) for k in keys)
+            + "".join(" & %s" % _vanilla_shade(k, PLDI_COL_SYMBOLS.get(k, _tex_escape(k)))
+                      for k in keys)
             + " & $A^{\\min}$/$S^{\\min}$"
             + " \\\\\n\\midrule\n")
     for pname in pass_names:
@@ -6881,7 +7004,7 @@ def _render_pldi_table(f, program: str, results_for_program: Dict[str, Benchmark
         else:
             uses_s, dead_s = _pldi_field_usage(results_for_program, pname)
         f.write(_tex_escape(pname) + " & " + uses_s + " & " + dead_s
-                + "".join(" & %s" % c for c in cells)
+                + "".join(" & %s" % _vanilla_shade(k, c) for k, c in zip(keys, cells))
                 + " & " + spd + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n")
 
@@ -6899,6 +7022,8 @@ def _pldi_reading_notes(f) -> None:
         "is the symbol key. In each row the fastest configuration is "
         "\\textcolor{" + COLOR_FASTEST + "}{green} and the slowest "
         "\\textcolor{" + COLOR_SLOWEST + "}{red}. "
+        "Vanilla Gibbon, " + PLDI_COL_SYMBOLS.get(SUMMARY_VANILLA_AOS, "")
+        + ", is shaded yellow in every table that shows it. "
         + simd_isa_caption_note() + reclaim_caption_note()
         + sizes_overview_note() +
         "$A^{\\min}$/$S^{\\min}$ divides a row's fastest AoS configuration by "
@@ -7757,7 +7882,8 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
         # missing from this list, so a document that did not already load it
         # failed on an undefined control sequence.
         f.write("% Requires: \\usepackage{booktabs}, \\usepackage{graphicx}, "
-                "\\usepackage{amsmath} and \\usepackage{xcolor} in preamble\n")
+                "\\usepackage{amsmath} and \\usepackage{xcolor} in preamble;\n"
+                "% \\usepackage{colortbl} as well to shade Vanilla Gibbon's cells\n")
         # Defined here rather than assumed from a palette option, so the
         # generated file \input{}s into any document that loads xcolor.
         f.write("\\providecommand{\\gibbondefinecolors}{}\n")
@@ -7765,6 +7891,16 @@ def write_latex_tables(all_results: List[Tuple], out_file: Path,
                 % COLOR_FASTEST)
         f.write("\\definecolor{%s}{RGB}{204,0,0}%% red: row-slowest\n"
                 % COLOR_SLOWEST)
+        # Vanilla Gibbon's cells are shaded so the reader finds the baseline
+        # at a glance. Shading a cell needs colortbl; a document without it
+        # gets the same tables unshaded rather than an undefined \cellcolor.
+        f.write("\\definecolor{%s}{RGB}{255,243,176}%% pale yellow: Vanilla Gibbon\n"
+                % COLOR_VANILLA)
+        f.write("\\makeatletter\n"
+                "\\providecommand{\\gibbonvanilla}{}\n"
+                "\\@ifpackageloaded{colortbl}"
+                "{\\renewcommand{\\gibbonvanilla}{\\cellcolor{%s}}}{}\n"
+                "\\makeatother\n" % COLOR_VANILLA)
         # Half a point up from whatever size command the table selected.
         # \f@size is the current size as a bare number, so this is relative:
         # \small stays \small-ish, \footnotesize stays \footnotesize-ish,
@@ -7908,17 +8044,40 @@ def _pldi_counter_programs(counter_results) -> List[str]:
     return ordered + [p for p in counter_results if p not in canonical]
 
 
-def _table_pldi_counter_notes(f, counter_results, pair: Tuple[str, str]) -> None:
-    """What every counter table below rests on, said once.
-
-    The binaries, the events and the pinning each decide whether a number
-    means anything, and none of them is visible in a cell."""
-    events: Dict[str, str] = {}
-    for by_cfg in counter_results.values():
+def pldi_counter_events(counter_results) -> Dict[str, List[str]]:
+    """Every hardware event each counter was read from, over every pass of
+    every configuration. One event per counter is the only state in which a
+    row compares like with like."""
+    events: Dict[str, List[str]] = {}
+    for by_cfg in (counter_results or {}).values():
         for res in by_cfg.values():
             for pdata in (getattr(res, "passes", None) or {}).values():
                 for metric, event in (pdata.get("papi_native_events") or {}).items():
-                    events.setdefault(metric, event)
+                    if event and event not in events.setdefault(metric, []):
+                        events[metric].append(event)
+    return events
+
+
+def pldi_counters_unavailable(counter_results) -> List[str]:
+    """Counters this machine's runtime asked for and had no event for."""
+    out = set()
+    for by_cfg in (counter_results or {}).values():
+        for res in by_cfg.values():
+            for pdata in (getattr(res, "passes", None) or {}).values():
+                out.update(pdata.get("papi_unavailable") or [])
+    return sorted(out)
+
+
+def _table_pldi_counter_notes(f, counter_results, pair: Tuple[str, str]) -> None:
+    """What every counter table below rests on, said once.
+
+    The binaries, the window, the events and the pinning each decide whether
+    a number means anything, and none of them is visible in a cell."""
+    events = pldi_counter_events(counter_results)
+    mixed = {m: evs for m, evs in events.items() if len(evs) > 1}
+    for m, evs in mixed.items():
+        print("  WARNING: counter %s was read from %d different events (%s); "
+              "its rows compare different quantities." % (m, len(evs), ", ".join(evs)))
     f.write("% -- Counter tables: shared notes --\n")
     f.write("\\paragraph{Hardware counters.}\n")
     if not pldi_counters_present(counter_results):
@@ -7927,48 +8086,76 @@ def _table_pldi_counter_notes(f, counter_results, pair: Tuple[str, str]) -> None
                 "counter executable failed, so there are no counter tables. "
                 "The driver's warning list, and the \\texttt{error} field of "
                 "each result in the counters JSON, say why.\n\n")
-    if COUNTER_BACKEND == "kperf":
-        f.write("Counts come from Apple's kperf framework (macOS), read by "
-                "the runtime around each pass inside the iteration loop, "
-                "and each entry is the median over the iterations of that "
-                "pass. They count this program's thread only. They were "
-                "measured in a \\emph{separate} campaign phase from every "
-                "time reported above: those binaries carry the counter "
-                "reads and ran as root, so a time and a count in this "
-                "report never come from the same executable.\n")
-    else:
-        f.write("Counts come from PAPI, read by the runtime around each pass "
-                "inside the iteration loop, and each entry is the median over "
-                "the iterations of that pass. They were measured in a "
-                "\\emph{separate} campaign phase from every time reported above: "
-                "those binaries carry the counter reads and link against "
-                "libpapi, so a time and a count in this report never come from "
-                "the same executable.\n")
+    source = ("Apple's kperf framework (macOS), counting this program's "
+              "thread only" if COUNTER_BACKEND == "kperf" else "PAPI")
+    window = ("immediately around the timed region of each iteration, so a "
+              "count covers exactly what that iteration's time covers"
+              if COUNTER_WINDOW == "timed" else
+              "around each whole iteration, which also covers the region "
+              "save before the timed region and the region reclaim after it "
+              "(this report predates counting the timed region alone)")
+    f.write("Counts come from %s, read by the runtime %s; each entry is the "
+            "median over the iterations of that pass. They were measured in a "
+            "\\emph{separate} campaign phase from every time reported above, "
+            "with binaries that carry the counter reads%s, so a time and a "
+            "count in this report never come from the same executable.\n"
+            % (source, window,
+               " and ran as root" if COUNTER_BACKEND == "kperf"
+               else " and link against libpapi"))
     if pair:
         f.write("The layout comparison is \\texttt{%s} versus "
                 "\\texttt{%s}, the one chain step that changes the layout "
                 "and nothing else.\n"
                 % (_tex_escape(pair[0]), _tex_escape(pair[1])))
-    if events:
-        f.write("Events: "
-                + ", ".join("%s $=$ \\texttt{%s}"
-                            % (_tex_escape(counter_label(m)),
-                               _tex_escape(events[m]))
-                            for m in pldi_counters_present(counter_results)
-                            if m in events)
-                + ". ")
-        if COUNTER_BACKEND == "kperf":
-            f.write("These are the CPU's own kpep event names. macOS cannot "
-                    "pin a thread to a core, so each run asked for the "
-                    "performance cores (user-interactive QoS) and may still "
-                    "have been scheduled on an efficiency core in part. The "
-                    "M1 exposes no L2 or last-level cache miss events, so "
-                    "those columns are absent.\n")
-        else:
-            f.write("PAPI exposes no preset events on this hybrid CPU, so these "
-                    "are native names; runs are pinned to a performance core, "
-                    "where alone they count.\n")
-    f.write("\n\n")
+    present = pldi_counters_present(counter_results)
+    shared = [m for m in SHARED_COUNTER_METRICS if m in present]
+    own = [m for m in present if m not in SHARED_COUNTER_METRICS]
+    defs = COUNTER_DEFINITIONS.get(COUNTER_BACKEND, {})
+
+    def described(ms: List[str]) -> str:
+        return "; ".join(
+            "%s:%s (\\texttt{%s})"
+            % (_tex_escape(counter_label(m)),
+               (" " + _tex_escape(defs[m])) if m in defs else "",
+               _tex_escape(", ".join(events.get(m, [])) or "event not recorded"))
+            for m in ms)
+    if shared:
+        f.write("\\textbf{Counted the same way on the M1 (kperf) and x86 "
+                "(PAPI)}, and listed first in every table: %s. " % described(shared))
+    if own:
+        f.write("\\textbf{This machine only}: %s. " % described(own))
+    if COUNTER_BACKEND == "kperf":
+        f.write("The M1's core counters have no L2 or last-level cache miss "
+                "event, so the x86 tables' L2 and LLC rows have no counterpart "
+                "here. macOS cannot pin a thread to a core, so each run asked "
+                "for the performance cores (user-interactive QoS) and may still "
+                "have been scheduled on an efficiency core in part. ")
+    else:
+        f.write("PAPI exposes no preset events on this hybrid CPU, so these "
+                "are native names; runs are pinned to a performance core, "
+                "where alone they count. That core counts four programmable "
+                "events beside cycles and instructions, one short of this "
+                "set, so every counter executable ran twice: once for %s, "
+                "once for %s. Cycles and instructions are from the first run. "
+                % tuple(", ".join(_tex_escape(counter_label(m)) for m in ms
+                                  if m not in ("CPU_CYCLES", "INSTRUCTIONS"))
+                        for ms in PAPI_COUNTER_GROUPS.values()))
+    unavailable = pldi_counters_unavailable(counter_results)
+    if unavailable:
+        f.write("\\textbf{Not counted}: this CPU has no event for %s, so "
+                "those rows are absent rather than filled from a different "
+                "event. " % ", ".join(_tex_escape(counter_label(m)) for m in unavailable))
+    if mixed:
+        f.write("\\textbf{Warning}: %s was read from more than one event "
+                "across these runs (%s), so its rows compare different "
+                "quantities. "
+                % (", ".join(_tex_escape(counter_label(m)) for m in mixed),
+                   "; ".join("%s" % _tex_escape(", ".join(evs)) for evs in mixed.values())))
+    f.write("A row whose largest median is below %d counts per iteration is "
+            "noise for this purpose: its cells are printed but its fastest "
+            "and slowest are not marked, and a counter whose every row is "
+            "below that is reduced to one line saying so.\n\n\n"
+            % COUNTER_NOISE_FLOOR)
 
 
 def _table_pldi_counter_summary(f, counter_results,
@@ -8010,11 +8197,14 @@ def _table_pldi_counter_summary(f, counter_results,
             a = pldi_counter_total(by_cfg, aos_cfg, c)
             sv = pldi_counter_total(by_cfg, soa_cfg, c)
             cells.append(" & %s/%s" % (_counter_cell(a), _counter_cell(sv)))
-            if a is not None and sv is not None and sv > 0:
+            if (a is not None and sv is not None and sv > 0
+                    and max(a, sv) >= COUNTER_NOISE_FLOOR):
                 ratios[c].append(a / sv)
                 cells.append(" & %s" % _spd_cell(a / sv))
                 drawn = True
             else:
+                # A ratio of a handful of counts is noise, and in the
+                # geomean it would weigh as much as a real one.
                 cells.append(" & --")
         if not drawn:
             continue
@@ -8096,7 +8286,10 @@ def _table_pldi_counter_per_program(f, program: str, by_cfg,
             sv = pldi_counter_value(by_cfg, soa_cfg, pname, c)
             cells.append(" & %s/%s" % (_counter_cell(a), _counter_cell(sv)))
             if a is not None and sv is not None and sv > 0:
-                cells.append(" & %s" % _spd_cell(a / sv))
+                # Below the noise floor the counts are shown, their ratio not.
+                cells.append(" & %s" % (_spd_cell(a / sv)
+                                        if max(a, sv) >= COUNTER_NOISE_FLOOR
+                                        else "--"))
                 drawn = True
             else:
                 cells.append(" & --")
@@ -8136,10 +8329,7 @@ def _table_pldi_counter_per_config(f, program: str, by_cfg) -> None:
     layout; this one shows where each configuration (the pointer-based one
     included) stands on every counter, so a time difference in the timing
     tables can be read against the same columns here."""
-    present = pldi_counters_present({program: by_cfg})
-    counters = [c for c in tuple(PLDI_COUNTER_METRICS) + tuple(PLDI_COUNTER_CONTEXT)
-                if c in present]
-    counters += [c for c in present if c not in counters]
+    counters = pldi_counters_present({program: by_cfg})
     groups = [(label, [k for k in keys if k in by_cfg])
               for label, keys in _pldi_col_groups(PLDI_MAP_CONFIGS)]
     groups = [(label, keys) for label, keys in groups if keys]
@@ -8150,13 +8340,19 @@ def _table_pldi_counter_per_config(f, program: str, by_cfg) -> None:
     blocks = []
     for c in counters:
         rows = []
+        block_max = 0.0
         for pname in names:
             raw = [(_counter_cell(v), v)
                    for v in (pldi_counter_value(by_cfg, k, pname, c) for k in keys)]
-            if any(v is not None for _t, v in raw):
-                rows.append((pname, _highlight_row_extremes(raw)))
+            values = [v for _t, v in raw if v is not None]
+            if values:
+                block_max = max(block_max, max(values))
+                # Fewest and most mean nothing among a handful of counts.
+                rows.append((pname, _highlight_row_extremes(raw)
+                             if max(values) >= COUNTER_NOISE_FLOOR
+                             else [t for t, _v in raw]))
         if rows:
-            blocks.append((c, rows))
+            blocks.append((c, rows, block_max))
     if not blocks:
         return
     display = program.replace(".hs", "")
@@ -8166,7 +8362,8 @@ def _table_pldi_counter_per_config(f, program: str, by_cfg) -> None:
             "measured configuration (Table~\\ref{tab:pldi-legend} is the "
             "symbol key). Each cell is the median count per iteration of "
             "that pass; in each row the fewest is \\textcolor{%s}{green} "
-            "and the most \\textcolor{%s}{red}. `--' marks a configuration "
+            "and the most \\textcolor{%s}{red}, except in rows below the "
+            "noise floor the counter notes give. `--' marks a configuration "
             "with no verified count for that pass. %s}\n"
             % (_tex_escape(display), COLOR_FASTEST, COLOR_SLOWEST,
                size_caption_note(program)))
@@ -8183,15 +8380,160 @@ def _table_pldi_counter_per_config(f, program: str, by_cfg) -> None:
         rules.append("\\cmidrule(lr){%d-%d}" % (col, col + len(ks) - 1))
         col += len(ks)
     f.write("".join(rules) + "\n")
-    f.write("".join(" & %s" % PLDI_COL_SYMBOLS.get(k, _tex_escape(k)) for k in keys)
+    f.write("".join(" & %s" % _vanilla_shade(k, PLDI_COL_SYMBOLS.get(k, _tex_escape(k)))
+                    for k in keys)
             + " \\\\\n")
-    for c, rows in blocks:
+    heading = None
+    for c, rows, block_max in blocks:
+        # Counters the other machine also reports come first, under their own
+        # heading, so the two machines' tables can be read side by side.
+        h = ("Counted the same way on the M1 and x86"
+             if c in SHARED_COUNTER_METRICS else "This machine only")
+        if h != heading:
+            f.write("\\midrule\n\\multicolumn{%d}{l}{\\textbf{%s}} \\\\\n"
+                    % (len(keys) + 1, h))
+            heading = h
         f.write("\\midrule\n\\multicolumn{%d}{l}{\\textit{%s}} \\\\\n"
                 % (len(keys) + 1, _tex_escape(counter_label(c))))
+        if block_max < COUNTER_NOISE_FLOOR:
+            f.write("\\multicolumn{%d}{l}{\\quad every pass and configuration "
+                    "below %d per iteration (at most %s): noise level} \\\\\n"
+                    % (len(keys) + 1, COUNTER_NOISE_FLOOR, _counter_cell(block_max)))
+            continue
         for pname, cells in rows:
-            f.write(_tex_escape(pname) + "".join(" & %s" % x for x in cells)
+            f.write(_tex_escape(pname)
+                    + "".join(" & %s" % _vanilla_shade(k, x) for k, x in zip(keys, cells))
                     + " \\\\\n")
     f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
+
+
+ALIGNMENT_PROBE_ORDER = (("aligned", "aligned"),
+                         ("unaligned_in_64B", "unaligned, inside 64 B"),
+                         ("cross_64B", "crossing a 64 B boundary"),
+                         ("cross_128B_line", "crossing a 128 B block"))
+
+
+def alignment_penalty_ns(probe: Optional[Dict[str, Dict[str, float]]]) -> Optional[float]:
+    """The largest measured extra latency of a misaligned 8-byte load over an
+    aligned one: what the bound charges every counted 64-byte crossing."""
+    if not probe or "aligned" not in probe:
+        return None
+    base = probe["aligned"]["latency_ns"]
+    worst = max(v["latency_ns"] for k, v in probe.items() if k != "aligned")
+    return max(0.0, worst - base)
+
+
+def _pldi_pass_seconds(by_cfg: Dict[str, BenchmarkResult], cfg: str,
+                       pname: str) -> Optional[float]:
+    """The counter run's own median seconds for one pass (same rules as
+    pldi_counter_value: the member that ran it, verified results only)."""
+    res = by_cfg.get(cfg)
+    origin = getattr(res, "pass_origin", None) if res is not None else None
+    if origin is not None and pname in origin:
+        res = origin[pname]
+    if not prov.verified_result(res) or not res.passes:
+        return None
+    t = (res.passes.get(pname) or {}).get("median_time")
+    return float(t) if t else None
+
+
+def _table_alignment_probe(f, probe: Dict[str, Dict[str, float]]) -> None:
+    f.write("% -- Table: misaligned-load cost on this machine --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{What an 8-byte load costs by alignment on the machine that "
+            "ran the counter phase, measured at the start of that phase "
+            "(\\texttt{alignment\\_probe.c}): data resident in L1, latency over a "
+            "dependent chain and throughput over independent loads, median of 3. "
+            "The bound in the per-program alignment tables charges every counted "
+            "64-byte crossing the largest extra latency in this table.}\n")
+    f.write("\\label{tab:pldi_alignment_probe}\n\\small\n")
+    f.write("\\begin{tabular}{l r r}\n\\toprule\n")
+    f.write("\\textbf{8-byte load} & \\textbf{Latency (ns)} & "
+            "\\textbf{Throughput (ns/load)} \\\\\n\\midrule\n")
+    for key, label in ALIGNMENT_PROBE_ORDER:
+        v = probe.get(key)
+        if v:
+            f.write("%s & %.3f & %.3f \\\\\n" % (label, v["latency_ns"], v["throughput_ns"]))
+    f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\n")
+
+
+def _table_pldi_alignment(f, program: str, by_cfg, penalty_ns: float) -> None:
+    """One program: per pass and configuration, the counted 64-byte-crossing
+    accesses per 1000 instructions, and an upper bound on the share of the
+    pass's time they could cost."""
+    groups = [(label, [k for k in keys if k in by_cfg])
+              for label, keys in _pldi_col_groups(PLDI_MAP_CONFIGS)]
+    groups = [(label, keys) for label, keys in groups if keys]
+    keys = [k for _label, ks in groups for k in ks]
+    names = _pldi_pass_names(by_cfg, "fold") + _pldi_pass_names(by_cfg, "map")
+    rate_rows, bound_rows = [], []
+    for pname in names:
+        rates, bounds = [], []
+        for k in keys:
+            cross = pldi_counter_value(by_cfg, k, pname, "CROSS_64B_ACCESSES")
+            instr = pldi_counter_value(by_cfg, k, pname, "INSTRUCTIONS")
+            secs = _pldi_pass_seconds(by_cfg, k, pname)
+            rates.append("%.2f" % (1000.0 * cross / instr)
+                         if cross is not None and instr else "--")
+            bounds.append("%.2f\\%%" % (100.0 * cross * penalty_ns * 1e-9 / secs)
+                          if cross is not None and secs else "--")
+        if any(r != "--" for r in rates):
+            rate_rows.append((pname, rates))
+        if any(b != "--" for b in bounds):
+            bound_rows.append((pname, bounds))
+    if not rate_rows and not bound_rows:
+        return
+    display = program.replace(".hs", "")
+    f.write(f"% -- Table: {display} misaligned accesses --\n")
+    f.write("\\begin{table}[t]\n\\centering\n")
+    f.write("\\caption{Misaligned accesses in \\texttt{%s}, every measured "
+            "configuration. \\emph{Per 1000 instructions}: loads and stores that "
+            "crossed a 64-byte boundary (\\texttt{LDST\\_X64\\_UOP}) per thousand "
+            "retired instructions. \\emph{Upper bound}: those crossings times "
+            "%.3f\\,ns, the largest extra latency of a misaligned load in "
+            "Table~\\ref{tab:pldi_alignment_probe}, as a share of the pass's "
+            "median time in the same counter run -- an over-estimate, since it "
+            "charges every 64-byte crossing as a 128-byte-block crossing on the "
+            "critical path. %s}\n"
+            % (_tex_escape(display), penalty_ns, size_caption_note(program)))
+    f.write("\\label{tab:%s_pldi_alignment}\n" % display)
+    f.write(_table_size_directive(len(keys) + 1))
+    f.write("\\gibbonfit{%\n\\begin{tabular}{l" + " r" * len(keys) + "}\n\\toprule\n")
+    f.write("\\textbf{Pass}"
+            + "".join(" & \\multicolumn{%d}{c}{\\textbf{%s}}" % (len(ks), label)
+                      for label, ks in groups) + " \\\\\n")
+    col, rules = 2, []
+    for _label, ks in groups:
+        rules.append("\\cmidrule(lr){%d-%d}" % (col, col + len(ks) - 1))
+        col += len(ks)
+    f.write("".join(rules) + "\n")
+    f.write("".join(" & %s" % _vanilla_shade(k, PLDI_COL_SYMBOLS.get(k, _tex_escape(k)))
+                    for k in keys)
+            + " \\\\\n")
+    for title, rows in (("64-byte crossings per 1000 instructions", rate_rows),
+                        ("Upper bound on the pass time they cost", bound_rows)):
+        if not rows:
+            continue
+        f.write("\\midrule\n\\multicolumn{%d}{l}{\\textit{%s}} \\\\\n" % (len(keys) + 1, title))
+        for pname, cells in rows:
+            f.write(_tex_escape(pname)
+                    + "".join(" & %s" % _vanilla_shade(k, c) for k, c in zip(keys, cells))
+                    + " \\\\\n")
+    f.write("\\bottomrule\n\\end{tabular}}\n\\end{table}\n\n\n")
+
+
+def write_pldi_alignment_tables(f, counter_results) -> None:
+    """The measured misaligned-load cost and, per program, the counted
+    crossings with the bound they imply. kperf runs only: they need the
+    64-byte-crossing counter and the probe from that phase."""
+    penalty = alignment_penalty_ns(ALIGNMENT_PROBE)
+    if COUNTER_BACKEND != "kperf" or penalty is None:
+        return
+    if "CROSS_64B_ACCESSES" not in pldi_counters_present(counter_results):
+        return
+    _table_alignment_probe(f, ALIGNMENT_PROBE)
+    for program in _pldi_counter_programs(counter_results):
+        _table_pldi_alignment(f, program, counter_results[program], penalty)
 
 
 def write_pldi_counter_tables(f, counter_results) -> None:
@@ -8220,6 +8562,7 @@ def write_pldi_counter_tables(f, counter_results) -> None:
         _table_pldi_counter_notes(f, counter_results, None)
     for program in _pldi_counter_programs(counter_results):
         _table_pldi_counter_per_config(f, program, counter_results[program])
+    write_pldi_alignment_tables(f, counter_results)
 
 
 # ColorOctree.hs's passes, split out of the combined OctTree row.
@@ -8552,7 +8895,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
         # configuration, and nothing else.
         _A = PLDI_COL_SYMBOLS.get(aos_config, _tex_escape(aos_config))
         _S = PLDI_COL_SYMBOLS.get(soa_config, _tex_escape(soa_config))
-        group_sub = f" & {_A} (s) & {_S} (s) & {_A}/{_S}"
+        group_sub = f" & {_vanilla_shade(aos_config, _A + ' (s)')} & {_S} (s) & {_A}/{_S}"
         f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
         f.write(
             "\\textbf{Program} & \\textbf{ADT} & \\textbf{SoA}"
@@ -8571,11 +8914,13 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
             " & \\multicolumn{5}{c}{\\textbf{Map passes}} \\\\\n"
         )
         f.write("\\cmidrule(lr){4-8}\\cmidrule(lr){9-13}\\cmidrule(lr){14-18}\n")
+        # Ai is vanilla Gibbon.
+        _ai_head = _vanilla_shade(SUMMARY_VANILLA_AOS, "Ai (s)")
         f.write(
             " & fields & bufs"
-            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm"
-            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm"
-            " & Am (s) & Ai (s) & Sm (s) & Am/Sm & Ai/Sm \\\\\n"
+            + " & Am (s) & %s & Sm (s) & Am/Sm & Ai/Sm" % _ai_head
+            + " & Am (s) & %s & Sm (s) & Am/Sm & Ai/Sm" % _ai_head
+            + " & Am (s) & %s & Sm (s) & Am/Sm & Ai/Sm \\\\\n" % _ai_head
         )
     else:
         f.write("\\gibbonfit{%\n\\begin{tabular}{l c c r r r r r r r r r}\n\\toprule\n")
@@ -8653,7 +8998,7 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
                 sl = _summary_loopified_total(pldi_variant_results, aos.program,
                                               soa_config, members, ptype)
                 spd = _spd_cell(al / sl) if al and sl and sl > 0 else "--"
-                cells += (f" & {fmt(al) if al and al > 0 else '--'}"
+                cells += (f" & {_vanilla_shade(aos_config, fmt(al) if al and al > 0 else '--')}"
                           f" & {fmt(sl) if sl and sl > 0 else '--'}"
                           f" & {spd}")
             f.write(f"{prog} & {adt_str} & {bufs_str}{cells} \\\\\n")
@@ -8663,17 +9008,17 @@ def _table_summary(f, all_results, all_variants_results: Optional[List[Dict]] = 
             f.write(
                 f"{prog} & {adt_str} & {bufs_str}"
                 f" & {fmt(at) if at and at > 0 else '--'}"
-                f" & {fmt(ait) if ait and ait > 0 else '--'}"
+                f" & {_vanilla_shade(SUMMARY_VANILLA_AOS, fmt(ait) if ait and ait > 0 else '--')}"
                 f" & {fmt(st) if st and st > 0 else '--'}"
                 f" & {tspd_s}"
                 f" & {t_ai_sm_s}"
                 f" & {fmt(af) if af and af > 0 else '--'}"
-                f" & {fmt(aif) if aif and aif > 0 else '--'}"
+                f" & {_vanilla_shade(SUMMARY_VANILLA_AOS, fmt(aif) if aif and aif > 0 else '--')}"
                 f" & {fmt(sf) if sf and sf > 0 else '--'}"
                 f" & {fspd_s}"
                 f" & {f_ai_sm_s}"
                 f" & {fmt(am) if am and am > 0 else '--'}"
-                f" & {fmt(aim) if aim and aim > 0 else '--'}"
+                f" & {_vanilla_shade(SUMMARY_VANILLA_AOS, fmt(aim) if aim and aim > 0 else '--')}"
                 f" & {fmt(sm) if sm and sm > 0 else '--'}"
                 f" & {mspd_s}"
                 f" & {m_ai_sm_s} \\\\\n"
@@ -9955,7 +10300,9 @@ def compile_latex_preview(tex_file: Path, out_dir: Path):
         "\\documentclass{article}\n"
         "\\usepackage{booktabs}\n"
         "\\usepackage{graphicx}\n"
+        "\\usepackage{amsmath}\n"
         "\\usepackage{xcolor}\n"
+        "\\usepackage{colortbl}\n"
         "\\usepackage[margin=0.5in,a3paper]{geometry}\n"
         "\\makeatletter\n"
         "\\renewenvironment{table}[1][]%\n"
@@ -10290,9 +10637,11 @@ def campaign_provenance(args) -> Dict[str, object]:
                                          else None),
                     "configurations": {layout: list(cfgs)
                                        for layout, cfgs in PLDI_MAP_CONFIGS.items()},
+                    "alignment_probe": ALIGNMENT_PROBE,
                     "counter_backend": ("kperf" if getattr(args, "pldi_kperf_counters", False)
                                         else "papi" if getattr(args, "pldi_cache_counters", False)
                                         else None),
+                    "counter_window": COUNTER_WINDOW,
                     "pldi_sizes_file": (str(args.pldi_sizes)
                                         if getattr(args, "pldi_sizes", None)
                                         else None),
@@ -10444,9 +10793,13 @@ def adopt_stored_campaign_settings(path: Path) -> None:
               "was recorded), so the captions cannot state one." % path)
     if "mutable_cursors_nonrec" in codegen:
         set_mutable_cursors_nonrec(bool(codegen["mutable_cursors_nonrec"]))
+    global COUNTER_BACKEND, ALIGNMENT_PROBE, COUNTER_WINDOW
     if codegen.get("counter_backend") in ("papi", "kperf"):
-        global COUNTER_BACKEND
         COUNTER_BACKEND = codegen["counter_backend"]
+    # Reports from before the window was recorded counted the whole iteration.
+    COUNTER_WINDOW = codegen.get("counter_window") or "iteration"
+    if isinstance(codegen.get("alignment_probe"), dict):
+        ALIGNMENT_PROBE = codegen["alignment_probe"]
     # The sizes the stored run used, so the replotted captions say so too.
     for program, info in (codegen.get("input_sizes") or {}).items():
         if program in PLDI_SIZE_KNOBS and isinstance(info, dict):
@@ -10830,26 +11183,96 @@ def pldi_stage_sort_key(program: str, group: str) -> Tuple[int, int, str, int]:
 # ---------------------------------------------------------------------------
 # Hardware counters over the PLDI matrix
 # ---------------------------------------------------------------------------
-# The data-side counters a cache argument is made of, in the order every
-# counter table and figure shows them. The RTS reads seven; the code-side and
-# instruction ones are context and denominators, not the claim.
-PLDI_COUNTER_METRICS = ("L1D_LOAD_MISSES", "L2D_MISSES", "LLC_LOAD_MISSES")
+# Counters both backends report under the same label for the same quantity,
+# so a Mac table and an x86 table line up row for row. The first three match
+# exactly; L1I_MISSES and DTLB_MISSES are the closest each PMU offers and
+# differ in detail (COUNTER_DEFINITIONS says how). Every table shows these
+# first.
+SHARED_COUNTER_METRICS = ("CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES_RETIRED",
+                          "L1I_MISSES", "DTLB_MISSES")
 
-# --pldi-kperf-counters (macOS): the metrics Apple's kperf gives on the M1,
-# filed under the PAPI path's names. The M1's event database has no L2 or
-# last-level cache miss events, so those columns stay empty. See Note
-# [kperf counters] in gibbon-rts/rts-c/gibbon_rts.c.
-KPERF_COUNTER_METRICS = ("CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES",
-                         "L1I_LOAD_MISSES")
+# --pldi-cache-counters (Linux, PAPI): the shared five, then the deeper
+# levels of the same retired-load chain, which the M1 cannot count. Must
+# match gibbon_native_papi_metric_labels in Codegen.hs.
+PAPI_COUNTER_METRICS = SHARED_COUNTER_METRICS + ("L2_LOAD_MISSES_RETIRED",
+                                                 "LLC_LOAD_MISSES_RETIRED")
+# The x86 P-core counts four programmable events beside cycles and
+# instructions, one short of the set, so the counter phase runs each
+# executable once per group (GIBBON_PAPI_GROUP) and merges the two. Must
+# match gibbon_native_papi_metric_groups in Codegen.hs.
+PAPI_COUNTER_GROUPS = {
+    1: ("CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES_RETIRED",
+        "L2_LOAD_MISSES_RETIRED", "LLC_LOAD_MISSES_RETIRED"),
+    2: ("CPU_CYCLES", "INSTRUCTIONS", "L1I_MISSES", "DTLB_MISSES"),
+}
+
+# The data-side counters a cache argument is made of, in the order every
+# counter table and figure shows them; the code-side and instruction ones
+# are context and denominators, not the claim. The last three are the names
+# runs before the shared set used, kept so their stored reports still render.
+PLDI_COUNTER_METRICS = ("L1D_LOAD_MISSES_RETIRED", "DTLB_MISSES",
+                        "L2_LOAD_MISSES_RETIRED", "LLC_LOAD_MISSES_RETIRED",
+                        "L1D_LOAD_MISSES", "L2D_MISSES", "LLC_LOAD_MISSES")
+
+# --pldi-kperf-counters (macOS): the metrics Apple's kperf gives on the M1.
+# The shared five, then four the M1 alone offers. Its core PMU has no L2- or
+# last-level-cache miss event (all 60 events in /usr/share/kpep/a14.plist were
+# checked), so the x86 L2/LLC rows have no M1 counterpart. Must match
+# gib_kperf_metric_labels in gibbon-rts/rts-c/gibbon_rts.c (Note [kperf
+# counters]).
+KPERF_COUNTER_METRICS = SHARED_COUNTER_METRICS + (
+    "L1D_LOAD_MISSES_SPEC", "DISPATCH_STALL_CYCLES", "PAGE_WALKS_DATA",
+    "CROSS_64B_ACCESSES")
+
+# What each counter means on each backend, for the notes. A shared metric
+# whose two definitions differ says so in both entries.
+COUNTER_DEFINITIONS = {
+    "papi": {
+        "CPU_CYCLES": "core cycles",
+        "INSTRUCTIONS": "instructions retired",
+        "L1D_LOAD_MISSES_RETIRED": "retired loads that missed the L1D",
+        "L1I_MISSES": "L1I misses, demand and prefetch (the M1 counts demand only)",
+        "DTLB_MISSES": "loads that missed every TLB level and completed a page "
+                       "walk (the M1 also counts stores)",
+        "L2_LOAD_MISSES_RETIRED": "retired loads that missed the L2",
+        "LLC_LOAD_MISSES_RETIRED": "retired loads that missed the last-level cache",
+    },
+    "kperf": {
+        "CPU_CYCLES": "core cycles",
+        "INSTRUCTIONS": "instructions retired",
+        "L1D_LOAD_MISSES_RETIRED": "retired loads that missed the L1D",
+        "L1I_MISSES": "demand fetches that missed the L1I (x86 also counts prefetches)",
+        "DTLB_MISSES": "loads and stores that missed the L2 TLB (x86 counts "
+                       "loads only)",
+        "L1D_LOAD_MISSES_SPEC": "loads that missed the L1D, including "
+                                "speculative ones",
+        "DISPATCH_STALL_CYCLES": "cycles the map unit stalled on dispatch back pressure",
+        "PAGE_WALKS_DATA": "table-walk memory requests for data accesses",
+        "CROSS_64B_ACCESSES": "load and store uops that crossed a 64-byte boundary",
+    },
+}
 # Which mechanism produced the counts being reported: "papi" (Linux, the
 # default) or "kperf". Set by the counter phase, or restored from a stored
 # report, so the notes describe how the numbers were taken.
 COUNTER_BACKEND = "papi"
+# What a count covers: "timed" -- exactly the region the iteration's timer
+# times -- for executables built by this driver; "iteration" -- the whole
+# iteration body, region save and reclaim included -- for stored reports
+# from before the counter reads were moved inside it.
+COUNTER_WINDOW = "timed"
+# Below this many counts per pass iteration a counter row is noise: a few
+# hundred L1I misses, say, in a pass that retires a billion instructions.
+COUNTER_NOISE_FLOOR = 1000
 # The launcher for kperf counter runs: `sudo -n` unless the driver itself is
 # root. Only the kperf counter phase uses it.
 KPERF_EXEC_PREFIX: List[str] = []
-PLDI_COUNTER_CONTEXT = ("L1I_LOAD_MISSES", "L2I_MISSES",
-                        "INSTRUCTIONS", "CPU_CYCLES")
+# What an 8-byte load costs by alignment class on the machine that ran the
+# kperf phase ({class: {"latency_ns", "throughput_ns"}}), from
+# alignment_probe.c. Paired with the counted 64-byte-crossing accesses to
+# bound how much of a pass misalignment could cost. None when not measured.
+ALIGNMENT_PROBE: Optional[Dict[str, Dict[str, float]]] = None
+PLDI_COUNTER_CONTEXT = ("L1I_MISSES", "INSTRUCTIONS", "CPU_CYCLES",
+                        "L1I_LOAD_MISSES", "L2I_MISSES")
 # Misses per thousand instructions is the normalization these tables use.
 # An element count would be the layout-native denominator, but only two of
 # the fifteen oracle models expose one (arithintensity_model.leaf_count),
@@ -10859,6 +11282,13 @@ PLDI_COUNTER_NORM = "INSTRUCTIONS"
 PLDI_COUNTER_NORM_SCALE = 1000.0
 
 PLDI_COUNTER_LABELS = {
+    "L1D_LOAD_MISSES_RETIRED": "L1D load misses (retired)",
+    "L1I_MISSES": "L1I misses",
+    "DTLB_MISSES": "Data TLB misses",
+    "L2_LOAD_MISSES_RETIRED": "L2 load misses (retired)",
+    "LLC_LOAD_MISSES_RETIRED": "LLC load misses (retired)",
+    "L1D_LOAD_MISSES_SPEC": "L1D load misses (incl. speculative)",
+    # Names used before the shared set; stored reports still carry them.
     "L1D_LOAD_MISSES": "L1D load misses",
     "L2D_MISSES": "L2 data misses",
     "LLC_LOAD_MISSES": "LLC misses",
@@ -10866,6 +11296,12 @@ PLDI_COUNTER_LABELS = {
     "L2I_MISSES": "L2 code misses",
     "INSTRUCTIONS": "Instructions",
     "CPU_CYCLES": "Cycles",
+    # kperf (M1) only: what the core PMU offers about memory in place of the
+    # L2/LLC events it does not have. Named for what they count.
+    "DISPATCH_STALL_CYCLES": "Dispatch-stall cycles",
+    "L2_TLB_DATA_MISSES": "L2 TLB data misses",
+    "PAGE_WALKS_DATA": "Data page walks",
+    "CROSS_64B_ACCESSES": "64B-crossing loads/stores",
 }
 
 # A miss brings in one line, so a miss count times the line size is the
@@ -10935,15 +11371,17 @@ def pldi_counter_metric(counter: str, pass_type: Optional[str] = None):
 
 def pldi_counters_present(counter_results) -> List[str]:
     """Every counter any pass of any configuration reported, in the tables'
-    order: the data-side counters first, then the context ones, then anything
-    the RTS added that this file does not name."""
+    order: the ones both machines count first, then the data-side counters,
+    the context ones, each machine's own, then anything the RTS added that
+    this file does not name."""
     found = set()
     for by_cfg in (counter_results or {}).values():
         for res in by_cfg.values():
             for pdata in (getattr(res, "passes", None) or {}).values():
                 found.update((pdata.get("papi_counters") or {}).keys())
-    ordered = [c for c in PLDI_COUNTER_METRICS + PLDI_COUNTER_CONTEXT
-               if c in found]
+    order = (SHARED_COUNTER_METRICS + PLDI_COUNTER_METRICS + PLDI_COUNTER_CONTEXT
+             + KPERF_COUNTER_METRICS + PAPI_COUNTER_METRICS)
+    ordered = list(dict.fromkeys(c for c in order if c in found))
     return ordered + sorted(found - set(ordered))
 
 
@@ -12213,8 +12651,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "--pldi-cache-counters phase, but with the counters "
                          "read through Apple's kperf framework instead of "
                          "PAPI (which has no macOS support). Gives cycles, "
-                         "instructions and L1D/L1I misses; the M1 exposes no "
-                         "L2 or last-level cache events. kperf needs root: "
+                         "instructions, L1D/L1I misses and the core's other "
+                         "memory events (retired L1D misses, dispatch stalls, "
+                         "L2 TLB misses, page walks, 64-byte-crossing "
+                         "accesses); the M1 exposes no L2 or last-level cache "
+                         "miss events. kperf needs root: "
                          "the driver asks for your sudo password once at "
                          "start and runs only the counter executables with "
                          "`sudo -n`. No --pin-cpu (macOS cannot pin); the "
@@ -12634,6 +13075,10 @@ def main():
         except RuntimeError as e:
             ap.error(str(e))
     if args.pldi_cache_counters:
+        if sys.platform == "darwin":
+            ap.error("--pldi-cache-counters reads counters through PAPI, which "
+                     "is Linux-only; on macOS use --pldi-kperf-counters (and no "
+                     "--pin-cpu)")
         if not args.pldi_submission:
             ap.error("--pldi-cache-counters measures the --pldi-submission "
                      "matrix; pass --pldi-submission too")

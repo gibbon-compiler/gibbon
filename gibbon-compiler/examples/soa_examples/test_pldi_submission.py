@@ -4013,13 +4013,13 @@ class TestCounterTotals(unittest.TestCase):
 
 
 class TestCounterOrdering(unittest.TestCase):
-    def test_data_counters_come_before_context_ones(self):
+    def test_shared_counters_come_first_then_data_then_context(self):
         res = _counter_result("P.hs", "aos_mut", {
             "f": ("fold", {"CPU_CYCLES": 1.0, "LLC_LOAD_MISSES": 2.0,
-                           "L1D_LOAD_MISSES": 3.0})})
+                           "L1D_LOAD_MISSES": 3.0, "L2I_MISSES": 4.0})})
         order = gb.pldi_counters_present({"P.hs": {"aos_mut": res}})
-        self.assertEqual(order,
-                         ["L1D_LOAD_MISSES", "LLC_LOAD_MISSES", "CPU_CYCLES"])
+        self.assertEqual(order, ["CPU_CYCLES", "L1D_LOAD_MISSES",
+                                 "LLC_LOAD_MISSES", "L2I_MISSES"])
 
     def test_an_unknown_counter_is_kept_and_sorted_last(self):
         res = _counter_result("P.hs", "aos_mut", {
@@ -4107,7 +4107,7 @@ class TestCounterTables(unittest.TestCase):
         gb.write_pldi_counter_tables(f, matrix)
         return f.getvalue()
 
-    def _full_matrix(self, aos_misses=200.0, soa_misses=100.0, insns=1e6):
+    def _full_matrix(self, aos_misses=2e5, soa_misses=1e5, insns=1e9):
         available = {cfg for lay in gb.PLDI_MAP_CONFIGS.values() for cfg in lay}
         matrix = {"KDTree.hs": {}}
         for cfg in available:
@@ -4122,9 +4122,9 @@ class TestCounterTables(unittest.TestCase):
         self.assertIn("\\label{tab:pldi_counters_totals}", tex)
         self.assertIn("\\label{tab:pldi_counters_mpki}", tex)
         self.assertIn("KDTree", tex)
-        # 200 / 100
+        # 2e5 / 1e5
         self.assertIn("2.00", tex)
-        # 100 misses per 1e6 instructions -> 0.10 per thousand
+        # 1e5 misses per 1e9 instructions -> 0.10 per thousand
         self.assertIn("0.10", tex)
 
     def test_the_notes_say_the_counts_are_not_from_the_timed_binaries(self):

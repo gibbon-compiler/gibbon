@@ -24,6 +24,8 @@ stack*.yaml.lock
 
 **/gibbon-test-summary.txt
 examples/**/*.c
+# Hand-written benchmark tool, not generated C.
+!examples/soa_examples/alignment_probe.c
 examples/**/*.exe
 examples/build_tmp/*
 examples/**/*.hi
