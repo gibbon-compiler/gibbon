@@ -317,7 +317,7 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
 -- "gibbon_main" expression in that program.
 codegenProg :: Config -> Prog -> IO String
 codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
-      return (hashIncludes ++ pretty 80 (stack (map ppr defs)))
+      return (hashIncludes ++ pretty 80 (stack (map ppr defs)) ++ mainWrapper)
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
 
@@ -363,7 +363,23 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         let bod = require_isa ++ init_gib ++ init_info_table ++ init_symbol_table
                   ++ (if gen_gc then ssDecls else [])
                   ++ e ++ exit_gib
-        pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
+        pure $ C.FuncDef [cfun| int gib_main(int argc, char **argv) { $items:bod } |] noLoc
+
+      -- macOS fixes the main thread's stack at exec, so there the program runs
+      -- on an RTS thread with the stack Linux gets from setrlimit.  See
+      -- Note [Program stack on macOS] in gibbon_rts.c.
+      mainWrapper :: String
+      mainWrapper = unlines
+        [ ""
+        , "int main(int argc, char **argv)"
+        , "{"
+        , "#ifdef __APPLE__"
+        , "    return gib_run_main(gib_main, argc, argv);"
+        , "#else"
+        , "    return gib_main(argc, argv);"
+        , "#endif"
+        , "}"
+        ]
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' FunDecl{funName = nam, funArgs = args, funRetTy = ty, funBody = tal} =
@@ -1278,25 +1294,44 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \static int gibbon_native_papi_inited = 0;\n\
         \#define GIBBON_NATIVE_PAPI_EVENT_COUNT 7\n\
         \#define GIBBON_NATIVE_PAPI_MAX_ALTS 4\n\
+        \/* The first four metrics share their labels and definitions with the\n\
+        \   kperf backend (Note [kperf counters] in the RTS), so tables from the two\n\
+        \   machines line up.  Every alternative within one metric is another\n\
+        \   SPELLING of the same event, never a different event: a metric this CPU\n\
+        \   cannot count is reported as unavailable instead of being quietly\n\
+        \   replaced by something that counts something else. */\n\
         \static const char *gibbon_native_papi_metric_labels[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {\n\
         \    \"CPU_CYCLES\",\n\
         \    \"INSTRUCTIONS\",\n\
-        \    \"L1D_LOAD_MISSES\",\n\
-        \    \"L1I_LOAD_MISSES\",\n\
-        \    \"L2D_MISSES\",\n\
-        \    \"L2I_MISSES\",\n\
-        \    \"LLC_LOAD_MISSES\",\n\
+        \    \"L1D_LOAD_MISSES_RETIRED\",\n\
+        \    \"L1I_MISSES\",\n\
+        \    \"DTLB_MISSES\",\n\
+        \    \"L2_LOAD_MISSES_RETIRED\",\n\
+        \    \"LLC_LOAD_MISSES_RETIRED\",\n\
         \};\n\
         \static const char *gibbon_native_papi_event_candidates[GIBBON_NATIVE_PAPI_EVENT_COUNT][GIBBON_NATIVE_PAPI_MAX_ALTS] = {\n\
         \    {\"perf::PERF_COUNT_HW_CPU_CYCLES\", \"perf::CPU-CYCLES\", \"perf::CYCLES\", \"ix86arch::UNHALTED_CORE_CYCLES\"},\n\
         \    {\"perf::PERF_COUNT_HW_INSTRUCTIONS\", \"perf::INSTRUCTIONS\", \"ix86arch::INSTRUCTION_RETIRED\", NULL},\n\
-        \    {\"perf::L1-DCACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1D\", NULL, NULL},\n\
-        \    {\"perf::L1-ICACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1I\", NULL, NULL},\n\
-        \    {\"L2_RQSTS:DEMAND_DATA_RD_MISS\", \"L2_RQSTS:MISS\", \"L2_REQUEST:DEMAND_DATA_RD_MISS\", \"L2_REQUEST:MISS\"},\n\
-        \    {\"L2_RQSTS:CODE_RD_MISS\", \"L2_REQUEST:CODE_RD_MISS\", NULL, NULL},\n\
-        \    {\"perf::LLC-LOAD-MISSES\", \"ix86arch::LLC_MISSES\", \"LONGEST_LAT_CACHE:MISS\", \"adl_grt::LONGEST_LAT_CACHE:MISS\"},\n\
+        \    {\"MEM_LOAD_RETIRED:L1_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L1_MISS\", \"MEM_LOAD_UOPS_RETIRED:L1_MISS\", NULL},\n\
+        \    {\"perf::L1-ICACHE-LOAD-MISSES\", NULL, NULL, NULL},\n\
+        \    {\"DTLB_LOAD_MISSES:WALK_COMPLETED\", \"adl_glc::DTLB_LOAD_MISSES:WALK_COMPLETED\", NULL, NULL},\n\
+        \    {\"MEM_LOAD_RETIRED:L2_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L2_MISS\", \"MEM_LOAD_UOPS_RETIRED:L2_MISS\", NULL},\n\
+        \    {\"MEM_LOAD_RETIRED:L3_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L3_MISS\", \"MEM_LOAD_UOPS_RETIRED:L3_MISS\", NULL},\n\
+        \};\n\
+        \/* Which counting groups read each metric (bit g-1 for group g).  A P-core\n\
+        \   of the i7-12700K takes four programmable events beside cycles and\n\
+        \   instructions, one short of this set, so the driver runs every counter\n\
+        \   executable twice: GIBBON_PAPI_GROUP=1 reads the retired-load chain,\n\
+        \   =2 the rest.  Cycles and instructions are read in both.  Unset, every\n\
+        \   metric is tried in one run. */\n\
+        \static const int gibbon_native_papi_metric_groups[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {\n\
+        \    3, 3, 1, 2, 2, 1, 1,\n\
         \};\n\
         \static const char *gibbon_native_papi_selected_events[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {NULL};\n\
+        \/* Eventset position of each metric: -1 when this CPU cannot count it,\n\
+        \   -2 when this run's group does not read it.  PAPI_read fills values in\n\
+        \   eventset order, which skips both. */\n\
+        \static int gibbon_native_papi_slot[GIBBON_NATIVE_PAPI_EVENT_COUNT];\n\
         \static void papi_init_or_die(void) {\n\
         \    if (gibbon_native_papi_inited) return;\n\
         \    int rv = PAPI_library_init(PAPI_VER_CURRENT);\n\
@@ -1309,8 +1344,15 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \        fprintf(stderr, \"PAPI_create_eventset failed: %s\\n\", PAPI_strerror(rv));\n\
         \        exit(1);\n\
         \    }\n\
+        \    int added = 0;\n\
+        \    const char *group_env = getenv(\"GIBBON_PAPI_GROUP\");\n\
+        \    int group_mask = (group_env && *group_env) ? (1 << (atoi(group_env) - 1)) : ~0;\n\
         \    for (int i = 0; i < GIBBON_NATIVE_PAPI_EVENT_COUNT; i++) {\n\
-        \        int added = 0;\n\
+        \        if (!(gibbon_native_papi_metric_groups[i] & group_mask)) {\n\
+        \            gibbon_native_papi_slot[i] = -2;\n\
+        \            continue;\n\
+        \        }\n\
+        \        gibbon_native_papi_slot[i] = -1;\n\
         \        for (int j = 0; j < GIBBON_NATIVE_PAPI_MAX_ALTS; j++) {\n\
         \            const char *ev_name = gibbon_native_papi_event_candidates[i][j];\n\
         \            int code;\n\
@@ -1324,14 +1366,17 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \            rv = PAPI_add_event(gibbon_native_papi_eventset, code);\n\
         \            if (rv == PAPI_OK) {\n\
         \                gibbon_native_papi_selected_events[i] = ev_name;\n\
-        \                added = 1;\n\
+        \                gibbon_native_papi_slot[i] = added++;\n\
         \                break;\n\
         \            }\n\
         \        }\n\
-        \        if (!added) {\n\
-        \            fprintf(stderr, \"No usable native PAPI event found for metric %s\\n\", gibbon_native_papi_metric_labels[i]);\n\
-        \            exit(1);\n\
+        \        if (gibbon_native_papi_slot[i] < 0) {\n\
+        \            fprintf(stderr, \"No usable native PAPI event for metric %s; reported as unavailable\\n\", gibbon_native_papi_metric_labels[i]);\n\
         \        }\n\
+        \    }\n\
+        \    if (gibbon_native_papi_slot[0] < 0 || gibbon_native_papi_slot[1] < 0) {\n\
+        \        fprintf(stderr, \"Cycles and instructions are required; no usable event for one of them\\n\");\n\
+        \        exit(1);\n\
         \    }\n\
         \    gibbon_native_papi_inited = 1;\n\
         \}\n\
@@ -1996,22 +2041,29 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
 
                      (if flg
                          -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                      then (let body = resetBody ++
+                      then (let -- The counters (PAPI, kperf) are read immediately outside
+                                -- the two clock_gettime calls, so they count what the timer
+                                -- times and nothing else: not the cursor resets and region
+                                -- save before it, nor the region reclaim and bookkeeping
+                                -- after it.
+                                bodyPre = resetBody ++
                                        [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
                                                          gib_list_bumpalloc_save_state();
                                                          gib_ptr_bumpalloc_save_state();
                                                          gib_region_chunk_save_state();
                                                          } |]
-                                       , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
-                                       ] ++
+                                       ]
+                                bodyTimed =
+                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |] ] ++
                                        rhs'' ++
-                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
+                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |] ]
+                                bodyPost =
                                        -- NB: this block is AFTER clock_gettime(end), so the
                                        -- region reclaim below costs no measured time.  It must
                                        -- also stay a BULK free at iteration end: freeing chunks
                                        -- one at a time as they are re-grown leaves their pages
                                        -- resident and silently makes iterations 2..n warm.
-                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
+                                       [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
                                                          gib_list_bumpalloc_restore_state();
                                                          gib_ptr_bumpalloc_restore_state();
                                                          gib_region_chunk_restore_state();
@@ -2021,7 +2073,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                        ]
                                 -- TODO: Find a better way to get a name for the region id.
                                 -- See Note [kperf counters] in the RTS: read immediately
-                                -- around the iteration, keep each iteration's delta, print
+                                -- around the timed region, keep each iteration's delta, print
                                 -- them after the loop exactly as the PAPI path does.
                                 kperfReadBefore =
                                   if kperf
@@ -2040,7 +2092,8 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                 ifdef_papi_native = "#ifdef _GIBBON_ENABLE_PAPI_NATIVE"
                                 ifndef_papi_native = "#ifndef _GIBBON_ENABLE_PAPI_NATIVE"
                                 endif = "#endif"
-                                body' = [   C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                body' = bodyPre ++
+                                        [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_before);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
@@ -2059,7 +2112,7 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                           , C.BlockStm [cstm| $escstm:endif |]
                                         ] ++ 
                                         kperfReadBefore ++
-                                        body ++ 
+                                        bodyTimed ++
                                         kperfReadAfter ++
                                         [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
@@ -2080,7 +2133,8 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                           , C.BlockStm [cstm| increment_papi_region_id(); |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:endif |]
-                                        ]                                        
+                                        ] ++
+                                        bodyPost
                             in [  C.BlockStm [cstm| $escstm:ifdef_papi |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                 , C.BlockStm [cstm| papi_init_or_die(); |]
@@ -2124,12 +2178,21 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                       fprintf(stderr, "PAPI_stop failed: %s\n", PAPI_strerror($id:papi_retval));
                                                       exit(1);
                                                       } |]
+                                , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                      if (gibbon_native_papi_slot[papi_i] == -1) {
+                                                          printf("PAPI_NATIVE %s[unavailable]\n",
+                                                                 gibbon_native_papi_metric_labels[papi_i]);
+                                                      }
+                                                  } |]
                                 , C.BlockStm [cstm| for (long long iter_i = 0; iter_i < gib_get_iters_param(); iter_i++) {
                                                       for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                          if (gibbon_native_papi_slot[papi_i] < 0) {
+                                                              continue;
+                                                          }
                                                           printf("PAPI_NATIVE %s[%s]=%lld\n",
                                                                  gibbon_native_papi_metric_labels[papi_i],
                                                                  gibbon_native_papi_selected_events[papi_i],
-                                                                 $id:papi_samples[papi_i][iter_i]);
+                                                                 $id:papi_samples[gibbon_native_papi_slot[papi_i]][iter_i]);
                                                       }
                                                   } |]
                                 , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {

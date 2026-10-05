@@ -34,6 +34,10 @@
 #include <gc.h>
 #endif
 
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
+
 #ifdef _GIBBON_PARALLEL
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
@@ -2926,6 +2930,67 @@ void check_args(int i, int argc, char **argv, char *parameter){
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+/*
+ * Note [Program stack on macOS]
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * Gibbon programs can recurse deeply: a non-tail-recursive function over a
+ * long list uses one frame per element.  On Linux, gib_init raises
+ * RLIMIT_STACK to GIB_STACK_SIZE and the kernel grows the main thread's stack
+ * up to that limit.  macOS fixes the main thread's stack when the process
+ * starts (8 MB by default, and the linker's -stack_size is capped at 512 MB
+ * on arm64), so raising the limit afterwards has no effect.  The generated
+ * main therefore calls gib_run_main on macOS, which runs the program on a
+ * thread whose stack is GIB_STACK_SIZE.  That stack is reserved address
+ * space; pages are committed only as the program touches them.
+ */
+#ifdef __APPLE__
+typedef struct gib_main_args {
+    int (*body)(int, char **);
+    int argc;
+    char **argv;
+    int ret;
+} GibMainArgs;
+
+static void *gib_main_thread(void *p)
+{
+    GibMainArgs *args = (GibMainArgs *) p;
+    args->ret = args->body(args->argc, args->argv);
+    return NULL;
+}
+
+int gib_run_main(int (*body)(int, char **), int argc, char **argv)
+{
+    GibMainArgs args = { body, argc, argv, 0 };
+    pthread_attr_t attr;
+    pthread_t thread;
+    size_t size = GIB_STACK_SIZE;
+    int code;
+
+    if ( (code = pthread_attr_init(&attr)) ) {
+        fprintf(stderr, " [gibbon rts] pthread_attr_init failed, code %d\n", code);
+        exit(1);
+    }
+    // Halve on failure, as gib_init does with setrlimit on Linux.
+    while ( (code = pthread_attr_setstacksize(&attr, size)) ||
+            (code = pthread_create(&thread, &attr, gib_main_thread, &args)) ) {
+        fprintf(stderr, " [gibbon rts] Failed to start the program with a stack of %zu bytes, code %d\n",
+                size, code);
+        size /= 2;
+        if (size < 100 * 1024) {
+            fprintf(stderr, " [gibbon rts] Failed to start the program with a reasonable stack; giving up.\n");
+            exit(1);
+        }
+    }
+    pthread_attr_destroy(&attr);
+    if ( (code = pthread_join(thread, NULL)) ) {
+        fprintf(stderr, " [gibbon rts] pthread_join failed, code %d\n", code);
+        exit(1);
+    }
+    return args.ret;
+}
+#endif
+
 // Called from gib_main_expr.
 int gib_init(int argc, char **argv)
 {
@@ -2950,11 +3015,10 @@ int gib_init(int argc, char **argv)
         exit(1);
     }
 
-    lim.rlim_cur = 4 * 1024LU * 1024LU * 1024LU; // 1GB stack.
-    // lim.rlim_cur = 512LU * 1024LU * 1024LU; // 500MB stack.
+    lim.rlim_cur = GIB_STACK_SIZE;
     // lim.rlim_max = lim.rlim_cur; // Normal users may only be able to decrease this.
 
-    // WARNING: Haven't yet figured out why this doesn't work on MacOS...
+    // macOS fixes the main thread's stack at exec; see Note [Program stack on macOS].
 #ifndef __APPLE__
     code = setrlimit(RLIMIT_STACK, &lim);
     while (code) {
@@ -3148,16 +3212,32 @@ static int (*gib_kpep_config_kpc_count)(gib_kpep_config *cfg, size_t *count_ptr)
 static int (*gib_kpep_config_kpc_map)(gib_kpep_config *cfg, size_t *buf, size_t buf_size);
 static int (*gib_kpep_config_kpc)(gib_kpep_config *cfg, gib_kpc_config_t *buf, size_t buf_size);
 
-// Metric labels match the PAPI path's, so the driver files both under the
-// same names; NULL ends each list of alternative event names.
+// Labels shared with the PAPI path (Codegen.hs) name the same quantity on
+// both machines, so the driver lines their tables up: CPU_CYCLES,
+// INSTRUCTIONS, L1D_LOAD_MISSES_RETIRED (retired loads that missed L1D),
+// L1I_MISSES and DTLB_MISSES (data accesses that missed the last-level TLB).
+// The last two are close rather than identical across vendors; the driver's
+// notes say how.  The M1's core PMU has no L2- or LLC-miss event (the L2 is a
+// shared cluster cache outside the core counters), so the rest are M1-only,
+// each under its own name: speculative L1D load misses, dispatch stall
+// cycles, page-walk traffic and 64-byte-crossing accesses.
+// 2 fixed + 7 of the 8 configurable counters.  NULL ends each list of
+// alternative names, which are spellings of one event, never substitutes.
 static const char *gib_kperf_metric_labels[GIB_KPERF_EVENT_COUNT] = {
-    "CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES", "L1I_LOAD_MISSES",
+    "CPU_CYCLES", "INSTRUCTIONS", "L1D_LOAD_MISSES_SPEC", "L1I_MISSES",
+    "L1D_LOAD_MISSES_RETIRED", "DISPATCH_STALL_CYCLES", "DTLB_MISSES",
+    "PAGE_WALKS_DATA", "CROSS_64B_ACCESSES",
 };
 static const char *gib_kperf_event_candidates[GIB_KPERF_EVENT_COUNT][3] = {
     {"FIXED_CYCLES", "CPU_CYCLES", NULL},
     {"FIXED_INSTRUCTIONS", "INST_ALL", NULL},
-    {"L1D_CACHE_MISS_LD", "L1D_CACHE_MISS_LD_NONSPEC", NULL},
+    {"L1D_CACHE_MISS_LD", NULL, NULL},
     {"L1I_CACHE_MISS_DEMAND", NULL, NULL},
+    {"L1D_CACHE_MISS_LD_NONSPEC", NULL, NULL},
+    {"MAP_STALL_DISPATCH", NULL, NULL},
+    {"L2_TLB_MISS_DATA", NULL, NULL},
+    {"MMU_TABLE_WALK_DATA", NULL, NULL},
+    {"LDST_X64_UOP", NULL, NULL},
 };
 static const char *gib_kperf_selected[GIB_KPERF_EVENT_COUNT];
 static size_t gib_kperf_counter_map[GIB_KPC_MAX_COUNTERS];

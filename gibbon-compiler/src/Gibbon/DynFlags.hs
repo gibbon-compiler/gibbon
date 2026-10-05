@@ -297,7 +297,7 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                           "unit, not the RTS.")) <|>
                    flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) <|>
                    flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).") <|>
-                   flag' Opt_KperfInstrumentation (long "enable-kperf" <> help ("Read per-iteration hardware counters (cycles, instructions, L1D/L1I misses) " ++
+                   flag' Opt_KperfInstrumentation (long "enable-kperf" <> help ("Read per-iteration hardware counters (cycles, instructions, L1D/L1I misses, memory-stall and page-walk events) " ++
                                                                                "in iterate timing through Apple's kperf framework. macOS only; the " ++
                                                                                "program must run as root. Cannot be combined with --enable-papi[-native]."))
     dflagsParser :: Parser DebugFlag
