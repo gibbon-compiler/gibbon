@@ -790,13 +790,15 @@ void gib_print_timing_array(GibVector *times) {
     printf("ITER TIMES: [");
     double *d;
     int64_t n = gib_vector_length(times);
+    // Nanosecond digits: plain %f keeps six decimals, which rounds a pass of
+    // a few microseconds to a whole microsecond (or to zero).
     for(int64_t i = 0; i < n; i++) {
         d = gib_vector_nth(times, i);
         if (i == (n-1)) {
-            printf("%f",*d);
+            printf("%.9f",*d);
         }
         else {
-            printf("%f, ",*d);
+            printf("%.9f, ",*d);
         }
     }
     printf("]\n");
