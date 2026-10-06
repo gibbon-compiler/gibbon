@@ -60,6 +60,13 @@ SwapWriter|--no-ran $MUT
 SwapWriter|--no-gc --no-ran $MUT
 SwapWriter|$NONREC
 SwapWriter|--no-ran $NONREC
+WrapperStart|
+WrapperStart|--no-ran
+WrapperStart|$MUT
+WrapperStart|--no-ran $MUT
+WrapperStart|--no-gc $MUT
+WrapperStart|$NONREC
+WrapperStart|--no-ran $NONREC
 EOC
 )
 

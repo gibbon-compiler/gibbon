@@ -1548,6 +1548,10 @@ tests:
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/SwapWriter.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: WrapperStart.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/WrapperStart.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs
     dir: examples/soa_examples/programs/SOA

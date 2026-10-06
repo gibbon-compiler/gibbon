@@ -5018,11 +5018,22 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                           _ -> pure ([], arg)
                   (endRegDerefBnds, endRegVals) <- fmap unzip $ mapM (derefCursorArg "deref_end") endRegArgs
                   (inputDerefBnds, inputEndVals) <- fmap unzip $ mapM (derefCursorArg "deref_input_end") inputValueArgs
-                  (packedBnds, packedVals) <- fmap unzip $ mapM
+                  -- A factored output location is a cursor array, which the
+                  -- mutable callee advances in place.  An immutable caller
+                  -- keeps no other record of the value's start, so it copies
+                  -- the start before the call.
+                  (startCopyBnds, packedBnds, packedVals) <- fmap unzip3 $ mapM
                     (\(loc, arg) -> do
                       let startVar = getVarNameFromFreeVar freeVarToVarEnv' (fromLocArgToFreeVarsTy loc)
                       (derefBnds, endVal) <- derefCursorArg "deref_out" arg
-                      pure (derefBnds, MkProdE [VarE startVar, endVal]))
+                      case loc of
+                        Loc lrem | not useMutableCursorsCall, isSoALoc (lremLoc lrem) -> do
+                          start <- gensym "value_start"
+                          let arrTy = CursorArrayTy (locBufferCount (lremLoc lrem))
+                          pure ( [ (start, [], arrTy, Ext $ InitCursor arrTy)
+                                 , ("_", [], ProdTy [], Ext $ MemCpy start startVar arrTy) ]
+                               , derefBnds, MkProdE [VarE start, endVal] )
+                        _ -> pure ([], derefBnds, MkProdE [VarE startVar, endVal]))
                     outputLocArgs
                   let callRetTy = unitizedPackedMutableTy (arrOut fnTy)
                       callTmpPrefix = case callRetTy of
@@ -5040,6 +5051,7 @@ cursorizeAppE m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt free
                           (_, _, _) -> MkProdE (locResults ++ [callPayload])
                   return $ mkLets additional_bnds $
                            mkLets (concat callArgBnds) $
+                           mkLets (concat startCopyBnds) $
                            LetE callBind $
                            mkLets (concat endRegDerefBnds ++ concat inputDerefBnds ++ concat packedBnds) callResult
                 else if calleeElidesInRegEnds
