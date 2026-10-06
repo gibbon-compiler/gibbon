@@ -67,6 +67,13 @@ WrapperStart|--no-ran $MUT
 WrapperStart|--no-gc $MUT
 WrapperStart|$NONREC
 WrapperStart|--no-ran $NONREC
+LocalRegionShare|
+LocalRegionShare|--no-ran
+LocalRegionShare|$MUT
+LocalRegionShare|--no-ran $MUT
+LocalRegionShare|--no-gc $MUT
+LocalRegionShare|$NONREC
+LocalRegionShare|--no-ran $NONREC
 EOC
 )
 

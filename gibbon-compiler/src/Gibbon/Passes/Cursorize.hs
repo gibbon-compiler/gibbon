@@ -1574,7 +1574,9 @@ cursorizeExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeIt freeV
           let reg_var = regionToVar reg
           let reg_ty = getCursorizeTyFromRegVar' Nothing useMutableCursorsCall reg_var
           let end_reg_ty = case endmut of 
-                                  L2.RegionImmutable -> MkTy2 CursorTy
+                                  L2.RegionImmutable -> case reg_var of
+                                                           SingleR{} -> MkTy2 CursorTy
+                                                           SoARv{} -> reg_ty
                                   L2.RegionMutable -> case reg_var of 
                                                            SingleR{} -> MkTy2 MutCursorTy 
                                                            SoARv{} -> reg_ty
@@ -3492,7 +3494,9 @@ cursorizePackedExp m1 m2 useMutableCursorsCall emitScalarCountBumps insideTimeit
           let reg_var = regionToVar r
           let reg_ty = getCursorizeTyFromRegVar' Nothing useMutableCursorsCall reg_var
           let end_reg_ty = case endmut of
-                                  L2.RegionImmutable -> MkTy2 CursorTy
+                                  L2.RegionImmutable -> case reg_var of
+                                                           SingleR{} -> MkTy2 CursorTy
+                                                           SoARv{} -> reg_ty
                                   L2.RegionMutable -> case reg_var of
                                                            SingleR{} -> MkTy2 MutCursorTy
                                                            SoARv{} -> reg_ty

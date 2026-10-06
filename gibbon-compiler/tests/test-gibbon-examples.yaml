@@ -1482,9 +1482,7 @@ tests:
     run-modes: [nonrec]
 
   # Fully-factored values shared through indirections; also checked under the
-  # remaining flag sets by factored_indirections.sh.  Each runs in the modes it
-  # passes: GcShare and GcSafe hit compile failures under mutable
-  # cursors that occur without any indirection (see the script).
+  # remaining flag sets by factored_indirections.sh.
   - name: IdTree.hs
     dir: tests/factored_indirections
     answer-file: tests/factored_indirections/IdTree.ans
@@ -1512,11 +1510,11 @@ tests:
   - name: GcShare.hs
     dir: tests/factored_indirections
     answer-file: tests/factored_indirections/GcShare.ans
-    run-modes: [gibbon2]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
   - name: GcSafe.hs
     dir: tests/factored_indirections
     answer-file: tests/factored_indirections/GcSafe.ans
-    run-modes: [gibbon2]
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
   - name: MixedLayout.hs
     dir: tests/factored_indirections
     answer-file: tests/factored_indirections/MixedLayout.ans
@@ -1551,6 +1549,10 @@ tests:
   - name: WrapperStart.hs
     dir: tests/fi_fixes
     answer-file: tests/fi_fixes/WrapperStart.ans
+    run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
+  - name: LocalRegionShare.hs
+    dir: tests/fi_fixes
+    answer-file: tests/fi_fixes/LocalRegionShare.ans
     run-modes: [gibbon2, loopify, selective, vectorize, nonrec]
 
   - name: PiecewiseFunctions.hs

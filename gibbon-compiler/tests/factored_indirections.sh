@@ -4,12 +4,8 @@
 # (derived by factored_indirections/model.py from the source) under every flag
 # set below.  See Note [A factored indirection lives in the tag buffer].
 #
-# The `known` entries are compile failures that occur without any indirection
-# (each has a reproducer that shares nothing); they are pinned so that fixing
-# one shows up here.
-#
-#   M3  function that allocates a factored value in a local region, mutable
-#       cursors
+# `expect` pins compile failures that occur without any indirection, so that
+# fixing one shows up here.  None is pinned at present.
 #
 # Usage: factored_indirections.sh [gcc|clang]
 set -u
@@ -32,8 +28,6 @@ MODE_FLAGS=("" "--no-ran" "--no-ran --use-mutable-cursors" "--no-gc" "--no-gc --
 # $1 program, $2 mode -> "ok" or the known defect.
 expect () {
   case "$1/$2" in
-    GcShare/noran_mut|GcSafe/noran_mut) echo M3 ;;
-    GcShare/mut_nonrec|GcSafe/mut_nonrec) echo M3 ;;
     *) echo ok ;;
   esac
 }
