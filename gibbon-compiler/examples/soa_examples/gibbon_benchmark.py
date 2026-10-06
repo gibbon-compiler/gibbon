@@ -6012,6 +6012,7 @@ def run_rounds(jobs: List[Tuple[str, Path]], iterations: int, rounds: int,
                on_run=None, warmup_runs: int = MATRIX_WARMUP_RUNS,
                warmup_iterations: int = MATRIX_WARMUP_ITERATIONS,
                exec_prefix: Optional[List[str]] = None,
+               size_param: int = 0,
                ) -> Dict[str, List[Dict]]:
     """Run every job once per round, rotating the order each round.
 
@@ -6028,14 +6029,16 @@ def run_rounds(jobs: List[Tuple[str, Path]], iterations: int, rounds: int,
         for key, exe in jobs:
             progress().item(exe.stem, "warmup")
             run_exe(exe, max(1, warmup_iterations), use_iterate_flag=True,
-                    pin_cpu=pin_cpu, exec_prefix=exec_prefix)
+                    pin_cpu=pin_cpu, exec_prefix=exec_prefix,
+                    size_param=size_param)
     rounds = max(1, rounds)
     stride = max(1, len(jobs) // rounds) if jobs else 1
     for rnd in range(rounds):
         shift = (rnd * stride) % len(jobs) if jobs else 0
         for key, exe in jobs[shift:] + jobs[:shift]:
             outcome = run_exe(exe, iterations, use_iterate_flag=True,
-                              pin_cpu=pin_cpu, exec_prefix=exec_prefix)
+                              pin_cpu=pin_cpu, exec_prefix=exec_prefix,
+                              size_param=size_param)
             collected[key].append(outcome)
             if on_run is not None:
                 on_run(key, rnd, outcome)
@@ -6198,6 +6201,7 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
                                  enable_papi_native: bool = False,
                                  measure_build: bool = True,
                                  enable_kperf: bool = False,
+                                 size_param: int = 0,
                                  ) -> Dict[str, Dict[str, BenchmarkResult]]:
     """Compiles and runs every PLDI_MAP_CONFIGS variant for every curated
     program, using the same compile_one/run_exe/qualify_variant path as
@@ -6369,7 +6373,8 @@ def collect_pldi_variant_results(programs_dir: Path, out_dir: Path, cc: str,
 
         collected = run_rounds(jobs, iterations, pass_rounds, pin_cpu=pin_cpu,
                                exec_prefix=(KPERF_EXEC_PREFIX if enable_kperf
-                                            else None))
+                                            else None),
+                               size_param=size_param)
 
         for cfg_name, _exe in jobs:
             info = pending[cfg_name]
@@ -12353,6 +12358,342 @@ def qualify_variant(program: str, variant: str, source: Optional[Path],
     return st
 
 
+# ---------------------------------------------------------------------------
+# --sumtree-size-sweep: MonoTree's sumTree at every depth in a range
+# ---------------------------------------------------------------------------
+# How each configuration's traversal scales with the input, from cache-resident
+# to far past the last-level cache: one point per (configuration, depth), the
+# pointer-based build included. Every point is run and verified exactly as a
+# --pldi-submission cell is (collect_pldi_variant_results), on a MonoTree
+# reduced to its sumTree pass, and drawn as a graph rather than a table. The
+# program reads its depth from --size-param, so each configuration is
+# compiled once and the same executable is run at every depth.
+SUMTREE_SWEEP_PROGRAMS_DIR = Path(__file__).resolve().parent / "sumtree_sweep" / "programs"
+SUMTREE_SWEEP_PROGRAM = "MonoTreeSumTree.hs"
+SUMTREE_SWEEP_PASS = "sumTree"
+SUMTREE_SWEEP_DEFAULT_DEPTHS = "10:26"
+SUMTREE_SWEEP_MODEL = "oracles/batch_a_model.py:mono_tree_sumtree_only"
+
+
+def sumtree_sweep_expected(depth: int) -> str:
+    """What the sweep program prints at `depth'."""
+    return _oracle_module("batch_a_model").mono_tree_sumtree_only(depth)
+SUMTREE_SWEEP_JSON_KIND = "sumtree_size_sweep"
+SUMTREE_SWEEP_PHASE = "sumtree"
+
+
+def parse_sumtree_depths(spec: str) -> List[int]:
+    """`10:26' (inclusive), `10:26:2' (with a step) or `12,16,20'."""
+    spec = spec.strip()
+    try:
+        if ":" in spec:
+            parts = [int(p) for p in spec.split(":")]
+            if len(parts) not in (2, 3):
+                raise ValueError
+            lo, hi = parts[0], parts[1]
+            step = parts[2] if len(parts) == 3 else 1
+            depths = list(range(lo, hi + 1, step))
+        else:
+            depths = [int(p) for p in spec.split(",") if p.strip()]
+    except ValueError:
+        raise ValueError("--sumtree-depths %r: expected LO:HI, LO:HI:STEP or "
+                         "a comma-separated list of depths" % spec)
+    if not depths or min(depths) < 1 or max(depths) > 40:
+        raise ValueError("--sumtree-depths %r: need at least one depth, each "
+                         "between 1 and 40" % spec)
+    return sorted(set(depths))
+
+
+def sumtree_sweep_configs() -> Dict[str, Dict[str, Dict]]:
+    """The fold configurations (sumTree is a fold, so nothing loopifies)
+    that this run selected, plus the pointer-based build whether or not
+    --pldi-config named it: the sweep exists to place it against the rest."""
+    configs = {layout: dict(cfgs) for layout, cfgs in PLDI_FOLD_CONFIGS.items()}
+    if not any("ptr" in cfgs for cfgs in configs.values()):
+        configs.update({layout: dict(cfgs)
+                        for layout, cfgs in PLDI_OPTIONAL_FOLD_CONFIGS.items()})
+    return configs
+
+
+def _sweep_cpu_name() -> str:
+    info = _machine_description()
+    if info.get("cpu"):
+        return info["cpu"]
+    try:
+        out = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return platform.machine()
+
+
+def run_sumtree_size_sweep(args) -> int:
+    """Measure, write and draw the sweep. Returns the process exit code."""
+    try:
+        depths = parse_sumtree_depths(args.sumtree_depths)
+    except ValueError as e:
+        print("error: %s" % e, file=sys.stderr)
+        return 2
+    configs = sumtree_sweep_configs()
+    order = [cfg for layout in configs.values() for cfg in layout]
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cc = resolve_cc(args.cc)
+    print("  sumTree size sweep: depths %s; configurations %s"
+          % (", ".join(map(str, depths)), ", ".join(order)))
+
+    global PLDI_MAP_CONFIGS
+    saved_configs = PLDI_MAP_CONFIGS
+    manifest = default_oracle_manifest()
+    stem = Path(SUMTREE_SWEEP_PROGRAM).stem
+    points: Dict[str, Dict[str, Dict]] = {cfg: {} for cfg in order}
+    try:
+        PLDI_MAP_CONFIGS = configs
+        progress().start_phase(SUMTREE_SWEEP_PHASE)
+        for i, depth in enumerate(depths):
+            # The bar names the depth in progress; the items under it are the
+            # matrix's own (compiling, warmup, running each configuration).
+            phase = getattr(progress(), "phases", {}).get(SUMTREE_SWEEP_PHASE)
+            if phase is not None:
+                phase.label = "sumTree sweep, depth %d of %d-%d" % (
+                    depth, depths[0], depths[-1])
+            # The answer depends on the depth the run is given, so the oracle
+            # entry is replaced before each depth's runs are checked.
+            manifest.entries[stem] = prov.OracleEntry(
+                stem, sumtree_sweep_expected(depth), "python-model",
+                "depth %d (--size-param) by %s" % (depth, SUMTREE_SWEEP_MODEL))
+            print("  Depth %d (%s leaves)" % (depth, f"{2 ** depth:,}"))
+            # Compiled for the first depth only: the source does not change
+            # between depths, so later ones reuse the same executables.
+            results = collect_pldi_variant_results(
+                SUMTREE_SWEEP_PROGRAMS_DIR, out_dir, cc,
+                args.force_recompile and i == 0, gibbon_exe=None,
+                iterations=args.iterations, c_arith_mode=args.c_arithmetic,
+                simd_isa=args.simd_isa, pin_cpu=args.pin_cpu,
+                programs=[SUMTREE_SWEEP_PROGRAM], pass_rounds=args.pass_rounds,
+                measure_build=False, size_param=depth)
+            for cfg, res in results.get(SUMTREE_SWEEP_PROGRAM, {}).items():
+                pdata = (res.passes or {}).get(SUMTREE_SWEEP_PASS) or {}
+                verified = bool(prov.verified_result(res)) and bool(pdata)
+                points.setdefault(cfg, {})[str(depth)] = {
+                    "median_s": pdata.get("median_time") if verified else None,
+                    "ci95_low_s": pdata.get("ci95_low") if verified else None,
+                    "ci95_high_s": pdata.get("ci95_high") if verified else None,
+                    "n": pdata.get("n"),
+                    "verified": verified,
+                    "error": None if verified else (res.error_message
+                                                    or "not verified"),
+                }
+        progress().finish_phase()
+        # Release the terminal before the summary below, as the campaign does.
+        progress().close()
+    finally:
+        PLDI_MAP_CONFIGS = saved_configs
+        manifest.entries.pop(stem, None)
+
+    report = {
+        "kind": SUMTREE_SWEEP_JSON_KIND,
+        "program": SUMTREE_SWEEP_PROGRAM,
+        "pass": SUMTREE_SWEEP_PASS,
+        "depths": depths,
+        "configurations": order,
+        "symbols": {cfg: PLDI_COL_SYMBOLS.get(cfg, cfg) for cfg in order},
+        "labels": {cfg: PLDI_ROW_LABELS.get(cfg, cfg) for cfg in order},
+        "machine": {"cpu": _sweep_cpu_name(), "platform": platform.platform()},
+        "cc": cc, "cc_version": cc_version(cc),
+        "iterations": args.iterations, "pass_rounds": args.pass_rounds,
+        "pin_cpu": args.pin_cpu, "simd_isa": args.simd_isa,
+        "c_arithmetic": args.c_arithmetic,
+        "reclaim_iterate_regions": RECLAIM_ITERATE_REGIONS,
+        "points": points,
+    }
+    json_path = out_dir / "sumtree_sweep.json"
+    json_path.write_text(json.dumps(report, indent=1))
+    print("  ✓ JSON → %s" % json_path)
+    failed = [(cfg, d, p["error"]) for cfg, by_d in points.items()
+              for d, p in by_d.items() if not p["verified"]]
+    for cfg, d, err in failed:
+        print("  ⚠ %s at depth %s did not verify: %s"
+              % (cfg, d, (err or "").splitlines()[0][:120] if err else ""))
+    return 0 if write_sumtree_sweep_outputs(report, out_dir,
+                                            Path(args.figures_dir)) else 1
+
+
+def write_sumtree_sweep_outputs(report: Dict, out_dir: Path,
+                                figures_dir: Path) -> bool:
+    """The CSV next to the JSON, and the graph as a LaTeX/pgfplots document
+    compiled to figures_dir/sumtree_sweep.pdf. False if LaTeX failed."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    depths = report["depths"]
+    order = report["configurations"]
+    points = report["points"]
+    csv_path = out_dir / "sumtree_sweep.csv"
+    with open(csv_path, "w") as f:
+        f.write("configuration,depth,leaves,median_s,ns_per_leaf,"
+                "ci95_low_s,ci95_high_s,n,verified\n")
+        for cfg in order:
+            for d in depths:
+                p = points.get(cfg, {}).get(str(d)) or {}
+                med = p.get("median_s")
+                f.write("%s,%d,%d,%s,%s,%s,%s,%s,%s\n" % (
+                    cfg, d, 2 ** d, "" if med is None else "%.9g" % med,
+                    "" if med is None else "%.6g" % (med * 1e9 / 2 ** d),
+                    "" if p.get("ci95_low_s") is None else "%.9g" % p["ci95_low_s"],
+                    "" if p.get("ci95_high_s") is None else "%.9g" % p["ci95_high_s"],
+                    "" if p.get("n") is None else p["n"], int(bool(p.get("verified")))))
+    print("  ✓ CSV → %s" % csv_path)
+
+    tex_path = figures_dir / "sumtree_sweep.tex"
+    tex_path.write_text(sumtree_sweep_tex(report))
+    try:
+        for _ in range(2):
+            run = subprocess.run(["pdflatex", "-interaction=nonstopmode",
+                                  "-halt-on-error", tex_path.name],
+                                 cwd=figures_dir, capture_output=True, text=True,
+                                 timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        print("  ⚠ graph not drawn: pdflatex could not run (%s); the CSV and "
+              "%s have the numbers" % (e, tex_path.name), file=sys.stderr)
+        return False
+    pdf = figures_dir / "sumtree_sweep.pdf"
+    if run.returncode != 0 or not pdf.exists():
+        print("  ⚠ graph not drawn: pdflatex failed on %s (needs pgfplots); see "
+              "%s" % (tex_path, tex_path.with_suffix(".log")), file=sys.stderr)
+        return False
+    print("  ✓ Graph → %s" % pdf)
+    return True
+
+
+# Line styles: the pointer build and vanilla Gibbon stand out; the rest
+# cycle through distinguishable colours and marks.
+_SWEEP_STYLE_POINTER = "black, very thick, dashed, mark=*, mark options={solid}"
+_SWEEP_STYLE_VANILLA = "orange!90!black, very thick, mark=square*"
+_SWEEP_CYCLE = [
+    ("blue", "o"), ("red", "triangle"), ("teal", "diamond"),
+    ("violet", "pentagon"), ("brown", "x"), ("cyan!70!black", "+"),
+    ("magenta", "star"), ("olive", "otimes"), ("gray", "square"),
+    ("green!50!black", "triangle*"), ("purple", "diamond*"), ("lime!60!black", "oplus"),
+]
+
+
+def _sweep_legend_label(cfg: str, label: str) -> str:
+    """A configuration's key-table label, short enough for a legend: every
+    sweep configuration is a recursive traversal, so that goes, and the C
+    compiler knobs are abbreviated."""
+    if cfg == "ptr":
+        return "pointer-based (one heap object per node)"
+    for long, short in (("recursive traversal, ", ""),
+                        ("immutable cursors", "immutable"),
+                        ("mutable cursors", "mutable"),
+                        ("C tail-call optimization disabled", "no C tail calls"),
+                        ("C auto-vectorization disabled", "no C auto-vec"),
+                        ("C auto-vectorization enabled", "C auto-vec")):
+        label = label.replace(long, short)
+    return label
+
+
+def sumtree_sweep_tex(report: Dict) -> str:
+    """A standalone pgfplots document: median sumTree time, and time per
+    leaf, against tree depth, one line per configuration."""
+    depths = report["depths"]
+    order = report["configurations"]
+    points = report["points"]
+
+    def style(i_cycle: int, cfg: str) -> str:
+        if cfg == "ptr":
+            return _SWEEP_STYLE_POINTER
+        if cfg == SUMMARY_VANILLA_AOS:
+            return _SWEEP_STYLE_VANILLA
+        colour, mark = _SWEEP_CYCLE[i_cycle % len(_SWEEP_CYCLE)]
+        return "%s, thick, mark=%s" % (colour, mark)
+
+    def plots(per_leaf: bool, with_legend: bool) -> str:
+        out, i = [], 0
+        for cfg in order:
+            coords = []
+            for d in depths:
+                med = (points.get(cfg, {}).get(str(d)) or {}).get("median_s")
+                if med:
+                    y = med * 1e9 / 2 ** d if per_leaf else med
+                    coords.append("(%d,%.6g)" % (d, y))
+            st = style(i, cfg)
+            if cfg not in ("ptr", SUMMARY_VANILLA_AOS):
+                i += 1
+            if not coords:
+                continue
+            out.append("\\addplot[%s] coordinates {%s};" % (st, " ".join(coords)))
+            if with_legend:
+                out.append("\\addlegendentry{%s %s}"
+                           % (report["symbols"].get(cfg, _tex_escape(cfg)),
+                              _tex_escape(_sweep_legend_label(
+                                  cfg, report["labels"].get(cfg, cfg)))))
+        return "\n".join(out)
+
+    m = report.get("machine", {})
+    missing = sorted({"%s at depth %s" % (cfg, d)
+                      for cfg, by_d in points.items()
+                      for d, p in by_d.items() if not p.get("verified")})
+    caption = (
+        "\\texttt{sumTree} from MonoTree (a complete binary tree of depth $d$, "
+        "$2^d$ leaves), median time per traversal over %d iterations"
+        "%s, on %s with %s. Every point's answer was checked against the "
+        "oracle model; vanilla Gibbon is the thick orange line, the "
+        "pointer-based build the dashed black one."
+        % (report["iterations"],
+           (" in each of %d interleaved rounds" % report["pass_rounds"]
+            if report.get("pass_rounds", 1) > 1 else ""),
+           _tex_escape(m.get("cpu", "unknown CPU")),
+           _tex_escape(report.get("cc_version") or report.get("cc", ""))))
+    if missing:
+        caption += (" Missing (did not compile, run or verify): %s."
+                    % _tex_escape(", ".join(missing)))
+    xticks = ",".join(str(d) for d in depths)
+    axis = ("width=0.48\\textwidth, height=0.42\\textwidth, xmin=%d, xmax=%d, "
+            "xtick={%s}, xticklabel style={font=\\tiny}, ymode=log, grid=major, "
+            "xlabel={tree depth $d$ ($2^d$ leaves)}, "
+            "tick label style={font=\\scriptsize}, label style={font=\\small}"
+            % (depths[0], depths[-1], xticks))
+    return "\n".join([
+        "\\documentclass{article}",
+        "\\usepackage[margin=0.5in,landscape]{geometry}",
+        "\\usepackage{pgfplots}",
+        "\\pgfplotsset{compat=1.16}",
+        "\\begin{document}\\pagestyle{empty}",
+        "\\begin{figure}[h]\\centering",
+        "\\begin{tikzpicture}",
+        "\\begin{axis}[%s, ylabel={median time per traversal (s)}, "
+        "legend to name=sweeplegend, legend columns=3, legend cell align=left, "
+        "legend style={font=\\scriptsize, draw=none}]" % axis,
+        plots(per_leaf=False, with_legend=True),
+        "\\end{axis}",
+        "\\end{tikzpicture}\\hfill",
+        "\\begin{tikzpicture}",
+        "\\begin{axis}[%s, ylabel={time per leaf (ns)}]" % axis,
+        plots(per_leaf=True, with_legend=False),
+        "\\end{axis}",
+        "\\end{tikzpicture}",
+        "",
+        "\\medskip\\ref{sweeplegend}",
+        "\\caption{%s}" % caption,
+        "\\end{figure}",
+        "\\end{document}",
+        "",
+    ])
+
+
+def replot_sumtree_sweep(json_path: Path, figures_dir: Path) -> int:
+    """Redraw the graph from a stored sweep, running nothing."""
+    report = json.loads(Path(json_path).read_text())
+    if report.get("kind") != SUMTREE_SWEEP_JSON_KIND:
+        print("error: %s is not a sumTree sweep report" % json_path, file=sys.stderr)
+        return 2
+    return 0 if write_sumtree_sweep_outputs(report, Path(json_path).parent,
+                                            figures_dir) else 1
+
+
 def run_correctness_qualification(args) -> int:
     """Compile + run each selected variant ONCE, check an independent oracle,
     record full provenance, and emit no performance claim.
@@ -12763,6 +13104,30 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Which CPU to pin the roofline probe to (default: 0). On a "
                          "hybrid CPU choose a performance core; an efficiency core "
                          "measures a genuinely lower ceiling.")
+    ap.add_argument("--sumtree-size-sweep", action="store_true",
+                    help="Time MonoTree's sumTree alone at every tree depth in "
+                         "--sumtree-depths, for every fold configuration plus "
+                         "the pointer-based build (ptr), and draw median time "
+                         "and time per leaf against depth: "
+                         "<figures-dir>/sumtree_sweep.pdf, with "
+                         "sumtree_sweep.json/.csv in --output-dir. Each "
+                         "configuration is compiled once (the depth is the "
+                         "executable's --size-param), and each point is run "
+                         "and checked against the oracle exactly as a "
+                         "--pldi-submission cell is; "
+                         "--pldi-config narrows the configurations. Runs "
+                         "nothing else.")
+    ap.add_argument("--sumtree-depths", default=SUMTREE_SWEEP_DEFAULT_DEPTHS,
+                    metavar="SPEC",
+                    help="Depths for --sumtree-size-sweep: LO:HI (inclusive), "
+                         "LO:HI:STEP or a comma-separated list. Default: %s. "
+                         "The pointer build at depth 26 holds about 4 GB."
+                         % SUMTREE_SWEEP_DEFAULT_DEPTHS)
+    ap.add_argument("--sumtree-sweep-from-json", type=Path, default=None,
+                    metavar="JSON",
+                    help="Redraw the --sumtree-size-sweep graph into "
+                         "--figures-dir from a stored sumtree_sweep.json, then "
+                         "exit; nothing is compiled or run.")
     ap.add_argument("--pldi-submission", action="store_true",
                     help="For every DEFAULT_PROGRAMS entry, compile and run the full AoS/SoA "
                          "variant matrix (recursive immutable/mutable/mutable-no-TCO, plus "
@@ -12969,10 +13334,11 @@ def resolve_pin_cpu_arg(raw) -> Optional[int]:
 def main():
     ap = build_parser()
     args = ap.parse_args()
+    # The sweep measures --pldi-submission cells, under the same defaults.
+    pldi_like = args.pldi_submission or args.sumtree_size_sweep
     args.reclaim_iterate_regions = default_reclaim_iterate_regions(
-        args.reclaim_iterate_regions, args.pldi_submission)
-    args.pass_rounds = default_pass_rounds(args.pass_rounds,
-                                           args.pldi_submission)
+        args.reclaim_iterate_regions, pldi_like)
+    args.pass_rounds = default_pass_rounds(args.pass_rounds, pldi_like)
     # Set BEFORE anything reads it -- the run banner and every compile do.
     # This lived further down and the banner, printed above it, always reported
     # "off" even when the flag was given.
@@ -12999,8 +13365,12 @@ def main():
     # Before --av-variants, so twins are made only for selected
     # configurations, and before the replot below, so stored results render
     # with the same columns they were collected for.
+    if args.sumtree_sweep_from_json is not None:
+        return replot_sumtree_sweep(args.sumtree_sweep_from_json, args.figures_dir)
+
     if args.pldi_config is not None:
-        if not (args.pldi_submission or args.figures_from_json):
+        if not (args.pldi_submission or args.figures_from_json
+                or args.sumtree_size_sweep):
             ap.error("--pldi-config selects --pldi-submission configurations; "
                      "use it with --pldi-submission (or --figures-from-json)")
         try:
@@ -13025,7 +13395,8 @@ def main():
         except ValueError as e:
             ap.error(str(e))
     args.av_variants = default_av_variants(
-        args.av_variants, args.pldi_submission or bool(args.figures_from_json))
+        args.av_variants, args.pldi_submission or bool(args.figures_from_json)
+        or args.sumtree_size_sweep)
     apply_av_variants(resolve_av_variants(args.av_variants))
     prune_pldi_delta_columns()
 
@@ -13117,40 +13488,55 @@ def main():
     # Phase totals are registered up front so the bar shows overall
     # completion, not just progress through whichever phase is running.
     # The same count the campaign loop advances by, so the bar reaches 100%.
-    _n_variants = len(campaign_variants(
-        args.benchmark_immutable, args.benchmark_baseline_gibbon,
-        args.benchmark_ghc, args.benchmark_mlton))
-    # Each phase is split into one group per program, so the estimate can
-    # cost every remaining program at its own time in the previous run.
-    _display.add_phase("campaign", "campaign",
-                       len(programs_to_run) * _n_variants,
-                       groups={p: _n_variants for p in programs_to_run})
-    if args.pldi_submission:
+    if args.sumtree_size_sweep:
+        # The sweep runs nothing else, so its phase is the only one: one unit
+        # per configuration per depth, the count the matrix advances by when
+        # it measures no build.
         try:
-            _pldi_programs = resolve_program_selection(
-                args.programs, args.exclude_programs,
-                default_programs=(QUICK_RUN_PROGRAMS if args.quick_run
-                                  else DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS),
-                programs_dir=args.programs_dir)
-            # The same narrowing the matrix itself applies, so the group names
-            # registered here are the ones it will report against.
-            if args.use_width != DEFAULT_PAYLOAD_WIDTH:
-                _pldi_programs, _ = apply_width_selection(
-                    _pldi_programs, args.programs_dir, args.use_width)
-        except ProgramSelectionError:
-            _pldi_programs = list(programs_to_run)
-        # Two units per configuration: the pass measurement and the build
-        # measurement, each advanced once (see collect_pldi_variant_results).
-        _pldi_units = 2 * sum(len(v) for v in PLDI_MAP_CONFIGS.values())
-        _display.add_phase(
-            "pldi", "variant matrix", len(_pldi_programs) * _pldi_units,
-            groups={p: _pldi_units for p in _pldi_programs})
-    _display.load_history(args.output_dir / PROGRESS_HISTORY_FILE)
-    # Writing tables and running pdflatex takes seconds, nothing like a
-    # benchmark unit, so it is shown as a phase but excluded from the estimate.
-    _display.add_phase("report", "tables", 1, estimate=False)
-    _display.install()
-    _display.start_phase("campaign")
+            _sweep_depths = parse_sumtree_depths(args.sumtree_depths)
+        except ValueError as e:
+            ap.error(str(e))
+        _sweep_units = len(_sweep_depths) * sum(
+            len(c) for c in sumtree_sweep_configs().values())
+        _display.add_phase(SUMTREE_SWEEP_PHASE, "sumTree sweep", _sweep_units,
+                           groups={SUMTREE_SWEEP_PROGRAM: _sweep_units})
+        _display.load_history(args.output_dir / PROGRESS_HISTORY_FILE)
+        _display.install()
+    else:
+        _n_variants = len(campaign_variants(
+            args.benchmark_immutable, args.benchmark_baseline_gibbon,
+            args.benchmark_ghc, args.benchmark_mlton))
+        # Each phase is split into one group per program, so the estimate can
+        # cost every remaining program at its own time in the previous run.
+        _display.add_phase("campaign", "campaign",
+                           len(programs_to_run) * _n_variants,
+                           groups={p: _n_variants for p in programs_to_run})
+        if args.pldi_submission:
+            try:
+                _pldi_programs = resolve_program_selection(
+                    args.programs, args.exclude_programs,
+                    default_programs=(QUICK_RUN_PROGRAMS if args.quick_run
+                                      else DEFAULT_PROGRAMS + PLDI_EXTRA_PROGRAMS),
+                    programs_dir=args.programs_dir)
+                # The same narrowing the matrix itself applies, so the group names
+                # registered here are the ones it will report against.
+                if args.use_width != DEFAULT_PAYLOAD_WIDTH:
+                    _pldi_programs, _ = apply_width_selection(
+                        _pldi_programs, args.programs_dir, args.use_width)
+            except ProgramSelectionError:
+                _pldi_programs = list(programs_to_run)
+            # Two units per configuration: the pass measurement and the build
+            # measurement, each advanced once (see collect_pldi_variant_results).
+            _pldi_units = 2 * sum(len(v) for v in PLDI_MAP_CONFIGS.values())
+            _display.add_phase(
+                "pldi", "variant matrix", len(_pldi_programs) * _pldi_units,
+                groups={p: _pldi_units for p in _pldi_programs})
+        _display.load_history(args.output_dir / PROGRESS_HISTORY_FILE)
+        # Writing tables and running pdflatex takes seconds, nothing like a
+        # benchmark unit, so it is shown as a phase but excluded from the estimate.
+        _display.add_phase("report", "tables", 1, estimate=False)
+        _display.install()
+        _display.start_phase("campaign")
 
     if args.roofline and not (args.roofline_overlay or args.generate_paper):
         # Standalone: measure, write, done. No compiles, no campaign.
@@ -13213,6 +13599,8 @@ def main():
           f"Gibbon vectorizer and C auto-vectorizer both target it)")
     print(f"  Arithmetic   : {args.c_arithmetic}  (--c-arithmetic; driver default: {DEFAULT_C_ARITH_MODE}; "
           f"{'no -fwrapv' if args.c_arithmetic == 'unsafe' else ('Gibbon adds -fwrapv' if args.c_arithmetic == 'wrapv' else 'RTS-helper calls')})")
+    if args.sumtree_size_sweep:
+        return run_sumtree_size_sweep(args)
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:

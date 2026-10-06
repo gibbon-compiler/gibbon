@@ -295,6 +295,36 @@ configuration. It is not a packed layout, so it takes no part in the
 $A^{\min}/S^{\min}$ column. Its delta column $\Delta^{P}_{pk}$ compares it
 against vanilla Gibbon ($A_{ri}$), and is positive when packed is faster.
 
+### sumTree across input sizes (`--sumtree-size-sweep`)
+
+How each configuration's traversal scales from a cache-resident tree to one far
+past the last-level cache, the pointer-based build included:
+
+```bash
+python3 gibbon_benchmark.py --sumtree-size-sweep --iterations 21 --cc gcc-16 \
+  --output-dir sumtree_sweep_out --figures-dir sumtree_sweep_out/figures
+```
+
+- **What runs:** `sumtree_sweep/programs/{AOS,SOA}/MonoTreeSumTree.hs`, MonoTree
+  reduced to building the tree and timing `sumTree` on it, at every depth in
+  `--sumtree-depths` (default `10:26`; also `LO:HI:STEP` or `12,16,20`). Depth
+  d is a complete binary tree with 2^d leaves.
+- **Configurations:** every fold configuration plus `ptr`, which is added even
+  when `--pldi-config` does not name it; `--pldi-config` narrows the rest.
+- **One build per configuration:** the program reads its depth from the
+  executable's `--size-param`, so each configuration is compiled once and the
+  same executable runs at every depth.
+- **Same measurement as the paper tables:** each point is run and checked
+  against the oracle model for its depth exactly as a `--pldi-submission` cell
+  is, with the same defaults (interleaved rounds, region reclaim). `--pin-cpu`
+  applies as usual, so on x86 add `--pin-cpu auto`.
+- **Output:** `sumtree_sweep.json` and `sumtree_sweep.csv` in `--output-dir`,
+  and `sumtree_sweep.pdf` in `--figures-dir`: median time per traversal and time
+  per leaf against depth, one line per configuration. The graph is drawn by LaTeX
+  (pgfplots), so it needs no matplotlib. `--sumtree-sweep-from-json FILE` redraws
+  it from a stored JSON without running anything.
+- **Memory:** the pointer build at depth 26 holds about 4 GB.
+
 ### Vanilla Gibbon is shaded
 
 Vanilla Gibbon, $A_{ri}^{+av}$ (AoS, immutable cursors, the C auto-vectorizer

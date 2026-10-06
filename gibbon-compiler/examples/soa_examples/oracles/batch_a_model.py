@@ -105,6 +105,13 @@ def mono_tree_sum(d: int):
     return "'#(%d %d)" % (total, total)
 
 
+def mono_tree_sumtree_only(d: int):
+    # sumtree_sweep/programs/*/MonoTreeSumTree.hs: MonoTree without add1Tree,
+    # so every one of the 2^d leaves holds d(d+1)/2. At d=26 the total is
+    # 23,555,211,264, inside Int64.
+    return str(wrap64((2 ** d) * (d * (d + 1) // 2)))
+
+
 MODELS = {
     "List": lambda: list_sum(100000000),
     "LinearListReduction": lambda: linear_list_reduction(10000000),

@@ -649,8 +649,9 @@ class TestGroupTimingStopsWithItsWork(unittest.TestCase):
         # against, so the phase would never finish.
         src = (HERE / "gibbon_benchmark.py").read_text()
         main_src = src[src.index("\ndef main("):]
+        import re
         block = main_src[main_src.index("_pldi_programs = resolve_program_selection"):
-                         main_src.index('_display.add_phase(\n            "pldi"')]
+                         re.search(r'_display\.add_phase\(\s*"pldi"', main_src).start()]
         self.assertIn("apply_width_selection(", block)
 
 
