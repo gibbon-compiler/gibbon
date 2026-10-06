@@ -74,6 +74,7 @@ Usage:
 
 import os, re, sys, json, time, shutil, argparse, statistics, subprocess, textwrap, datetime, math, signal
 import hashlib
+import shlex
 import platform
 try:
     import resource
@@ -12359,30 +12360,55 @@ def qualify_variant(program: str, variant: str, source: Optional[Path],
 
 
 # ---------------------------------------------------------------------------
-# --sumtree-size-sweep: MonoTree's sumTree at every depth in a range
+# --tree-sweep: MonoTree's buildTree, add1Tree and sumTree at every depth
 # ---------------------------------------------------------------------------
-# How each configuration's traversal scales with the input, from cache-resident
-# to far past the last-level cache: one point per (configuration, depth), the
-# pointer-based build included. Every point is run and verified exactly as a
-# --pldi-submission cell is (collect_pldi_variant_results), on a MonoTree
-# reduced to its sumTree pass, and drawn as a graph rather than a table. The
-# program reads its depth from --size-param, so each configuration is
-# compiled once and the same executable is run at every depth.
-SUMTREE_SWEEP_PROGRAMS_DIR = Path(__file__).resolve().parent / "sumtree_sweep" / "programs"
-SUMTREE_SWEEP_PROGRAM = "MonoTreeSumTree.hs"
-SUMTREE_SWEEP_PASS = "sumTree"
-SUMTREE_SWEEP_DEFAULT_DEPTHS = "10:26"
-SUMTREE_SWEEP_MODEL = "oracles/batch_a_model.py:mono_tree_sumtree_only"
+# The three traversals of the ECOOP 2017 Gibbon paper's Figure 4, from a
+# cache-resident tree to one far past the last-level cache, for the Gibbon
+# configurations (the pointer-based build included) and for the same program
+# in other languages. Every Gibbon point is run and verified exactly as a
+# --pldi-submission cell is (collect_pldi_variant_results); the programs read
+# their depth from --size-param, so each configuration is compiled once. The
+# other languages' versions (tree_sweep/langs) print the same timing lines and
+# the same answer, and are run, parsed and checked the same way.
+TREE_SWEEP_DIR = Path(__file__).resolve().parent / "tree_sweep"
+TREE_SWEEP_PROGRAMS_DIR = TREE_SWEEP_DIR / "programs"
+TREE_SWEEP_LANGS_DIR = TREE_SWEEP_DIR / "langs"
+TREE_SWEEP_DEFAULT_DEPTHS = "10:26"
+TREE_SWEEP_JSON_KIND = "tree_sweep"
+TREE_SWEEP_PHASE = "treesweep"
+# The pointer build allocates with malloc and never frees, so a build or
+# add1 pass keeps every iteration's tree: its iterations are capped so they
+# fit this many bytes (an estimate of 48 bytes per leaf: a 16-byte leaf and
+# a 32-byte node allocation).
+TREE_SWEEP_POINTER_BUDGET_GB = 6.0
+TREE_SWEEP_POINTER_BYTES_PER_LEAF = 48
+
+# (key, pass name in the output, Gibbon program, which registry its
+#  configurations come from, oracle model)
+TREE_SWEEP_TRAVERSALS = (
+    ("build", "buildTree", "MonoTreeBuildTree.hs", "fold", "mono_tree_sumtree_only"),
+    ("add1", "add1Tree", "MonoTreeAdd1Tree.hs", "map", "mono_tree_add1_only"),
+    ("sum", "sumTree", "MonoTreeSumTree.hs", "fold", "mono_tree_sumtree_only"),
+)
+TREE_SWEEP_TITLES = {"build": "buildTree", "add1": "add1Tree", "sum": "sumTree"}
+
+# The Gibbon lines drawn (the CSV and JSON keep every configuration):
+# vanilla, the best recursive AoS and SoA, the loopified, vectorized SoA
+# where the traversal has one, and the pointer build.
+TREE_SWEEP_GIBBON_DRAWN = ("aos_imm", "aos_mut", "soa_mut", "soa_loop_sbs_gibvec", "ptr")
+
+TREE_SWEEP_LANGUAGES = ("ghc", "mlton", "ocaml", "rust", "racket", "java", "chez")
+TREE_SWEEP_LANGUAGE_LABELS = {
+    "ghc": "GHC", "mlton": "MLton", "ocaml": "OCaml", "rust": "Rust",
+    "racket": "Racket", "java": "Java", "chez": "Chez Scheme",
+}
 
 
-def sumtree_sweep_expected(depth: int) -> str:
-    """What the sweep program prints at `depth'."""
-    return _oracle_module("batch_a_model").mono_tree_sumtree_only(depth)
-SUMTREE_SWEEP_JSON_KIND = "sumtree_size_sweep"
-SUMTREE_SWEEP_PHASE = "sumtree"
+def tree_sweep_expected(model: str, depth: int) -> str:
+    return getattr(_oracle_module("batch_a_model"), model)(depth)
 
 
-def parse_sumtree_depths(spec: str) -> List[int]:
+def parse_tree_sweep_depths(spec: str) -> List[int]:
     """`10:26' (inclusive), `10:26:2' (with a step) or `12,16,20'."""
     spec = spec.strip()
     try:
@@ -12390,29 +12416,55 @@ def parse_sumtree_depths(spec: str) -> List[int]:
             parts = [int(p) for p in spec.split(":")]
             if len(parts) not in (2, 3):
                 raise ValueError
-            lo, hi = parts[0], parts[1]
-            step = parts[2] if len(parts) == 3 else 1
-            depths = list(range(lo, hi + 1, step))
+            depths = list(range(parts[0], parts[1] + 1,
+                                parts[2] if len(parts) == 3 else 1))
         else:
             depths = [int(p) for p in spec.split(",") if p.strip()]
     except ValueError:
-        raise ValueError("--sumtree-depths %r: expected LO:HI, LO:HI:STEP or "
-                         "a comma-separated list of depths" % spec)
+        raise ValueError("depths %r: expected LO:HI, LO:HI:STEP or a "
+                         "comma-separated list of depths" % spec)
     if not depths or min(depths) < 1 or max(depths) > 40:
-        raise ValueError("--sumtree-depths %r: need at least one depth, each "
-                         "between 1 and 40" % spec)
+        raise ValueError("depths %r: need at least one depth, each between "
+                         "1 and 40" % spec)
     return sorted(set(depths))
 
 
-def sumtree_sweep_configs() -> Dict[str, Dict[str, Dict]]:
-    """The fold configurations (sumTree is a fold, so nothing loopifies)
-    that this run selected, plus the pointer-based build whether or not
-    --pldi-config named it: the sweep exists to place it against the rest."""
-    configs = {layout: dict(cfgs) for layout, cfgs in PLDI_FOLD_CONFIGS.items()}
+def parse_tree_sweep_list(spec: str, known: Tuple[str, ...], what: str) -> List[str]:
+    """A comma-separated selection out of `known', in `known' order; `all'
+    and `none' are accepted."""
+    spec = spec.strip().lower()
+    if spec == "all":
+        return list(known)
+    if spec in ("none", ""):
+        return []
+    picked = [p.strip() for p in spec.split(",") if p.strip()]
+    unknown = [p for p in picked if p not in known]
+    if unknown:
+        raise ValueError("unknown %s %s; known: %s"
+                         % (what, ", ".join(unknown), ", ".join(known)))
+    return [k for k in known if k in picked]
+
+
+def tree_sweep_configs(registry: str) -> Dict[str, Dict[str, Dict]]:
+    """This run's configurations for one traversal: the fold ones (a fold or
+    a build loopifies nothing) or the map ones, plus the pointer build
+    whether or not --pldi-config named it."""
+    source = PLDI_FOLD_CONFIGS if registry == "fold" else PLDI_MAP_CONFIGS
+    configs = {layout: dict(cfgs) for layout, cfgs in source.items()}
     if not any("ptr" in cfgs for cfgs in configs.values()):
         configs.update({layout: dict(cfgs)
                         for layout, cfgs in PLDI_OPTIONAL_FOLD_CONFIGS.items()})
     return configs
+
+
+def tree_sweep_units(depths: List[int], traversals: List[str],
+                     languages: List[str]) -> int:
+    """Progress units: one per Gibbon configuration and language, per
+    traversal and depth -- what the runs below advance by."""
+    regs = {k: reg for k, _p, _prog, reg, _m in TREE_SWEEP_TRAVERSALS}
+    per_depth = sum(sum(len(c) for c in tree_sweep_configs(regs[t]).values())
+                    + len(languages) for t in traversals)
+    return len(depths) * per_depth
 
 
 def _sweep_cpu_name() -> str:
@@ -12429,125 +12481,379 @@ def _sweep_cpu_name() -> str:
     return platform.machine()
 
 
-def run_sumtree_size_sweep(args) -> int:
+# -- the other languages ---------------------------------------------------
+
+def _first_line(cmd: List[str]) -> str:
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        text = (r.stdout or r.stderr or "").strip()
+        return text.splitlines()[0] if text else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _rustc_command() -> Optional[List[str]]:
+    """A rustc that runs: the one on PATH, else a rustup toolchain (stable
+    first). Homebrew's can be broken by a missing LLVM dependency, and
+    rustup may have no default toolchain, so each is tried, not assumed."""
+    rustc = shutil.which("rustc")
+    if rustc and _first_line([rustc, "--version"]).startswith("rustc "):
+        return [rustc]
+    rustup = shutil.which("rustup") or str(Path.home() / ".cargo" / "bin" / "rustup")
+    if Path(rustup).exists():
+        try:
+            names = subprocess.run([rustup, "toolchain", "list"], capture_output=True,
+                                   text=True, timeout=60).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            names = []
+        names = [n for n in names if not n.startswith("(")]
+        names.sort(key=lambda n: (not n.startswith("stable"), n))
+        for name in names:
+            cmd = [rustup, "run", name, "rustc"]
+            if _first_line(cmd + ["--version"]).startswith("rustc "):
+                return cmd
+    return None
+
+
+def _ghc_command() -> Optional[str]:
+    pinned = Path.home() / ".ghcup" / "bin" / "ghc-9.4.6"
+    if pinned.exists():
+        return str(pinned)
+    return shutil.which("ghc")
+
+
+def _chez_command() -> Optional[str]:
+    """Chez Scheme: `chez' (Homebrew) or `chezscheme', else `scheme' when it
+    is Chez -- Linux packages install it under that name, and its --version
+    prints a bare version number, which MIT Scheme's does not."""
+    for name in ("chez", "chezscheme"):
+        path = shutil.which(name)
+        if path:
+            return path
+    path = shutil.which("scheme")
+    if path:
+        version = _first_line([path, "--version"])
+        if re.match(r"^\d+(\.\d+)+\s*$", version) and "MIT" not in version:
+            return path
+    return None
+
+
+def build_tree_sweep_language(lang: str, build_dir: Path
+                              ) -> Tuple[Optional[List[str]], str, Optional[str]]:
+    """Compile one language's version into build_dir.
+
+    Returns (command that runs it -- the pass name and the usual
+    --size-param/--iterate follow --, toolchain version, why it is absent).
+    """
+    # Absolute: every compiler below runs with build_dir as its working
+    # directory, where a relative path would point somewhere else.
+    build_dir = Path(build_dir).resolve()
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+    shutil.copytree(TREE_SWEEP_LANGS_DIR, build_dir)
+
+    def run(cmd: List[str], **kw) -> Optional[str]:
+        try:
+            r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True,
+                               timeout=900, **kw)
+        except (OSError, subprocess.SubprocessError) as e:
+            return str(e)
+        if r.returncode != 0:
+            return ((r.stderr or "") + (r.stdout or "")).strip()[-800:] or "exit %d" % r.returncode
+        return None
+
+    exe = build_dir / ("treebench_%s" % lang)
+    if lang == "ghc":
+        ghc = _ghc_command()
+        if not ghc:
+            return None, "", "no ghc"
+        err = run([ghc, "-O2", "-outputdir", "ghc_build", "treebench.hs", "-o", str(exe)])
+        return (None, "", err) if err else ([str(exe)], "GHC " + _first_line([ghc, "--numeric-version"]) + ", -O2", None)
+    if lang == "mlton":
+        mlton = shutil.which("mlton")
+        if not mlton:
+            return None, "", "no mlton"
+        err = run([mlton, "-default-ann", "allowFFI true", "-output", str(exe),
+                   "treebench.sml", "tb_now.c"])
+        return (None, "", err) if err else ([str(exe)], _first_line([mlton]).split(" (")[0], None)
+    if lang == "ocaml":
+        ocamlopt = shutil.which("ocamlopt")
+        if not ocamlopt:
+            return None, "", "no ocamlopt"
+        flambda = "flambda: true" in subprocess.run([ocamlopt, "-config"], capture_output=True,
+                                                    text=True).stdout
+        err = run([ocamlopt] + (["-O3"] if flambda else []) +
+                  ["-ccopt", "-DTB_OCAML", "tb_now.c", "treebench.ml", "-o", str(exe)])
+        version = "OCaml " + _first_line([ocamlopt, "-version"]) + (", -O3 (flambda)" if flambda else "")
+        return (None, "", err) if err else ([str(exe)], version, None)
+    if lang == "rust":
+        rustc = _rustc_command()
+        if not rustc:
+            return None, "", "no working rustc"
+        err = run(rustc + ["-O", "treebench.rs", "-o", str(exe)])
+        return (None, "", err) if err else ([str(exe)], _first_line(rustc + ["--version"]) + ", -O", None)
+    if lang == "racket":
+        racket = shutil.which("racket")
+        if not racket:
+            return None, "", "no racket"
+        err = run([racket, "-e", '(require compiler/cm) (managed-compile-zo "treebench.rkt")'])
+        return (None, "", err) if err else ([racket, str(build_dir / "treebench.rkt")],
+                                            _first_line([racket, "--version"]).replace("Welcome to ", "").rstrip("."), None)
+    if lang == "java":
+        javac, java = shutil.which("javac"), shutil.which("java")
+        if not (javac and java):
+            return None, "", "no javac/java"
+        err = run([javac, "-d", "classes", "TreeBench.java"])
+        return (None, "", err) if err else ([java, "-cp", str(build_dir / "classes"), "TreeBench"],
+                                            _first_line([java, "-version"]) + ", default JIT and heap", None)
+    if lang == "chez":
+        chez = _chez_command()
+        if not chez:
+            return None, "", "no Chez Scheme"
+        err = run([chez, "-q"], input='(optimize-level 3) (compile-program "treebench.ss" "treebench.so")\n')
+        return (None, "", err) if err else ([chez, "--program", str(build_dir / "treebench.so")],
+                                            "Chez Scheme " + _first_line([chez, "--version"]) + ", optimize-level 3", None)
+    return None, "", "unknown language %s" % lang
+
+
+def _launcher(path: Path, command: List[str], pass_arg: str,
+              memory_limit_kb: int) -> Path:
+    """A script that runs one language's version of one pass, taking the
+    same arguments a Gibbon executable takes, so run_exe can launch it.
+
+    It also kills the run if its resident memory passes memory_limit_kb: a
+    garbage-collected runtime at its default settings can need several times
+    the tree's size, and on a small machine that ends in swap, not in an
+    error. macOS enforces no memory rlimit, so the script polls instead."""
+    path.write_text(
+        "#!/bin/sh\n"
+        "%s %s \"$@\" &\n"
+        "pid=$!\n"
+        "while kill -0 $pid 2>/dev/null; do\n"
+        "  rss=$(ps -o rss= -p $pid 2>/dev/null | tr -d ' ')\n"
+        "  if [ -n \"$rss\" ] && [ \"$rss\" -gt %d ]; then\n"
+        "    kill -9 $pid 2>/dev/null\n"
+        "    echo \"tree sweep: exceeded the %.1f GB memory limit\" >&2\n"
+        "    exit 137\n"
+        "  fi\n"
+        "  sleep 0.1\n"
+        "done\n"
+        "wait $pid\n"
+        % (" ".join(shlex.quote(c) for c in command), shlex.quote(pass_arg),
+           memory_limit_kb, memory_limit_kb / 1048576))
+    path.chmod(0o755)
+    return path
+
+
+def tree_sweep_default_memory_gb() -> float:
+    """60% of this machine's memory, at most 24 GB: room for the run, the
+    driver and everything else on the machine."""
+    try:
+        if sys.platform == "darwin":
+            total = int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True,
+                                       text=True, timeout=5).stdout.strip())
+        else:
+            total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        return round(min(24.0, 0.6 * total / 1e9), 1)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 8.0
+
+
+def _language_point(runs: List[Tuple], pass_name: str, expected: str) -> Dict:
+    """One language's measurement at one depth, from its rounds."""
+    ok_runs = [r for r in runs if r[0]]
+    first = ok_runs[0] if ok_runs else runs[0]
+    parsed = [parse_passes(r[2]) for r in ok_runs if r[2]]
+    row = aggregate_rounds([p.get(pass_name) for p in parsed]) if parsed else {}
+    answer = (prov.semantic_output(first[2] or "") or "").strip()
+    verified = bool(ok_runs) and bool(row) and answer == expected
+    error = None
+    if not ok_runs:
+        error = ((first[3] or "").strip()[-300:] or "exit %s" % first[4])
+    elif answer != expected:
+        error = "printed %r, expected %s" % (answer[-60:], expected)
+    return {"median_s": row.get("median_time") if verified else None,
+            "ci95_low_s": row.get("ci95_low") if verified else None,
+            "ci95_high_s": row.get("ci95_high") if verified else None,
+            "n": row.get("n"), "verified": verified, "error": error}
+
+
+# -- the sweep -------------------------------------------------------------
+
+def run_tree_sweep(args) -> int:
     """Measure, write and draw the sweep. Returns the process exit code."""
     try:
-        depths = parse_sumtree_depths(args.sumtree_depths)
+        depths = parse_tree_sweep_depths(args.tree_sweep_depths)
+        traversals = parse_tree_sweep_list(args.tree_sweep_traversals,
+                                           tuple(t[0] for t in TREE_SWEEP_TRAVERSALS),
+                                           "traversal")
+        languages = parse_tree_sweep_list(args.tree_sweep_languages,
+                                          TREE_SWEEP_LANGUAGES, "language")
     except ValueError as e:
         print("error: %s" % e, file=sys.stderr)
         return 2
-    configs = sumtree_sweep_configs()
-    order = [cfg for layout in configs.values() for cfg in layout]
-    out_dir = Path(args.output_dir)
+    if not traversals:
+        print("error: no traversal selected", file=sys.stderr)
+        return 2
+    out_dir = Path(args.output_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     cc = resolve_cc(args.cc)
-    print("  sumTree size sweep: depths %s; configurations %s"
-          % (", ".join(map(str, depths)), ", ".join(order)))
+    spec = {k: (p, prog, reg, model) for k, p, prog, reg, model in TREE_SWEEP_TRAVERSALS}
+    budget = args.tree_sweep_pointer_gb * 1e9
+
+    # The other languages are compiled before anything is timed.
+    lang_cmds: Dict[str, List[str]] = {}
+    lang_versions: Dict[str, str] = {}
+    lang_missing: Dict[str, str] = {}
+    for lang in languages:
+        cmd, version, why = build_tree_sweep_language(lang, out_dir / "langs" / lang)
+        if cmd is None:
+            lang_missing[lang] = (why or "build failed").splitlines()[-1][:200]
+            print("  ⚠ %s left out: %s" % (TREE_SWEEP_LANGUAGE_LABELS[lang],
+                                           lang_missing[lang]))
+        else:
+            lang_cmds[lang] = cmd
+            lang_versions[lang] = version
+            print("  %s: %s" % (TREE_SWEEP_LANGUAGE_LABELS[lang], version))
+    memory_gb = args.tree_sweep_memory_gb or tree_sweep_default_memory_gb()
+    print("  Other languages are stopped above %.1f GB resident "
+          "(--tree-sweep-memory-gb)" % memory_gb)
+    launchers = {(lang, t): _launcher(out_dir / "langs" / lang / ("run_%s.sh" % t),
+                                      lang_cmds[lang], t, int(memory_gb * 1048576))
+                 for lang in lang_cmds for t in traversals}
 
     global PLDI_MAP_CONFIGS
     saved_configs = PLDI_MAP_CONFIGS
     manifest = default_oracle_manifest()
-    stem = Path(SUMTREE_SWEEP_PROGRAM).stem
-    points: Dict[str, Dict[str, Dict]] = {cfg: {} for cfg in order}
+    points: Dict[str, Dict[str, Dict[str, Dict]]] = {t: {} for t in traversals}
+    order: Dict[str, List[str]] = {}
+    pointer_iterations: Dict[str, Dict[str, int]] = {t: {} for t in traversals}
     try:
-        PLDI_MAP_CONFIGS = configs
-        progress().start_phase(SUMTREE_SWEEP_PHASE)
+        progress().start_phase(TREE_SWEEP_PHASE)
         for i, depth in enumerate(depths):
-            # The bar names the depth in progress; the items under it are the
-            # matrix's own (compiling, warmup, running each configuration).
-            phase = getattr(progress(), "phases", {}).get(SUMTREE_SWEEP_PHASE)
-            if phase is not None:
-                phase.label = "sumTree sweep, depth %d of %d-%d" % (
-                    depth, depths[0], depths[-1])
-            # The answer depends on the depth the run is given, so the oracle
-            # entry is replaced before each depth's runs are checked.
-            manifest.entries[stem] = prov.OracleEntry(
-                stem, sumtree_sweep_expected(depth), "python-model",
-                "depth %d (--size-param) by %s" % (depth, SUMTREE_SWEEP_MODEL))
-            print("  Depth %d (%s leaves)" % (depth, f"{2 ** depth:,}"))
-            # Compiled for the first depth only: the source does not change
-            # between depths, so later ones reuse the same executables.
-            results = collect_pldi_variant_results(
-                SUMTREE_SWEEP_PROGRAMS_DIR, out_dir, cc,
-                args.force_recompile and i == 0, gibbon_exe=None,
-                iterations=args.iterations, c_arith_mode=args.c_arithmetic,
-                simd_isa=args.simd_isa, pin_cpu=args.pin_cpu,
-                programs=[SUMTREE_SWEEP_PROGRAM], pass_rounds=args.pass_rounds,
-                measure_build=False, size_param=depth)
-            for cfg, res in results.get(SUMTREE_SWEEP_PROGRAM, {}).items():
-                pdata = (res.passes or {}).get(SUMTREE_SWEEP_PASS) or {}
-                verified = bool(prov.verified_result(res)) and bool(pdata)
-                points.setdefault(cfg, {})[str(depth)] = {
-                    "median_s": pdata.get("median_time") if verified else None,
-                    "ci95_low_s": pdata.get("ci95_low") if verified else None,
-                    "ci95_high_s": pdata.get("ci95_high") if verified else None,
-                    "n": pdata.get("n"),
-                    "verified": verified,
-                    "error": None if verified else (res.error_message
-                                                    or "not verified"),
-                }
+            for t in traversals:
+                pass_name, program, registry, model = spec[t]
+                expected = tree_sweep_expected(model, depth)
+                stem = Path(program).stem
+                phase = getattr(progress(), "phases", {}).get(TREE_SWEEP_PHASE)
+                if phase is not None:
+                    phase.label = "tree sweep: %s, depth %d of %d-%d" % (
+                        pass_name, depth, depths[0], depths[-1])
+                print("  %s, depth %d (%s leaves)" % (pass_name, depth, f"{2 ** depth:,}"))
+                configs = tree_sweep_configs(registry)
+                order[t] = [c for cfgs in configs.values() for c in cfgs]
+                manifest.entries[stem] = prov.OracleEntry(
+                    stem, expected, "python-model",
+                    "depth %d (--size-param) by oracles/batch_a_model.py:%s" % (depth, model))
+                # The pointer build keeps every build/add1 iteration's tree.
+                runs = [(configs, args.iterations)]
+                if t != "sum":
+                    cap = max(1, int(budget // (TREE_SWEEP_POINTER_BYTES_PER_LEAF * 2 ** depth)))
+                    if cap < args.iterations:
+                        rest = {lay: c for lay, c in configs.items() if lay != "ptr"}
+                        ptr = {lay: c for lay, c in configs.items() if lay == "ptr"}
+                        runs = [(rest, args.iterations), (ptr, cap)]
+                        pointer_iterations[t][str(depth)] = cap
+                for cfgs, iterations in runs:
+                    PLDI_MAP_CONFIGS = cfgs
+                    # Compiled for the first depth only: later depths run the
+                    # same executables with a different --size-param.
+                    results = collect_pldi_variant_results(
+                        TREE_SWEEP_PROGRAMS_DIR, out_dir / "gibbon", cc,
+                        args.force_recompile and i == 0, gibbon_exe=None,
+                        iterations=iterations, c_arith_mode=args.c_arithmetic,
+                        simd_isa=args.simd_isa, pin_cpu=args.pin_cpu,
+                        programs=[program], pass_rounds=args.pass_rounds,
+                        measure_build=False, size_param=depth)
+                    for cfg, res in results.get(program, {}).items():
+                        pdata = (res.passes or {}).get(pass_name) or {}
+                        verified = bool(prov.verified_result(res)) and bool(pdata)
+                        points[t].setdefault(cfg, {})[str(depth)] = {
+                            "median_s": pdata.get("median_time") if verified else None,
+                            "ci95_low_s": pdata.get("ci95_low") if verified else None,
+                            "ci95_high_s": pdata.get("ci95_high") if verified else None,
+                            "n": pdata.get("n"), "iterations": iterations,
+                            "verified": verified,
+                            "error": None if verified else (res.error_message or "not verified"),
+                        }
+                PLDI_MAP_CONFIGS = saved_configs
+                # The other languages, interleaved among themselves.
+                jobs = [(lang, launchers[(lang, t)]) for lang in lang_cmds]
+                if jobs:
+                    collected = run_rounds(jobs, args.iterations, args.pass_rounds,
+                                           pin_cpu=args.pin_cpu, size_param=depth)
+                    for lang, _l in jobs:
+                        points[t].setdefault("lang:" + lang, {})[str(depth)] = \
+                            _language_point(collected[lang], pass_name, expected)
+                        progress().advance()
         progress().finish_phase()
-        # Release the terminal before the summary below, as the campaign does.
         progress().close()
     finally:
         PLDI_MAP_CONFIGS = saved_configs
-        manifest.entries.pop(stem, None)
+        for _k, _p, program, _r, _m in TREE_SWEEP_TRAVERSALS:
+            manifest.entries.pop(Path(program).stem, None)
 
+    gibbon_cfgs = list(dict.fromkeys(c for t in traversals for c in order.get(t, [])))
     report = {
-        "kind": SUMTREE_SWEEP_JSON_KIND,
-        "program": SUMTREE_SWEEP_PROGRAM,
-        "pass": SUMTREE_SWEEP_PASS,
+        "kind": TREE_SWEEP_JSON_KIND,
+        "traversals": traversals,
+        "pass_names": {t: spec[t][0] for t in traversals},
         "depths": depths,
-        "configurations": order,
-        "symbols": {cfg: PLDI_COL_SYMBOLS.get(cfg, cfg) for cfg in order},
-        "labels": {cfg: PLDI_ROW_LABELS.get(cfg, cfg) for cfg in order},
+        "configurations": {t: order.get(t, []) for t in traversals},
+        "languages": list(lang_cmds),
+        "language_versions": lang_versions,
+        "languages_missing": lang_missing,
+        "symbols": {c: PLDI_COL_SYMBOLS.get(c, c) for c in gibbon_cfgs},
+        "labels": {c: PLDI_ROW_LABELS.get(c, c) for c in gibbon_cfgs},
         "machine": {"cpu": _sweep_cpu_name(), "platform": platform.platform()},
         "cc": cc, "cc_version": cc_version(cc),
         "iterations": args.iterations, "pass_rounds": args.pass_rounds,
+        "pointer_iterations": pointer_iterations,
+        "language_memory_limit_gb": memory_gb,
         "pin_cpu": args.pin_cpu, "simd_isa": args.simd_isa,
         "c_arithmetic": args.c_arithmetic,
         "reclaim_iterate_regions": RECLAIM_ITERATE_REGIONS,
         "points": points,
     }
-    json_path = out_dir / "sumtree_sweep.json"
+    json_path = out_dir / "tree_sweep.json"
     json_path.write_text(json.dumps(report, indent=1))
     print("  ✓ JSON → %s" % json_path)
-    failed = [(cfg, d, p["error"]) for cfg, by_d in points.items()
-              for d, p in by_d.items() if not p["verified"]]
-    for cfg, d, err in failed:
-        print("  ⚠ %s at depth %s did not verify: %s"
-              % (cfg, d, (err or "").splitlines()[0][:120] if err else ""))
-    return 0 if write_sumtree_sweep_outputs(report, out_dir,
-                                            Path(args.figures_dir)) else 1
+    for t in traversals:
+        for line, by_d in points[t].items():
+            for d, p in by_d.items():
+                if not p["verified"]:
+                    print("  ⚠ %s %s at depth %s did not verify: %s"
+                          % (spec[t][0], line, d, (p.get("error") or "").splitlines()[0][:150]
+                             if p.get("error") else ""))
+    return 0 if write_tree_sweep_outputs(report, out_dir, Path(args.figures_dir)) else 1
 
 
-def write_sumtree_sweep_outputs(report: Dict, out_dir: Path,
-                                figures_dir: Path) -> bool:
-    """The CSV next to the JSON, and the graph as a LaTeX/pgfplots document
-    compiled to figures_dir/sumtree_sweep.pdf. False if LaTeX failed."""
+def write_tree_sweep_outputs(report: Dict, out_dir: Path, figures_dir: Path) -> bool:
+    """The CSV next to the JSON, and the figure as a LaTeX/pgfplots document
+    compiled to figures_dir/tree_sweep.pdf. False if LaTeX failed."""
     out_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
-    depths = report["depths"]
-    order = report["configurations"]
-    points = report["points"]
-    csv_path = out_dir / "sumtree_sweep.csv"
+    csv_path = out_dir / "tree_sweep.csv"
     with open(csv_path, "w") as f:
-        f.write("configuration,depth,leaves,median_s,ns_per_leaf,"
+        f.write("traversal,line,depth,leaves,median_s,ns_per_leaf,"
                 "ci95_low_s,ci95_high_s,n,verified\n")
-        for cfg in order:
-            for d in depths:
-                p = points.get(cfg, {}).get(str(d)) or {}
-                med = p.get("median_s")
-                f.write("%s,%d,%d,%s,%s,%s,%s,%s,%s\n" % (
-                    cfg, d, 2 ** d, "" if med is None else "%.9g" % med,
-                    "" if med is None else "%.6g" % (med * 1e9 / 2 ** d),
-                    "" if p.get("ci95_low_s") is None else "%.9g" % p["ci95_low_s"],
-                    "" if p.get("ci95_high_s") is None else "%.9g" % p["ci95_high_s"],
-                    "" if p.get("n") is None else p["n"], int(bool(p.get("verified")))))
+        for t in report["traversals"]:
+            for line, by_d in report["points"][t].items():
+                for d in report["depths"]:
+                    p = by_d.get(str(d))
+                    if p is None:
+                        continue
+                    med = p.get("median_s")
+                    f.write("%s,%s,%d,%d,%s,%s,%s,%s,%s,%d\n" % (
+                        report["pass_names"][t], line, d, 2 ** d,
+                        "" if med is None else "%.9g" % med,
+                        "" if med is None else "%.6g" % (med * 1e9 / 2 ** d),
+                        "" if p.get("ci95_low_s") is None else "%.9g" % p["ci95_low_s"],
+                        "" if p.get("ci95_high_s") is None else "%.9g" % p["ci95_high_s"],
+                        "" if p.get("n") is None else p["n"], int(bool(p.get("verified")))))
     print("  ✓ CSV → %s" % csv_path)
-
-    tex_path = figures_dir / "sumtree_sweep.tex"
-    tex_path.write_text(sumtree_sweep_tex(report))
+    tex_path = figures_dir / "tree_sweep.tex"
+    tex_path.write_text(tree_sweep_tex(report))
     try:
         for _ in range(2):
             run = subprocess.run(["pdflatex", "-interaction=nonstopmode",
@@ -12555,39 +12861,45 @@ def write_sumtree_sweep_outputs(report: Dict, out_dir: Path,
                                  cwd=figures_dir, capture_output=True, text=True,
                                  timeout=300)
     except (OSError, subprocess.SubprocessError) as e:
-        print("  ⚠ graph not drawn: pdflatex could not run (%s); the CSV and "
+        print("  ⚠ figure not drawn: pdflatex could not run (%s); the CSV and "
               "%s have the numbers" % (e, tex_path.name), file=sys.stderr)
         return False
-    pdf = figures_dir / "sumtree_sweep.pdf"
+    pdf = figures_dir / "tree_sweep.pdf"
     if run.returncode != 0 or not pdf.exists():
-        print("  ⚠ graph not drawn: pdflatex failed on %s (needs pgfplots); see "
+        print("  ⚠ figure not drawn: pdflatex failed on %s (needs pgfplots); see "
               "%s" % (tex_path, tex_path.with_suffix(".log")), file=sys.stderr)
         return False
-    print("  ✓ Graph → %s" % pdf)
+    print("  ✓ Figure → %s" % pdf)
     return True
 
 
-# Line styles: the pointer build and vanilla Gibbon stand out; the rest
-# cycle through distinguishable colours and marks.
-_SWEEP_STYLE_POINTER = "black, very thick, dashed, mark=*, mark options={solid}"
-_SWEEP_STYLE_VANILLA = "orange!90!black, very thick, mark=square*"
-_SWEEP_CYCLE = [
-    ("blue", "o"), ("red", "triangle"), ("teal", "diamond"),
-    ("violet", "pentagon"), ("brown", "x"), ("cyan!70!black", "+"),
-    ("magenta", "star"), ("olive", "otimes"), ("gray", "square"),
-    ("green!50!black", "triangle*"), ("purple", "diamond*"), ("lime!60!black", "oplus"),
-]
+# Line styles: Gibbon's lines are solid, the pointer build dashed black, and
+# the other languages dotted, each with its own colour and mark.
+_SWEEP_STYLES = {
+    "aos_imm": "orange!90!black, very thick, mark=square*",
+    "aos_mut": "blue, thick, mark=*",
+    "soa_mut": "red, thick, mark=triangle*",
+    "soa_loop_sbs_gibvec": "red!60!black, thick, mark=diamond*",
+    "ptr": "black, very thick, dashed, mark=*, mark options={solid}",
+    "lang:ghc": "violet, thick, densely dotted, mark=o, mark options={solid}",
+    "lang:mlton": "teal, thick, densely dotted, mark=triangle, mark options={solid}",
+    "lang:ocaml": "brown, thick, densely dotted, mark=square, mark options={solid}",
+    "lang:rust": "green!50!black, thick, densely dotted, mark=diamond, mark options={solid}",
+    "lang:racket": "cyan!70!black, thick, densely dotted, mark=pentagon, mark options={solid}",
+    "lang:java": "magenta, thick, densely dotted, mark=star, mark options={solid}",
+    "lang:chez": "gray, thick, densely dotted, mark=x, mark options={solid}",
+}
 
 
 def _sweep_legend_label(cfg: str, label: str) -> str:
-    """A configuration's key-table label, short enough for a legend: every
-    sweep configuration is a recursive traversal, so that goes, and the C
-    compiler knobs are abbreviated."""
+    """A configuration's key-table label, short enough for a legend."""
     if cfg == "ptr":
         return "pointer-based (one heap object per node)"
     for long, short in (("recursive traversal, ", ""),
                         ("immutable cursors", "immutable"),
                         ("mutable cursors", "mutable"),
+                        ("selective buffer sharing", "buffer sharing"),
+                        ("Gibbon SIMD vectorization", "Gibbon SIMD"),
                         ("C tail-call optimization disabled", "no C tail calls"),
                         ("C auto-vectorization disabled", "no C auto-vec"),
                         ("C auto-vectorization enabled", "C auto-vec")):
@@ -12595,88 +12907,115 @@ def _sweep_legend_label(cfg: str, label: str) -> str:
     return label
 
 
-def sumtree_sweep_tex(report: Dict) -> str:
-    """A standalone pgfplots document: median sumTree time, and time per
-    leaf, against tree depth, one line per configuration."""
+def tree_sweep_tex(report: Dict) -> str:
+    """A standalone pgfplots document: one panel per traversal, median time
+    per traversal against tree depth, one line per drawn configuration and
+    language."""
     depths = report["depths"]
-    order = report["configurations"]
     points = report["points"]
+    lines = [c for c in TREE_SWEEP_GIBBON_DRAWN
+             if any(c in points[t] for t in report["traversals"])]
+    lines += ["lang:" + lang for lang in report.get("languages", [])]
 
-    def style(i_cycle: int, cfg: str) -> str:
-        if cfg == "ptr":
-            return _SWEEP_STYLE_POINTER
-        if cfg == SUMMARY_VANILLA_AOS:
-            return _SWEEP_STYLE_VANILLA
-        colour, mark = _SWEEP_CYCLE[i_cycle % len(_SWEEP_CYCLE)]
-        return "%s, thick, mark=%s" % (colour, mark)
+    def legend(line: str) -> str:
+        if line.startswith("lang:"):
+            return TREE_SWEEP_LANGUAGE_LABELS.get(line[5:], line[5:])
+        return "Gibbon %s %s" % (report["symbols"].get(line, _tex_escape(line)),
+                                 _tex_escape(_sweep_legend_label(
+                                     line, report["labels"].get(line, line))))
 
-    def plots(per_leaf: bool, with_legend: bool) -> str:
-        out, i = [], 0
-        for cfg in order:
-            coords = []
-            for d in depths:
-                med = (points.get(cfg, {}).get(str(d)) or {}).get("median_s")
-                if med:
-                    y = med * 1e9 / 2 ** d if per_leaf else med
-                    coords.append("(%d,%.6g)" % (d, y))
-            st = style(i, cfg)
-            if cfg not in ("ptr", SUMMARY_VANILLA_AOS):
-                i += 1
-            if not coords:
-                continue
-            out.append("\\addplot[%s] coordinates {%s};" % (st, " ".join(coords)))
-            if with_legend:
-                out.append("\\addlegendentry{%s %s}"
-                           % (report["symbols"].get(cfg, _tex_escape(cfg)),
-                              _tex_escape(_sweep_legend_label(
-                                  cfg, report["labels"].get(cfg, cfg)))))
+    def panel(t: str, first: bool) -> str:
+        """One panel's lines. The first panel also carries the legend for
+        every line of every panel, so a line only some traversals have (the
+        loopified SoA, say) still gets its entry."""
+        out = []
+        for line in lines:
+            style = _SWEEP_STYLES.get(line, "thick")
+            by_d = points[t].get(line) or {}
+            coords = ["(%d,%.6g)" % (d, p["median_s"])
+                      for d in depths for p in [by_d.get(str(d)) or {}]
+                      if p.get("median_s")]
+            if coords:
+                out.append("\\addplot[%s%s] coordinates {%s};"
+                           % (style, "" if first else ", forget plot", " ".join(coords)))
+            elif first:
+                out.append("\\addlegendimage{%s}" % style)
+            if first:
+                out.append("\\addlegendentry{%s}" % legend(line))
         return "\n".join(out)
 
     m = report.get("machine", {})
-    missing = sorted({"%s at depth %s" % (cfg, d)
-                      for cfg, by_d in points.items()
-                      for d, p in by_d.items() if not p.get("verified")})
+    missing = []
+    for t in report["traversals"]:
+        for line, by_d in points[t].items():
+            bad = [d for d, p in by_d.items() if not p.get("verified")]
+            if bad and (line in TREE_SWEEP_GIBBON_DRAWN or line.startswith("lang:")):
+                missing.append("%s %s at depth %s" % (
+                    report["pass_names"][t],
+                    legend(line).replace("Gibbon ", ""), ", ".join(sorted(bad, key=int))))
     caption = (
-        "\\texttt{sumTree} from MonoTree (a complete binary tree of depth $d$, "
-        "$2^d$ leaves), median time per traversal over %d iterations"
-        "%s, on %s with %s. Every point's answer was checked against the "
-        "oracle model; vanilla Gibbon is the thick orange line, the "
-        "pointer-based build the dashed black one."
+        "MonoTree's three traversals on a complete binary tree of depth $d$ "
+        "($2^d$ leaves): median time per traversal over %d iterations%s, on "
+        "%s. Gibbon compiled with %s. Every point's answer was checked against "
+        "the oracle model. Vanilla Gibbon is the thick orange line, the "
+        "pointer-based build the dashed black one, and the other languages "
+        "are dotted: %s."
         % (report["iterations"],
            (" in each of %d interleaved rounds" % report["pass_rounds"]
             if report.get("pass_rounds", 1) > 1 else ""),
            _tex_escape(m.get("cpu", "unknown CPU")),
-           _tex_escape(report.get("cc_version") or report.get("cc", ""))))
+           _tex_escape(report.get("cc_version") or report.get("cc", "")),
+           _tex_escape("; ".join(report.get("language_versions", {}).values())
+                       or "none")))
+    capped = {t: v for t, v in report.get("pointer_iterations", {}).items() if v}
+    if capped:
+        caption += (" The pointer build never frees, so its %s iterations were "
+                    "capped where they would exceed memory: %s."
+                    % ("/".join(report["pass_names"][t] for t in capped),
+                       _tex_escape("; ".join(
+                           "%s %s" % (report["pass_names"][t],
+                                      ", ".join("depth %s: %d" % (d, n)
+                                                for d, n in sorted(v.items(), key=lambda x: int(x[0]))))
+                           for t, v in capped.items()))))
+    if report.get("language_memory_limit_gb"):
+        caption += (" The other languages run at their default settings and "
+                    "are stopped above %.1f GB resident."
+                    % report["language_memory_limit_gb"])
+    if report.get("languages_missing"):
+        caption += " Left out (no toolchain): %s." % _tex_escape(", ".join(
+            "%s (%s)" % (TREE_SWEEP_LANGUAGE_LABELS[l], why)
+            for l, why in report["languages_missing"].items()))
     if missing:
-        caption += (" Missing (did not compile, run or verify): %s."
-                    % _tex_escape(", ".join(missing)))
+        caption += " Missing points (did not compile, run or verify): %s." % _tex_escape(
+            "; ".join(missing))
     xticks = ",".join(str(d) for d in depths)
-    axis = ("width=0.48\\textwidth, height=0.42\\textwidth, xmin=%d, xmax=%d, "
-            "xtick={%s}, xticklabel style={font=\\tiny}, ymode=log, grid=major, "
-            "xlabel={tree depth $d$ ($2^d$ leaves)}, "
-            "tick label style={font=\\scriptsize}, label style={font=\\small}"
-            % (depths[0], depths[-1], xticks))
+    width = {1: "0.7", 2: "0.47", 3: "0.32"}.get(len(report["traversals"]), "0.32")
+    body = []
+    for n, t in enumerate(report["traversals"]):
+        body += [
+            "\\begin{tikzpicture}",
+            "\\begin{axis}[title={%s}, width=%s\\textwidth, height=0.36\\textwidth, "
+            "xmin=%d, xmax=%d, xtick={%s}, xticklabel style={font=\\tiny}, "
+            "ymode=log, grid=major, xlabel={tree depth $d$ ($2^d$ leaves)}, "
+            "%s tick label style={font=\\scriptsize}, label style={font=\\small}%s]"
+            % (report["pass_names"][t], width, depths[0], depths[-1], xticks,
+               "ylabel={median time per traversal (s)}," if n == 0 else "",
+               ", legend to name=treelegend, legend columns=3, legend cell align=left, "
+               "legend style={font=\\scriptsize, draw=none}" if n == 0 else ""),
+            panel(t, n == 0),
+            "\\end{axis}",
+            "\\end{tikzpicture}" + ("\\hfill" if n + 1 < len(report["traversals"]) else ""),
+        ]
     return "\n".join([
         "\\documentclass{article}",
-        "\\usepackage[margin=0.5in,landscape]{geometry}",
+        "\\usepackage[margin=0.4in,landscape]{geometry}",
         "\\usepackage{pgfplots}",
         "\\pgfplotsset{compat=1.16}",
         "\\begin{document}\\pagestyle{empty}",
         "\\begin{figure}[h]\\centering",
-        "\\begin{tikzpicture}",
-        "\\begin{axis}[%s, ylabel={median time per traversal (s)}, "
-        "legend to name=sweeplegend, legend columns=3, legend cell align=left, "
-        "legend style={font=\\scriptsize, draw=none}]" % axis,
-        plots(per_leaf=False, with_legend=True),
-        "\\end{axis}",
-        "\\end{tikzpicture}\\hfill",
-        "\\begin{tikzpicture}",
-        "\\begin{axis}[%s, ylabel={time per leaf (ns)}]" % axis,
-        plots(per_leaf=True, with_legend=False),
-        "\\end{axis}",
-        "\\end{tikzpicture}",
+    ] + body + [
         "",
-        "\\medskip\\ref{sweeplegend}",
+        "\\medskip\\ref{treelegend}",
         "\\caption{%s}" % caption,
         "\\end{figure}",
         "\\end{document}",
@@ -12684,14 +13023,14 @@ def sumtree_sweep_tex(report: Dict) -> str:
     ])
 
 
-def replot_sumtree_sweep(json_path: Path, figures_dir: Path) -> int:
-    """Redraw the graph from a stored sweep, running nothing."""
+def replot_tree_sweep(json_path: Path, figures_dir: Path) -> int:
+    """Redraw the figure from a stored sweep, running nothing."""
     report = json.loads(Path(json_path).read_text())
-    if report.get("kind") != SUMTREE_SWEEP_JSON_KIND:
-        print("error: %s is not a sumTree sweep report" % json_path, file=sys.stderr)
+    if report.get("kind") != TREE_SWEEP_JSON_KIND:
+        print("error: %s is not a tree sweep report" % json_path, file=sys.stderr)
         return 2
-    return 0 if write_sumtree_sweep_outputs(report, Path(json_path).parent,
-                                            figures_dir) else 1
+    return 0 if write_tree_sweep_outputs(report, Path(json_path).parent,
+                                         figures_dir) else 1
 
 
 def run_correctness_qualification(args) -> int:
@@ -13104,30 +13443,50 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Which CPU to pin the roofline probe to (default: 0). On a "
                          "hybrid CPU choose a performance core; an efficiency core "
                          "measures a genuinely lower ceiling.")
-    ap.add_argument("--sumtree-size-sweep", action="store_true",
-                    help="Time MonoTree's sumTree alone at every tree depth in "
-                         "--sumtree-depths, for every fold configuration plus "
-                         "the pointer-based build (ptr), and draw median time "
-                         "and time per leaf against depth: "
-                         "<figures-dir>/sumtree_sweep.pdf, with "
-                         "sumtree_sweep.json/.csv in --output-dir. Each "
+    ap.add_argument("--tree-sweep", action="store_true",
+                    help="MonoTree's buildTree, add1Tree and sumTree at every tree "
+                         "depth in --tree-sweep-depths (the three panels of the "
+                         "ECOOP 2017 Gibbon paper's Figure 4), for the Gibbon "
+                         "configurations (the pointer build included) and for "
+                         "the same program in GHC, MLton, OCaml, Rust, Racket, "
+                         "Java and Chez Scheme (tree_sweep/langs). Writes "
+                         "tree_sweep.json/.csv to --output-dir and "
+                         "<figures-dir>/tree_sweep.pdf. Each Gibbon "
                          "configuration is compiled once (the depth is the "
-                         "executable's --size-param), and each point is run "
-                         "and checked against the oracle exactly as a "
-                         "--pldi-submission cell is; "
-                         "--pldi-config narrows the configurations. Runs "
-                         "nothing else.")
-    ap.add_argument("--sumtree-depths", default=SUMTREE_SWEEP_DEFAULT_DEPTHS,
+                         "executable's --size-param); every point is run and "
+                         "checked against the oracle the way a --pldi-submission "
+                         "cell is. A language whose compiler is missing is left "
+                         "out and named in the caption. Runs nothing else.")
+    ap.add_argument("--sumtree-size-sweep", action="store_true",
+                    help="--tree-sweep with only sumTree and only Gibbon.")
+    ap.add_argument("--tree-sweep-depths", "--sumtree-depths",
+                    dest="tree_sweep_depths", default=TREE_SWEEP_DEFAULT_DEPTHS,
                     metavar="SPEC",
-                    help="Depths for --sumtree-size-sweep: LO:HI (inclusive), "
-                         "LO:HI:STEP or a comma-separated list. Default: %s. "
-                         "The pointer build at depth 26 holds about 4 GB."
-                         % SUMTREE_SWEEP_DEFAULT_DEPTHS)
-    ap.add_argument("--sumtree-sweep-from-json", type=Path, default=None,
+                    help="Depths for --tree-sweep: LO:HI (inclusive), LO:HI:STEP "
+                         "or a comma-separated list. Default: %s."
+                         % TREE_SWEEP_DEFAULT_DEPTHS)
+    ap.add_argument("--tree-sweep-traversals", default="all", metavar="LIST",
+                    help="Comma-separated subset of build,add1,sum. Default: all.")
+    ap.add_argument("--tree-sweep-languages", default="all", metavar="LIST",
+                    help="Comma-separated subset of %s, or none. Default: all."
+                         % ",".join(TREE_SWEEP_LANGUAGES))
+    ap.add_argument("--tree-sweep-pointer-gb", type=float,
+                    default=TREE_SWEEP_POINTER_BUDGET_GB, metavar="GB",
+                    help="The pointer build never frees, so its buildTree and "
+                         "add1Tree iterations are capped to fit this much memory "
+                         "(default %g); the caption lists any cap."
+                         % TREE_SWEEP_POINTER_BUDGET_GB)
+    ap.add_argument("--tree-sweep-memory-gb", type=float, default=None, metavar="GB",
+                    help="Stop an other-language run whose resident memory passes "
+                         "this, and report its point as missing (default: 60%% of "
+                         "this machine's memory, at most 24). Their runtimes keep "
+                         "their default settings, and a garbage collector can need "
+                         "several times the tree's size.")
+    ap.add_argument("--tree-sweep-from-json", "--sumtree-sweep-from-json",
+                    dest="tree_sweep_from_json", type=Path, default=None,
                     metavar="JSON",
-                    help="Redraw the --sumtree-size-sweep graph into "
-                         "--figures-dir from a stored sumtree_sweep.json, then "
-                         "exit; nothing is compiled or run.")
+                    help="Redraw the --tree-sweep figure into --figures-dir from a "
+                         "stored tree_sweep.json, then exit; nothing is run.")
     ap.add_argument("--pldi-submission", action="store_true",
                     help="For every DEFAULT_PROGRAMS entry, compile and run the full AoS/SoA "
                          "variant matrix (recursive immutable/mutable/mutable-no-TCO, plus "
@@ -13335,7 +13694,11 @@ def main():
     ap = build_parser()
     args = ap.parse_args()
     # The sweep measures --pldi-submission cells, under the same defaults.
-    pldi_like = args.pldi_submission or args.sumtree_size_sweep
+    if args.sumtree_size_sweep:
+        args.tree_sweep = True
+        args.tree_sweep_traversals = "sum"
+        args.tree_sweep_languages = "none"
+    pldi_like = args.pldi_submission or args.tree_sweep
     args.reclaim_iterate_regions = default_reclaim_iterate_regions(
         args.reclaim_iterate_regions, pldi_like)
     args.pass_rounds = default_pass_rounds(args.pass_rounds, pldi_like)
@@ -13365,12 +13728,12 @@ def main():
     # Before --av-variants, so twins are made only for selected
     # configurations, and before the replot below, so stored results render
     # with the same columns they were collected for.
-    if args.sumtree_sweep_from_json is not None:
-        return replot_sumtree_sweep(args.sumtree_sweep_from_json, args.figures_dir)
+    if args.tree_sweep_from_json is not None:
+        return replot_tree_sweep(args.tree_sweep_from_json, args.figures_dir)
 
     if args.pldi_config is not None:
         if not (args.pldi_submission or args.figures_from_json
-                or args.sumtree_size_sweep):
+                or args.tree_sweep):
             ap.error("--pldi-config selects --pldi-submission configurations; "
                      "use it with --pldi-submission (or --figures-from-json)")
         try:
@@ -13396,7 +13759,7 @@ def main():
             ap.error(str(e))
     args.av_variants = default_av_variants(
         args.av_variants, args.pldi_submission or bool(args.figures_from_json)
-        or args.sumtree_size_sweep)
+        or args.tree_sweep)
     apply_av_variants(resolve_av_variants(args.av_variants))
     prune_pldi_delta_columns()
 
@@ -13488,18 +13851,20 @@ def main():
     # Phase totals are registered up front so the bar shows overall
     # completion, not just progress through whichever phase is running.
     # The same count the campaign loop advances by, so the bar reaches 100%.
-    if args.sumtree_size_sweep:
+    if args.tree_sweep:
         # The sweep runs nothing else, so its phase is the only one: one unit
-        # per configuration per depth, the count the matrix advances by when
-        # it measures no build.
+        # per Gibbon configuration and language, per traversal and depth.
         try:
-            _sweep_depths = parse_sumtree_depths(args.sumtree_depths)
+            _sweep_units = tree_sweep_units(
+                parse_tree_sweep_depths(args.tree_sweep_depths),
+                parse_tree_sweep_list(args.tree_sweep_traversals,
+                                      tuple(t[0] for t in TREE_SWEEP_TRAVERSALS),
+                                      "traversal"),
+                parse_tree_sweep_list(args.tree_sweep_languages,
+                                      TREE_SWEEP_LANGUAGES, "language"))
         except ValueError as e:
             ap.error(str(e))
-        _sweep_units = len(_sweep_depths) * sum(
-            len(c) for c in sumtree_sweep_configs().values())
-        _display.add_phase(SUMTREE_SWEEP_PHASE, "sumTree sweep", _sweep_units,
-                           groups={SUMTREE_SWEEP_PROGRAM: _sweep_units})
+        _display.add_phase(TREE_SWEEP_PHASE, "tree sweep", _sweep_units)
         _display.load_history(args.output_dir / PROGRESS_HISTORY_FILE)
         _display.install()
     else:
@@ -13599,8 +13964,8 @@ def main():
           f"Gibbon vectorizer and C auto-vectorizer both target it)")
     print(f"  Arithmetic   : {args.c_arithmetic}  (--c-arithmetic; driver default: {DEFAULT_C_ARITH_MODE}; "
           f"{'no -fwrapv' if args.c_arithmetic == 'unsafe' else ('Gibbon adds -fwrapv' if args.c_arithmetic == 'wrapv' else 'RTS-helper calls')})")
-    if args.sumtree_size_sweep:
-        return run_sumtree_size_sweep(args)
+    if args.tree_sweep:
+        return run_tree_sweep(args)
     if args.benchmark_immutable:
         imm_s = "YES  (4 variants: aos, aos_imm, soa, soa_imm)"
     elif args.benchmark_baseline_gibbon:

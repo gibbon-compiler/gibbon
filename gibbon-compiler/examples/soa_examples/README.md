@@ -295,35 +295,60 @@ configuration. It is not a packed layout, so it takes no part in the
 $A^{\min}/S^{\min}$ column. Its delta column $\Delta^{P}_{pk}$ compares it
 against vanilla Gibbon ($A_{ri}$), and is positive when packed is faster.
 
-### sumTree across input sizes (`--sumtree-size-sweep`)
+### Tree traversals across input sizes and languages (`--tree-sweep`)
 
-How each configuration's traversal scales from a cache-resident tree to one far
-past the last-level cache, the pointer-based build included:
+MonoTree's three traversals, `buildTree`, `add1Tree` and `sumTree` (the three
+panels of Figure 4 in the ECOOP 2017 Gibbon paper), at every tree depth from a
+cache-resident tree to one far past the last-level cache, for Gibbon and for the
+same program in other languages:
 
 ```bash
-python3 gibbon_benchmark.py --sumtree-size-sweep --iterations 21 --cc gcc-16 \
-  --output-dir sumtree_sweep_out --figures-dir sumtree_sweep_out/figures
+python3 gibbon_benchmark.py --tree-sweep --iterations 21 --cc gcc-16 \
+  --output-dir tree_sweep_out --figures-dir tree_sweep_out/figures
 ```
 
-- **What runs:** `sumtree_sweep/programs/{AOS,SOA}/MonoTreeSumTree.hs`, MonoTree
-  reduced to building the tree and timing `sumTree` on it, at every depth in
-  `--sumtree-depths` (default `10:26`; also `LO:HI:STEP` or `12,16,20`). Depth
-  d is a complete binary tree with 2^d leaves.
-- **Configurations:** every fold configuration plus `ptr`, which is added even
-  when `--pldi-config` does not name it; `--pldi-config` narrows the rest.
-- **One build per configuration:** the program reads its depth from the
-  executable's `--size-param`, so each configuration is compiled once and the
-  same executable runs at every depth.
-- **Same measurement as the paper tables:** each point is run and checked
-  against the oracle model for its depth exactly as a `--pldi-submission` cell
-  is, with the same defaults (interleaved rounds, region reclaim). `--pin-cpu`
-  applies as usual, so on x86 add `--pin-cpu auto`.
-- **Output:** `sumtree_sweep.json` and `sumtree_sweep.csv` in `--output-dir`,
-  and `sumtree_sweep.pdf` in `--figures-dir`: median time per traversal and time
-  per leaf against depth, one line per configuration. The graph is drawn by LaTeX
-  (pgfplots), so it needs no matplotlib. `--sumtree-sweep-from-json FILE` redraws
-  it from a stored JSON without running anything.
-- **Memory:** the pointer build at depth 26 holds about 4 GB.
+- **Gibbon:** `tree_sweep/programs/{AOS,SOA}/MonoTree{BuildTree,Add1Tree,SumTree}.hs`,
+  each timing one traversal. The fold configurations run `buildTree` and
+  `sumTree`, the map configurations (loopified and vectorized SoA included) run
+  `add1Tree`, and the pointer build (`ptr`) runs all three. `--pldi-config`
+  narrows the rest. The depth is the executable's `--size-param`, so each
+  configuration is compiled once.
+- **Other languages:** `tree_sweep/langs/` holds GHC, MLton, OCaml, Rust,
+  Racket, Java and Chez Scheme versions, ported from the 2017 BintreeBench
+  suite and aligned with MonoTree: 64-bit leaves, `mkTree d 0`, every subtree
+  built separately. Each takes the same arguments as a Gibbon executable and
+  prints the same timing lines and answer. They are compiled with standard
+  optimization (`ghc -O2`, MLton, `ocamlopt`, `rustc -O`, Racket CS, `javac` with
+  the default JIT, Chez `optimize-level 3`) and run with their runtime's default
+  settings. A language whose compiler is missing is left out and named in the
+  caption. `--tree-sweep-languages` picks a subset (or `none`).
+- **Same measurement for every line:** each point is run in interleaved rounds
+  and checked against the oracle model for its depth, the way a
+  `--pldi-submission` cell is. `--pin-cpu` applies as usual, so on x86 add
+  `--pin-cpu auto`.
+- **Memory:** the pointer build never frees, so its `buildTree` and `add1Tree`
+  iterations are capped to fit `--tree-sweep-pointer-gb` (default 6). Another
+  language's run is stopped if its resident memory passes
+  `--tree-sweep-memory-gb` (default 60% of the machine's memory, at most 24 GB):
+  at default settings GHC, Java, MLton, Chez and Racket need several times the
+  tree's size, and on a 16 GB machine depth 26 would otherwise end in swap. Both
+  are named in the caption where they apply.
+- **Output:** `tree_sweep.json` and `tree_sweep.csv` (every configuration) in
+  `--output-dir`, and `tree_sweep.pdf` in `--figures-dir`: one panel per
+  traversal, median time per traversal against depth, with vanilla Gibbon, the
+  best recursive AoS and SoA, the loopified vectorized SoA, the pointer build and
+  every language drawn. LaTeX (pgfplots) draws it, so no matplotlib is needed;
+  `--tree-sweep-from-json FILE` redraws it without running anything.
+- **Toolchains:** each language uses the first compiler it finds on `PATH`:
+  `ghc` (or `~/.ghcup/bin/ghc-9.4.6`), `mlton`, `ocamlopt`, `rustc` (a working
+  one on `PATH`, else a rustup toolchain, stable first), `racket`,
+  `javac`/`java`, and `chez`, `chezscheme` or `scheme` for Chez. On Debian or
+  Ubuntu, for example: `sudo apt install mlton ocaml-nox racket default-jdk
+  chezscheme texlive-pictures` (pgfplots, for the figure), plus GHC through
+  ghcup and Rust through rustup. The run prints the version it found for each.
+- **Subsets:** `--tree-sweep-depths` (default `10:26`; also `LO:HI:STEP` or
+  `12,16,20`), `--tree-sweep-traversals` (any of `build,add1,sum`).
+  `--sumtree-size-sweep` is `sumTree` with Gibbon only.
 
 ### Vanilla Gibbon is shaded
 

@@ -26,6 +26,7 @@ stack*.yaml.lock
 examples/**/*.c
 # Hand-written benchmark tool, not generated C.
 !examples/soa_examples/alignment_probe.c
+!examples/soa_examples/tree_sweep/langs/tb_now.c
 examples/**/*.exe
 examples/build_tmp/*
 examples/**/*.hi
