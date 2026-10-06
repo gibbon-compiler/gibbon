@@ -455,7 +455,8 @@ _PROTOCOL_LINE_RES = [
     re.compile(r"Running\s+pass\s+.*?:"),
     re.compile(r"Running\s+program\s+.*?:"),
     re.compile(r"End"),
-    re.compile(r"PAPI_NATIVE\s+\S+.*"),
+    # Counter lines from the PAPI and the kperf (--enable-kperf) runtimes.
+    re.compile(r"(?:PAPI|KPERF)_NATIVE\s+\S+.*"),
     re.compile(r"INFO_TABLE:.*"),
     re.compile(r"Initialized\s+footer\s+at.*"),
     re.compile(r"(?:GibOldgenChunkFooter|GibRegionInfo).*"),

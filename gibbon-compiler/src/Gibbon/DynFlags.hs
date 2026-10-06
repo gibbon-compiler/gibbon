@@ -73,6 +73,7 @@ data GeneralFlag
                              --   Requires Opt_UseMutableCursors.
   | Opt_PapiInstrumentation -- ^ Enable PAPI instrumentation while compiling the gibbon binary.
   | Opt_PapiNativeInstrumentation -- ^ Enable native PAPI event instrumentation while compiling the gibbon binary.
+  | Opt_KperfInstrumentation -- ^ Read hardware counters through Apple's kperf (macOS only; the program must run as root).
   | Opt_TailCallOptimize   -- ^ For functions that are tail recursive, run the optimization pass to transform them in tail position.
   | Opt_StoreScalarFieldCounts -- ^ Store scalar-field counts for annotated SoA builders.
   | Opt_DeferScalarCounts -- ^ Maintain scalar-field counts with a deferred per-buffer counter
@@ -304,7 +305,10 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                           "compiler backend setting. Applies only to the generated translation " ++
                                           "unit, not the RTS.")) <|>
                    flag' Opt_PapiInstrumentation (long "enable-papi" <> help "Enable instrumentation using papi, extends the iterate timing function." ) <|>
-                   flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).")
+                   flag' Opt_PapiNativeInstrumentation (long "enable-papi-native" <> help "Enable PAPI native-event instrumentation in iterate timing (uses EventSet API).") <|>
+                   flag' Opt_KperfInstrumentation (long "enable-kperf" <> help ("Read per-iteration hardware counters (cycles, instructions, L1D/L1I misses, memory-stall and page-walk events) " ++
+                                                                               "in iterate timing through Apple's kperf framework. macOS only; the " ++
+                                                                               "program must run as root. Cannot be combined with --enable-papi[-native]."))
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
                                             help "Dump some information while running RepairProgram") <|>

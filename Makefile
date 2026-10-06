@@ -16,7 +16,7 @@ SANDBOX=.racket_sandbox
 
 gibbon-lang: $(SANDBOX)
 	rm -rf $(SANDBOX)/*
-	PLTADDONDIR=`pwd`/$(SANDBOX) raco pkg install --link ./gibbon
+	PLTADDONDIR=`pwd`/$(SANDBOX) raco pkg install --scope user --link ./gibbon
 
 # OLD WAY: user-wide install.  No good for testing.
 # RRN [2016.12.28] was there a single command that is idempotent?

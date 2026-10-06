@@ -1976,9 +1976,15 @@ INLINE_HEADER void clobber(void) {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+// The stack a Gibbon program runs on; see Note [Program stack on macOS].
+#define GIB_STACK_SIZE (4 * 1024LU * 1024LU * 1024LU)
+
 size_t gib_nursery_realloc(GibNursery *nursery, size_t nsize);
 int gib_init(int argc, char **argv);
 int gib_exit(void);
+#ifdef __APPLE__
+int gib_run_main(int (*body)(int, char **), int argc, char **argv);
+#endif
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2060,5 +2066,17 @@ _Static_assert(_Generic(&gib_get_size_param_i64,
 _Static_assert(_Generic(&gib_get_iters_param_i64,
                         int64_t (*)(void): 1, default: 0),
                GIB_ABI_PIN_MSG("gib_get_iters_param_i64"));
+
+#ifdef _GIBBON_ENABLE_KPERF
+// Hardware counters through Apple's private kperf framework: macOS on Apple
+// silicon only, and the process must run as root.  Opt-in: compiled only
+// for `gibbon --enable-kperf` (RTS built with KPERF=1).  The counters are
+// per thread.  See Note [kperf counters] in gibbon_rts.c.
+#define GIB_KPERF_EVENT_COUNT 9
+void gib_kperf_init_or_die(void);
+void gib_kperf_read(uint64_t out[GIB_KPERF_EVENT_COUNT]);
+const char *gib_kperf_metric_label(int i);
+const char *gib_kperf_event_name(int i);
+#endif // _GIBBON_ENABLE_KPERF
 
 #endif // #ifndef _GIBBON_H

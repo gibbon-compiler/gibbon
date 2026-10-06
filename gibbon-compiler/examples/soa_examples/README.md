@@ -4,18 +4,6 @@ Benchmarks **AoS** (Array of Structs) vs **SoA** (Struct of Arrays) Gibbon
 compiler programs and produces publication-quality figures and LaTeX tables for
 conference papers.
 
-> **Design / context / verification documents live outside this repository.**
-> Handoff notes, verification plans, defect and benchmark analyses for the
-> packed fully-factored layout work (loopification, selective buffer sharing,
-> SIMD vectorization, and the source-declared integer widths) are maintained in
-> `git@github.com:vidsinghal/llm-notes.git` under `gibbon-soa-layout/`.
-> Start with
-> `gibbon-soa-layout/current/variable_width_integer_implementation_progress.md`,
-> the canonical living ledger (the older `Context.md` is historical and its
-> `--int32` model is superseded).  Only user-facing documentation for
-> the shipped artifact — this file, `ANNOTATIONS.md`, `GETTING_STARTED.txt` —
-> stays here.
-
 ---
 
 ## Integer width is a source property
@@ -266,6 +254,177 @@ over) and the one thing the skip hides.
 
 ---
 
+## Choosing PLDI configurations (`--pldi-config`)
+
+`--pldi-submission` compiles and runs a fixed matrix of configurations per
+program. To run only some of them, or to add an opt-in configuration, list them
+in a TOML file and pass it with `--pldi-config`:
+
+```toml
+[pldi]
+configs = ["aos_imm", "aos_mut", "soa_mut", "ptr"]
+```
+
+```bash
+./gibbon_benchmark.py --pldi-submission --pldi-config my_configs.toml --generate-paper
+```
+
+`pldi_configs.example.toml` lists every name with a one-line description; copy
+it and delete what you do not want. Without `--pldi-config` the default matrix
+runs, unchanged.
+
+- **Order** does not matter: columns keep the standard order.
+- **Delta columns** appear only when both configurations they compare are
+  selected. A summary table whose two configurations were not both selected is
+  replaced by a one-line note.
+- **The `-av` twins** (`*_navec`) are not named in the file. `--av-variants`
+  still adds them, for whichever of their bases are selected.
+- **Replotting** (`--figures-from-json`) takes the same `--pldi-config`, so
+  stored results render with the columns they were collected for.
+- Unknown names, duplicates, unknown keys and an empty list are errors, reported
+  before anything is compiled.
+
+### The pointer-based configuration (`ptr`)
+
+`ptr` is opt-in. It compiles the **AoS** source with `gibbon --pointer` instead
+of `--packed`: one heap object per node, allocated with `malloc` (the runtime
+links the Boehm GC but pointer mode does not use it, so `--no-gc` changes
+nothing), which is how an ordinary functional program represents a tree. It appears in its own
+**Pointer** column group ($P$), checked against the same oracle as every other
+configuration. It is not a packed layout, so it takes no part in the
+$A^{\min}/S^{\min}$ column. Its delta column $\Delta^{P}_{pk}$ compares it
+against vanilla Gibbon ($A_{ri}$), and is positive when packed is faster.
+
+### Vanilla Gibbon is shaded
+
+Vanilla Gibbon, $A_{ri}^{+av}$ (AoS, immutable cursors, the C auto-vectorizer
+on, i.e. plain Gibbon at `-O3`), is shaded pale yellow in every table that shows
+it: its column in the per-pass, counter and alignment tables, its group columns in
+the summary-versus-vanilla table, and its row in the configuration key. Shading
+needs `\usepackage{colortbl}` in the document that `\input`s the tables; without
+it the tables compile unshaded. The preview PDF loads it.
+
+### Input sizes (`--pldi-sizes`)
+
+Every sizable program fixes its input with one literal in `gibbon_main`
+(`mkList 100000000`, `mkTree 23 0`, ...). To run some programs at a different
+size, list them in a TOML file and pass it with `--pldi-sizes`:
+
+```toml
+[sizes]
+List = 10000000      # n, list elements
+MonoTree = 20        # depth
+```
+
+`pldi_sizes.example.toml` lists every sizable program and its shipped size.
+Programs you don't list keep their shipped size.
+
+- **The shipped sources are never edited.** The literal is rewritten in a copy
+  under `<output-dir>/resized_src/`, which is what gets compiled, and the same
+  rewrite applies to the build-timing copy.
+- **Results stay verified.** The expected answer is recomputed at the new size
+  by the program's independent model in `oracles/`, the same model the
+  committed oracle came from.
+- **Resized runs are labelled.** Every resized program's tables say so in
+  their caption, with the shipped size. The summary tables and reading notes
+  list all resized programs, and the results JSON records the sizes, which a
+  `--figures-from-json` replot restores.
+- **Sizable programs:** List, MonoTree, TernaryTree, reduceNestedList,
+  Add1TreeInt{8,16,32,64} and ArithmeticIntensityInt{8,16,32,64}. Naming any
+  other program is an error.
+- **Not combinable with `--benchmark-ghc` or `--benchmark-mlton`,** since
+  their sources have their own size literals. Sizes are also not applied to
+  `--include-build-pass`'s build-only sources.
+
+**Stack depth.** A configuration that recurses once per element needs a deep C
+stack. On Linux the runtime raises the stack limit to 4 GB. macOS fixes the main
+thread's stack at 8 MB when the process starts, so there the generated `main`
+runs the program on a thread with the same 4 GB stack (reserved, not committed).
+Both machines therefore run the same sizes.
+
+**Memory.** `reduceNestedList` at its shipped size builds about 3×10⁹ list
+cells (~26 GB packed), and the pointer build keeps every build iteration's copy.
+`pldi_sizes.crossplatform.toml` sets it, MonoTree and Add1TreeInt* to sizes that
+fit a 16 GB machine; use the same file on every machine you compare.
+
+### Hardware counters on macOS (`--pldi-kperf-counters`)
+
+`--pldi-cache-counters` reads counters through PAPI, which only exists on
+Linux. On Apple silicon, `--pldi-kperf-counters` runs the same counter phase
+but reads the counters through Apple's private kperf framework, the interface
+Instruments uses. It's opt-in: without it, no command, binary or table
+changes.
+
+- **Counters:** see "What the counters count" below. The M1's event
+  database (`/usr/share/kpep/a14.plist`, 60 events) has **no L2 or last-level
+  cache miss event**: the L2 is shared by a core cluster and its counters are
+  outside the core PMU. Those rows are absent rather than filled with a
+  substitute.
+- **Needs root.** The driver asks for your sudo password once at start, then
+  runs only the counter executables with `sudo -n`, keeping the sudo
+  timestamp fresh in the background. Everything else, including compiling and
+  the output files, runs as you.
+- **No core pinning:** macOS can't pin a thread to a core, so `--pin-cpu` is
+  not needed. The runtime asks for the performance cores (user-interactive QoS)
+  instead, and the notes say so.
+- **Under the hood:** it compiles with `gibbon --enable-kperf`, which emits the
+  counter reads only when given and builds the RTS with `KPERF=1`. See
+  Note [kperf counters] in `gibbon-rts/rts-c/gibbon_rts.c`.
+
+**Misaligned accesses (kperf runs).** At the start of the kperf phase the driver
+compiles and runs `alignment_probe.c`, which measures what an 8-byte load costs on
+this machine when it is aligned, unaligned, crossing 64 bytes or crossing a 128-byte
+block. The report prints that as a calibration table. Each program then gets a table
+with, per pass and configuration, the counted 64-byte-crossing accesses per 1000
+instructions and an upper bound on the share of the pass's time they could cost: the
+crossings times the probe's largest extra latency, divided by the pass's time. The
+bound deliberately over-charges, treating every 64-byte crossing as a 128-byte-block
+crossing on the critical path.
+
+### What the counters count
+
+Both backends report five counters under the same names, so an M1 table and an
+x86 table line up row for row. Every counter table lists them first, under
+"Counted the same way on the M1 and x86":
+
+| Counter | M1 (kperf) | x86 (PAPI) |
+|---|---|---|
+| Cycles | `FIXED_CYCLES` | core cycles |
+| Instructions | `FIXED_INSTRUCTIONS` | instructions retired |
+| L1D load misses (retired) | `L1D_CACHE_MISS_LD_NONSPEC` | `MEM_LOAD_RETIRED:L1_MISS` |
+| L1I misses | `L1I_CACHE_MISS_DEMAND` (demand only) | `perf::L1-ICACHE-LOAD-MISSES` (includes prefetch) |
+| Data TLB misses | `L2_TLB_MISS_DATA` (loads and stores) | `DTLB_LOAD_MISSES:WALK_COMPLETED` (loads) |
+
+The last two are the closest each machine offers, not identical. Then, under
+"This machine only": on x86, L2 and LLC misses of retired loads
+(`MEM_LOAD_RETIRED:L2_MISS`, `:L3_MISS`); on the M1, L1D load misses including
+speculative ones, dispatch-stall cycles, data page walks and 64-byte-crossing
+accesses.
+
+- **Window.** The runtime reads the counters immediately around the timed
+  region of each iteration, so a count covers exactly what that iteration's
+  time covers, not the region save and reclaim around it.
+- **Two runs on x86.** A P-core of the i7-12700K counts four programmable
+  events beside cycles and instructions, one short of the x86 set. The counter
+  phase therefore runs each executable twice, once per event group
+  (`GIBBON_PAPI_GROUP=1`: L1D, L2, LLC; `=2`: L1I, DTLB), and merges them.
+- **Exact events.** The counter notes name the event behind every counter.
+  Each counter's alternative event names are spellings of the same event, never
+  a different one: a counter the CPU cannot count is listed as "Not counted",
+  and one read from more than one event is flagged.
+- **Noise.** A row whose largest count is under 1000 per iteration gets no
+  green/red marks and no AoS/SoA ratio, and a counter that is under that
+  everywhere is reduced to one line.
+
+Both counter backends now also produce a **per-configuration counter table**
+for each program. It has one column per measured configuration, grouped
+AoS / SoA / Pointer like the timing tables, one block of rows per counter, and
+one row per timed pass. The existing AoS-versus-SoA counter tables are
+unchanged. They are produced only when both configurations of the layout step
+were measured.
+
+---
+
 ## Smart Recompilation
 
 The script compares the **modification timestamp** of each `.hs` source file
@@ -346,6 +505,9 @@ for accessibility.  Horizontal legend below the plots.
   --figures-dir  DIR    Figure output dir  (default: figures/)
   --report       FILE   Text report path   (default: benchmark_report.txt)
   --json         FILE   JSON results path  (default: benchmark_results.json)
+  --pldi-config  FILE   TOML file choosing --pldi-submission configurations
+  --pldi-sizes   FILE   TOML file overriding --pldi-submission input sizes
+  --pldi-kperf-counters  macOS: counter phase via Apple kperf (needs sudo)
 ```
 
 ---

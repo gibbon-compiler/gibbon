@@ -1,0 +1,9 @@
+[sizes]
+MonoTree = 25
+Add1TreeInt8 = 34
+Add1TreeInt16 = 34
+Add1TreeInt32 = 34
+Add1TreeInt64 = 34
+# Shipped 1000000 needs ~26 GB packed; the pointer build-timed run keeps all
+# 9 builds (~4.1 GB at 5000).
+reduceNestedList = 5000

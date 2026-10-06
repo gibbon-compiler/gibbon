@@ -14,6 +14,7 @@
 # PARALLEL
 # BUMPALLOC
 # PAPI
+# KPERF
 # REGIONRESET               = 0 | 1
 # SCALARCOUNTDIFF           = 0 | 1
 #
@@ -70,6 +71,12 @@ endif
 
 ifeq ($(PAPI), 1)
 	CFLAGS += -D_GIBBON_ENABLE_PAPI
+endif
+
+# Opt-in hardware counters through Apple's kperf (macOS only, run as root).
+# See Note [kperf counters] in rts-c/gibbon_rts.c.
+ifeq ($(KPERF), 1)
+	CFLAGS += -D_GIBBON_ENABLE_KPERF
 endif
 
 ifeq ($(PARALLEL), 1)
@@ -141,7 +148,12 @@ RUST_RTS_DIR      := $(GIBBONDIR)/gibbon-rts
 C_RTS_DIR         := $(RUST_RTS_DIR)/rts-c
 BUILD_DIR         := $(RUST_RTS_DIR)/build
 NAME              := gibbon_rts
-RUST_RTS_SO       := libgibbon_rts_ng.so
+# cargo names shared libraries .dylib on macOS and .so elsewhere.
+ifeq ($(shell uname -s), Darwin)
+	RUST_RTS_SO   := libgibbon_rts_ng.dylib
+else
+	RUST_RTS_SO   := libgibbon_rts_ng.so
+endif
 RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
 RUST_SOURCES      := $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
 
@@ -165,9 +177,14 @@ t_rs_rts: $(RUST_SOURCES)
 	cd  $(RUST_RTS_DIR) && \
 	$(RSC) test -- --nocapture
 
+# On macOS cargo stamps the dylib with its absolute path under target/, which
+# goes stale once it is moved here; make it @rpath-relative like the .so is.
 $(BUILD_DIR)/$(RUST_RTS_SO): $(RUST_RTS_PATH)
 	mkdir -p $(BUILD_DIR) && \
 	mv $^ $@
+ifeq ($(shell uname -s), Darwin)
+	install_name_tool -id @rpath/$(RUST_RTS_SO) $@
+endif
 
 # The Rust sources are not specified as prerequisites and a FORCE
 # prerequisite is used to force unconditional recompilation.

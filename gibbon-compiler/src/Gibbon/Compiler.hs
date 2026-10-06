@@ -42,6 +42,7 @@ import           System.Exit
 import           System.FilePath
 import           System.IO
 import           System.IO.Error (isDoesNotExistError, catchIOError)
+import           System.Info (arch, os)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
@@ -298,8 +299,13 @@ validateDynFlags dflags
         "The per-element bump does not have this problem because it re-resolves the\n" ++
         "footer on every element.\n" ++
         "Drop the deferred counting (counts stay correct, just slower), or drop --gen-gc."
+  | kperf && (gopt Opt_PapiInstrumentation dflags || gopt Opt_PapiNativeInstrumentation dflags) =
+      error "--enable-kperf cannot be combined with --enable-papi or --enable-papi-native: both read the hardware counters."
+  | kperf && os /= "darwin" =
+      error "--enable-kperf reads counters through Apple's kperf framework and is only available on macOS."
   | otherwise = pure ()
   where
+    kperf = gopt Opt_KperfInstrumentation dflags
     deferring = gopt Opt_DeferScalarCounts dflags || gopt Opt_ScalarCountDiff dflags
     requested
       | gopt Opt_ScalarCountDiff dflags = "--scalar-counts-diff (which implies deferred counting)"
@@ -505,6 +511,7 @@ compileRTS Config{verbosity,optc,dynflags,cc=ccCmd,cArithMode} = do
                  ++ (if parallel then " PARALLEL=1 " else "")
                  ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
                  ++ (if papi || papi_native then " PAPI=1 " else "")
+                 ++ (if kperf then " KPERF=1 " else "")
                  -- Must agree with the -D_GIBBON_REGIONRESET passed to the
                  -- generated program below: gib_grow_region_on_heap is an
                  -- INLINE_HEADER, so the call site is compiled into the
@@ -535,6 +542,7 @@ compileRTS Config{verbosity,optc,dynflags,cc=ccCmd,cArithMode} = do
     scalarCountDiff = gopt Opt_ScalarCountDiff dynflags
     papi = gopt Opt_PapiInstrumentation dynflags
     papi_native = gopt Opt_PapiNativeInstrumentation dynflags
+    kperf = gopt Opt_KperfInstrumentation dynflags
 
 
 -- | Compile and run the generated code if appropriate
@@ -577,12 +585,18 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
         compile_program = do
             compileRTS cfg
             lib_dir <- getRTSBuildDir
+            gibbon_dir <- getGibbonDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
+                -- gibbon_rts.h includes <uthash.h>; use the vendored copy the
+                -- RTS itself is built against rather than relying on a
+                -- system-wide install (macOS has none by default).
+                uthash_dir = gibbon_dir </> "deps/uthash"
                 compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
+                                   ++" -I" ++ uthash_dir
                                    ++" -L" ++ lib_dir
-                                   ++ " -Wl,-rpath=" ++ lib_dir ++ " "
+                                   ++ " -Wl,-rpath," ++ lib_dir ++ " "
                                    ++ outfile ++ " " ++ rts_o_path
                                    ++ links' ++ " -lgibbon_rts_ng"
 
@@ -621,6 +635,11 @@ chooseArchiver ccCmd = pick candidates
       case found of
         Just path -> pure path
         Nothing   -> pick rest
+
+-- | Whether this compiler is running on (and so, by default, its C compiler is
+-- targeting) an x86 machine, where the SSE/AVX flags and intrinsics exist.
+hostIsX86 :: Bool
+hostIsX86 = arch `elem` ["x86_64", "i386"]
 
 isClangCompiler :: String -> Bool
 isClangCompiler = ("clang" `isInfixOf`) . takeFileName
@@ -737,11 +756,14 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++ (if lazyPromote then " -D_GIBBON_EAGER_PROMOTION=0 " else " -D_GIBBON_EAGER_PROMOTION=1 ")
                           ++ (if papi || papi_native then " -D_GIBBON_ENABLE_PAPI " else "")
                           ++ (if papi_native then " -D_GIBBON_ENABLE_PAPI_NATIVE " else "")
+                          ++ (if kperf then " -D_GIBBON_ENABLE_KPERF " else "")
                           -- @--sse4.1@ raises the selected ISA, and the ISA
                           -- carries its own C flags; a second -msse4.1 here
                           -- would let the two disagree about what was asked
-                          -- for.
-                          ++ simdIsaCcFlags (simdIsaOf dflags)
+                          -- for.  The flags are x86 ISA names, so a non-x86
+                          -- host (e.g. arm64 macOS) gets none; the 256-bit
+                          -- helpers are vector extensions and need no flag.
+                          ++ (if hostIsX86 then simdIsaCcFlags (simdIsaOf dflags) else "")
                           ++ (if noGccVec then noAutoVectorizeFlags (cc config) else "")
                           ++ (if noGccTailCalls then " -fno-optimize-sibling-calls " else "")
                           ++ (if cArithMode config == ArithWrapv then " -fwrapv " else "")
@@ -759,6 +781,7 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
         lazyPromote = gopt Opt_NoEagerPromote dflags
         papi = gopt Opt_PapiInstrumentation dflags
         papi_native = gopt Opt_PapiNativeInstrumentation dflags
+        kperf = gopt Opt_KperfInstrumentation dflags
         noGccVec = gopt Opt_NoGccVectorize dflags
         noGccTailCalls = gopt Opt_NoGccTailCalls dflags
 

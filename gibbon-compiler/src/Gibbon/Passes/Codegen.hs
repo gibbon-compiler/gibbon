@@ -317,7 +317,7 @@ sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
 -- "gibbon_main" expression in that program.
 codegenProg :: Config -> Prog -> IO String
 codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
-      return (hashIncludes ++ pretty 80 (stack (map ppr defs)))
+      return (hashIncludes ++ pretty 80 (stack (map ppr defs)) ++ mainWrapper)
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
 
@@ -363,7 +363,23 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         let bod = require_isa ++ init_gib ++ init_info_table ++ init_symbol_table
                   ++ (if gen_gc then ssDecls else [])
                   ++ e ++ exit_gib
-        pure $ C.FuncDef [cfun| int main(int argc, char **argv) { $items:bod } |] noLoc
+        pure $ C.FuncDef [cfun| int gib_main(int argc, char **argv) { $items:bod } |] noLoc
+
+      -- macOS fixes the main thread's stack at exec, so there the program runs
+      -- on an RTS thread with the stack Linux gets from setrlimit.  See
+      -- Note [Program stack on macOS] in gibbon_rts.c.
+      mainWrapper :: String
+      mainWrapper = unlines
+        [ ""
+        , "int main(int argc, char **argv)"
+        , "{"
+        , "#ifdef __APPLE__"
+        , "    return gib_run_main(gib_main, argc, argv);"
+        , "#else"
+        , "    return gib_main(argc, argv);"
+        , "#endif"
+        , "}"
+        ]
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' FunDecl{funName = nam, funArgs = args, funRetTy = ty, funBody = tal} =
@@ -375,7 +391,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
              let nam' = if S.member nam sort_fns
                         then varAppend nam (toVar "_original")
                         else nam
-             body <- codegenTail init_venv M.empty init_fun_env sort_fns tal ty []
+             body <- codegenTail init_venv M.empty init_fun_env sort_fns (unitTailCalls ty tal) ty []
              let body' = (if gen_gc then ssDecls else []) ++ body
              let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
                               $items:body'
@@ -457,10 +473,15 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <fcntl.h>\n\
         \#include <stdarg.h>\n\
         \#include <errno.h>\n\
+        \#include <uthash.h>\n\n\
+        \/* The 128-bit helpers below are SSE intrinsics, so they exist only on x86;\n\
+        \ * elsewhere (e.g. arm64 macOS) programs that use no 128-bit vector ops\n\
+        \ * still compile.  The 256-bit helpers further down are portable. */\n\
+        \#if defined(__x86_64__) || defined(__i386__)\n\
         \#include <xmmintrin.h>\n\
         \#include <emmintrin.h>\n\
         \" ++ (if simdIsaHasSse41 selectedIsa then "#include <smmintrin.h>\n" else "") ++ "\
-        \#include <uthash.h>\n\n\
+        \\n\
         \static inline __m128i gib_vec_broadcast_int64x2(GibInt x) {\n\
         \  return _mm_set1_epi64x((long long) x);\n\
         \}\n\
@@ -895,6 +916,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \static inline void gib_vec_store_float32x4(GibCursor *ref, __m128 v) {\n\
         \  _mm_storeu_ps((float *) (*ref), v);\n\
         \}\n\
+        \#endif /* x86 128-bit SIMD helpers */\n\
         \\n\
         \/* ---------------- 256-bit (AVX2) SIMD helpers ----------------------\n\
         \ *\n\
@@ -1272,25 +1294,44 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \static int gibbon_native_papi_inited = 0;\n\
         \#define GIBBON_NATIVE_PAPI_EVENT_COUNT 7\n\
         \#define GIBBON_NATIVE_PAPI_MAX_ALTS 4\n\
+        \/* The first four metrics share their labels and definitions with the\n\
+        \   kperf backend (Note [kperf counters] in the RTS), so tables from the two\n\
+        \   machines line up.  Every alternative within one metric is another\n\
+        \   SPELLING of the same event, never a different event: a metric this CPU\n\
+        \   cannot count is reported as unavailable instead of being quietly\n\
+        \   replaced by something that counts something else. */\n\
         \static const char *gibbon_native_papi_metric_labels[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {\n\
         \    \"CPU_CYCLES\",\n\
         \    \"INSTRUCTIONS\",\n\
-        \    \"L1D_LOAD_MISSES\",\n\
-        \    \"L1I_LOAD_MISSES\",\n\
-        \    \"L2D_MISSES\",\n\
-        \    \"L2I_MISSES\",\n\
-        \    \"LLC_LOAD_MISSES\",\n\
+        \    \"L1D_LOAD_MISSES_RETIRED\",\n\
+        \    \"L1I_MISSES\",\n\
+        \    \"DTLB_MISSES\",\n\
+        \    \"L2_LOAD_MISSES_RETIRED\",\n\
+        \    \"LLC_LOAD_MISSES_RETIRED\",\n\
         \};\n\
         \static const char *gibbon_native_papi_event_candidates[GIBBON_NATIVE_PAPI_EVENT_COUNT][GIBBON_NATIVE_PAPI_MAX_ALTS] = {\n\
         \    {\"perf::PERF_COUNT_HW_CPU_CYCLES\", \"perf::CPU-CYCLES\", \"perf::CYCLES\", \"ix86arch::UNHALTED_CORE_CYCLES\"},\n\
         \    {\"perf::PERF_COUNT_HW_INSTRUCTIONS\", \"perf::INSTRUCTIONS\", \"ix86arch::INSTRUCTION_RETIRED\", NULL},\n\
-        \    {\"perf::L1-DCACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1D\", NULL, NULL},\n\
-        \    {\"perf::L1-ICACHE-LOAD-MISSES\", \"perf::PERF_COUNT_HW_CACHE_L1I\", NULL, NULL},\n\
-        \    {\"L2_RQSTS:DEMAND_DATA_RD_MISS\", \"L2_RQSTS:MISS\", \"L2_REQUEST:DEMAND_DATA_RD_MISS\", \"L2_REQUEST:MISS\"},\n\
-        \    {\"L2_RQSTS:CODE_RD_MISS\", \"L2_REQUEST:CODE_RD_MISS\", NULL, NULL},\n\
-        \    {\"perf::LLC-LOAD-MISSES\", \"ix86arch::LLC_MISSES\", \"LONGEST_LAT_CACHE:MISS\", \"adl_grt::LONGEST_LAT_CACHE:MISS\"},\n\
+        \    {\"MEM_LOAD_RETIRED:L1_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L1_MISS\", \"MEM_LOAD_UOPS_RETIRED:L1_MISS\", NULL},\n\
+        \    {\"perf::L1-ICACHE-LOAD-MISSES\", NULL, NULL, NULL},\n\
+        \    {\"DTLB_LOAD_MISSES:WALK_COMPLETED\", \"adl_glc::DTLB_LOAD_MISSES:WALK_COMPLETED\", NULL, NULL},\n\
+        \    {\"MEM_LOAD_RETIRED:L2_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L2_MISS\", \"MEM_LOAD_UOPS_RETIRED:L2_MISS\", NULL},\n\
+        \    {\"MEM_LOAD_RETIRED:L3_MISS\", \"adl_glc::MEM_LOAD_RETIRED:L3_MISS\", \"MEM_LOAD_UOPS_RETIRED:L3_MISS\", NULL},\n\
+        \};\n\
+        \/* Which counting groups read each metric (bit g-1 for group g).  A P-core\n\
+        \   of the i7-12700K takes four programmable events beside cycles and\n\
+        \   instructions, one short of this set, so the driver runs every counter\n\
+        \   executable twice: GIBBON_PAPI_GROUP=1 reads the retired-load chain,\n\
+        \   =2 the rest.  Cycles and instructions are read in both.  Unset, every\n\
+        \   metric is tried in one run. */\n\
+        \static const int gibbon_native_papi_metric_groups[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {\n\
+        \    3, 3, 1, 2, 2, 1, 1,\n\
         \};\n\
         \static const char *gibbon_native_papi_selected_events[GIBBON_NATIVE_PAPI_EVENT_COUNT] = {NULL};\n\
+        \/* Eventset position of each metric: -1 when this CPU cannot count it,\n\
+        \   -2 when this run's group does not read it.  PAPI_read fills values in\n\
+        \   eventset order, which skips both. */\n\
+        \static int gibbon_native_papi_slot[GIBBON_NATIVE_PAPI_EVENT_COUNT];\n\
         \static void papi_init_or_die(void) {\n\
         \    if (gibbon_native_papi_inited) return;\n\
         \    int rv = PAPI_library_init(PAPI_VER_CURRENT);\n\
@@ -1303,8 +1344,15 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \        fprintf(stderr, \"PAPI_create_eventset failed: %s\\n\", PAPI_strerror(rv));\n\
         \        exit(1);\n\
         \    }\n\
+        \    int added = 0;\n\
+        \    const char *group_env = getenv(\"GIBBON_PAPI_GROUP\");\n\
+        \    int group_mask = (group_env && *group_env) ? (1 << (atoi(group_env) - 1)) : ~0;\n\
         \    for (int i = 0; i < GIBBON_NATIVE_PAPI_EVENT_COUNT; i++) {\n\
-        \        int added = 0;\n\
+        \        if (!(gibbon_native_papi_metric_groups[i] & group_mask)) {\n\
+        \            gibbon_native_papi_slot[i] = -2;\n\
+        \            continue;\n\
+        \        }\n\
+        \        gibbon_native_papi_slot[i] = -1;\n\
         \        for (int j = 0; j < GIBBON_NATIVE_PAPI_MAX_ALTS; j++) {\n\
         \            const char *ev_name = gibbon_native_papi_event_candidates[i][j];\n\
         \            int code;\n\
@@ -1318,14 +1366,17 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \            rv = PAPI_add_event(gibbon_native_papi_eventset, code);\n\
         \            if (rv == PAPI_OK) {\n\
         \                gibbon_native_papi_selected_events[i] = ev_name;\n\
-        \                added = 1;\n\
+        \                gibbon_native_papi_slot[i] = added++;\n\
         \                break;\n\
         \            }\n\
         \        }\n\
-        \        if (!added) {\n\
-        \            fprintf(stderr, \"No usable native PAPI event found for metric %s\\n\", gibbon_native_papi_metric_labels[i]);\n\
-        \            exit(1);\n\
+        \        if (gibbon_native_papi_slot[i] < 0) {\n\
+        \            fprintf(stderr, \"No usable native PAPI event for metric %s; reported as unavailable\\n\", gibbon_native_papi_metric_labels[i]);\n\
         \        }\n\
+        \    }\n\
+        \    if (gibbon_native_papi_slot[0] < 0 || gibbon_native_papi_slot[1] < 0) {\n\
+        \        fprintf(stderr, \"Cycles and instructions are required; no usable event for one of them\\n\");\n\
+        \        exit(1);\n\
         \    }\n\
         \    gibbon_native_papi_inited = 1;\n\
         \}\n\
@@ -1373,6 +1424,89 @@ simdIsaGuard isa selectedBy =
           unwords (words (simdIsaCcFlags isa)) ++
           "), and this CPU does not support " ++ feature ++ ".\n" ++
           "Recompile with --simd-isa=sse2.\n"
+
+-- | Turn a unit-returning call in tail position into a real C tail call.
+--
+-- Under mutable cursors a call to a function returning unit is lowered as
+--
+-- > unsigned char void_call = f(...);
+-- > GibCursor deref_end = *end_r;      // unused read-backs of the cursors
+-- > GibCursor end_rst[2];             // (SoA: a fresh cursor array,
+-- > memcpy(end_rst, cur, ...);         //  filled and never read)
+-- > return 0;
+--
+-- which returns a constant rather than the call's result.  gcc will not
+-- turn that into a jump ("call and return value are different"), so a
+-- self-recursive builder such as @mkList@ recurses once per element and a
+-- 100M-element list exhausts the C stack; clang happens to see through it.
+-- Unit has exactly one value, which every function of that type returns, so
+-- when the enclosing function also returns unit, @return f(...)@ is the same
+-- program -- and one gcc can tail-call.
+--
+-- Only TRUE tail positions are rewritten: let-bodies, if branches and switch
+-- alternatives.  Join points (LetIfT), loop bodies and timed blocks are not
+-- tail positions and are left alone, as is any call that is async or is
+-- followed by anything other than unused cursor reads.
+unitTailCalls :: Ty -> Tail -> Tail
+unitTailCalls (ProdTy []) = go
+  where
+    go tl = case tl of
+      LetCallT { async = False, binds = [(res, ProdTy [])], rator, rands, bod }
+        | deadUntilUnitReturn (S.singleton res) S.empty bod -> TailCall rator rands
+      LetCallT{bod}        -> tl { bod = go bod }
+      LetPrimCallT{bod}    -> tl { bod = go bod }
+      LetTrivT{bod}        -> tl { bod = go bod }
+      LetIfT{bod}          -> tl { bod = go bod }
+      LetUnpackT{bod}      -> tl { bod = go bod }
+      LetAllocT{bod}       -> tl { bod = go bod }
+      LetAvailT{bod}       -> tl { bod = go bod }
+      LetArenaT{bod}       -> tl { bod = go bod }
+      IfT tst con els      -> IfT tst (go con) (go els)
+      Switch lbl trv alts def ->
+        Switch lbl trv (goAlts alts) (fmap go def)
+      _ -> tl
+
+    goAlts (TagAlts as) = TagAlts [ (t, go b) | (t, b) <- as ]
+    goAlts (IntAlts as) = IntAlts [ (i, go b) | (i, b) <- as ]
+
+    -- Everything between the call and @return 0@ must be dead:
+    --
+    --  * a read nobody uses: a cursor read-back (DerefMutCursor), a cursor
+    --    array copied out of memory (CastPtr), or a trivial binding;
+    --  * a MemCpy whose destination is one of those fresh locals (SoA declares
+    --    an uninitialised cursor array, then fills it with a separate MemCpy).
+    --
+    -- @bound@ holds every binder introduced since the call (none may be read)
+    -- and @locals@ the arrays declared since the call (the only memory a
+    -- MemCpy here may write).  None of these has an effect beyond those dead
+    -- locals, so dropping them -- which the tail call does -- is safe.
+    deadUntilUnitReturn :: S.Set Var -> S.Set Var -> Tail -> Bool
+    deadUntilUnitReturn bound locals t = case t of
+      RetValsT [] -> True
+      LetPrimCallT { binds = [(v, _)], prim, rands, bod }
+        | prim `elem` [DerefMutCursor, CastPtr] ->
+        notReading bound rands
+          && deadUntilUnitReturn (S.insert v bound) locals bod
+      LetPrimCallT { binds = [], prim = MemCpy, rands = VarTriv dst : rest, bod } ->
+        dst `S.member` locals
+          && notReading bound rest
+          && deadUntilUnitReturn bound locals bod
+      LetTrivT { bnd = (v, _, rhs), bod } ->
+        notReading bound [rhs]
+          && deadUntilUnitReturn (S.insert v bound) (S.insert v locals) bod
+      _ -> False
+
+    notReading :: S.Set Var -> [Triv] -> Bool
+    notReading bound = not . any (`S.member` bound) . concatMap trivVars
+
+    trivVars :: Triv -> [Var]
+    trivVars trv = case trv of
+      VarTriv v                 -> [v]
+      ProdTriv ts               -> concatMap trivVars ts
+      ProjTriv _ t              -> trivVars t
+      IndexCursorArrayTriv _ t  -> trivVars t
+      _                         -> []
+unitTailCalls _ = id
 
 builtinFieldTys :: [String]
 builtinFieldTys =
@@ -1853,6 +1987,13 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
        papi_before <- gensym "papi_before"
        papi_after <- gensym "papi_after"
        papi_samples <- gensym "papi_samples"
+       -- kperf (--enable-kperf, macOS): names are made only when it is on, so
+       -- a build without it gets byte-identical C (gensym numbers every name).
+       kperf <- gopt Opt_KperfInstrumentation <$> getDynFlags
+       let kperfName n = if kperf then gensym (toVar n) else pure (toVar n)
+       kperf_before <- kperfName "kperf_before"
+       kperf_after <- kperfName "kperf_after"
+       kperf_samples <- kperfName "kperf_samples"
        let timedResetVars = timedStateVars venv rhs
            -- Deduplicated by name rather than through a 'S.Set Var', for the
            -- reason given at 'timedStateVars'.
@@ -1900,22 +2041,29 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
 
                      (if flg
                          -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                      then (let body = resetBody ++
+                      then (let -- The counters (PAPI, kperf) are read immediately outside
+                                -- the two clock_gettime calls, so they count what the timer
+                                -- times and nothing else: not the cursor resets and region
+                                -- save before it, nor the region reclaim and bookkeeping
+                                -- after it.
+                                bodyPre = resetBody ++
                                        [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
                                                          gib_list_bumpalloc_save_state();
                                                          gib_ptr_bumpalloc_save_state();
                                                          gib_region_chunk_save_state();
                                                          } |]
-                                       , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
-                                       ] ++
+                                       ]
+                                bodyTimed =
+                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |] ] ++
                                        rhs'' ++
-                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
+                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |] ]
+                                bodyPost =
                                        -- NB: this block is AFTER clock_gettime(end), so the
                                        -- region reclaim below costs no measured time.  It must
                                        -- also stay a BULK free at iteration end: freeing chunks
                                        -- one at a time as they are re-grown leaves their pages
                                        -- resident and silently makes iterations 2..n warm.
-                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
+                                       [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) {
                                                          gib_list_bumpalloc_restore_state();
                                                          gib_ptr_bumpalloc_restore_state();
                                                          gib_region_chunk_restore_state();
@@ -1924,11 +2072,28 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
                                 -- TODO: Find a better way to get a name for the region id.
+                                -- See Note [kperf counters] in the RTS: read immediately
+                                -- around the timed region, keep each iteration's delta, print
+                                -- them after the loop exactly as the PAPI path does.
+                                kperfReadBefore =
+                                  if kperf
+                                  then [ C.BlockStm [cstm| gib_kperf_read($id:kperf_before); |] ]
+                                  else []
+                                kperfReadAfter =
+                                  if kperf
+                                  then [ C.BlockStm [cstm| gib_kperf_read($id:kperf_after); |]
+                                       , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                             $id:kperf_samples[kperf_i][$id:iters] =
+                                                               $id:kperf_after[kperf_i] - $id:kperf_before[kperf_i];
+                                                           } |]
+                                       ]
+                                  else []
                                 ifdef_papi = "#ifdef _GIBBON_ENABLE_PAPI"
                                 ifdef_papi_native = "#ifdef _GIBBON_ENABLE_PAPI_NATIVE"
                                 ifndef_papi_native = "#ifndef _GIBBON_ENABLE_PAPI_NATIVE"
                                 endif = "#endif"
-                                body' = [   C.BlockStm [cstm| $escstm:ifdef_papi |]
+                                body' = bodyPre ++
+                                        [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_before);|]
                                           , C.BlockStm [cstm| if ( $id:papi_retval != PAPI_OK ) {
@@ -1946,7 +2111,9 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                         ] ++ 
-                                        body ++ 
+                                        kperfReadBefore ++
+                                        bodyTimed ++
+                                        kperfReadAfter ++
                                         [   C.BlockStm [cstm| $escstm:ifdef_papi |]
                                           , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                           , C.BlockStm [cstm| $id:papi_retval = PAPI_read(gibbon_native_papi_eventset, $id:papi_after);|]
@@ -1966,7 +2133,8 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                           , C.BlockStm [cstm| increment_papi_region_id(); |]
                                           , C.BlockStm [cstm| $escstm:endif |]
                                           , C.BlockStm [cstm| $escstm:endif |]
-                                        ]                                        
+                                        ] ++
+                                        bodyPost
                             in [  C.BlockStm [cstm| $escstm:ifdef_papi |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                 , C.BlockStm [cstm| papi_init_or_die(); |]
@@ -1987,7 +2155,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                   } |]
                                 , C.BlockStm [cstm| $escstm:endif |]
                                 , C.BlockStm [cstm| $escstm:endif |]
-                                , C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
+                               ] ++
+                               (if kperf
+                                then [ C.BlockStm [cstm| gib_kperf_init_or_die(); |]
+                                     , C.BlockDecl [cdecl| typename uint64_t $id:kperf_before[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockDecl [cdecl| typename uint64_t $id:kperf_after[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockDecl [cdecl| typename uint64_t *$id:kperf_samples[GIB_KPERF_EVENT_COUNT]; |]
+                                     , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                           $id:kperf_samples[kperf_i] = (typename uint64_t *) malloc(sizeof(typename uint64_t) * gib_get_iters_param());
+                                                           if ($id:kperf_samples[kperf_i] == NULL) {
+                                                               fprintf(stderr, "malloc failed for kperf samples\n");
+                                                               exit(1);
+                                                           }
+                                                       } |]
+                                     ]
+                                else []) ++
+                               [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body' } |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi |]
                                 , C.BlockStm [cstm| $escstm:ifdef_papi_native |]
                                 , C.BlockStm [cstm| $id:papi_retval = PAPI_stop(gibbon_native_papi_eventset, $id:papi_after);|]
@@ -1995,12 +2178,21 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                       fprintf(stderr, "PAPI_stop failed: %s\n", PAPI_strerror($id:papi_retval));
                                                       exit(1);
                                                       } |]
+                                , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                      if (gibbon_native_papi_slot[papi_i] == -1) {
+                                                          printf("PAPI_NATIVE %s[unavailable]\n",
+                                                                 gibbon_native_papi_metric_labels[papi_i]);
+                                                      }
+                                                  } |]
                                 , C.BlockStm [cstm| for (long long iter_i = 0; iter_i < gib_get_iters_param(); iter_i++) {
                                                       for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
+                                                          if (gibbon_native_papi_slot[papi_i] < 0) {
+                                                              continue;
+                                                          }
                                                           printf("PAPI_NATIVE %s[%s]=%lld\n",
                                                                  gibbon_native_papi_metric_labels[papi_i],
                                                                  gibbon_native_papi_selected_events[papi_i],
-                                                                 $id:papi_samples[papi_i][iter_i]);
+                                                                 $id:papi_samples[gibbon_native_papi_slot[papi_i]][iter_i]);
                                                       }
                                                   } |]
                                 , C.BlockStm [cstm| for (int papi_i = 0; papi_i < GIBBON_NATIVE_PAPI_EVENT_COUNT; papi_i++) {
@@ -2008,7 +2200,22 @@ codegenTail venv mutEndEnv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_d
                                                   } |]
                                 , C.BlockStm [cstm| $escstm:endif |]
                                 , C.BlockStm [cstm| $escstm:endif |]
-                                , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
+                               ] ++
+                               (if kperf
+                                then [ C.BlockStm [cstm| for (long long iter_i = 0; iter_i < gib_get_iters_param(); iter_i++) {
+                                                           for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                               printf("KPERF_NATIVE %s[%s]=%llu\n",
+                                                                      gib_kperf_metric_label(kperf_i),
+                                                                      gib_kperf_event_name(kperf_i),
+                                                                      (unsigned long long) $id:kperf_samples[kperf_i][iter_i]);
+                                                           }
+                                                       } |]
+                                     , C.BlockStm [cstm| for (int kperf_i = 0; kperf_i < GIB_KPERF_EVENT_COUNT; kperf_i++) {
+                                                           free($id:kperf_samples[kperf_i]);
+                                                       } |]
+                                     ]
+                                else []) ++
+                               [ C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
                                 , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
                                 , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
                                 , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]

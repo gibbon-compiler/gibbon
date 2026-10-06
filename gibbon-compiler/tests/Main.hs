@@ -37,6 +37,7 @@ import LoopifyFlatTraversals
 import ReorderScalarWrites
 import AssignScalarCountSlots
 import L3Traverse
+import PointerLower
 import ScalarCountPropagation
 import SelectiveBufferSharing
 import VectorizeTraversals
@@ -65,6 +66,7 @@ main = defaultMain allTests
                    , reorderScalarWritesTests
                    , assignScalarCountSlotsTests, scalarCountPropagationTests
                    , l3TraverseTests
+                   , pointerLowerTests
                    , selectiveBufferSharingTests
                    , vectorizeTraversalsTests
                    , codegenSimdTests

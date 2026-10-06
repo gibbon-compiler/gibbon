@@ -131,5 +131,89 @@ case_well_typed_let_triv_is_accepted = do
   assertBool "expected the binding to be emitted"
     ("triv_probe_v" `L.isInfixOf` src)
 
+-- | A unit-returning caller whose body is @callee(..)@, then @rest@.
+unitCallProg :: Ty -> Tail -> Prog
+unitCallProg callerRet rest =
+  Prog
+    { infoTable = M.empty
+    , symbolTable = M.empty
+    , fundefs =
+        [ FunDecl
+            { funName = "tc_callee"
+            , funArgs = [("tc_cur", MutCursorTy)]
+            , funRetTy = ProdTy []
+            , funBody = RetValsT []
+            , isPure = False
+            , funMeta = FunMeta NotRec NoInline False [] Nothing
+            }
+        , FunDecl
+            { funName = "tc_caller"
+            , funArgs = [("tc_cur", MutCursorTy)]
+            , funRetTy = callerRet
+            , funBody = LetCallT False [("tc_res", ProdTy [])] "tc_callee"
+                          [VarTriv "tc_cur"] rest
+            , isPure = False
+            , funMeta = FunMeta NotRec NoInline False [] Nothing
+            }
+        ]
+    , mainExp = Nothing
+    }
+
+-- | Count of lines containing @needle@.
+occurrences :: String -> String -> Int
+occurrences needle = length . filter (needle `L.isInfixOf`) . lines
+
+-- | A unit call followed only by an unused cursor read-back and @return 0@ is
+-- emitted as @return tc_callee(..)@, which gcc can turn into a jump.  Gibbon
+-- used to emit @x = f(..); <read-back>; return 0;@, which gcc does not
+-- tail-call, so a self-recursive builder like List's mkList recursed once
+-- per element.
+case_unit_tail_call_is_returned :: Assertion
+case_unit_tail_call_is_returned = do
+  src <- codegenProg defaultConfig $ unitCallProg (ProdTy []) $
+           LetPrimCallT [("tc_deref", CursorTy)] DerefMutCursor [VarTriv "tc_cur"] $
+           RetValsT []
+  assertEqual "the call must be returned" 1 (occurrences "return tc_callee(" src)
+
+-- | Anything else after the call -- here a second call -- keeps the first
+-- one an ordinary call; only the last becomes a tail call.
+case_unit_call_followed_by_work_is_not_a_tail_call :: Assertion
+case_unit_call_followed_by_work_is_not_a_tail_call = do
+  src <- codegenProg defaultConfig $ unitCallProg (ProdTy []) $
+           LetCallT False [("tc_res2", ProdTy [])] "tc_callee" [VarTriv "tc_cur"] $
+           RetValsT []
+  assertEqual "only the last call is returned" 1 (occurrences "return tc_callee(" src)
+  assertBool "the first call stays a call"
+    (occurrences "tc_res = tc_callee(" src + occurrences "tc_res =" src >= 1)
+
+-- | SoA lowers the read-back into a fresh cursor array filled by a separate
+-- MemCpy.  Writing a local nobody reads is dead too, so the call is still a
+-- tail call.
+case_unit_tail_call_through_dead_array_copy :: Assertion
+case_unit_tail_call_through_dead_array_copy = do
+  src <- codegenProg defaultConfig $ unitCallProg (ProdTy []) $
+           LetTrivT ("tc_arr", CursorArrayTy 2, UninitTriv "tc_arr" (CursorArrayTy 2) 2) $
+           LetPrimCallT [] MemCpy [VarTriv "tc_arr", VarTriv "tc_cur", SizeOf (CursorArrayTy 2)] $
+           RetValsT []
+  assertEqual "the call must be returned" 1 (occurrences "return tc_callee(" src)
+
+-- | A MemCpy into memory the caller can see (here the cursor argument) is a
+-- real effect after the call, so the call must stay a call.
+case_unit_call_followed_by_visible_write_is_not_a_tail_call :: Assertion
+case_unit_call_followed_by_visible_write_is_not_a_tail_call = do
+  src <- codegenProg defaultConfig $ unitCallProg (ProdTy []) $
+           LetTrivT ("tc_arr", CursorArrayTy 2, UninitTriv "tc_arr" (CursorArrayTy 2) 2) $
+           LetPrimCallT [] MemCpy [VarTriv "tc_cur", VarTriv "tc_arr", SizeOf (CursorArrayTy 2)] $
+           RetValsT []
+  assertEqual "no tail call past a visible write" 0 (occurrences "return tc_callee(" src)
+
+-- | A caller that does not itself return unit is left alone: returning the
+-- callee's unit there would change its result.
+case_non_unit_caller_is_left_alone :: Assertion
+case_non_unit_caller_is_left_alone = do
+  src <- codegenProg defaultConfig $ unitCallProg (IntTy W64) $
+           RetValsT [intTrivW64 7]
+  assertEqual "no tail call for a non-unit caller" 0 (occurrences "return tc_callee(" src)
+
 codegenInvariantsTests :: TestTree
 codegenInvariantsTests = $(testGroupGenerator)

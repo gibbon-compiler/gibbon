@@ -18,7 +18,7 @@ for RR in 1 0; do
       -I "$ROOT/deps/uthash" -I "$ROOT/gibbon-rts/rts-c" -I "$ROOT/gibbon-rts/build" \
       -o "$BIN" "$ROOT/gibbon-rts/tests/region_chunk_log_test.c" \
       "$ROOT/gibbon-rts/rts-c/gibbon_rts.c" \
-      -L "$ROOT/gibbon-rts/build" -Wl,-rpath="$ROOT/gibbon-rts/build" \
+      -L "$ROOT/gibbon-rts/build" -Wl,-rpath,"$ROOT/gibbon-rts/build" \
       -lgibbon_rts_ng -lm 2>"$TMP/cc.log"
   if [ ! -x "$BIN" ]; then
     echo "FAIL: build with $CC at _GIBBON_REGIONRESET=$RR"; tail -20 "$TMP/cc.log"; exit 1
