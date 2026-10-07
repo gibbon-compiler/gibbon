@@ -308,11 +308,13 @@ python3 gibbon_benchmark.py --tree-sweep --iterations 21 --cc gcc-16 \
 ```
 
 - **Gibbon:** `tree_sweep/programs/{AOS,SOA}/MonoTree{BuildTree,Add1Tree,SumTree}.hs`,
-  each timing one traversal. The fold configurations run `buildTree` and
-  `sumTree`, the map configurations (loopified and vectorized SoA included) run
-  `add1Tree`, and the pointer build (`ptr`) runs all three. `--pldi-config`
-  narrows the rest. The depth is the executable's `--size-param`, so each
-  configuration is compiled once.
+  each timing one traversal. All three run the same configurations: every
+  recursive and loopified one (vectorized SoA included) and the pointer build
+  (`ptr`), so every legend line appears in every panel. A build or a fold has
+  nothing to loopify, so there the loopified configurations compile to their
+  recursive counterparts; they are measured, not assumed equal.
+  `--pldi-config` narrows the set. The depth is the executable's
+  `--size-param`, so each configuration is compiled once.
 - **Other languages:** `tree_sweep/langs/` holds GHC, MLton, OCaml, Rust,
   Racket, Java and Chez Scheme versions, ported from the 2017 BintreeBench
   suite and aligned with MonoTree: 64-bit leaves, `mkTree d 0`, every subtree

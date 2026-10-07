@@ -3,9 +3,9 @@
 
   - TestDepthsAndLists: the depth spec forms and the traversal/language
     selections, with bad ones rejected.
-  - TestConfigs: fold configurations for buildTree and sumTree, map ones for
-    add1Tree, and the pointer build in each even when --pldi-config did not
-    name it.
+  - TestConfigs: every traversal runs the map configurations (loopified
+    ones included) and the pointer build, even when --pldi-config did not
+    name it, so every legend line is measured in every panel.
   - TestPrograms: every sweep program reads its depth from --size-param and
     times one pass; the models give the answers the programs compute.
   - TestLanguages: every language's source exists and prints the same
@@ -67,6 +67,14 @@ class TestConfigs(unittest.TestCase):
         self.assertEqual(mapped[-1], "ptr")
         self.assertFalse([n for n in fold if "loop" in n])
         self.assertTrue([n for n in mapped if "loop" in n])
+
+    def test_every_drawn_gibbon_line_runs_in_every_traversal(self):
+        # The legend is shared by the panels, so a line it names must be
+        # measured in each of them.
+        for key, _p, _prog, registry, _m in gb.TREE_SWEEP_TRAVERSALS:
+            names = self._names(registry)
+            for line in gb.TREE_SWEEP_GIBBON_DRAWN:
+                self.assertIn(line, names, (key, line))
 
     def test_pointer_is_added_once(self):
         gb.apply_config_selection(["aos_imm", "soa_mut"])

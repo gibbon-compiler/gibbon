@@ -12384,11 +12384,15 @@ TREE_SWEEP_POINTER_BUDGET_GB = 6.0
 TREE_SWEEP_POINTER_BYTES_PER_LEAF = 48
 
 # (key, pass name in the output, Gibbon program, which registry its
-#  configurations come from, oracle model)
+#  configurations come from, oracle model). Every traversal runs the map
+# registry -- the loopified configurations included -- so every line in the
+# shared legend appears in every panel. A build or a fold has nothing to
+# loopify, so there those configurations compile to their recursive
+# counterparts; they are measured rather than assumed equal.
 TREE_SWEEP_TRAVERSALS = (
-    ("build", "buildTree", "MonoTreeBuildTree.hs", "fold", "mono_tree_sumtree_only"),
+    ("build", "buildTree", "MonoTreeBuildTree.hs", "map", "mono_tree_sumtree_only"),
     ("add1", "add1Tree", "MonoTreeAdd1Tree.hs", "map", "mono_tree_add1_only"),
-    ("sum", "sumTree", "MonoTreeSumTree.hs", "fold", "mono_tree_sumtree_only"),
+    ("sum", "sumTree", "MonoTreeSumTree.hs", "map", "mono_tree_sumtree_only"),
 )
 TREE_SWEEP_TITLES = {"build": "buildTree", "add1": "add1Tree", "sum": "sumTree"}
 
@@ -12446,9 +12450,9 @@ def parse_tree_sweep_list(spec: str, known: Tuple[str, ...], what: str) -> List[
 
 
 def tree_sweep_configs(registry: str) -> Dict[str, Dict[str, Dict]]:
-    """This run's configurations for one traversal: the fold ones (a fold or
-    a build loopifies nothing) or the map ones, plus the pointer build
-    whether or not --pldi-config named it."""
+    """This run's configurations from one registry (the fold or the map
+    configurations), plus the pointer build whether or not --pldi-config
+    named it."""
     source = PLDI_FOLD_CONFIGS if registry == "fold" else PLDI_MAP_CONFIGS
     configs = {layout: dict(cfgs) for layout, cfgs in source.items()}
     if not any("ptr" in cfgs for cfgs in configs.values()):
