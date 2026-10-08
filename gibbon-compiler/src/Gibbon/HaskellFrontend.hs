@@ -7,7 +7,7 @@ module Gibbon.HaskellFrontend
   ( parseFile, primMap, multiArgsToOne, desugarLinearExts ) where
 
 import           Control.Monad
-import           Data.Foldable ( foldrM )
+import           Data.Foldable ( foldrM, foldl' )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
