@@ -81,7 +81,7 @@ genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
 genAlts ((_dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
-  curTail <- genDcons typs' tail [(T.TagTyPacked, T.VarTriv tag)]
+  curTail <- genDcons typs' tail [(T.TagTyBoxed, T.VarTriv tag)]
   alts    <- genAlts xs tail tag (n+1)
   let alt = n
   case alts of
@@ -585,9 +585,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
     --------------------------------------------------------------------------------
     -- Not-packed, pointer-based codegen
     --------------------------------------------------------------------------------
-    -- In pointer-based representation we don't use `TagTyPacked`, because it is
-    -- causing problems.  By default gcc aligns struct fields but we don't
-    -- take that padding into account in our codegen.
+    -- In the pointer-based representation a constructor cell is a C struct
+    -- whose first field is the tag ('TagTyBoxed'), followed by the fields.
+    -- Cells are allocated ('LetAllocT') and unpacked ('LetUnpackT') through
+    -- that same struct type, so the C compiler accounts for any padding after
+    -- the tag, and reads and writes never go through different types (which
+    -- would trip strict-aliasing analysis, see #314).
     --
     -- If we get here that means we're NOT packing trees on this run:
     -- Thus this operates on BOXED data:
@@ -603,7 +606,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       tag_bndr  <- gensym $ toVar "tag"
 
       let bndrs' = tag_bndr : bndrs2
-          tys'   = T.IntTy  : tys
+          tys'   = T.TagTyBoxed : tys
       rhs' <- tail free_reg sym_tbl rhs
       return (T.LetUnpackT (zip bndrs' tys') e_var rhs')
 
@@ -612,7 +615,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       tail_bndr <- gensym $ toVar "tail"
 
       let
-        e_triv = triv sym_tbl "sum case scrutinee" e
+        e_triv@(T.VarTriv e_var) = triv sym_tbl "sum case scrutinee" e
 
         mk_alt :: (DataCon, [(Var,())], Exp3) -> PassM (Int64, T.Tail)
         mk_alt (con, bndrs, rhs) = do
@@ -620,8 +623,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
             con_tag = getTagOfDataCon ddefs con
             bndr_tys = L.map typ (lookupDataCon ddefs con)
             (bndrs',_) = unzip bndrs
+          tag_fld <- gensym $ toVar "tag"
           rhs' <- tail free_reg sym_tbl rhs
-          return ( fromIntegral con_tag, T.LetUnpackT (zip bndrs' bndr_tys) tail_bndr rhs' )
+          return ( fromIntegral con_tag
+                 , T.LetUnpackT (zip (tag_fld : bndrs') (T.TagTyBoxed : bndr_tys)) e_var rhs' )
 
       alts' <- mapM mk_alt alts
       let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar tag_bndr
@@ -630,7 +635,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       return $
         T.LetPrimCallT
           [(tag_bndr, T.TagTyPacked), (tail_bndr, T.CursorTy)]
-          (T.ReadScalar IntS)
+          T.ReadTag
           [e_triv]
           (T.Switch lbl (T.VarTriv tag_bndr) (T.IntAlts alts') (Just def_alt))
 
@@ -643,7 +648,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
           field_tys= L.map typ (lookupDataCon ddefs k)
           fields0  = fragileZip field_tys (L.map (triv sym_tbl "DataConE args") ls)
-          fields   = (T.IntTy, T.IntTriv (fromIntegral tag)) : fields0
+          fields   = (T.TagTyBoxed, T.IntTriv (fromIntegral tag)) : fields0
           --  | is_prod   = fields0
           --  | otherwise = (T.IntTy, T.IntTriv (fromIntegral tag)) : fields0
       bod' <- tail free_reg sym_tbl bod
