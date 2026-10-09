@@ -26,8 +26,8 @@
 # ======================================================================
 
 
-CC        := gcc
-AR        := gcc-ar
+CC        := clang
+AR        := llvm-ar
 CFLAGS    := -Wall -Wextra -Wpedantic -Wshadow -Werror -std=gnu11 -flto
 RSC       := cargo
 RSFLAGS   := -v
@@ -66,7 +66,7 @@ ifeq ($(POINTER), 1)
 endif
 
 ifeq ($(PARALLEL), 1)
-	CFLAGS += -fcilkplus -D_GIBBON_PARALLEL
+	CFLAGS += -fopencilk -D_GIBBON_PARALLEL
 endif
 
 ifeq ($(BUMPALLOC), 1)
@@ -106,6 +106,11 @@ NAME              := gibbon_rts
 RUST_RTS_SO       := libgibbon_rts_ng.so
 RUST_RTS_PATH     := $(RUST_RTS_DIR)/target/$(MODE)/$(RUST_RTS_SO)
 RUST_SOURCES      := $(shell find $(RUST_RTS_DIR) -type f -name *.rs)
+
+UTHASH_INCLUDE ?= $(GIBBONDIR)/deps/uthash
+ifneq ($(strip $(UTHASH_INCLUDE)),)
+	CFLAGS += -I$(UTHASH_INCLUDE)
+endif
 
 
 all: rts

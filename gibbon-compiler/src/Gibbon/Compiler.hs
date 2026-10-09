@@ -35,10 +35,12 @@ import           System.Environment
 import           System.Exit
 import           System.FilePath
 import           System.IO
-import           System.IO.Error (isDoesNotExistError)
+import           System.IO.Error (isDoesNotExistError, catchIOError)
 import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
+import           Data.List (isInfixOf, stripPrefix)
+import           Data.Char (isDigit, isSpace)
 import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Language
@@ -128,7 +130,7 @@ configParser = Config <$> inputParser
                         , long "verbose"
                         , help "Set the debug output level, 1-5, mirrors DEBUG env var."
                         ]) <|> pure 1)
-                      <*> (strOption (long "cc" <> help "Set C compiler, default 'gcc'")
+                      <*> (strOption (long "cc" <> help "Set C compiler, default 'clang' (OpenCilk's clang in the nix shell)")
                            <|> pure (cc defaultConfig))
                       <*> (strOption (long "optc" <> help "Set C compiler options, default '-std=gnu11 -O3'")
                            <|> pure (optc defaultConfig))
@@ -369,10 +371,30 @@ withPrintInterpProg l0 =
     return Nothing
 
 compileRTS :: Config -> IO ()
-compileRTS Config{verbosity,optc,dynflags} = do
+compileRTS Config{verbosity,optc,dynflags,cc=ccCmd} = do
   gibbon_dir <- getGibbonDir
+  archiver <- chooseArchiver ccCmd
+  when (isClangCompiler ccCmd && not ("llvm-ar" `isInfixOf` takeFileName archiver)) $
+    hPutStrLn stderr $
+      "[compiler] clang detected but llvm-ar not found; using '" ++ archiver ++ "' instead."
+  when (isClangCompiler ccCmd && "llvm-ar" `isInfixOf` takeFileName archiver) $ do
+    clangVer <- toolVersionMajor ccCmd
+    arVer    <- toolVersionMajor archiver
+    case (clangVer, arVer) of
+      (Just clangMajor, Just arMajor)
+        | clangMajor /= arMajor ->
+            die $ unlines
+              [ "[compiler] clang/llvm-ar version mismatch detected."
+              , "  requested compiler : " ++ ccCmd
+              , "  selected archiver  : " ++ archiver
+              , "  clang major version: " ++ show clangMajor
+              , "  archiver major ver : " ++ show arMajor
+              , "Please adjust PATH so clang and llvm-ar versions align."
+              ]
+      _ -> pure ()
   let rtsmk = gibbon_dir </> "gibbon-rts/Makefile"
-  let rtsmkcmd = "make -f " ++ rtsmk ++ " "
+      userCFlags = optc
+      rtsmkcmd = "make -f " ++ rtsmk ++ " "
                  ++ (if rts_debug then " MODE=debug " else " MODE=release ")
                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                  ++ (if not genGC then " GC=nongen " else " GC=gen ")
@@ -380,8 +402,10 @@ compileRTS Config{verbosity,optc,dynflags} = do
                  ++ (if pointer then " POINTER=1 " else "")
                  ++ (if parallel then " PARALLEL=1 " else "")
                  ++ (if bumpAlloc then " BUMPALLOC=1 " else "")
-                 ++ (" USER_CFLAGS=\"" ++ optc ++ "\"")
+                 ++ (" USER_CFLAGS=\"" ++ userCFlags ++ "\"")
                  ++ (" VERBOSITY=" ++ show verbosity)
+                 ++ (" CC=\"" ++ ccCmd ++ "\"")
+                 ++ (" AR=\"" ++ archiver ++ "\"")
   execCmd
     Nothing
     rtsmkcmd
@@ -401,6 +425,7 @@ compileRTS Config{verbosity,optc,dynflags} = do
 --
 compileAndRunExe :: Config -> FilePath -> IO String
 compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp = do
+  validateParallelCompiler cfg
   exepath <- makeAbsolute exe
   clearFile exepath
   -- (Stage 4) Codegen finished, generate a binary
@@ -433,7 +458,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             compileRTS cfg
             lib_dir <- getRTSBuildDir
             let rts_o_path = lib_dir </> "gibbon_rts.o"
-            let compile_prog_cmd = compilationCmd backend cfg
+                compile_prog_cmd = compilationCmd backend cfg
                                    ++ " -o " ++ exe
                                    ++" -I" ++ lib_dir
                                    ++" -L" ++ lib_dir
@@ -447,6 +472,11 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
               "Compiling the program\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
               (show backend ++" compiler failed! ")
             pure ()
+
+validateParallelCompiler :: Config -> IO ()
+validateParallelCompiler config =
+  when (gopt Opt_Parallel (dynflags config) && not (isClangCompiler (cc config))) $
+    die "Parallel mode requires OpenCilk's clang; use --cc=clang inside nix-shell."
 
 getGibbonDir :: IO String
 getGibbonDir =
@@ -464,6 +494,52 @@ getRTSBuildDir =
      unless exists (error "RTS build not found.")
      pure build_dir
 
+chooseArchiver :: String -> IO String
+chooseArchiver ccCmd = pick candidates
+  where
+    candidates
+      | isClangCompiler ccCmd = ["llvm-ar", "ar"]
+      | otherwise             = ["gcc-ar", "ar"]
+    pick [] = pure "ar"
+    pick (tool:rest) = do
+      found <- findExecutable tool
+      case found of
+        Just path -> pure path
+        Nothing   -> pick rest
+
+isClangCompiler :: String -> Bool
+isClangCompiler = ("clang" `isInfixOf`) . takeFileName
+
+toolVersionMajor :: String -> IO (Maybe Int)
+toolVersionMajor toolString = do
+  let exe = takeWhile (not . isSpace) (dropWhile isSpace toolString)
+      base = takeFileName exe
+      marker
+        | "llvm-ar" `isInfixOf` base = Just "LLVM version "
+        | "clang"   `isInfixOf` base = Just "clang version "
+        | otherwise                  = Nothing
+  case marker of
+    Nothing -> pure Nothing
+    Just mk -> do
+      outcome <- catchIOError (Just <$> readProcessWithExitCode exe ["--version"] "") (const (pure Nothing))
+      case outcome of
+        Just (ExitSuccess, stdoutText, _) -> pure (parseMajorAfter mk stdoutText)
+        _ -> pure Nothing
+
+parseMajorAfter :: String -> String -> Maybe Int
+parseMajorAfter marker txt = do
+  rest <- findMarker marker txt
+  let digits = takeWhile isDigit rest
+  if null digits
+     then Nothing
+     else Just (read digits)
+
+findMarker :: String -> String -> Maybe String
+findMarker _ [] = Nothing
+findMarker marker str =
+  case stripPrefix marker str of
+    Just rest -> Just rest
+    Nothing   -> findMarker marker (drop 1 str)
 
 execCmd :: Maybe FilePath -> String -> String -> String -> IO ()
 execCmd dir cmd msg errmsg = do
@@ -512,11 +588,11 @@ getExeFile backend fp Nothing =
 -- | Compilation command
 --
 compilationCmd :: Backend -> Config -> String
-compilationCmd LLVM _   = "clang-5.0 lib.o "
+compilationCmd LLVM config = cc config ++ " lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then " -D_GIBBON_BUMPALLOC_LISTS -D_GIBBON_BUMPALLOC_HEAP " else "")
                           ++(if pointer then " -D_GIBBON_POINTER " else "")
-                          ++(if parallel then " -fcilkplus -D_GIBBON_PARALLEL " else "")
+                          ++(if parallel then " -fopencilk -D_GIBBON_PARALLEL " else "")
                           ++(if warnc
                              then " -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic "
                              else suppress_warnings)

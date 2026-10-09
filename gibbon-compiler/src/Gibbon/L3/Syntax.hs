@@ -92,7 +92,7 @@ data E3Ext loc dec =
                                     --   Used for dict lookup, which returns a packed value but
                                     --   no end witness.
   | RetE [(PreExp E3Ext loc dec)]   -- ^ Analogous to L2's RetE.
-  | GetCilkWorkerNum                -- ^ Translates to  __cilkrts_get_worker_number().
+  | GetCilkWorkerNum                -- ^ Translates to gib_get_thread_id().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
   | AllocateTagHere Var TyCon  -- ^ Analogous to L2's extension.
   | AllocateScalarsHere Var    -- ^ Analogous to L2's extension.

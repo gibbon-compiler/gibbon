@@ -356,7 +356,7 @@ data Prim
     | ReadInt
 
     | ParSync          -- ^ cilk_sync
-    | GetCilkWorkerNum -- ^ Runs  __cilkrts_get_worker_number()
+    | GetCilkWorkerNum -- ^ Runs gib_get_thread_id()
     | IsBig
 
     | Gensym
