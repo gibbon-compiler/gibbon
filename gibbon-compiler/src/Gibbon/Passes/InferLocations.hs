@@ -1655,12 +1655,7 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- dbgTrace (minChatLvl) "print tryInRegion in DataConE: " dbgTrace (minChatLvl) (sdoc (cs'', k, ty'')) dbgTrace (minChatLvl) "End print DataConE.\n" tryInRegion cs''
           -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
-          -- Inferring the data constructor may have inserted a copy of one of
-          -- its fields (see the DataConE case), in which case 'rhs'' is a
-          -- nested let: (let cpy = _copy_T x in DataConE ...). Hoist such
-          -- bindings in front of this let so the program stays a flat let
-          -- spine, which every later pass (RouteEnds, ThreadRegions,
-          -- Cursorize, ...) assumes. See gibbon issue #307.
+          -- Hoist copy bindings inserted by the DataConE case out of the RHS.
           let dcon_ty = PackedTy (getTyOfDataCon dataDefs k) locTy
               (cpy_bnds, dcon_rhs) = peelLets rhs'
               let_new_dcon = mkLets cpy_bnds (L2.LetE (vr,[],dcon_ty,dcon_rhs) bod'')
