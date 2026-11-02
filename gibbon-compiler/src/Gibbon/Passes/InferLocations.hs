@@ -1655,7 +1655,15 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- dbgTrace (minChatLvl) "print tryInRegion in DataConE: " dbgTrace (minChatLvl) (sdoc (cs'', k, ty'')) dbgTrace (minChatLvl) "End print DataConE.\n" tryInRegion cs''
           -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
-          let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) locTy,rhs') bod''
+          -- Inferring the data constructor may have inserted a copy of one of
+          -- its fields (see the DataConE case), in which case 'rhs'' is a
+          -- nested let: (let cpy = _copy_T x in DataConE ...). Hoist such
+          -- bindings in front of this let so the program stays a flat let
+          -- spine, which every later pass (RouteEnds, ThreadRegions,
+          -- Cursorize, ...) assumes. See gibbon issue #307.
+          let dcon_ty = PackedTy (getTyOfDataCon dataDefs k) locTy
+              (cpy_bnds, dcon_rhs) = peelLets rhs'
+              let_new_dcon = mkLets cpy_bnds (L2.LetE (vr,[],dcon_ty,dcon_rhs) bod'')
           let expr = case locTy of
                        SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA locTy)
                                                     fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key locTy)) fieldLocs
@@ -2460,6 +2468,11 @@ copy (e,ty,cs) lv1 =
               eapp = AppE copyName [lv2,lv1] [e]
           return (eapp, PackedTy tc lv1, cs)
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
+
+-- | Split a chain of let bindings off the front of an expression.
+peelLets :: Exp2 -> ([(Var, [LocVar], Ty2, Exp2)], Exp2)
+peelLets (LetE bnd bod) = let (bnds, e) = peelLets bod in (bnd : bnds, e)
+peelLets e = ([], e)
 
 unNestLet :: Result -> Result
 unNestLet ((LetE _ e),ty,cs) = (e,ty,cs)
