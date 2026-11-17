@@ -1737,8 +1737,14 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
   where
     err1 msg = error $ "floatOutCase: " ++ msg
 
-    float_fn :: Env2 Var Ty0 -> Exp0 -> FloatM Exp0
-    float_fn env2 ex = do
+    hasPackedTy0 :: Ty0 -> Bool
+    hasPackedTy0 ty = case ty of
+      PackedTy{} -> True
+      ProdTy tys -> any hasPackedTy0 tys
+      _ -> False
+
+    float_fn :: Var -> Env2 Var Ty0 -> Exp0 -> FloatM Exp0
+    float_fn fn_prefix env2 ex = do
       fundefs' <- get
       let fenv' = M.map funTy fundefs'
           env2' = env2 {fEnv = fenv'}
@@ -1746,7 +1752,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
           in_tys = map (\x -> lookupVEnv x env2') free
           ret_ty = recoverType ddefs env2' ex
           fn_ty = ForAll [] (ArrowTy in_tys ret_ty)
-      fn_name <- lift $ gensym "caseFn"
+      fn_name <- lift $ gensym fn_prefix
       args <- mapM (\x -> lift $ gensym x) free
       let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
       let fn = FunDef fn_name args fn_ty ex' (FunMeta NotRec NoInline False)
@@ -1765,7 +1771,13 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
           args' <- mapM recur args
           pure $ PrimAppE pr args'
         LetE (v,tyapps,ty,rhs) bod ->  do
-          rhs' <- go True env2 rhs
+          rhs' <- case rhs of
+                    -- An if-expression of packed type cannot be the RHS of a
+                    -- let in L2: InferLocations gives its branches different
+                    -- destinations (#206). Float it into a function, as is
+                    -- done for case expressions.
+                    IfE{} | hasPackedTy0 ty -> go True env2 rhs >>= float_fn "ifFn" env2
+                    _ -> go True env2 rhs
           let env2'= extendVEnv v ty env2
           bod' <- go True env2' bod
           pure $ LetE (v,tyapps,ty,rhs') bod'
@@ -1782,7 +1794,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
                           pure (dcon,vtys,rhs'))
                        brs
           if float
-          then float_fn env2 (CaseE scrt' brs')
+          then float_fn "caseFn" env2 (CaseE scrt' brs')
           else pure $ CaseE scrt' brs'
         DataConE a dcon ls -> DataConE a dcon <$> mapM recur ls
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> recur e
