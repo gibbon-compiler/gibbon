@@ -1017,9 +1017,6 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                         -- dbgTrace minChatLvl "End in lambda inferExp.\n"
                     
                         (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
-                      -- let ls'' = L.map unNestLet ls'
-                      --     bnds = catMaybes $ L.map pullBnds ls'
-                      --     env' = addCopyVarToEnv ls' env
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
                       argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
@@ -1126,9 +1123,6 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
                         -- dbgTrace minChatLvl "End in lambda inferExp.\n"
                     
                         (inferExp ddefs env e $ SingleDest lv)) $ zip ls locs
-                      -- let ls'' = L.map unNestLet ls'
-                      --     bnds = catMaybes $ L.map pullBnds ls'
-                      --     env' = addCopyVarToEnv ls' env
                       -- Arguments are either a fixed size or a variable
                       -- TODO: audit this!
                       let tyConOfDataCon = getTyOfDataCon ddefs k
@@ -1654,8 +1648,12 @@ inferExp ddefs env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp ddefs (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) locTy) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- dbgTrace (minChatLvl) "print tryInRegion in DataConE: " dbgTrace (minChatLvl) (sdoc (cs'', k, ty'')) dbgTrace (minChatLvl) "End print DataConE.\n" tryInRegion cs''
+          -- Hoist the last-field copy binding out of the RHS: later passes
+          -- (RouteEnds, ThreadRegions2, Cursorize) assume a let RHS is not itself a let.
+          let dcon_ty = PackedTy (getTyOfDataCon dataDefs k) locTy
+              (cpy_bnds, dcon_rhs) = peelLets rhs'
+              let_new_dcon = mkLets cpy_bnds (L2.LetE (vr,[],dcon_ty,dcon_rhs) bod'')
           -- In case of a write operation with a dataConE, its better to eagerly extract all the locations within the the complex location in case of the SoA loc.
-          let let_new_dcon = L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) locTy,rhs') bod''
           let expr = case locTy of
                        SoA dconLoc fieldLocs -> let dataConLetE = LetLocE (singleLocVar dconLoc) (GetDataConLocSoA locTy)
                                                     fieldLetEs = L.map (\(key, l) -> LetLocE l (GetFieldLocSoA key locTy)) fieldLocs
@@ -2461,13 +2459,10 @@ copy (e,ty,cs) lv1 =
           return (eapp, PackedTy tc lv1, cs)
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
-unNestLet :: Result -> Result
-unNestLet ((LetE _ e),ty,cs) = (e,ty,cs)
-unNestLet (e,ty,cs) = (e,ty,cs)
-
-pullBnds :: Result -> Maybe (Var, [LocVar], Ty2, Exp2)
-pullBnds ((LetE bnd _),_ty,_cs) = Just bnd
-pullBnds (_e,_ty,_cs) = Nothing
+-- | Split a chain of let bindings off the front of an expression.
+peelLets :: Exp2 -> ([(Var, [LocVar], Ty2, Exp2)], Exp2)
+peelLets (LetE bnd bod) = let (bnds, e) = peelLets bod in (bnd : bnds, e)
+peelLets e = ([], e)
 
 buildLets :: [(Var, [LocVar], Ty2, Exp2)] -> Exp2 -> Exp2
 buildLets (bnd:bnds) e =
