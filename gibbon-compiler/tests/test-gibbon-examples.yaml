@@ -600,4 +600,8 @@ tests:
   - name: test_307.hs
     answer-file: examples/test_307.ans
 
+  # Regression test for #206: an if-expression of packed type as a let RHS.
+  - name: test_206.hs
+    answer-file: examples/test_206.ans
+
 
